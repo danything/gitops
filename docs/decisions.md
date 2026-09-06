@@ -85,28 +85,68 @@ inlineManifests に載るのは「Argo CD 本体 + repo-creds + apps Application
 
 ## ルーティングの選定(2026-09-06 に再検討)
 
-いま Traefik に依存しているもの: 標準 `Ingress` 15 個(annotation で entrypoints / certresolver)、`IngressRoute` 4、
-`IngressRouteTCP` 1(3proxy、SNI で TLS 終端して 3128 へ)、`Middleware` 4(redirect-https、forward-auth、
-forward-auth-errors、yuzuriha)、ACME は Traefik 内蔵の mydnschallenge(Cloudflare DNS-01)。forward-auth の先は oauth2-proxy + redis(auth ns)。
+いま Traefik に依存しているもの: 標準 `Ingress` 15、`IngressRoute` 4、`IngressRouteTCP` 1(3proxy、SNI で TLS 終端して 3128 へ)、
+`Middleware` 4(redirect-https、forward-auth、forward-auth-errors、yuzuriha)、ACME は Traefik 内蔵(Cloudflare DNS-01)。
+forward-auth の先は oauth2-proxy + redis(IdP は Entra ID)。LoadBalancer は k3s 組み込みの ServiceLB(Klipper)。
 
-前提: `Ingress` API は凍結済みで、ingress-nginx は 2026-03-24 に EOL(リポジトリ read-only、CVE 修正なし)。新規に組むなら Gateway API。
+前提: `Ingress` API は凍結済みで、**ingress-nginx は 2026-03-24 に retire**(リポジトリは read-only、CVE 修正なし)。
+新規に組むなら Gateway API。なお F5/NGINX Inc. の `nginxinc/kubernetes-ingress` は別プロジェクトで継続中。
 
-| 案 | 書き換え | 認証(forward-auth 相当) | TCP/UDP | 証明書 | 所感 |
+| 案 | 書き換え | 認証 | TCP/UDP | 証明書 | 所感 |
 | --- | --- | --- | --- | --- | --- |
-| **A. Traefik v3 を Helm で継続** | ほぼ 0(HelmChart CRD → ArgoCD の helm source だけ) | Middleware のまま(oauth2-proxy + redis を維持) | IngressRouteTCP/UDP | 内蔵 ACME のまま | 最小工数。Traefik 固有 CRD に縛られ続ける。Gateway API 対応は部分的 |
-| **B. Envoy Gateway + cert-manager + MetalLB** | Ingress 15 → HTTPRoute(ingress2gateway で機械変換可)、IngressRoute 4、TCP 1 → TLS 終端 + TCPRoute、Middleware → SecurityPolicy と HTTPRoute filter | **SecurityPolicy の OIDC が内蔵**(Entra に直接。oauth2-proxy と redis を撤去できる)。ExtAuth もある | TCPRoute / UDPRoute / TLSRoute | cert-manager(Cloudflare DNS-01、Gateway に annotation) | Gateway API の参照実装で機能が最も揃う。部品は増えるが auth ns の 2 Deployment が消える |
-| C. Cilium(CNI + Gateway API + L2 LB) | B と同程度 + **CNI 交換**(flannel → Cilium、kube-proxy 置換) | HTTPRoute の ExternalAuth(GEP-1494)が 1.20 pre-release で入ったばかり。fail-open のバグ報告あり。OIDC 内蔵は無い | TLSRoute のみ(TCPRoute/UDPRoute は非対応) | cert-manager | 1 つで flannel + ServiceLB + Ingress を置き換えられて魅力的だが、OS 交換と同時に CNI 交換は blast radius が大きい。ExternalAuth も生煮え |
-| ingress-nginx | — | — | — | — | EOL。対象外 |
-| HAProxy / Kong / Istio | — | — | — | — | 単一ノードには過剰、または Gateway API 対応が B に劣る |
+| **A. Traefik v3 を継続** | ほぼ 0(HelmChart CRD → ArgoCD の helm source だけ) | Middleware のまま(oauth2-proxy + redis を維持) | IngressRouteTCP/UDP | 内蔵 ACME | 最小工数。Traefik 固有 CRD への依存は続くが、**Traefik v3 も Gateway API 実装を持つ**ので後から寄せる経路はある |
+| **B. Envoy Gateway + cert-manager(+ LB)** | Ingress 15 → HTTPRoute(`ingress2gateway` で機械変換可)、IngressRoute 4 と TCP 1 は手動、Middleware → SecurityPolicy と HTTPRoute filter | SecurityPolicy の OIDC が内蔵(Entra に直接)。ExtAuth もある | TCPRoute / UDPRoute / TLSRoute | cert-manager(Cloudflare DNS-01)。**ただし Gateway API 対応は Beta 止まりで `--enable-gateway-api` の明示が要る** | Gateway API 実装として機能が最も揃う。要検証事項あり(下記) |
+| C. Cilium(CNI + Gateway API + L2 LB) | B と同程度 + **CNI 交換** | HTTPRoute の ExternalAuth(GEP-1494)が 1.20 pre-release。fail-open のバグ報告あり。OIDC 内蔵は無い | **TLSRoute のみ**(TCPRoute/UDPRoute 非対応) | cert-manager | 1 つで CNI + LB + Ingress を賄えるのは魅力だが、OS 交換と同時の CNI 交換は影響範囲が大きい |
+| ingress-nginx / HAProxy / Kong / Istio | — | — | — | — | 前者は EOL。後者は単一ノードに過剰か、Gateway API 対応で B に劣る |
 
-**結論: B(Envoy Gateway + cert-manager + MetalLB)を採用。** Talos への移行で manifest をどうせ触るので、そのタイミングで
-Gateway API に寄せる。決め手は SecurityPolicy の OIDC 内蔵で、forward-auth の Middleware 2 つと oauth2-proxy と redis が丸ごと消えること。
-Cilium は CNI として後から入れてもよく(Gateway は Envoy Gateway のまま共存できる)、今回は flannel のままにする。
-時間が無ければ A に倒せる(A は Talos 上でも問題なく動く。mydnschallenge も Middleware もそのまま)。
+**結論: B(Envoy Gateway)を第一候補とするが、下の検証を通してから確定する。** 当初「oauth2-proxy と redis が撤去できる」を
+決め手にしていたが、それは条件付きだと分かった(下記)。時間が無ければ A に倒せる。A は Talos 上でも問題なく動く。
 
-移行の段取り: Phase 1 の Hyper-V 上で B を組み、`ingress2gateway` で HTTPRoute を生成 → 各 repo の `deploy/` に Gateway API 版を
-**Ingress と並置**でコミット(k3s 側の Traefik は Gateway API の CRD が無ければ無視する)→ 切替時に Ingress 側を消す。
+### B を選ぶ前に必ず確認すること
 
+**Envoy Gateway の OIDC はトークンをブラウザの Cookie に保存する。** redis が要らなくなるのはこのためだが、既知の問題がある。
+
+| Issue | 内容 |
+| --- | --- |
+| envoyproxy/gateway#7315 | トークンが **4096 文字を超えるとブラウザが Cookie をセットせず**、認証がループして「リダイレクトが多すぎます」で落ちる。**Envoy 側にエラーログが出ない** |
+| envoyproxy/gateway#8441 | OIDC Discovery が失敗すると毎リクエスト token introspection にフォールバック。IdP 停止時に白画面 |
+| envoyproxy/gateway#8649 | Gateway レベルとルートレベルで SecurityPolicy を二重掛けすると CSRF 検証で落ちる |
+
+Entra ID はグループクレームが増えると 4 KB を容易に超える。**実測(2026-09-06)**: oauth2-proxy が redis に置いている
+セッションは **4293 バイト**だった(1 セッション)。これは ID トークン・アクセストークン・リフレッシュトークンと
+メタデータをまとめて暗号化した値なので、**個々のトークンはそれぞれ 4096 を下回っている**と読める。
+ただし余裕は大きくない。確定させるには生の ID トークン長を測る必要がある(ブラウザでログインして
+`IdToken` Cookie の長さを見るのが早い)。4 KB を超えるならクレームを削るか、B の主要な動機が消える。
+
+`cookieDomain` はサブドメイン間で共有するなら root domain(`.doany.io`)を指定する。後から変えるとブラウザに残った
+古い Cookie が優先されて認証が壊れるので、変更時は Cookie クリアが要る。
+
+### 部品数は減らない(当初の説明の訂正)
+
+「auth namespace の 2 Deployment が消える」と書いていたが、**MetalLB を入れると controller + speaker で 2 ワークロード増える**
+ので差し引きゼロ。単一ノードなら MetalLB 自体が過剰かもしれない。Envoy Gateway は `EnvoyProxy` CRD でプロキシの
+Deployment をパッチできるので、**hostNetwork にすれば LB コントローラは要らない**(Talos では namespace に
+`pod-security.kubernetes.io/enforce: privileged` ラベルが必要)。
+
+### 段階移行(同時にやらない)
+
+「OS 交換」「Ingress コントローラ交換」「API モデル移行(Ingress → Gateway API)」を同時にやると、単一ノードでは
+障害の切り分けができなくなる。Gateway API の可搬性を活かして各段階でロールバック可能にする。順番は ROADMAP 参照。
+
+### バージョンの回転が速い
+
+Envoy Gateway は 1.9.1(2026-08-28、Envoy 1.39.0 / Gateway API v1.6.1)。マイナーが 2 週間強に 1 回出てサポート窓も短い。
+**Talos / Kubernetes / Gateway API CRD / Envoy Gateway の 4 つのバージョンマトリクスを回す前提**でコストを見る。
+GitHub スターは約 2.9K と少なく見えるが、2022 年発表と新しいこと、Envoy 本体にスターが吸われていること、
+Contour / Emissary を統合した共通コアとして設計され実利用の多くが下流製品経由であることによる。
+同カテゴリ(Kong IC、NGINX Gateway Fabric、Contour)も 2〜4K のレンジ。ただし日本語の事例が少ないのは実害。
+
+### 残っている論点
+
+- **Entra ID の生の ID トークン長**(最優先。上記)
+- `IngressRouteTCP` 1 本(3proxy)の中身。TLS passthrough で足りるなら C の TLSRoute でも代替できるか
+- 単一ノードで MetalLB を使うか、hostNetwork で済ませるか
+- `IngressRoute` 4 本と `Middleware` の具体的な中身(機械変換できない部分の実工数)
 
 ## ghcr の pull 認証
 

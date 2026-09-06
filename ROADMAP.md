@@ -46,28 +46,48 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
 
-### Phase 2 — 切り替え(停止を伴う)
+### Phase 1.5 — k3s のまま LB / Ingress を試す(Talos より先)
 
-- [ ] 作業中の見せ方は未定(メンテページは一旦見送り)。調べた事実だけ残す:
-      サブドメインは `*.doany.io` のワイルドカード CNAME 1 本でほぼ全部賄われていて(明示レコードは apex と
-      `l` `ts` `w` `x` `y` の 5 つだけ)、**このワイルドカードの proxied を倒すだけで全サブドメインが Cloudflare 受けになる**。
-      ただし Cloudflare 単体では 521 画面しか出ないので、読めるページを出すには Worker か Pages が要る。
-      proxied にすると HTTP/HTTPS 以外(WireGuard の UDP、AdGuard の DNS/DoT、3proxy の TCP)は通らない。
-- [ ] **作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から行う。** cloudflared 経由の ssh は使えない。
-- [ ] **Ingress を Traefik から Envoy Gateway に載せ替える**(理由は decisions.md「ルーティングの選定」)。
-      Phase 1 で用意した HTTPRoute を有効化し、cert-manager(Cloudflare DNS-01)で証明書を出し、
-      MetalLB で LoadBalancer 型 Service(adguardhome-dns、mattermost-calls)を賄う。
-      `SecurityPolicy` の OIDC に寄せて `auth` namespace の oauth2-proxy と redis、forward-auth の Middleware を撤去する。
-      IngressRouteTCP(3proxy)は TLSRoute に、`traefik-acme` の PVC は cert-manager の Secret に置き換わる。
+**OS 交換・コントローラ交換・API モデル移行を同時にやらない**([docs/decisions.md](docs/decisions.md)「段階移行」)。
+単一ノードなので、同時にやると障害の切り分けができない。Gateway API は可搬なので各段階で戻せる。
+
+- [ ] **Entra ID の生の ID トークン長を測る(最優先)。** ブラウザでログインして `IdToken` Cookie の長さを見るのが早い。
+      4096 を超えると Envoy Gateway の OIDC が無言で落ちる(envoyproxy/gateway#7315)。
+      参考: oauth2-proxy が redis に持つセッション(3 トークン + メタデータをまとめて暗号化)は **4293 バイト**だった(2026-09-06 実測)。
+      個々のトークンは 4096 を下回っているはずだが余裕は小さい。4 KB 超ならクレームを削るか、Envoy Gateway の OIDC を諦めて
+      oauth2-proxy を残す(その場合 B の主要な動機が消えるので A の継続も再検討する)。
+- [ ] Gateway API の CRD を自前で入れる。
+- [ ] **ServiceLB を MetalLB に置き換える**(`--disable servicelb`)。Talos には ServiceLB 相当が無いので、
+      この差分を k3s のうちに埋めておくと OS 交換時の変数が減る。**単一ノードなら Envoy Gateway を hostNetwork にして
+      LB コントローラ無しで済ませる案もある**ので、両方試して決める。
+- [ ] Envoy Gateway を入れる。**Traefik は止めない**(`--disable traefik` は不要)。GatewayClass が別なので並走でき、
+      HTTPRoute を 1 つずつ移せる。まず 1 サービスだけ移して観察する。
+- [ ] cert-manager を Gateway API 対応で入れる(`config.enableGatewayAPI=true` の明示が要る。**まだ Beta**)。
+- [ ] `externalTrafficPolicy` かクライアント IP の保持方法を先に決める(`Cluster` だと SNAT されてレート制限や IP 制限が壊れる)。
+
+### Phase 2 — k3s → Talos(停止を伴う。**Ingress 構成は変えない**)
+
+OS 交換だけに集中する。Ingress は Phase 1.5 で落ち着いた構成のまま持っていく。
+
+- [ ] 作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から。cloudflared 経由の ssh は使えない。
+      作業中の見せ方は未定(Cloudflare のワイルドカード CNAME を proxied にすれば全サブドメインを Cloudflare 受けにできるが、
+      読めるページを出すには Worker か Pages が要る。詳細は decisions.md)。
+- [ ] 最終バックアップを取り、`restic check` を通す。
+- [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
 - [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
-- [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす(decisions.md「PT3 チューナー」)。
-- [ ] **ghcr の資格情報を machine config に移す**(`machine.registries.config."ghcr.io".auth`)。k3s の registries.yaml は役目を終える。
-- [ ] 最終バックアップ(Phase 0 のホスト側 restic)を取り、`restic check` を通す。
-- [ ] Talos を実機にインストール、machine config 適用。
+- [ ] PSA のラベルを付ける(`local-path-storage`、`wireguard`、`denpa`)。
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
-- [ ] PV データを restic から新しい local-path ディレクトリへ Job で復元(PVC 名 / namespace を合わせ、`pvc-<uid>` の付け替えは PV を手で作って bind)。
+- [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
+- [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
+- [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、wireguard、AdGuard の公開リゾルバを確認。
-- [ ] 旧ホストのスクリプトと timer を廃止。この repo の k3s 期のファイルを削除。
+
+### Phase 2.5 — Ingress 15 本を HTTPRoute に移す(落ち着いてから)
+
+- [ ] `ingress2gateway` で機械変換 → 各 repo の `deploy/` に **Ingress と並置**でコミット。
+- [ ] `IngressRoute` 4 本と `Middleware` 4 つを手で移す(ここが実工数。中身の棚卸しが要る)。
+- [ ] `IngressRouteTCP`(3proxy)は TLSRoute か TCPRoute へ。
+- [ ] 全部 Gateway API に揃った時点で Ingress 側と Traefik を落とす。HTTPRoute はコントローラを差し替えてもそのまま動く。
 
 ### Phase 3 — Talos 定常運用
 

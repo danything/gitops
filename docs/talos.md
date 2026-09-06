@@ -175,3 +175,53 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
+
+## ネットワークまわりの前提(移行前に押さえておくこと)
+
+### 既定は Flannel + kube-proxy のまま
+
+Talos 1.14.0 のイメージにも Flannel 0.28.9 と kube-proxy が入っている。**CNI を替える必然性は無い。**
+
+- kube-proxy は Kubernetes 1.31 以降 **nftables バックエンドが既定**。「iptables で遅い」という話はもう当てはまらない
+- **Talos 1.13 から Flannel が NetworkPolicy に対応**(実体は上流の `kube-network-policies`)。machine config で有効にする:
+
+  ```yaml
+  cluster:
+    network:
+      cni:
+        name: flannel
+        flannel:
+          kubeNetworkPoliciesEnabled: true
+  ```
+
+  ただし L3/L4 まで。FQDN ベースの egress 制御はできない。
+
+Cilium に替える場合は machine config 側で CNI と kube-proxy を止める(`cni.name: none`、`proxy.disabled: true`)。
+Cilium 側は `kubeProxyReplacement: true`、`k8sServiceHost: localhost`、`k8sServicePort: 7445`(KubePrism)、
+`cgroup.autoMount.enabled: false` + `hostRoot: /sys/fs/cgroup` が Talos 固有。
+**CNI の交換は構築時にやる。** 稼働中クラスタでの差し替えは全 Pod 再起動が前提で、後からやるとコストが一桁変わる。
+
+### LoadBalancer の実体が無い
+
+k3s の ServiceLB(Klipper)に相当するものは Talos に無い。**MetalLB か Cilium の LB-IPAM が要る**。
+単一ノードなら、Envoy Gateway を `EnvoyProxy` CRD で hostNetwork にして LB コントローラ自体を省く手もある。
+
+### クライアント IP の保持を先に決める
+
+`externalTrafficPolicy: Cluster` だと SNAT されて送信元 IP が消え、レート制限や IP 制限が壊れる。
+`Local` にするか PROXY protocol を使うかを**最初に**決める。後から変えると挙動が変わる。
+
+### Ingress Firewall
+
+`NetworkDefaultActionConfig: block` を使うなら、`NetworkRuleConfig` で必要なポートを明示的に開ける。
+
+## 管理モデル(3 つのレイヤーを混同しない)
+
+| レイヤー | 決めること | 変更手段 |
+| --- | --- | --- |
+| イメージ | カーネル引数、system extension(GPU ドライバ等) | Image Factory で schematic を作って `talosctl upgrade` |
+| machine config | CNI、kube-proxy、ディスク、ネットワーク、ファイアウォール | `talosctl apply-config` |
+| Kubernetes | ワークロード、Envoy Gateway、Cilium 本体 | `kubectl` / Helm / GitOps |
+
+SSH もシェルもパッケージマネージャも無く gRPC API だけなので、**障害時は「直さず作り直す」**。
+machine config は必ず git に置く(唯一の真実になる)。デバッグは `talosctl dmesg` / `logs` / `read`、1.13 以降は debug コンテナ。
