@@ -5,9 +5,9 @@ k3s クラスタ上のセルフホストアプリを [Argo CD](https://argo-cd.r
 ## 仕組み
 
 `danything/bootstrap` の ApplicationSet (`argocd/appsets/repos.yaml`) が org 内のリポジトリを走査し、
-このリポジトリ直下の [`k3s/argocd.yaml`](k3s/argocd.yaml) を見つけて Argo CD の Application を生成する。
+このリポジトリ直下の [`deploy/argocd.yaml`](deploy/argocd.yaml) を見つけて Argo CD の Application を生成する。
 そのため、このリポジトリがどうデプロイされるか(同期対象パス・autoSync 等)は
-クラスタ側ではなく `k3s/argocd.yaml` で決まる。ルート以下のマニフェストが再帰的に同期される。
+クラスタ側ではなく `deploy/argocd.yaml` で決まる。ルート以下のマニフェストが再帰的に同期される。
 
 ## アプリ
 
