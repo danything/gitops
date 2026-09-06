@@ -45,11 +45,11 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 
 | ディレクトリ | 内容 |
 | --- | --- |
-| [`adguardhome/`](adguardhome/) | AdGuard Home (DNS フィルタ) |
-| [`cloudflare-ddns/`](cloudflare-ddns/) | DDNS |
-| [`erpnext/`](erpnext/) | ERPNext (Helm chart + OIDC セットアップ) |
-| [`mattermost/`](mattermost/) | Mattermost + PostgreSQL |
-| [`portainer/`](portainer/) | Portainer |
-| [`wireguard/`](wireguard/) | wg-easy (WireGuard VPN) |
-| [`3proxy/`](3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
+| [`adguardhome/`](apps/adguardhome/) | AdGuard Home (DNS フィルタ) |
+| [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
+| [`erpnext/`](apps/erpnext/) | ERPNext (Helm chart + OIDC セットアップ) |
+| [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL |
+| [`portainer/`](apps/portainer/) | Portainer |
+| [`wireguard/`](apps/wireguard/) | wg-easy (WireGuard VPN) |
+| [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
 
