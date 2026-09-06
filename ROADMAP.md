@@ -66,9 +66,16 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       **yk.doany.io を Traefik と並走で HTTPRoute に載せて実際に配信できることを確認**(Let's Encrypt 証明書付き)。
       Gateway の待ち受けは LB-IPAM + L2 アナウンス(作業用に 10.10.0.50-55)。
       AdGuard の DoT 証明書も Traefik の acme.json 監視(acme-watcher)をやめて cert-manager 発行の Secret に移した。
-- [ ] **段階 3 の本番移行**: 残り 14 ホストの `Ingress` を `ingress2gateway` で HTTPRoute に変換し、
-      **Ingress と並置**でコミットして 1 つずつ切り替える。`IngressRoute` 4 本と `Middleware` 4 つ、
-      `IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
+- [x] **Web の 15 ホストすべてを HTTPRoute に並置し、Gateway 経由で Traefik と同じ応答を確認(2026-09-06)。**
+      証明書はワイルドカード 1 枚、HTTP → HTTPS の 301 リダイレクトも Gateway 側に用意した。
+      本番トラフィックはまだ Traefik(hostPort 80/443)が捌いている。
+- [ ] **切り替え前に残っているもの**:
+      - `px.doany.io`(3proxy)の `IngressRouteTCP` → TLSRoute か TCPRoute
+      - forward-auth の 2 本(Traefik ダッシュボードと `sub`)。**Cilium の Gateway では賄えない**ので、
+        oauth2-proxy を前段プロキシにするか、この 2 本のためだけに Traefik を残すか決める
+      - yuzuriha の `compress` ミドルウェア(Gateway API に相当機能なし。諦めるかアプリ側で)
+- [ ] **切り替え本番**: Traefik の hostPort 80/443 を外し、Gateway の待ち受けをそこに移す(同時に行う)。
+      そのあと `disable: [traefik]` と Ingress の削除。
       `IngressRoute` 4 本と `Middleware` 4 つ、`IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
       **forward-auth は Cilium の Gateway では賄えない**(OIDC 内蔵なし、ExternalAuth も未実装)。
       該当は Traefik ダッシュボードと `sub` の 2 本だけなので、oauth2-proxy を前段プロキシにするか、
