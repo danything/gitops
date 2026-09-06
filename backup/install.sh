@@ -1,7 +1,7 @@
 #!/bin/sh
 # 稼働中の k3s ホストに k3s-backup を入れる(1 回きり、clone から実行)。
 # 終わったら clone は消してよい: 以後ホストに repo は要らない。
-#   git clone ... && sudo ./bootstrap/backup/install.sh && rm -rf bootstrap
+#   git clone ... && sudo ./backup/install.sh && rm -rf bootstrap
 set -eu
 DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo" >&2; exit 1; }

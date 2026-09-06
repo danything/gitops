@@ -176,7 +176,7 @@ spec:
               value: "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0"
             # OIDC が無効な間は Secret wg-easy-oidc を置かない(Infisical にも入れていない)ので optional。
             # これが無いと、Secret がまだ無い復元直後に Pod が CreateContainerConfigError で起動できない
-            # (bootstrap/docs/restore-drill.md の 5)。
+            # (docs/restore-drill.md の 5)。
             - name: OAUTH_OIDC_CLIENT_ID
               valueFrom:
                 secretKeyRef:

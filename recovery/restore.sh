@@ -102,7 +102,7 @@ if [ "$DRILL" = 1 ]; then
 	echo "DRILL: not enabling k3s-backup.timer, dropping flannel-iface from k3s config"
 	sed -i '/^flannel-iface:/d' /etc/rancher/k3s/config.yaml
 else
-	systemctl enable k3s-backup.timer 2>/dev/null || echo "WARNING: k3s-backup.timer not in snapshot; install it from bootstrap/backup" >&2
+	systemctl enable k3s-backup.timer 2>/dev/null || echo "WARNING: k3s-backup.timer not in snapshot; install it from the gitops repo (backup/)" >&2
 fi
 
 # firewalld は k3s と相性が悪い(公式も無効化を推奨)。フィルタは k3s 側(nft)に任せる。

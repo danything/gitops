@@ -5,7 +5,7 @@
 `traefik/cloudflare-secret.yaml`)は SOPS(age)で暗号化してあるので、適用は `sops -d <file> | kubectl apply -f -`。
 鍵は [`gitops の recovery/`](https://github.com/gitops の recovery/) の `sops-age.key.age`。
 
-このホストの構成は暫定(最終形は Talos Linux)。方針と手順は [ROADMAP.md](ROADMAP.md)。
+このホストの構成は暫定(最終形は Talos Linux)。方針と手順は [ROADMAP.md](../ROADMAP.md)。
 いま動いているのは Ubuntu 26.04(NetworkManager、netplan バックエンド、TZ は UTC)。README 冒頭の dnf の手順は
 Fedora に載せ替える予定だった頃のもので、旧方式と一緒に消す。
 
@@ -25,7 +25,7 @@ PVC データ・k3s の証明書・k3s と NetworkManager の設定・timer 一�
 稼働中ホストへの導入は 1 回だけ clone して:
 
 ```shell
-sudo ./bootstrap/backup/install.sh   # env を埋めて再実行 → restic init と timer 有効化
+sudo ./backup/install.sh   # env を埋めて再実行 → restic init と timer 有効化
 rm -rf bootstrap                      # 以後ホストに repo は要らない
 ```
 
