@@ -24,8 +24,9 @@ npx wrangler login          # または Workers Scripts:Edit を持つトーク�
 npx wrangler deploy         # route も wrangler.toml から作られる
 ```
 
-route は proxied なホストにしか当たらないので、deploy した時点では `l` `ts` `w` `x` `y` と apex だけが
-Worker を通る (中身は素通し)。挙動が変わらないことを確認しておくとよい。
+route は proxied なホストにしか当たらないので、deploy した時点では apex と、常時オレンジ雲にしてある
+5 つ (`l` = lgtm、`ts` = tamasagashi、`w` = worklog、`x` = xool、`y` = yuzuriha) だけが Worker を通る。
+中身は素通しなので挙動は変わらないが、ここは本番の通り道なので deploy 直後に一度ブラウザで確認しておく。
 
 ## 当日
 
@@ -36,6 +37,19 @@ export CF_API_TOKEN=$(sops -d ../traefik/cloudflare-secret.yaml | awk '/CF_DNS_A
 #   … Talos インストール …
 ./maintenance.sh off        # 元に戻す
 ```
+
+## 常時オレンジ雲にしてあるサブドメイン
+
+`l` `ts` `w` `x` `y` はワイルドカードを上書きして個別に proxied=true にしてある。これらは:
+
+- **`maintenance.sh on/off` では触らない。** スクリプトが PATCH するのは `*.doany.io` の 1 本だけなので、
+  個別設定は on にしても off にしても proxied=true のまま残る (`off` で灰色に戻してしまう事故が無い)。
+- **メンテ中も同じメンテページが出る。** もともと Cloudflare を通っているので、`on` にする前から Worker の
+  route が当たっている。オリジンが落ちた時点で自動的にメンテページに変わる。
+- **平常時は Worker を素通りする。** ただし本番トラフィックが Worker を 1 段通ることになるので、
+  無料枠 (Worker 全体で 10 万リクエスト/日) を意識する。超えそうなら route を
+  `*.doany.io/*` からメンテ対象のサブドメインだけに絞る (その場合この 5 つはメンテ中に
+  Cloudflare の 521 画面になる)。
 
 ## 注意
 
