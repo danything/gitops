@@ -106,7 +106,7 @@ sudo kill $(cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-d
 
    | Secret | その後 | 対処 |
    | --- | --- | --- |
-   | `wireguard/wg-easy-init` | 誰も作り直せず wg-easy が起動不能 | `apps/wireguard/wg-easy-secrets.yaml` で Infisical 管理に移した(値の投入は手作業) |
+   | `wireguard/wg-easy-init` | 誰も作り直せず wg-easy が起動不能 | セットアップ済みなら `INIT_*` は無視されるので Secret ごと廃止。参照は `optional: true` |
    | `wireguard/wg-easy-oidc` | 同上 | OIDC は Entra 側の仕様で元々使えないので Secret を作らない。Deployment の参照を `optional: true` にして、無くても起動するようにした |
    | `blog/artalk-secrets` | 同上 | **未使用**なので放置(消してもよい) |
    | `tamasagashi/ghcr-pull` | Infisical から作り直された | 対処不要(最初から `InfisicalSecret` があった) |

@@ -88,9 +88,9 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 - [x] **クラスタにしか無い Secret を Infisical に移す**(docs/restore-drill.md の 5)。CR は
       `apps/wireguard/wg-easy-secrets.yaml` に置いた。`tamasagashi/ghcr-pull` は元から Infisical 管理で対処不要、
       `blog/artalk-secrets` は未使用。
-- [ ] Infisical の UI で `/wireguard/wg-easy-init` に `INIT_PASSWORD` を入れる(本人作業)。入るまで CR は Failed のまま。
-      OIDC は Entra が `email_verified` を返さず wg-easy が必須にしているため使えないので、Secret ごと作らない
-      (Deployment 側の参照は `optional: true` にした)。
+- [x] wireguard は Secret を持たない形にした(2026-09-06)。`INIT_*` はセットアップ済みなら無視され、OIDC は
+      Entra が `email_verified` を返さず wg-easy が必須にしているため使えない。どちらの `secretKeyRef` も
+      `optional: true` にしたので、復元直後に Secret が無くても起動する。
 - [ ] **ghcr の pull 認証を node 単位に寄せる**(下記)。imagePullSecrets と `ghcr-pull` の CR 2 つが消える。
 - [ ] 上記が通ったら backup.sh / init.sh / setup-network.sh を削除。repo 内の平文秘密(Infisical の鍵、GitHub App 秘密鍵、Cloudflare トークン、
       Postgres パスワード)は「復元はバックアップから」に一本化した上で、env.age と同じ `age -p` で暗号化するか削除する。

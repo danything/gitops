@@ -130,16 +130,20 @@ spec:
             # (v15.3.0 では cli が壊れていて(upstream #2682)これしか手が無かった。
             # v15.4.0 で修正済みだが、宣言的に書けるこちらを維持する)
             # セットアップ完了後は無視される。
-            # パスワードのみSecret参照(このリポジトリはpublicのため)。
             - name: INIT_ENABLED
               value: "true"
             - name: INIT_USERNAME
               value: "wgeasyadmin"
+            # 初回セットアップ済みなら wg-easy は INIT_* を無視するので、Secret は置いていない。
+            # 復元しても PV (wg-easy-data) にセットアップ済みの状態が入っているため必要にならない。
+            # まっさらから作り直すときだけ、Secret wg-easy-init を手で作るか Infisical に
+            # /wireguard/wg-easy-init (INIT_PASSWORD) を用意する。
             - name: INIT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: wg-easy-init
                   key: INIT_PASSWORD
+                  optional: true
             - name: INIT_HOST
               value: "v.doany.io"
             - name: INIT_PORT
