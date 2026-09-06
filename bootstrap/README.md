@@ -73,7 +73,7 @@ kubectl apply -f infisical/
 
 | | |
 | --- | --- |
-| Project | `k3s`(slug `doa`。slug は5文字以上が必須)、環境は `prod` だけ |
+| Project | `doa`（slug `doa`）、環境は `prod` だけ |
 | フォルダ | `/<namespace>/<Secret 名>`(例: `/denpa/denpa-oidc`、`/worklog/ghcr-pull`) |
 | シークレット名 | 作られる `Secret` の **キー名そのまま**(`client-id`、`.dockerconfigjson` など) |
 | Machine Identity | `infisical-operator`(Kubernetes auth、許可 SA は `infisical/infisical-auth`、project の viewer) |
