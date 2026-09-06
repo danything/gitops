@@ -116,6 +116,25 @@ sudo kill $(cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-d
    (Argo CD の sync 結果にもログにも出ておらず、kine のトムストーンは compaction で消えていた)。
    次回のリハーサル(`resource.exclusions` 適用後のスナップショット)で再現するか確かめる。
 
+## 2 回目 (2026-09-06、修正後のスナップショットで再確認)
+
+1 回目で見つけた 3 件を直したあと、手動でバックアップを取り直して同じ手順を回した。**すべて解消していた。**
+
+| 1 回目の問題 | 2 回目 |
+| --- | --- |
+| `replicas: 0` が焼き込まれる | **解消**。`replicas=0` の Deployment/StatefulSet は 0 件。Infisical も自力で起動 |
+| 復元直後に DNS が死ぬ | **解消**。restore.sh が `/etc/resolv.conf` をスタブから外し、イメージ取得が最初から通った |
+| Secret が消える | **解消**。1 回目に消えた 4 つ(`wireguard/wg-easy-init`、`wg-easy-oidc`、`tamasagashi/ghcr-pull`、`blog/artalk-secrets`)は全部残っていた |
+
+これで **Argo CD が犯人だったことが確定した**。`resource.exclusions` で Secret を管理対象から外しただけで、
+operator 製・手動作成の両方が消えなくなった。
+
+結果: 45 Running / 17 Completed、`InfisicalSecret` は 15 件すべて OK、Argo CD も Healthy。復元は 2 分。
+起動しなかったのは 2 つだけで、どちらも VM の都合:
+
+- `denpa/tuner-agent` … PT3 が無い (ContainerCreating)
+- `wireguard/wg-easy` … カーネルに wireguard モジュールが無く `wg-quick up wg0` が失敗 (CrashLoopBackOff)
+
 ## 片付けの前に
 
 VM の中で `k3s kubectl` を叩けば本物と同じ構成が動いている。データの中身(Mattermost の投稿数、ERPNext の DB 一覧など)を

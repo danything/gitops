@@ -71,6 +71,8 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 - [x] R2 の API トークン発行 → `/etc/k3s-backup/env` を作り `age -p -o backup/env.age` でコミット(2026-09-06)。
 - [x] パスフレーズを Edge と紙へ(本人作業、2026-09-06)。
 - [x] `install.sh` を実機(Ubuntu 26.04)で実行、`restic init` 済み、timer 有効(毎日 04:00 JST)。2026-09-06。
+- [x] R2 の使用量は 3.28 GiB(重複排除・圧縮後、論理 12.28 GiB)で無料枠 10 GB 内。操作回数と egress は桁違いに余裕。
+      通知に実サイズとスナップショット数を出すようにした。増えるとしたら `denpa-recorded` と `adguardhome-work`。
 - [x] 初回: `--no-scale` の暖機 51 秒(5.3 GiB)→ 本番 197 秒(うち 120 秒は denpa の Pod 終了待ちで無駄)。
       denpa は terminationGracePeriodSeconds=21900 なので scale down 対象から外した(`SKIP_SCALE_NAMESPACES`)。以後の停止は 30 秒前後の見込み。
 - [x] スクリプト一式(`backup/k3s-backup`、`backup/k3s-backup.{service,timer}`、`backup/install.sh`、`restore.sh`)。
@@ -84,7 +86,8 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 - [x] 復元リハーサル(Hyper-V は権限が無くサーバ上の QEMU/KVM で実施、2026-09-06)。結果と見つかった 3 件は
       [docs/restore-drill.md](docs/restore-drill.md)。backup.sh のスナップショット順序と restore.sh の DNS は修正済み。
 - [x] **operator 製 Secret を ArgoCD が prune する問題**(docs/restore-drill.md の 3)→ ArgoCD の `resource.exclusions` で Secret を外した(2026-09-06)。
-- [ ] 修正後のスナップショット(04:00 JST 以降)でもう一度リハーサル。今回の手順なら 30 分で回る。
+- [x] 修正後のスナップショットでもう一度リハーサル(2026-09-06、04:00 を待たず手動でバックアップを取って実施)。
+      **3 件とも解消**し、Argo CD が Secret を消していたことも確定した([docs/restore-drill.md](docs/restore-drill.md) の「2 回目」)。
 - [x] **クラスタにしか無い Secret を Infisical に移す**(docs/restore-drill.md の 5)。CR は
       `apps/wireguard/wg-easy-secrets.yaml` に置いた。`tamasagashi/ghcr-pull` は元から Infisical 管理で対処不要、
       `blog/artalk-secrets` は未使用。
