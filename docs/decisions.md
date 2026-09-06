@@ -199,9 +199,15 @@ Traefik では `IngressRouteTCP` が `HostSNI(px.doany.io)` で受けて **TLS �
 
 取りうる形は 3 つ。
 
-**さらに、passthrough で逃げる案も 443 では成立しない。** 同じポートに HTTPS(Terminate)のリスナーと
-TLS(Passthrough)のリスナーを同居させると Gateway API の規則で **ProtocolConflict** になり、両方が Invalid になる。
-実際に試して、443 の `https` リスナーごと落ちることを確認した。
+**なぜ Traefik では 443 のまま両立できていたのか。** Traefik は 443 のエントリポイントが 1 つあり、
+接続ごとに TLS の ClientHello を覗いて **SNI で HTTP ルーターと TCP ルーターに振り分けて**いた。
+Gateway API では TLS の扱いが**リスナーの属性**なので、同じポートに Terminate と Passthrough を同居させると
+どちらとして扱うか決まらず **ProtocolConflict** になる(実際に試して 443 の `https` リスナーごと落ちた)。
+
+**ただし仕様上は 443 のままでも書ける。** `protocol: TLS` + `mode: Terminate` のリスナーに TCPRoute を付ける形は
+Traefik と同じ意味で、終端するリスナーが 1 つあるだけなので他の HTTPS リスナーとも衝突しない。
+**通らないのは Cilium がその組み合わせを実装していないから**で、ポートの制約ではない。
+Envoy Gateway はこれを実装しているので、443 のままにしたいなら選択肢になる。
 
 **採った形(2026-09-06): Gateway を使わず、Pod のサイドカーがホストのポートを直接受ける。**
 
@@ -209,7 +215,9 @@ TLS(Passthrough)のリスナーを同居させると Gateway API の規則で **
 - 証明書は cert-manager が `px.doany.io` で発行し、サイドカーがマウントする(Traefik 内蔵 ACME の置き換え)
 - サイドカーは **hostPort 8443** で公開する。443 は Gateway が使うため
 - **クライアント側の設定変更が要る**(`px.doany.io:443` → `px.doany.io:8443`)。
-  443 のまま出したければ、px 専用の IP を LB-IPAM で払い出してルータ側で振り分ける形になる
+  SNI で振り分けるより**ポートで分ける方が構成として素直**なので、これを本採用とした(2026-09-06 判断)。
+  443 のままにしたい場合の代案は、px 専用の IP を LB-IPAM で払い出してルータ側で振り分けるか、
+  Envoy Gateway に替えて TLS 終端リスナー + TCPRoute を使うか
 
 ### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
 
