@@ -32,8 +32,9 @@ spec:
             - name: proxy-tls
               containerPort: 3129
               # Gateway は使わない。443 では TLS 終端(HTTPS リスナー)と passthrough が共存できず
-              # ProtocolConflict になるため(docs/decisions.md)、このサイドカーがホストの 8443 で直接受ける。
-              hostPort: 8443
+              # ProtocolConflict になるため(docs/decisions.md)、このサイドカーがホストのポートで直接受ける。
+              # 8443 は mattermost-calls が TCP/UDP 両方で使っているので 8444 にしている。
+              hostPort: 8444
           volumeMounts:
             - name: tls-terminator-config
               mountPath: /etc/nginx/nginx.conf
