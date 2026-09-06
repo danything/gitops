@@ -85,9 +85,12 @@ Object Read & Write をこのバケットだけに絞った Account API token。
       [docs/restore-drill.md](docs/restore-drill.md)。backup.sh のスナップショット順序と restore.sh の DNS は修正済み。
 - [x] **operator 製 Secret を ArgoCD が prune する問題**(docs/restore-drill.md の 3)→ ArgoCD の `resource.exclusions` で Secret を外した(2026-09-06)。
 - [ ] 修正後のスナップショット(04:00 JST 以降)でもう一度リハーサル。今回の手順なら 30 分で回る。
-- [ ] **クラスタにしか無い Secret 4 つを Infisical に移す**(`wireguard/wg-easy-init`、`wireguard/wg-easy-oidc`、
-      `tamasagashi/ghcr-pull`、`blog/artalk-secrets`)。復元後に誰も作り直せず、リハーサルで実際に失われた
-      (docs/restore-drill.md の 5)。Infisical の UI で値を入れて `InfisicalSecret` を各 repo に置く。
+- [x] **クラスタにしか無い Secret を Infisical に移す**(docs/restore-drill.md の 5)。CR は
+      `apps/wireguard/wg-easy-secrets.yaml` に置いた。`tamasagashi/ghcr-pull` は元から Infisical 管理で対処不要、
+      `blog/artalk-secrets` は未使用。
+- [ ] Infisical の UI で `/wireguard/wg-easy-init`(`INIT_PASSWORD`)と `/wireguard/wg-easy-oidc`
+      (`OAUTH_OIDC_CLIENT_ID`、`OAUTH_OIDC_CLIENT_SECRET`)に値を入れる(本人作業)。入るまで CR は Failed のまま。
+- [ ] **ghcr の pull 認証を node 単位に寄せる**(下記)。imagePullSecrets と `ghcr-pull` の CR 2 つが消える。
 - [ ] 上記が通ったら backup.sh / init.sh / setup-network.sh を削除。repo 内の平文秘密(Infisical の鍵、GitHub App 秘密鍵、Cloudflare トークン、
       Postgres パスワード)は「復元はバックアップから」に一本化した上で、env.age と同じ `age -p` で暗号化するか削除する。
 
@@ -175,6 +178,20 @@ Cilium は CNI として後から入れてもよく(Gateway は Envoy Gateway �
 
 移行の段取り: Phase 1 の Hyper-V 上で B を組み、`ingress2gateway` で HTTPRoute を生成 → 各 repo の `deploy/` に Gateway API 版を
 **Ingress と並置**でコミット(k3s 側の Traefik は Gateway API の CRD が無ければ無視する)→ 切替時に Ingress 側を消す。
+
+## ghcr の pull 認証
+
+いまは repo が private なのでパッケージも private で、名前空間ごとに `ghcr-pull`(PAT の dockerconfigjson)を
+Infisical から作って `imagePullSecrets` で参照している(tamasagashi、worklog)。アプリを足すたびに同じものが増える。
+
+| 案 | 中身 | 評価 |
+| --- | --- | --- |
+| **node 単位の資格情報**(推奨) | k3s なら `/etc/rancher/k3s/registries.yaml`、Talos なら machine config の `machine.registries.config."ghcr.io".auth`。全 namespace に効く | `imagePullSecrets` と `ghcr-pull` の CR が全部消える。Talos では SOPS 暗号化した machine config に載るので、秘密の置き場も統一される。**Talos 移行と同時にやるのが自然** |
+| パッケージだけ public にする | GHCR のパッケージ可視性は repo の可視性と独立。public にすれば資格情報ゼロ | いちばん簡単。ただしイメージの中身(ビルド済みのアプリ)が誰でも pull できる |
+| GitHub App の短命トークン | CronJob で 1 時間ごとにトークンを発行して Secret を書き換える | いちばん安全だが、動く部品が増える。単一ノードの自宅クラスタには過剰 |
+| いまのまま(PAT を Infisical に) | 現状 | 動いてはいる。ローテーションは Infisical 側 1 回で済む |
+
+**結論: Talos 移行のときに node 単位へ寄せる。** それまでは現状維持でよい(復元でも Infisical から戻る)。
 
 ## 未決事項
 

@@ -101,19 +101,19 @@ sudo kill $(cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-d
 
 5. **クラスタにしか無い Secret が復元後に消えた。** スナップショットには 70 個の Secret があったのに、
    復元 1 時間後のクラスタには 55 個しかなかった。差分 15 個のうち 11 個は Helm のリリース履歴
-   (`sh.helm.release.v1.*` の v2 以降。v1 だけ残った)、残り 4 個が実害のあるもの:
+   (`sh.helm.release.v1.*` の v2 以降。v1 だけ残った)。残り 4 個のうち 3 個は **`InfisicalSecret` が無く、
+   手で `kubectl apply` しただけの Secret** だった。
 
-   | Secret | 由来 | 影響 |
+   | Secret | その後 | 対処 |
    | --- | --- | --- |
-   | `wireguard/wg-easy-init`、`wg-easy-oidc` | 手で `kubectl apply` | wg-easy が起動できない |
-   | `tamasagashi/ghcr-pull` | 手で apply | イメージが引けない |
-   | `blog/artalk-secrets` | 手で apply | artalk が起動できない |
+   | `wireguard/wg-easy-init`、`wg-easy-oidc` | 誰も作り直せず wg-easy が起動不能 | `apps/wireguard/wg-easy-secrets.yaml` で Infisical 管理に移した(値の投入は手作業) |
+   | `blog/artalk-secrets` | 同上 | **未使用**なので放置(消してもよい) |
+   | `tamasagashi/ghcr-pull` | Infisical から作り直された | 対処不要(最初から `InfisicalSecret` があった) |
 
-   Infisical operator が管理している Secret は、Infisical が上がった時点で全部作り直された(14 件すべて OK)。
+   Infisical operator が管理している Secret は、Infisical が上がった時点で全部作り直された(15 件すべて OK)。
    **消えたのは「git にも Infisical にも無く、クラスタにしか存在しない」ものだけ。** 犯人は特定できていない
    (Argo CD の sync 結果にもログにも出ておらず、kine のトムストーンは compaction で消えていた)。
-   → 対処は 2 つ。(a) この 4 つを Infisical に移して `InfisicalSecret` から作らせる(根本対処)。
-   (b) 次回のリハーサル(`resource.exclusions` 適用後のスナップショット)で再現するか確かめる。
+   次回のリハーサル(`resource.exclusions` 適用後のスナップショット)で再現するか確かめる。
 
 ## 片付けの前に
 
