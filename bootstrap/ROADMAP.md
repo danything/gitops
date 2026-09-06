@@ -92,8 +92,9 @@ Object Read & Write をこのバケットだけに絞った Account API token。
       Entra が `email_verified` を返さず wg-easy が必須にしているため使えない。どちらの `secretKeyRef` も
       `optional: true` にしたので、復元直後に Secret が無くても起動する。
 - [ ] **ghcr の pull 認証を node 単位に寄せる**(下記)。imagePullSecrets と `ghcr-pull` の CR 2 つが消える。
-- [ ] 上記が通ったら backup.sh / init.sh / setup-network.sh を削除。repo 内の平文秘密(Infisical の鍵、GitHub App 秘密鍵、Cloudflare トークン、
-      Postgres パスワード)は「復元はバックアップから」に一本化した上で、env.age と同じ `age -p` で暗号化するか削除する。
+- [x] backup.sh / init.sh / setup-network.sh を削除(2026-09-06、リハーサル通過後)。repo 内の平文秘密
+      (Infisical の鍵、GitHub App 秘密鍵、Cloudflare トークン、Postgres パスワード)は **SOPS + age** で
+      該当キーだけ暗号化した(`.sops.yaml`)。鍵は `recovery/sops-age.key.age` に env.age と同じパスフレーズで封じてある。
 
 ### Phase 0.5 — 各 repo の `k3s/` ディレクトリ改名(k3s 固有の名前をやめる)
 
@@ -124,9 +125,12 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 
 ### Phase 2 — 切り替え(停止を伴う)
 
-- [x] メンテナンスページの仕組み(`bootstrap/maintenance/`、手順は [docs/maintenance.md](docs/maintenance.md))。
-      `*.doany.io` の proxied を倒すと Cloudflare の Worker が受けてメンテ表示になる。**Worker の deploy は未実施**。
-- [ ] 当日: `maintenance.sh on` → 作業 → `maintenance.sh off`。作業は LAN か iLO から(外からは入れない)。
+- [ ] 作業中の見せ方は未定(メンテページは一旦見送り)。調べた事実だけ残す:
+      サブドメインは `*.doany.io` のワイルドカード CNAME 1 本でほぼ全部賄われていて(明示レコードは apex と
+      `l` `ts` `w` `x` `y` の 5 つだけ)、**このワイルドカードの proxied を倒すだけで全サブドメインが Cloudflare 受けになる**。
+      ただし Cloudflare 単体では 521 画面しか出ないので、読めるページを出すには Worker か Pages が要る。
+      proxied にすると HTTP/HTTPS 以外(WireGuard の UDP、AdGuard の DNS/DoT、3proxy の TCP)は通らない。
+- [ ] **作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から行う。** cloudflared 経由の ssh は使えない。
 - [ ] 最終バックアップ(Phase 0 のホスト側 restic)を取り、`restic check` を通す。
 - [ ] Talos を実機にインストール、machine config 適用。
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
