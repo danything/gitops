@@ -1,19 +1,52 @@
-# クラスタ共通(single node なので実質 main 用)
+# クラスタ共通。**v1.14 では型付きドキュメントと v1alpha1 を併記できない**ので、
+# 項目ごとに書く場所が決まっている(../docs/talos-install-media.md 参照)。
 machine:
-  install:
-    wipe: false
   sysctls:
-    # bond0 の SLAAC を stable-privacy にする(EUI-64 で MAC を出さない)。eno4 は IPv6 を使わない。
+    # bond0 の SLAAC を stable-privacy にする(EUI-64 で MAC を出さない)。
+    # NetworkManager の ipv6.token ::2 に相当する設定は Talos に無いので、AAAA は cloudflare-ddns に任せる。
     net.ipv6.conf.bond0.addr_gen_mode: "2"
+    # IPv6 は bond0 に一本化する。eno4 側の RA でデフォルトルートを奪われると非対称ルーティングになる。
     net.ipv6.conf.eno4.disable_ipv6: "1"
   kubelet:
+    # local-path-provisioner のデータ置き場。/var は EPHEMERAL パーティションなのでアップグレードで消えない。
+    # KubeletConfig ドキュメントには extraMounts が無いため、下でそれを削ってから v1alpha1 に書いている。
     extraMounts:
-      # local-path-provisioner のデータ置き場。Talos の /var は EPHEMERAL パーティション(アップグレードで消えない)。
       - destination: /var/local-path-provisioner
         type: bind
         source: /var/local-path-provisioner
         options: [bind, rshared, rw]
-  features:
-    hostDNS:
-      enabled: true
-      forwardKubeDNSToHost: true
+  network:
+    interfaces:
+      - interface: bond0
+        bond:
+          interfaces: [eno1, eno2]
+          mode: balance-alb
+          miimon: 100
+        dhcp: false
+        addresses:
+          - 10.0.0.2/24
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.0.0.1
+      - interface: eno4
+        dhcp: false
+        addresses:
+          - 10.10.0.4/24
+        routes:
+          - network: 10.10.0.0/24
+            gateway: 10.10.0.1
+---
+# extraMounts を v1alpha1 側に書くため、このドキュメントごと消す。
+apiVersion: v1alpha1
+kind: KubeletConfig
+$patch: delete
+---
+apiVersion: v1alpha1
+kind: KubeNetworkConfig
+podSubnets:
+    - 10.42.0.0/16
+    - fd42::/64
+serviceSubnets:
+    - 10.43.0.0/16
+    # **/64 は Talos に弾かれる(/108 以下が必須)。k3s の fd43::/64 から変わるので ClusterIP は振り直しになる。
+    - fd43::/108

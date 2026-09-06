@@ -33,7 +33,9 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       **`inlineManifests` が効くこと、デュアルスタック、local-path での PVC 作成を確認**。
       1.14 の machine config の作法(複数ドキュメント、service の IPv6 は `/108` 以下、PSA が既定 `baseline`)は
       [docs/talos-install-media.md](docs/talos-install-media.md) の「machine config の作法」にまとめた。
-- [ ] `talos/talconfig.yaml` を 1.14 の形に書き直す(talhelper + SOPS)。いまの内容は 1.13 以前の書き方で通らない。
+- [x] `talos/` を 1.14 の形に書き直した(2026-09-06)。talhelper はやめて `talosctl gen config` + パッチだけにし、
+      **`talosctl validate -m metal` が通ることを確認**。カーネル引数は Image Factory の schematic
+      (`32820716…`)に移した。手順は [talos/README.md](talos/README.md)。
 - [ ] 実機固有の確認: bond0(balance-alb、eno1+eno2)、eno4 の static、**IPv6 の token `::2` 相当**(無ければ
       stable-privacy + cloudflare-ddns で代替)、wg-easy の hostNetwork UDP 51820。QEMU の user-mode では試せない。
 - [ ] PSA のラベルが要る namespace を洗い出して manifest に入れる(`local-path-storage`、`wireguard`、`denpa`)。

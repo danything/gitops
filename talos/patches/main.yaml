@@ -1,9 +1,22 @@
-# main(実機)だけの設定。PT3 を KubeVirt の VM に渡すための IOMMU / vfio(ROADMAP「PT3」)。
+# 実機(main)だけの設定。
+#
+# **カーネル引数(intel_iommu=on / iommu=pt)は machine config ではなく Image Factory の schematic に入れている。**
+# v1.14 では `machine.install` が UnattendedInstallConfig と衝突して書けないため。
+# schematic: 32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
+#   customization.extraKernelArgs: [intel_iommu=on, iommu=pt]
+#   customization.systemExtensions.officialExtensions: [siderolabs/intel-ucode]
+---
+apiVersion: v1alpha1
+kind: UnattendedInstallConfig
+provisioning:
+    diskSelector:
+        # DL360 Gen9 の SAS SSD(447 GB)。実機で `talosctl get disks` を見てから確定させる。CEL 式。
+        match: disk.dev_path == "/dev/sda"
+    wipe: false
+---
+# PT3 を KubeVirt の VM にパススルーするための vfio(../docs/decisions.md「PT3 チューナー」)。
+# 上流の extension が入れば不要になる。
 machine:
-  install:
-    extraKernelArgs:
-      - intel_iommu=on
-      - iommu=pt
   kernel:
     modules:
       - name: vfio_pci

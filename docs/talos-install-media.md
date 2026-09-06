@@ -8,11 +8,16 @@
 Talos は「素の ISO」ではなく、必要な system extension を焼き込んだ ISO を https://factory.talos.dev で作る。
 組み合わせは **schematic** という YAML で表し、その内容のハッシュが schematic ID になる(同じ YAML なら誰が作っても同じ ID)。
 
-この箱に要るのは intel-ucode だけ(BCM5719 の tg3、bonding、AHCI は Talos のカーネルに入っている。Matrox G200 は無くてよい)。
+この箱に要る extension は intel-ucode だけ(BCM5719 の tg3、bonding、AHCI は Talos のカーネルに入っている)。
+**カーネル引数もここに入れる。** v1.14 では `machine.install` が `UnattendedInstallConfig` と衝突して machine config 側に
+書けないため、IOMMU の引数は schematic に持たせる。
 
 ```yaml
-# schematic.yaml
+# schematic.yaml (本番用)
 customization:
+  extraKernelArgs:
+    - intel_iommu=on      # PT3 を KubeVirt に渡すため
+    - iommu=pt
   systemExtensions:
     officialExtensions:
       - siderolabs/intel-ucode
@@ -23,13 +28,20 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 # => {"id":"2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8"}
 ```
 
-この ID は上の YAML から実際に発行したもの。Web UI(factory.talos.dev → Bare-metal Machine → amd64 → version → extensions で intel-ucode)でも同じ ID が出る。
+実際に発行した ID は 2 つある。
+
+| 用途 | schematic ID |
+| --- | --- |
+| **本番**(intel-ucode + IOMMU の引数) | `32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302` |
+| 検証用(intel-ucode のみ) | `2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8` |
+
+Web UI(factory.talos.dev → Bare-metal Machine → amd64 → version → extensions)でも同じ ID が出る。
 
 | 用途 | URL |
 | --- | --- |
-| ISO(通常、Secure Boot オフ) | `https://factory.talos.dev/image/2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8/v1.14.0/metal-amd64.iso` |
+| ISO(通常、Secure Boot オフ) | `https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.14.0/metal-amd64.iso` |
 | ISO(Secure Boot 用、Sidero の鍵で署名。UEFI に鍵登録が要るので今回は使わない) | 同じ URL で `metal-amd64-secureboot.iso` |
-| machine config の `machine.install.image` と `talosctl upgrade --image` | `factory.talos.dev/installer/2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8:v1.14.0` |
+| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.0` |
 
 ISO は約 400 MB。extension を足したくなったら schematic を作り直して ID を差し替え、`talosctl upgrade` で当てる(ISO を焼き直す必要はない)。
 
@@ -100,6 +112,7 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig talosconfig kubeconfig
 | --- | --- |
 | pod / service の CIDR | `KubeNetworkConfig` の `podSubnets` / `serviceSubnets` |
 | インストール先ディスク | `UnattendedInstallConfig` の `provisioning.diskSelector.match`(**CEL 式**。例 `disk.dev_path == "/dev/sda"`) |
+| カーネル引数 | `machine.install.extraKernelArgs` は使えない(同じく衝突)。**Image Factory の schematic の `customization.extraKernelArgs`** に入れる |
 | host DNS | `ResolverConfig`。**既定で有効**なので普通は書かなくてよい |
 | kubelet の `extraMounts` | `KubeletConfig` には無い。**`KubeletConfig` を `$patch: delete` してから** v1alpha1 の `machine.kubelet` に書く |
 | control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。`KubeNodeConfig` の `taints` を消す必要があるが、**strategic merge の空マップ(`taints: {}`)では消えなかった**。talhelper 経由か、起動後に `kubectl taint nodes --all node-role.kubernetes.io/control-plane-` |
