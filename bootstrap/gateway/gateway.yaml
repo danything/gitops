@@ -58,6 +58,19 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+    # *.s.doany.io(SSO 付きで LAN のホストへ中継)。証明書は 2 段目のワイルドカード。
+    - name: https-sub
+      protocol: HTTPS
+      port: 443
+      hostname: "*.s.doany.io"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: doany-sub-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All
     - name: https-apex
       protocol: HTTPS
       port: 443
