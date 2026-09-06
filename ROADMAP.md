@@ -108,4 +108,15 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 
 ## 未決事項
 
-いまのところ無し(2026-09-06 時点)。決着したものは [`docs/decisions.md`](docs/decisions.md) に移した。
+- **Entra ID のトークンを小さくして redis を廃止できるか。** いまの forward-auth は oauth2-proxy + redis で、
+  redis はセッション(トークン)を持つためだけに居る。Entra 側で**グループクレームを全部載せるのをやめて
+  アプリロールに切り替える**と `roles: ["admin"]` の数十バイトになり、oauth2-proxy を Cookie セッション
+  (`--session-store-type=cookie`)に変えられて redis が消せる。実測ではいまのセッションが 4293 バイトで、
+  Cookie の 4096 バイト制限に収まっていない。手順は Entra の アプリの登録 > トークン構成 で
+  groups クレームを外し、アプリロールを定義してユーザー/グループを割り当てる。
+  副次的に、将来 Gateway 内蔵の OIDC(Envoy Gateway など)を使う道も開く。
+- **Hubble を入れるか。** Cilium に同梱の可視化(フローログ、サービスマップ、UI)。CNI を Cilium にしたので
+  追加インストールは Helm の値 2 つ(`hubble.relay.enabled` と `hubble.ui.enabled`)で済む。
+  判断材料: 単一ノードでは Relay + UI で Pod が 2 つ増える、フローログはメモリを食う(既定のバッファは 4095 flow/ノード)、
+  一方で Cilium の NetworkPolicy を書くときに「何が落ちているか」が見えないと実質デバッグできない。
+  **NetworkPolicy を書き始めるなら実質必須、書かないなら不要**、という切り分けで決める。

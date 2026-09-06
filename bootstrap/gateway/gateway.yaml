@@ -1,24 +1,50 @@
-# Cilium Gateway(Gateway API)。Traefik と並走させて 1 ホストずつ移す。
-# 証明書は cert-manager が ClusterIssuer letsencrypt で発行し、listener の certificateRefs に入る Secret を作る。
+# Cilium Gateway(Gateway API)。Traefik と並走させ、HTTPRoute を 1 つずつ移す。
+# 証明書は cert-manager が ClusterIssuer letsencrypt(Cloudflare DNS-01)で発行する。
+# ワイルドカードなのでホストを足すたびに証明書を増やさなくてよい。
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: doany-wildcard
+  namespace: kube-system
+spec:
+  secretName: doany-wildcard-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+    - doany.io
+    - "*.doany.io"
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: doany
   namespace: kube-system
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt
 spec:
   gatewayClassName: cilium
   listeners:
-    - name: https-yk
+    # `*.doany.io` は 1 段だけなので apex は別リスナーが要る(証明書は同じ)。
+    - name: https
       protocol: HTTPS
       port: 443
-      hostname: yk.doany.io
+      hostname: "*.doany.io"
       tls:
         mode: Terminate
         certificateRefs:
           - kind: Secret
-            name: yk-doany-tls
+            name: doany-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https-apex
+      protocol: HTTPS
+      port: 443
+      hostname: doany.io
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: doany-wildcard-tls
       allowedRoutes:
         namespaces:
           from: All
