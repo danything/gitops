@@ -1,0 +1,178 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+    name: argocd
+    namespace: kube-system
+spec:
+    chart: argo-cd
+    repo: https://argoproj.github.io/argo-helm
+    targetNamespace: argocd
+    createNamespace: true
+    values:
+        # Native OIDC straight to Entra ID (same tenant/app registration as
+        # auth/deployment.yaml, gitlab, erpnext) instead of Dex.
+        dex:
+            enabled: false
+        configs:
+            params:
+                # TLS is terminated at traefik (mydnschallenge), so argocd-server
+                # talks plain HTTP internally to avoid a double-TLS redirect loop.
+                server.insecure: true
+            cm:
+                url: https://ac.doany.io
+                # Local admin superuser disabled now that Entra ID OIDC login works;
+                # the Entra "admins" group has role:admin via RBAC below (shared
+                # with auth/deployment.yaml's oauth2-proxy --allowed-groups).
+                accounts.admin.enabled: "false"
+                # The chart default is admin.enabled: true; without this override every
+                # helm upgrade would re-enable the admin login it fought argocd-server's
+                # field ownership over.
+                admin.enabled: "false"
+                oidc.config: |
+                    name: Microsoft Entra ID
+                    issuer: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
+                    clientID: b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
+                    # Secret argocd-oidc, built by oidc-secret.yaml from Infisical.
+                    clientSecret: $argocd-oidc:client-secret
+                    requestedScopes:
+                      - openid
+                      - profile
+                      - email
+                # Secret は ArgoCD の管理対象から外す。git に平文 Secret は置かない方針なので ArgoCD が Secret を
+                # 作ることは無く、一方で Infisical operator が作る Secret には CR からコピーされた tracking-id が
+                # 付くため、ArgoCD が「git に無い管理対象」と見なして sync 時に prune してしまう
+                # (復元リハーサル 2026-09-06、docs/restore-drill.md の 3)。
+                resource.exclusions: |
+                    - apiGroups: [""]
+                      kinds: ["Secret"]
+                      clusters: ["*"]
+            rbac:
+                policy.default: role:readonly
+                policy.csv: |
+                    g, 5847ec59-0f80-4713-89f9-3624cc217468, role:admin
+                scopes: '[groups, email]'
+        notifications:
+            secret:
+                # Helm's own empty placeholder secret would fight any externally
+                # managed argocd-notifications-secret for ownership, so let Helm skip it.
+                create: false
+            # notifiers/templates/triggers/subscriptions live here (not in a
+            # separately-applied ConfigMap) because the chart owns and re-renders
+            # argocd-notifications-cm on every release sync with notifications.cm.create
+            # true by default; anything applied out-of-band gets wiped the next time
+            # the HelmChart is reconciled.
+            notifiers:
+                service.webhook.mattermost: ENC[AES256_GCM,data:EBF9hzzBc+7EZV6PVw4y1orbrTl7vDgPPn+9nqTXrzxfxSEjS24bB4BLZeyprfinPrJEEdbFoAaVLVIo838iJjMNpebXCBfl1yZljIj11pPpzHFtlb9BnMR6nQ+UQH0jUmZKH6f4zoaH4xLVPbd0wrSloTi2ow==,iv:qiCQZYFhOwvdD3O0qaZT7b64MtQEHJTHqKVWwAddX30=,tag:VXdV3Bn7LDpwR8Rj8qG65g==,type:str]
+            templates:
+                # Succeeded is back: Progressing -> Healthy flips too fast to read as a
+                # "deploy complete" signal, so sync-result gives that its own clear ping.
+                template.app-sync-result: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.operationState.phase}} {{if eq .app.status.operationState.phase \"Succeeded\"}}✅{{else if eq .app.status.operationState.phase \"Running\"}}\U0001F680{{else}}❌{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
+                # Shared by both on-health-change branches, so all six health.status values
+                # need an emoji here (Healthy/Progressing included).
+                template.app-health-status: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.health.status}} {{if eq .app.status.health.status \"Healthy\"}}\U0001F49A{{else if eq .app.status.health.status \"Progressing\"}}\U0001F504{{else if eq .app.status.health.status \"Degraded\"}}\U0001F494{{else if eq .app.status.health.status \"Suspended\"}}⏸️{{else if eq .app.status.health.status \"Missing\"}}❓{{else}}❔{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
+            triggers:
+                # 'Running' sits between syncs as an intermediate phase, so this condition
+                # still flips false -> true on every new sync even though it's one `when`.
+                # Running and Succeeded both get oncePer (like the Healthy health-status
+                # branch below) so they fire once per revision instead of on every
+                # reconcile, while Error/Failed still notify every time.
+                trigger.on-sync-result: |
+                    - when: app.status.operationState.phase == 'Running'
+                      oncePer: app.status.sync.revision
+                      send: [app-sync-result]
+                    - when: app.status.operationState.phase in ['Error', 'Failed']
+                      send: [app-sync-result]
+                    - when: app.status.operationState.phase == 'Succeeded'
+                      oncePer: app.status.sync.revision
+                      send: [app-sync-result]
+                # Healthy dropped: on-sync-result's Succeeded already covers the
+                # "deploy completed fine" case, so this stays for anomalies only.
+                trigger.on-health-change: |
+                    - when: app.status.health.status == 'Progressing'
+                      oncePer: app.status.sync.revision
+                      send: [app-health-status]
+                    - when: app.status.health.status in ['Degraded', 'Suspended', 'Missing', 'Unknown']
+                      send: [app-health-status]
+            # Applies to every Application automatically (current and future, eg. via
+            # ApplicationSet) without needing per-app annotations.
+            subscriptions:
+                - recipients:
+                    - mattermost
+                  triggers:
+                    - on-sync-result
+                    - on-health-change
+        # The seed that makes ArgoCD start managing itself. It rides along with this
+        # chart install precisely so there's nothing extra to kubectl apply. The
+        # chart renders each entry through `tpl`, so anything put here must not
+        # contain Go template braces -- the ApplicationSet does, which is why it
+        # lives in argocd/repos.yaml and is pulled from git instead.
+        extraObjects:
+            # The GitHub App credential that lets ArgoCD read danything/* -- both the
+            # private repos (this one included) and the SCM Provider generator's org
+            # scan in argocd/repos.yaml. It genuinely can't be fetched from
+            # git, since it's what makes fetching from git possible, so it ships with
+            # the install instead. Created through the UI originally, hence the
+            # generated name: keeping that name means applying this adopts the
+            # existing secret instead of leaving two sets of credentials for the same
+            # URL behind. Plaintext because this is the one credential that can't
+            # come from Infisical: ArgoCD syncing is how Infisical itself gets
+            # deployed and recovered -- this repo is private.
+            - apiVersion: v1
+              kind: Secret
+              metadata:
+                name: creds-2776534691
+                namespace: argocd
+                labels:
+                    argocd.argoproj.io/secret-type: repo-creds
+              type: Opaque
+              stringData:
+                url: https://github.com/danything
+                githubAppID: "4434943"
+                githubAppInstallationID: "150067651"
+                githubAppPrivateKey: ENC[AES256_GCM,data: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,iv:yW49n4z5vQX75Rs+w9cgH6MLkJLL/wFvJF48Cvc2/Pg=,tag:zq4IcnwtQKOKQ+fx7NAHBQ==,type:str]
+            # The anchor, and the only thing here that has to be applied by hand
+            # (which the ArgoCD install already is). It syncs argocd/repos.yaml out of
+            # this repo, that ApplicationSet discovers the app repos, and each repo's
+            # own argocd.yaml decides how it gets deployed -- so changing any of that
+            # is a push, not a kubectl command.
+            #
+            # An Application syncs a whole directory, and this directory also holds
+            # the HelmChart that installs ArgoCD, so the include below is what keeps
+            # ArgoCD out of its own management. Widening it (say to '*.yaml') would
+            # put this file under prune/selfHeal: deleting it would then uninstall
+            # ArgoCD, and values couldn't be tried out with kubectl any more.
+            - apiVersion: argoproj.io/v1alpha1
+              kind: Application
+              metadata:
+                name: apps
+                namespace: argocd
+              spec:
+                project: default
+                source:
+                    repoURL: https://github.com/danything/gitops.git
+                    targetRevision: main
+                    path: bootstrap/argocd
+                    directory:
+                        include: repos.yaml
+                destination:
+                    server: https://kubernetes.default.svc
+                    namespace: argocd
+                syncPolicy:
+                    automated:
+                        prune: true
+                        selfHeal: true
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA4N3d6SXZiSlhOaTRHU3R3
+            NGk2UmxGR1REZS82b0dCb01hZUYrTjc5NFhzCnZMZUlHMjZORGsrakZYRWpacEZy
+            aFU5UlBsS0RXVGtsdGFnUElZa3BlU2sKLS0tIDdoMnV4dmxvREtoMlZEaXdWcG9Z
+            ekZ6UTV4SXZPUndkR05uOGpTWEw2TlkKlzlhz06P0COtjs7sa1W3t6FtKILya34p
+            0nPbWVSWBw/pxgNr3ynv3Mtby0aP4FVHiksU4+eTjqvbDtK7/MQMPg==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
+    lastmodified: "2026-09-06T10:52:09Z"
+    mac: ENC[AES256_GCM,data:p/VeKpdIQzVtda7IhS/021xXZ3npXYA+8ld1PV845ml7qDsxo43uVqnRuPlOP7SgcOB6+mFs2knwrEdMN55p0CR0oSpN78TBWITn9KFN9ARDH4gtLMRumNa2BSafB4xSLZ5QlD8HzrJk9BgQXH6kaTOnsTlGHJsBDKASE9ltKyk=,iv:fc3tTl2Gv/bWc3keN1bALZMD3+JVGGUla0ePHM8VHao=,tag:thUE3gcNmvyg11JyEjZYrg==,type:str]
+    version: 3.13.3

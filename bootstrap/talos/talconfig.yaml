@@ -1,0 +1,54 @@
+# talhelper の入力(https://github.com/budimanjojo/talhelper)。Phase 1 の Hyper-V / QEMU 検証で叩き台にする。**未検証**。
+#   talhelper gensecret > talsecret.sops.yaml   # → sops(age)で暗号化してコミット
+#   talhelper genconfig                          # → clusterconfig/ に machine config が出る(.gitignore 済み)
+# 手順は docs/talos-install-media.md。
+clusterName: doany
+talosVersion: v1.14.0
+kubernetesVersion: v1.36.2
+endpoint: https://10.0.0.2:6443
+allowSchedulingOnControlPlanes: true
+cniConfig:
+  name: flannel            # 既定のまま。Cilium は後から検討(ROADMAP「ルーティングの選定」)
+clusterPodNets:
+  - 10.42.0.0/16
+  - fd42::/64
+clusterSvcNets:
+  - 10.43.0.0/16
+  - fd43::/64
+patches:
+  - "@./patches/cluster.yaml"
+nodes:
+  - hostname: main
+    ipAddress: 10.0.0.2
+    controlPlane: true
+    installDiskSelector:
+      # DL360 Gen9 の SAS SSD(447 GB、Radeon R7)。lsblk -o NAME,SIZE,MODEL で確認してから使う
+      model: "Radeon R7*"
+    schematic:
+      customization:
+        systemExtensions:
+          officialExtensions:
+            - siderolabs/intel-ucode
+    networkInterfaces:
+      - interface: bond0
+        bond:
+          interfaces: [eno1, eno2]
+          mode: balance-alb
+          miimon: 100
+        dhcp: false
+        addresses:
+          - 10.0.0.2/24
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.0.0.1
+        # IPv6 は RA/SLAAC(Talos は既定で RA を受ける)。NetworkManager の ipv6.token ::2 に相当する設定は Talos に無いので、
+        # addr_gen_mode=2(stable-privacy)にして MAC を出さず、AAAA は cloudflare-ddns に任せる(patches/cluster.yaml の sysctls)。
+      - interface: eno4
+        dhcp: false
+        addresses:
+          - 10.10.0.4/24
+        routes:
+          - network: 10.10.0.0/24
+            gateway: 10.10.0.1
+    patches:
+      - "@./patches/main.yaml"

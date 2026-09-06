@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sub-backend
+  namespace: kube-system
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: sub-backend-manual
+  namespace: kube-system
+  labels:
+    kubernetes.io/service-name: sub-backend
+addressType: IPv4
+ports:
+  - name: http
+    port: 80
+endpoints:
+  - addresses: ["10.10.0.2"]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: sub
+  namespace: kube-system
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostRegexp(`^.+\.s\.doany\.io$`)
+      kind: Rule
+      middlewares:
+        - name: forward-auth-errors
+          namespace: auth
+        - name: forward-auth
+          namespace: auth
+      services:
+        - name: sub-backend
+          port: 80
+  tls:
+    certResolver: mydnschallenge
+    domains:
+      - main: "*.s.doany.io"

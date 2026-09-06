@@ -1,0 +1,14 @@
+[Unit]
+Description=Back up this k3s host to restic
+After=k3s.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/k3s-backup
+# systemd 配下には $HOME が無いので restic のキャッシュ先を明示する(無いと毎回 index を全部取りに行く)
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+# restic の prune はメモリを食うので、他を巻き込まないよう少し下げる
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

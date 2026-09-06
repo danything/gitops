@@ -1,0 +1,5 @@
+cluster-cidr: "10.42.0.0/16,fd42::/64"
+service-cidr: "10.43.0.0/16,fd43::/64"
+flannel-ipv6-masq: true
+flannel-iface: bond0
+write-kubeconfig-mode: "0644"

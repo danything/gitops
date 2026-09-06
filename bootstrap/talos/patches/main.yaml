@@ -1,0 +1,10 @@
+# main(実機)だけの設定。PT3 を KubeVirt の VM に渡すための IOMMU / vfio(ROADMAP「PT3」)。
+machine:
+  install:
+    extraKernelArgs:
+      - intel_iommu=on
+      - iommu=pt
+  kernel:
+    modules:
+      - name: vfio_pci
+      - name: vfio_iommu_type1

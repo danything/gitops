@@ -6,7 +6,7 @@ name: gitops
 namespace: ''
 
 # Directory holding the manifests, relative to the repo root.
-sourcePath: .
+sourcePath: apps
 recurse: true
 
 # autoSync: false leaves the app on manual sync in the UI.

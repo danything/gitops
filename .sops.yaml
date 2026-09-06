@@ -1,0 +1,6 @@
+# bootstrap/ にある平文の秘密だけを暗号化する。鍵は recovery/sops-age.key.age
+# (env.age と同じパスフレーズ)。復号は `age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age` のあと sops -d。
+creation_rules:
+  - path_regex: ^bootstrap/.*\.yaml$
+    encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
