@@ -57,71 +57,14 @@ spec:
         - name: adguardhome-work
           persistentVolumeClaim:
             claimName: adguardhome-work
+        # DoT(853)用の証明書。cert-manager が d.doany.io で発行した Secret を、
+        # AdGuard の設定が見ているファイル名(server.crt / server.key)に読み替えて渡す。
+        # 以前は Traefik の acme.json を監視する acme-watcher が PVC に書き出していた。
         - name: adguardhome-ssl
-          persistentVolumeClaim:
-            claimName: adguardhome-ssl
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: acme-watcher
-  namespace: adguardhome
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: acme-watcher
-  template:
-    metadata:
-      labels:
-        app: acme-watcher
-    spec:
-      containers:
-        - name: acme-watcher
-          image: alpine:3.18
-          env:
-            - name: ACME_JSON
-              value: "/host/traefik/acme.json"
-            - name: SCRIPT_PATH
-              value: "/host/adguard-ssl/process_acme_script.sh"
-            - name: DOMAIN
-              value: "d.doany.io"
-            - name: OUT_DIR
-              value: "/host/adguard-ssl"
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -euo pipefail
-              apk add --no-cache inotify-tools jq coreutils bash >/dev/null 2>&1 || true
-              # 初回実行
-              if [ -x "${SCRIPT_PATH}" ]; then
-                /bin/sh "${SCRIPT_PATH}" || true
-              else
-                echo "script not executable: ${SCRIPT_PATH}" >&2
-                exit 2
-              fi
-              # 監視ループ
-              while inotifywait -e close_write -e moved_to -e create "${ACME_JSON}"; do
-                echo "$(date -Iseconds) acme.json changed, running script"
-                /bin/sh "${SCRIPT_PATH}" || true
-              done
-          volumeMounts:
-            - name: traefik-acme
-              mountPath: /host/traefik
-              readOnly: true
-            - name: adguard-ssl
-              mountPath: /host/adguard-ssl
-      volumes:
-        - name: traefik-acme
-          hostPath:
-            # traefik/acme.json now lives in a PVC (kube-system/traefik-acme,
-            # local-path-retain). PVCs are namespace-scoped and local-path
-            # doesn't support ReadWriteMany, so this cross-namespace reader
-            # points directly at the PV's resolved on-disk directory instead.
-            # Safe because the PV is Retain and its path is stable.
-            path: /var/lib/rancher/k3s/storage/pvc-644cbb1d-786b-4d52-8632-6edd9536cb50_kube-system_traefik-acme
-            type: Directory
-        - name: adguard-ssl
-          persistentVolumeClaim:
-            claimName: adguardhome-ssl
+          secret:
+            secretName: adguard-dot-tls
+            items:
+              - key: tls.crt
+                path: server.crt
+              - key: tls.key
+                path: server.key

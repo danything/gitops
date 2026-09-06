@@ -1,0 +1,14 @@
+# DoT(853)で使う証明書。以前は Traefik の acme.json を acme-watcher が監視して PVC に書き出していたが、
+# cert-manager が直接 Secret に発行する形にした(deployment.yaml がその Secret をマウントする)。
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: adguard-dot
+  namespace: adguardhome
+spec:
+  secretName: adguard-dot-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+    - d.doany.io

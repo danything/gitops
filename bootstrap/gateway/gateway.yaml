@@ -1,0 +1,24 @@
+# Cilium Gateway(Gateway API)。Traefik と並走させて 1 ホストずつ移す。
+# 証明書は cert-manager が ClusterIssuer letsencrypt で発行し、listener の certificateRefs に入る Secret を作る。
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: doany
+  namespace: kube-system
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: https-yk
+      protocol: HTTPS
+      port: 443
+      hostname: yk.doany.io
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: yk-doany-tls
+      allowedRoutes:
+        namespaces:
+          from: All

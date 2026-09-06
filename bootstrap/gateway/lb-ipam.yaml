@@ -1,0 +1,23 @@
+# Cilium LB-IPAM。Gateway の待ち受けアドレスを LAN から払い出す。
+# 公開しているサービス(Traefik / AdGuard / Mattermost calls)は hostPort でノードの IP に直接出しているので、
+# ここのプールは Gateway API への移行中に使う作業用アドレス。
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: lan
+spec:
+  blocks:
+    - start: "10.10.0.50"
+      stop: "10.10.0.55"
+---
+# 払い出したアドレスを eno4(社内 LAN 側)で ARP 応答する。
+# 注意: LB IP は ICMP に応答しないので ping では確認できない。TCP で叩くこと。
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: lan
+spec:
+  loadBalancerIPs: true
+  interfaces: ["^eno4$"]
+  nodeSelector:
+    matchLabels: {}
