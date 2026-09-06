@@ -162,23 +162,29 @@ spec:
             # OIDC は必ず401になる。v15.4.0 でも assertHasOauthProps は
             # email_verified 必須のまま(upstream #2741 でオプション化を要望中)。
             # 上流が修正されるまで無効にしておく。
-            # 有効化するときは値を "oidc" に戻すだけでよい。
+            # 有効化するときは値を "oidc" に戻し、Infisical に /wireguard/wg-easy-oidc を作る
+            # (OAUTH_OIDC_CLIENT_ID と OAUTH_OIDC_CLIENT_SECRET)。
             - name: OAUTH_PROVIDERS
               value: ""
             - name: OAUTH_OIDC_NAME
               value: "Entra ID"
             - name: OAUTH_OIDC_SERVER
               value: "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0"
+            # OIDC が無効な間は Secret wg-easy-oidc を置かない(Infisical にも入れていない)ので optional。
+            # これが無いと、Secret がまだ無い復元直後に Pod が CreateContainerConfigError で起動できない
+            # (bootstrap/docs/restore-drill.md の 5)。
             - name: OAUTH_OIDC_CLIENT_ID
               valueFrom:
                 secretKeyRef:
                   name: wg-easy-oidc
                   key: OAUTH_OIDC_CLIENT_ID
+                  optional: true
             - name: OAUTH_OIDC_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: wg-easy-oidc
                   key: OAUTH_OIDC_CLIENT_SECRET
+                  optional: true
             # Entra側で既にadminsグループに絞られているため自動登録して良い
             - name: OAUTH_AUTO_REGISTER
               value: "true"
