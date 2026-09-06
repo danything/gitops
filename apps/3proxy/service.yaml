@@ -10,3 +10,7 @@ spec:
     - name: proxy
       port: 3128
       targetPort: 3128
+    # Gateway からの TLS passthrough はこちらに入る(サイドカーが終端する)。
+    - name: proxy-tls
+      port: 3129
+      targetPort: 3129

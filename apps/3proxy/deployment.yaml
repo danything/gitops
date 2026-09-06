@@ -14,6 +14,28 @@ spec:
         app: 3proxy
     spec:
       containers:
+        # TLS を終端して 127.0.0.1:3128 に渡すだけのサイドカー。証明書は cert-manager が発行する。
+        # 更新は Secret の中身が変わるだけなので、nginx を定期的に読み直させる。
+        - name: tls-terminator
+          image: nginx:1.29-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              nginx -c /etc/nginx/nginx.conf -g 'daemon off;' &
+              pid=$!
+              while :; do sleep 6h; nginx -c /etc/nginx/nginx.conf -s reload 2>/dev/null || true; done &
+              wait $pid
+          ports:
+            - name: proxy-tls
+              containerPort: 3129
+          volumeMounts:
+            - name: tls-terminator-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: tls
+              mountPath: /etc/nginx/tls
+              readOnly: true
         - name: 3proxy
           image: ghcr.io/3proxy/3proxy:1.0.0
           env:
@@ -42,6 +64,12 @@ spec:
             capabilities:
               drop: ["ALL"]
       volumes:
+        - name: tls-terminator-config
+          configMap:
+            name: tls-terminator
+        - name: tls
+          secret:
+            secretName: 3proxy-tls
         - name: config
           configMap:
             name: 3proxy

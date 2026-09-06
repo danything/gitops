@@ -1,0 +1,21 @@
+# TLS を終端して素の TCP を 3proxy に渡すだけの nginx。
+# Cilium の Gateway は TLS 終端リスナーに TCPRoute を付けられないので(docs/decisions.md 参照)、
+# 終端を Pod 側に寄せて Gateway は passthrough にしている。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tls-terminator
+  namespace: 3proxy
+data:
+  nginx.conf: |
+    worker_processes 1;
+    events { worker_connections 1024; }
+    stream {
+      server {
+        listen 3129 ssl;
+        ssl_certificate     /etc/nginx/tls/tls.crt;
+        ssl_certificate_key /etc/nginx/tls/tls.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        proxy_pass 127.0.0.1:3128;
+      }
+    }
