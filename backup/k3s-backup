@@ -161,4 +161,9 @@ rm -f "$SNAP_DIR/state.db"
 restic forget --tag "$TAG" $KEEP --prune
 restic check --read-data-subset=5%
 
-notify "OK ✅"
+# R2 の無料枠は 10 GB/月。実際に置かれている量(重複排除・圧縮後)を通知に出して、
+# 増え方が見えるようにする。
+SIZE="$(restic stats --mode raw-data --json 2>/dev/null | python3 -c 'import sys,json;print("%.2f GiB" % (json.load(sys.stdin)["total_size"]/1073741824))' 2>/dev/null || echo unknown)"
+SNAPS="$(restic snapshots --tag "$TAG" --json 2>/dev/null | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?")"
+
+notify "OK ✅ ($SNAPS snapshots, $SIZE in R2 / 10 GiB free tier)"
