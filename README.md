@@ -19,7 +19,7 @@ k3s クラスタ上のセルフホストアプリを [Argo CD](https://argo-cd.r
 | [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
 | `talos/` | Talos への移行用 machine config(検証中。1.14 の形に書き直しが要る) |
-| [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos のインストールメディアと machine config](docs/talos-install-media.md) |
+| [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos のインストールメディアと machine config](docs/talos.md) |
 | [`ROADMAP.md`](ROADMAP.md) | 暫定構成から Talos までの道筋と、決定の記録 |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
 | `.sops.yaml` | `bootstrap/` にある平文の秘密を SOPS(age)で暗号化する規則 |

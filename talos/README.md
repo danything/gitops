@@ -1,7 +1,7 @@
 # talos
 
 実機(HP ProLiant DL360 Gen9)を Talos Linux に載せ替えるための machine config。
-**v1.14.0 の形で書いてある**(1.13 以前とは別物。作法は [../docs/talos-install-media.md](../docs/talos-install-media.md))。
+**v1.14.0 の形で書いてある**(1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
 
 talhelper は使わない。`talosctl gen config` にこのディレクトリのパッチを渡すだけで足りる。
 

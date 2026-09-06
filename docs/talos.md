@@ -1,4 +1,4 @@
-# Talos Linux のインストールメディア
+# Talos Linux — メディア作成と machine config
 
 対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、NIC は BCM5719 ×4、ディスクは SAS の SSD 447 GB)。
 検証用に Hyper-V でも同じ ISO を使う。2026-09-06 時点の最新は Talos v1.14.0(v1.13.10 も可)。
@@ -146,3 +146,32 @@ kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged
 - **`cluster.inlineManifests` は期待どおり適用された**(仕込んだ Namespace がラベルごと存在した)。
   `bootstrap/` をここに載せる案([decisions.md](decisions.md))は成立する
 - flannel でデュアルスタック、CoreDNS / kube-proxy / scheduler すべて Running
+
+## etcd スナップショットからの復旧(検証済み)
+
+Talos 期のバックアップは **etcd(k8s オブジェクト)と PV データで別経路**になる。両方を試した。
+
+```shell
+talosctl etcd snapshot ./etcd.snapshot          # 1.8 MB / 394 keys (検証時)
+```
+
+復旧は、**同じ `secrets.yaml` で machine config を作り直す**のが肝(PKI が一致しないと復旧できない)。
+
+```shell
+# まっさらなディスクに ISO から入れ直したあと
+talosctl apply-config --insecure -n <IP> -f controlplane.yaml
+# 再起動を待って
+talosctl bootstrap --recover-from=./etcd.snapshot
+```
+
+2026-09-06 に空のディスクから実際に通した結果:
+
+- Node が**同じ名前・同じ作成時刻**で Ready に戻り、Namespace・Deployment・PVC/PV の紐付け・
+  PSA のラベルまでスナップショット時点の状態が復元された
+- **PV の中身は戻らない。** `/var/local-path-provisioner` は空のままだった。
+  etcd は「PVC がこの PV に紐づいている」という事実しか持っていない
+- したがって Talos 期の復元は **etcd スナップショット → PV データを restic(k8up)から戻す** の 2 段になる。
+  順序は etcd が先(PV オブジェクトが無いと戻す先が決まらない)
+
+`bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
+数分待って再試行する。

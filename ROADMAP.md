@@ -2,7 +2,7 @@
 
 いまの「Ubuntu + k3s(sqlite)」は暫定構成で、最終形は **Talos Linux**(ホストに repo も clone も置かない)。
 ここには**やること と 進捗**だけを置く。**なぜそうしたかは [`docs/decisions.md`](docs/decisions.md)**、
-Talos のインストールメディアは [`docs/talos-install-media.md`](docs/talos-install-media.md)、
+Talos のインストールメディアは [`docs/talos.md`](docs/talos.md)、
 復元リハーサルは [`docs/restore-drill.md`](docs/restore-drill.md)。
 
 ## ロードマップ
@@ -32,7 +32,7 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
 - [x] QEMU/KVM(サーバ上)で v1.14.0 を起動 → `apply-config` → `bootstrap` → kubeconfig 取得まで通した(2026-09-06)。
       **`inlineManifests` が効くこと、デュアルスタック、local-path での PVC 作成を確認**。
       1.14 の machine config の作法(複数ドキュメント、service の IPv6 は `/108` 以下、PSA が既定 `baseline`)は
-      [docs/talos-install-media.md](docs/talos-install-media.md) の「machine config の作法」にまとめた。
+      [docs/talos.md](docs/talos.md) の「machine config の作法」にまとめた。
 - [x] `talos/` を 1.14 の形に書き直した(2026-09-06)。talhelper はやめて `talosctl gen config` + パッチだけにし、
       **`talosctl validate -m metal` が通ることを確認**。カーネル引数は Image Factory の schematic
       (`32820716…`)に移した。手順は [talos/README.md](talos/README.md)。
@@ -42,7 +42,9 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
 - [ ] HelmChart CRD 依存(argocd / infisical / push-bridge)を ArgoCD の Application に書き直す。
 - [ ] Envoy Gateway + cert-manager + MetalLB を組み、`ingress2gateway` で HTTPRoute を作って各 repo に **Ingress と並置**でコミットする。
 - [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に PVC バックアップと `backupcommand` の dump が取れること。
-- [ ] `talosctl etcd snapshot` → 別 VM で `talosctl bootstrap --recover-from` の復元リハーサル。
+- [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
+      k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
+      詳細は [docs/talos.md](docs/talos.md)。
 
 ### Phase 2 — 切り替え(停止を伴う)
 
