@@ -49,7 +49,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 ## Secret
 
 各アプリの `*-secrets.yaml` は [Infisical 純正 operator](https://infisical.com/docs/integrations/platforms/kubernetes/overview) の `InfisicalSecret`。
-値は Infisical（https://il.doany.io、`danything/bootstrap` の README 参照）のフォルダ
+値は Infisical（https://il.doany.io、[`bootstrap/README.md`](bootstrap/README.md) 参照）のフォルダ
 `/<namespace>/<Secret 名>`（例: `/erpnext/erpnext`、`/mattermost/mattermost`）にあり、
 シークレット名がそのまま Secret のキーになる。平文の Secret も暗号化した Secret もコミットしない。
 
