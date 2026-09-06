@@ -1,0 +1,95 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: repos
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    # Every key referenced below has to exist in the repo's argocd.yaml.
+    # A missing or misspelled one fails the generator loudly instead of
+    # rendering an Application with an empty name or path.
+    - missingkey=error
+  generators:
+    # Two steps: find the repos, then let each repo describe itself.
+    #   1. scmProvider walks the danything org and keeps repos that carry a
+    #      deploy/argocd.yaml (this replaces the "argocd" GitHub topic
+    #      that the deleted sync-webhooks.sh used to look for).
+    #   2. git reads that file out of the repo, and its keys become the
+    #      template parameters below.
+    # Adding an app is therefore "push manifests + deploy/argocd.yaml to a new repo".
+    # This file is the one piece that isn't decided per-repo, because it's the
+    # rule for *finding* the repos -- it can't live in the repos it finds.
+    - matrix:
+        generators:
+          - scmProvider:
+              cloneProtocol: https
+              github:
+                organization: danything
+                # Default branch only. allBranches: true would produce one
+                # Application per branch, which is for preview environments.
+                allBranches: false
+                # The GitHub App repo-creds ArgoCD already uses to clone
+                # danything/*, reused for the org API scan -- so there's no
+                # second credential to create, no anonymous 60 req/hr ceiling
+                # (this scan runs every 3 minutes), and worklog-cloud doesn't
+                # go invisible for being private.
+                appSecretName: creds-2776534691
+              filters:
+                - pathsExist:
+                    - deploy/argocd.yaml
+          - git:
+              repoURL: '{{ .url }}'
+              revision: '{{ .branch }}'
+              files:
+                - path: deploy/argocd.yaml
+  # generator の結果から repo が消えても(改名の途中、一時的な API エラー)、Application は消しても
+  # その中の実リソース(Deployment や PVC)は道連れにしない。
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      # Declared per-repo rather than derived from the repo name, because the
+      # hand-made Applications don't match their repos (denpa -> epg,
+      # worklog-cloud -> worklog). Keeping the existing
+      # names lets the controller adopt them in place -- it adds its
+      # ownerReference to the Application that's already there instead of
+      # standing up a second one fighting over the same resources.
+      name: '{{ .name }}'
+    spec:
+      project: default
+      source:
+        repoURL: '{{ .url }}'
+        targetRevision: '{{ .branch }}'
+        path: '{{ .sourcePath }}'
+        directory:
+          include: '*.yaml'
+          # gitops keeps its manifests at the repo root (sourcePath: .,
+          # recurse: true), so its deploy/argocd.yaml ends up inside the synced
+          # path one level down; without this the sync fails on a document
+          # with no apiVersion/kind. ** matches it there and at top level for
+          # any repo whose sourcePath is the same directory argocd.yaml lives in.
+          # bootstrap/** も外す。gitops repo は同期対象を apps/ に絞っているので通常は当たらないが、
+          # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
+          # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
+          exclude: '{**/argocd.yaml,bootstrap/**}'
+      destination:
+        server: https://kubernetes.default.svc
+        # Empty for a repo whose manifests span several namespaces, which is
+        # fine because every manifest in these repos carries its own.
+        namespace: '{{ .namespace }}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+  # These four live in the patch rather than in template because plain
+  # templating only substitutes strings, and they're booleans.
+  templatePatch: |
+    spec:
+      source:
+        directory:
+          recurse: {{ .recurse }}
+      syncPolicy:
+        automated:
+          enabled: {{ .autoSync }}
+          prune: {{ .prune }}
+          selfHeal: {{ .selfHeal }}

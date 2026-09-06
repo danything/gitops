@@ -1,0 +1,25 @@
+# Traefik ダッシュボード。*.s.doany.io と同じく oauth2-proxy (auth/) の
+# forwardAuth で守る。allowCrossNamespace が有効なので auth ns の
+# Middleware をそのまま参照できる。forward-auth-errors を先に置くのは
+# 401 を 302 (サインイン画面) に書き換えるため (auth/middleware.yaml 参照)。
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: dashboard
+  namespace: kube-system
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`t.doany.io`)
+      kind: Rule
+      middlewares:
+        - name: forward-auth-errors
+          namespace: auth
+        - name: forward-auth
+          namespace: auth
+      services:
+        - name: api@internal
+          kind: TraefikService
+  tls:
+    certResolver: mydnschallenge

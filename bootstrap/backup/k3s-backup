@@ -1,0 +1,164 @@
+#!/bin/sh
+# k3s-backup: この k3s ホストを restic で丸ごとバックアップする(root で実行、systemd timer 経由)。
+#
+# 取るもの(復元は restore.sh。`restic restore latest --target /` で元の場所に戻る前提の絶対パス構成):
+#   /var/lib/rancher/k3s/storage/                 local-path-retain の PVC データ(アプリの DB・メディア)
+#   /var/lib/rancher/k3s/server/{tls,cred,token}  クラスタ CA・証明書・join 資格情報(無いと復元後に別 CA が生成され state.db と食い違う)
+#   /var/lib/k3s-backup/state.db                  k3s の datastore(全 k8s オブジェクト)の sqlite ホットバックアップ
+#   /var/lib/k3s-backup/k3s-version               restore.sh が同じ k3s バージョンを入れるためのメモ
+#   /etc/rancher/k3s/config.yaml                  k3s のホスト設定(旧 k3s-server-config.yaml)
+#   /etc/NetworkManager/system-connections/       bond0 / eno4 のプロファイル(旧 setup-network.sh)
+#   /etc/netplan/                                 Ubuntu では NM が profile を netplan 経由でここに書く
+#   /etc/NetworkManager/conf.d/20-no-auto-default.conf
+#   /etc/k3s-backup/env, このスクリプト, systemd unit  復元後にそのまま timer が動くように
+#
+# 秘密は /etc/k3s-backup/env だけ(RESTIC_REPOSITORY / RESTIC_PASSWORD / S3 の鍵)。
+# env 自身もスナップショットに入るが、それ自身のパスフレーズで暗号化されているので問題ない。
+#
+# DB の整合性のため、対象 namespace の Deployment/StatefulSet を scale down してから取る。
+# wireguard も止まるので VPN 越しに手動実行すると自分のセッションが切れる。timer からなら関係ない。
+
+set -eu
+
+ENV_FILE="${ENV_FILE:-/etc/k3s-backup/env}"
+SNAP_DIR=/var/lib/k3s-backup
+K3S_STORAGE_DIR=/var/lib/rancher/k3s/storage
+K3S_SERVER_DIR=/var/lib/rancher/k3s/server
+K3S_STATE_DB="$K3S_SERVER_DIR/db/state.db"
+KUBECTL="${KUBECTL:-k3s kubectl}"
+TAG=k3s-host
+
+[ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
+[ -r "$ENV_FILE" ] || { echo "$ENV_FILE not found" >&2; exit 1; }
+set -a
+. "$ENV_FILE"
+set +a
+: "${RESTIC_REPOSITORY:?}" "${RESTIC_PASSWORD:?}"
+export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-/var/cache/restic}"
+mkdir -p "$RESTIC_CACHE_DIR"
+
+# PVC を持つ(=中身の整合性が要る)namespace は PVC の一覧から毎回求める(固定リストだと陳腐化する)。
+# kube-system(traefik の ACME 用 PVC)は止めない。env の TARGET_NAMESPACES で上書き可。
+# denpa(録画)は terminationGracePeriodSeconds=21900 で録画終了まで Pod が消えないので止めない
+# (止めると古い Pod と新しい Pod が同じチューナーと PVC を取り合う)。中身は crash-consistent で取る。
+SKIP_SCALE_NAMESPACES="${SKIP_SCALE_NAMESPACES:-denpa}"
+if [ -z "${TARGET_NAMESPACES:-}" ]; then
+	TARGET_NAMESPACES="$($KUBECTL get pvc -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' | grep -vx kube-system | sort -u | tr '\n' ' ')"
+fi
+for skip in $SKIP_SCALE_NAMESPACES; do
+	TARGET_NAMESPACES="$(printf '%s\n' $TARGET_NAMESPACES | grep -vx "$skip" | tr '\n' ' ')"
+done
+KEEP="${RESTIC_KEEP:---keep-daily 7 --keep-weekly 4 --keep-monthly 6}"
+# --no-scale: 初回の暖機用(稼働中のまま取る。整合性は保証されないが、次回の scale down 中のアップロードが差分だけになる)
+NO_SCALE=0
+[ "${1:-}" = "--no-scale" ] && NO_SCALE=1
+
+STATE_FILE="$(mktemp)"
+SCALED_DOWN=0
+TAB="$(printf '\t')"
+
+notify() {
+	[ -n "${MATTERMOST_WEBHOOK:-}" ] || return 0
+	curl -fsS -m 10 -H 'Content-Type: application/json' \
+		-d "{\"text\": \"[k3s-backup] $(hostname): $1\"}" "$MATTERMOST_WEBHOOK" >/dev/null 2>&1 || true
+}
+
+restore_replicas() {
+	[ "$SCALED_DOWN" -eq 1 ] || return 0
+	while IFS="$TAB" read -r ns kind name replicas; do
+		[ -n "$ns" ] && [ -n "$name" ] || continue
+		case "$replicas" in ""|*[!0-9]*) replicas=1 ;; esac
+		$KUBECTL -n "$ns" scale "$kind" "$name" --replicas="$replicas" >/dev/null || true
+	done < "$STATE_FILE"
+	SCALED_DOWN=0
+}
+
+finish() {
+	rc=$?
+	restore_replicas
+	rm -f "$STATE_FILE"
+	[ "$rc" -eq 0 ] || notify "FAILED (exit $rc) ❌"
+	exit "$rc"
+}
+trap finish EXIT HUP INT TERM
+
+# --- 1) k3s datastore のホットバックアップ + バージョン ------------------------------
+# **scale down より前に取る。** 後に取ると Deployment/StatefulSet の replicas=0 がスナップショットに焼き込まれ、
+# 復元したクラスタで git 管理外のもの(Infisical の HelmChart など)が 0 のまま二度と上がらない
+# (2026-09-06 のリハーサルで発生)。sqlite の .backup 自体が単体で整合しているので、PV データより数秒古くても問題ない。
+mkdir -p "$SNAP_DIR"
+chmod 700 "$SNAP_DIR"
+rm -f "$SNAP_DIR/state.db"
+sqlite3 "$K3S_STATE_DB" ".backup '$SNAP_DIR/state.db'"
+k3s --version | awk 'NR==1 {print $3}' > "$SNAP_DIR/k3s-version"
+
+# --- 2) scale down -----------------------------------------------------------
+: > "$STATE_FILE"
+[ "$NO_SCALE" -eq 1 ] && echo "--no-scale: workloads stay up (crash-consistent warm-up run)"
+[ "$NO_SCALE" -eq 1 ] && TARGET_NAMESPACES=""
+for ns in $TARGET_NAMESPACES; do
+	if ! $KUBECTL get ns "$ns" >/dev/null 2>&1; then
+		echo "WARNING: namespace '$ns' does not exist -- TARGET_NAMESPACES is stale, fix it" >&2
+		continue
+	fi
+	for kind in deploy sts; do
+		$KUBECTL -n "$ns" get "$kind" \
+			-o jsonpath="{range .items[*]}{.metadata.namespace}{'\t'}${kind}{'\t'}{.metadata.name}{'\t'}{.spec.replicas}{'\n'}{end}" \
+			>> "$STATE_FILE" 2>/dev/null || true
+	done
+done
+
+while IFS="$TAB" read -r ns kind name replicas; do
+	[ -n "$ns" ] && [ -n "$name" ] || continue
+	case "$replicas" in ""|*[!0-9]*) replicas=1 ;; esac
+	[ "$replicas" -eq 0 ] && continue
+	$KUBECTL -n "$ns" scale "$kind" "$name" --replicas=0 >/dev/null
+done < "$STATE_FILE"
+SCALED_DOWN=1
+
+# Pod が実際に消えるのを待つ(DB のファイルが閉じられるまで)。Job や DaemonSet の Pod は対象外。
+remaining() {
+	$KUBECTL get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace} {.metadata.ownerReferences[0].kind}{"\n"}{end}' 2>/dev/null \
+		| grep -E ' (ReplicaSet|StatefulSet)$' | awk '{print $1}' | sort -u > "$STATE_FILE.pods"
+	LEFT=""
+	for ns in $TARGET_NAMESPACES; do grep -qx "$ns" "$STATE_FILE.pods" && LEFT="$LEFT $ns"; done
+	rm -f "$STATE_FILE.pods"
+	[ -n "$LEFT" ]
+}
+i=0
+while [ "$SCALED_DOWN" -eq 1 ] && remaining; do
+	i=$((i+1))
+	[ "$i" -ge 60 ] && { echo "WARNING: pods still running after 120s in: $LEFT -- continuing" >&2; break; }
+	sleep 2
+done
+
+# --- 3) restic ---------------------------------------------------------------
+PATHS=""
+for p in \
+	"$K3S_STORAGE_DIR" \
+	"$K3S_SERVER_DIR/tls" "$K3S_SERVER_DIR/cred" "$K3S_SERVER_DIR/token" \
+	"$SNAP_DIR" \
+	/etc/rancher/k3s/config.yaml \
+	/etc/NetworkManager/system-connections \
+	/etc/NetworkManager/conf.d/20-no-auto-default.conf \
+	/etc/netplan \
+	"$ENV_FILE" \
+	/usr/local/bin/k3s-backup \
+	/etc/systemd/system/k3s-backup.service \
+	/etc/systemd/system/k3s-backup.timer
+do
+	[ -e "$p" ] && PATHS="$PATHS $p"
+done
+
+# shellcheck disable=SC2086
+restic backup --tag "$TAG" --exclude-caches $PATHS
+
+# バックアップが終わった時点で戻す。forget/prune/check は動かしたままでよい。
+restore_replicas
+rm -f "$SNAP_DIR/state.db"
+
+# shellcheck disable=SC2086
+restic forget --tag "$TAG" $KEEP --prune
+restic check --read-data-subset=5%
+
+notify "OK ✅"

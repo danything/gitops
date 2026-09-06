@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily k3s backup
+
+[Timer]
+# 04:00 JST(ホストは UTC なので TZ を明示)。停止を伴うので利用者のいない時間に。
+OnCalendar=*-*-* 04:00:00 Asia/Tokyo
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

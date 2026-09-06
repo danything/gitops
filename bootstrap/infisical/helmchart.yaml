@@ -1,0 +1,94 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+    name: infisical
+    namespace: kube-system
+spec:
+    # https://github.com/Infisical/infisical/tree/main/helm-charts/infisical-standalone-postgres
+    # Bundles Postgres + Redis (bitnami subcharts). Single node, so one replica
+    # and in-cluster databases are fine; the Postgres PVC is what backup.sh has
+    # to carry (the namespace is in its TARGET_NAMESPACES).
+    chart: infisical-standalone
+    repo: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+    targetNamespace: infisical
+    values:
+        infisical:
+            # Otherwise the Deployment/Service come out as
+            # infisical-infisical-standalone-infisical (release + chart + component).
+            fullnameOverride: infisical
+            replicaCount: 1
+            image:
+                # The chart's default tag lags releases; pin explicitly.
+                tag: v0.165.2
+            # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL live in infisical/secrets.yaml.
+            kubeSecretRef: infisical-secrets
+            extraEnv:
+                # Kubernetes auth makes Infisical call https://kubernetes.default.svc
+                # (TokenReview); its SSRF guard refuses cluster-internal IPs unless
+                # told otherwise.
+                - name: ALLOW_INTERNAL_IP_CONNECTIONS
+                  value: "true"
+                # Outgoing mail via Exchange Online SMTP AUTH on the info@doany.io
+                # mailbox, same as mattermost/erpnext (STARTTLS on 587 is Infisical's
+                # default, SMTP_REQUIRE_TLS=true). The password is the one value here
+                # that lives in Infisical itself (/infisical/infisical-smtp, pulled by
+                # smtp-secret.yaml), hence optional: on a from-scratch install the
+                # pod comes up mail-less, the operator fills the Secret once Infisical answers,
+                # and a rollout restart turns mail on.
+                - name: SMTP_HOST
+                  value: smtp.office365.com
+                - name: SMTP_PORT
+                  value: "587"
+                - name: SMTP_USERNAME
+                  value: info@doany.io
+                - name: SMTP_FROM_ADDRESS
+                  value: info@doany.io
+                - name: SMTP_FROM_NAME
+                  value: Infisical
+                - name: SMTP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                        name: infisical-smtp
+                        key: SMTP_PASSWORD
+                        optional: true
+        ingress:
+            # The traefik Ingress is infisical/ingress.yaml, same shape as argocd/.
+            enabled: false
+            nginx:
+                # Also the on/off switch for the bundled ingress-nginx subchart.
+                enabled: false
+        postgresql:
+            enabled: true
+            auth:
+                username: infisical
+                password: ENC[AES256_GCM,data:Dc4e1cPeDgh1L/7mo/GlSLyAkGP7fe8o4/XBXmyKIi9YuyiAu8J4SSWLNMTYI6/j,iv:kAM/E/HBtFxST/hpFfm4hz3ZYXB6LtxRpEC/nWMylvI=,tag:E+faw/b4ccg0ZrOFcaOTrQ==,type:str]
+                database: infisicalDB
+            primary:
+                persistence:
+                    # Retain: deleting this HelmChart must not take the secrets
+                    # database with it.
+                    storageClass: local-path-retain
+                    size: 5Gi
+        redis:
+            enabled: true
+            auth:
+                password: ENC[AES256_GCM,data:5h4k6r2aNhl+fyLT8TLM+4KMyR4yQW6cUDQhnClE8fct6QqveWjSBDz6+nN7CSwg,iv:bU7jEEYBQ07NZejibptqIK12uVQn3klk4Sm48nJhr9w=,tag:DDWhBzr2iJp3sIgl38LJ6w==,type:str]
+            master:
+                persistence:
+                    # Queue/cache only; nothing worth keeping across restarts.
+                    enabled: false
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBmT2haTUw3UUxpZk0yRFVO
+            SW03T28yTFgwQVphUmJnSTl1RWY4THl5UEhNCmlHeU93NENmNk5aL0lWckpGM3lB
+            OFB0LzZLcnNTaW5zMHIrNFVSV24xMncKLS0tIGFRME1pRVJzZ09GMDVHOW43eno5
+            dDhIWnFJTEZJNTBGdHRvMml1VCt0bmcKhF1yCgkOykX0s2TKbcuYZCWyCNFkcaxh
+            6pgHmqta05awjpWMRw2VaS301UfIYAJ4bSwR5nOxqiB7PFdQYai9mg==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
+    lastmodified: "2026-09-06T10:49:49Z"
+    mac: ENC[AES256_GCM,data:/JFZm3W/AKMQChkrdkN26c+HTvsjUehdWJMa5UYwCFyqrcpeod4m5+P64Im/EqU5+AmlRQU2xKnJUsC8PB9DxXHpl58saqnfzCaCyt+xOz+g5yY1f1OJJq8vokSalJg1cSbzWFaPUAW1/3Xd9Fv6ntYlPZIQeaOMwItE8B2WHM8=,iv:yAohU+twZg06W3KPQsU0GwNF8e8ZpH6pjlSaeF86dCI=,tag:FyT5kQaykmBbo1FC7owGpA==,type:str]
+    version: 3.13.3

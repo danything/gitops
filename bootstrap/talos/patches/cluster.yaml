@@ -1,0 +1,19 @@
+# クラスタ共通(single node なので実質 main 用)
+machine:
+  install:
+    wipe: false
+  sysctls:
+    # bond0 の SLAAC を stable-privacy にする(EUI-64 で MAC を出さない)。eno4 は IPv6 を使わない。
+    net.ipv6.conf.bond0.addr_gen_mode: "2"
+    net.ipv6.conf.eno4.disable_ipv6: "1"
+  kubelet:
+    extraMounts:
+      # local-path-provisioner のデータ置き場。Talos の /var は EPHEMERAL パーティション(アップグレードで消えない)。
+      - destination: /var/local-path-provisioner
+        type: bind
+        source: /var/local-path-provisioner
+        options: [bind, rshared, rw]
+  features:
+    hostDNS:
+      enabled: true
+      forwardKubeDNSToHost: true
