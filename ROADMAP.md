@@ -72,7 +72,11 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 - [x] パスフレーズを Edge と紙へ(本人作業、2026-09-06)。
 - [x] `install.sh` を実機(Ubuntu 26.04)で実行、`restic init` 済み、timer 有効(毎日 04:00 JST)。2026-09-06。
 - [x] R2 の使用量は 3.28 GiB(重複排除・圧縮後、論理 12.28 GiB)で無料枠 10 GB 内。操作回数と egress は桁違いに余裕。
-      通知に実サイズとスナップショット数を出すようにした。増えるとしたら `denpa-recorded` と `adguardhome-work`。
+      通知に実サイズとスナップショット数を出すようにした。
+- [x] 容量対策(2026-09-06): **AdGuard のクエリログ保持を 90d → 7d**(`querylog.json` が単体で 2.0 GB あった。
+      いま 8.8 MB。設定は PVC の中なので git 管理外、UI の 設定 > 一般設定 から変えられる)。
+      **保持世代を 17 → 13 に削減**(`--keep-daily 7 --keep-weekly 4 --keep-monthly 2`)。
+      残る大物は `denpa-recorded`(録画、1.6 GB)。除外するかは未決。
 - [x] 初回: `--no-scale` の暖機 51 秒(5.3 GiB)→ 本番 197 秒(うち 120 秒は denpa の Pod 終了待ちで無駄)。
       denpa は terminationGracePeriodSeconds=21900 なので scale down 対象から外した(`SKIP_SCALE_NAMESPACES`)。以後の停止は 30 秒前後の見込み。
 - [x] スクリプト一式(`backup/k3s-backup`、`backup/k3s-backup.{service,timer}`、`backup/install.sh`、`restore.sh`)。
@@ -94,7 +98,10 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 - [x] wireguard は Secret を持たない形にした(2026-09-06)。`INIT_*` はセットアップ済みなら無視され、OIDC は
       Entra が `email_verified` を返さず wg-easy が必須にしているため使えない。どちらの `secretKeyRef` も
       `optional: true` にしたので、復元直後に Secret が無くても起動する。
-- [ ] **ghcr の pull 認証を node 単位に寄せる**(下記)。imagePullSecrets と `ghcr-pull` の CR 2 つが消える。
+- [x] **ghcr の pull 認証を node 単位に寄せた**(2026-09-06)。`/etc/rancher/k3s/registries.yaml` に資格情報を置き、
+      k3s を再起動して private イメージの pull を確認。`imagePullSecrets` と `ghcr-pull` の CR 2 つ、Secret 2 つを削除
+      (tamasagashi#66、worklog-cloud#109)。`registries.yaml` はバックアップ対象に追加済み。
+      **Talos では machine config の `machine.registries.config."ghcr.io".auth` に同じものを書く。**
 - [x] backup.sh / init.sh / setup-network.sh を削除(2026-09-06、リハーサル通過後)。repo 内の平文秘密
       (Infisical の鍵、GitHub App 秘密鍵、Cloudflare トークン、Postgres パスワード)は **SOPS + age** で
       該当キーだけ暗号化した(`.sops.yaml`)。鍵は `recovery/sops-age.key.age` に env.age と同じパスフレーズで封じてある。
@@ -217,7 +224,7 @@ Infisical から作って `imagePullSecrets` で参照している(tamasagashi�
 | GitHub App の短命トークン | CronJob で 1 時間ごとにトークンを発行して Secret を書き換える | いちばん安全だが、動く部品が増える。単一ノードの自宅クラスタには過剰 |
 | いまのまま(PAT を Infisical に) | 現状 | 動いてはいる。ローテーションは Infisical 側 1 回で済む |
 
-**結論: Talos 移行のときに node 単位へ寄せる。** それまでは現状維持でよい(復元でも Infisical から戻る)。
+**結論: node 単位へ寄せた(2026-09-06、Talos を待たず k3s 側で実施)。** アプリを足すたびに Secret を用意する必要が無くなった。
 
 ## 未決事項
 
