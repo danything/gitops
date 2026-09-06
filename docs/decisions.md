@@ -149,6 +149,31 @@ Cilium 1.20.1 を Helm で導入。**Traefik と Ingress はこの段階では�
   ServiceLB(klipper)の hostPort と Cilium の socket-LB の組み合わせが原因と見られる。
   **段階 2 で ServiceLB を Cilium LB-IPAM に置き換えると経路ごと変わる**ので、そこで解消するか再評価する。
 
+### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
+
+Talos には k3s の ServiceLB(klipper)が無いので、その差分を k3s のうちに埋めた。**hostPort を選んだ。**
+
+ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:1::2`)をそのまま EXTERNAL-IP にする作りで、
+ルータの DMZ 転送先と AdGuard の split-horizon がこの IP に固定されている。Cilium LB-IPAM で仮想 IP を払い出すと
+**クラスタ外(ルータと DNS)の変更が必要**になり、IPv6 のプレフィックスは RA 由来で変わりうるため `externalIPs` への
+固定書きも危うい。hostPort ならノードの全アドレスで受けられ、送信元 IP も保たれ、Talos でも同じ形が使える。
+ノードが増えたときに VIP が要るなら、そのとき LB-IPAM に移ればよい。
+
+| 対象 | hostPort |
+| --- | --- |
+| traefik | 80 / 443 |
+| adguardhome | 53 UDP・53 TCP・853 TCP |
+| mattermost(calls) | 8443 UDP・8443 TCP |
+
+**詰まった点 3 つ:**
+
+1. **Cilium の hostPort は既定で無効。** `hostPort.enabled=true`(あわせて `nodePort.enabled` と `externalIPs.enabled`)を
+   有効にしないと、Pod は Running なのにホストのポートに何も来ない。`ss` には現れない(eBPF なので)。
+   確認は `cilium-dbg service list | grep HostPort`。
+2. **hostPort は Pod のサンドボックス作成時に設定される。** 設定を有効にしたあと、対象の Pod を作り直す必要がある。
+3. **hostPort と RollingUpdate は両立しない。** 新旧の Pod が同じホストポートを奪い合い、新しい方が Pending で止まる。
+   AdGuard は `strategy: Recreate`、Traefik は `deployment.kind: DaemonSet` にして解決した。
+
 ### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
 
 「Entra 側でトークンを小さくして Cilium の Envoy 機能で OIDC を賄う」案を検討したが、**Cilium には

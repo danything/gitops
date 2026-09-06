@@ -59,9 +59,9 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
 - [x] **段階 1: CNI を Cilium に替えた(2026-09-06)。** 全 50 Pod Running、全サイト応答、KubeProxyReplacement 有効。
       詰まった点(flannel の残骸が VXLAN と衝突、grace period の長い Pod は強制削除が要る)は
       [docs/decisions.md](docs/decisions.md)「本番での実施結果」。戻すときは `config.yaml.pre-cilium` に戻して k3s 再起動。
-- [ ] **段階 2: ServiceLB を Cilium LB-IPAM に替える。** `disable: [servicelb]` を足し、
-      `CiliumLoadBalancerIPPool` と `CiliumL2AnnouncementPolicy` を作る。`type: LoadBalancer` の 3 つ
-      (adguardhome-dns、mattermost-calls、traefik)にアドレスが付くことを確認。**アプリのマニフェストは変えない。**
+- [x] **段階 2: ServiceLB をやめて hostPort に寄せた(2026-09-06)。** LB-IPAM ではなく hostPort を選んだ理由と
+      詰まった点は [docs/decisions.md](docs/decisions.md)「LoadBalancer をどう置き換えるか」。
+      Cilium 側は `hostPort.enabled` / `nodePort.enabled` / `externalIPs.enabled` を有効にする必要がある(既定は無効)。
 - [ ] **段階 3: Ingress を HTTPRoute に移す。** cert-manager(Cloudflare DNS-01)を入れ、Cilium Gateway を立てて
       `ingress2gateway` で変換した HTTPRoute を **Ingress と並置**でコミット。1 サイトずつ切り替える。
       `IngressRoute` 4 本と `Middleware` 4 つ、`IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
