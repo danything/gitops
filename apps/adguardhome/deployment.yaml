@@ -9,6 +9,10 @@ metadata:
     # 7d に縮めた (2026-09-06)。変えるときは UI の 設定 > 一般設定 > クエリログの保存期間 から。
 spec:
   replicas: 1
+  # hostPort を持つので同じポートを 2 つの Pod が同時に掴めない。RollingUpdate だと
+  # 新しい Pod が Pending のまま止まるため Recreate にする。
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: adguardhome
