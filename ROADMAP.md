@@ -73,11 +73,15 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       - [x] `px.doany.io`(3proxy)は Gateway を使わず、Pod のサイドカー(nginx stream)が TLS を終端して
         **hostPort 8443** で直接受ける形にした。443 では HTTPS 終端と TLS passthrough が同居できない
         (ProtocolConflict)ため。**クライアントのポート変更が要る**(decisions.md 参照)
-      - forward-auth の 2 本(Traefik ダッシュボードと `sub`)。**Cilium の Gateway では賄えない**ので、
-        oauth2-proxy を前段プロキシにするか、この 2 本のためだけに Traefik を残すか決める
-      - yuzuriha の `compress` ミドルウェア(Gateway API に相当機能なし。諦めるかアプリ側で)
-- [ ] **切り替え本番**: Traefik の hostPort 80/443 を外し、Gateway の待ち受けをそこに移す(同時に行う)。
-      そのあと `disable: [traefik]` と Ingress の削除。
+      - [x] forward-auth の 2 本。`sub`(`*.s.doany.io`)は **oauth2-proxy を前段プロキシにする方式**で移した
+        (専用インスタンス `auth-sub` が `--upstream` で LAN のホストへ中継。コールバックは既存の
+        a.doany.io 側が受け、cookie secret と redis を共有)。Traefik ダッシュボードは Traefik ごと消えるので対処不要
+      - [x] yuzuriha の `compress` は諦める(Gateway API に相当フィルタが無い。必要ならアプリ側で圧縮する)
+- [ ] **切り替え本番**(残りはこれだけ): Traefik の hostPort 80/443 を外すのと、Gateway の待ち受けを
+      そこに移すのを**同時に**行う。Gateway 側は `CiliumGatewayClassConfig` か Service の書き換えで
+      ノードのアドレスに出す形にする。そのあと `disable: [traefik]`、Ingress と IngressRoute の削除、
+      Traefik の PVC(`traefik-acme`)の破棄。
+      **切り戻し**は Traefik を戻して hostPort を返すだけ(Ingress は残してあるので即座に戻る)。
       `IngressRoute` 4 本と `Middleware` 4 つ、`IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
       **forward-auth は Cilium の Gateway では賄えない**(OIDC 内蔵なし、ExternalAuth も未実装)。
       該当は Traefik ダッシュボードと `sub` の 2 本だけなので、oauth2-proxy を前段プロキシにするか、
