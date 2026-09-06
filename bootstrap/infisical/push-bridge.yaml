@@ -25,5 +25,5 @@ spec:
       identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
       serviceAccountName: infisical-auth
       serviceAccountNamespace: infisical
-      projectSlug: doany
+      projectSlug: doa
       secretsPath: /infisical-push-bridge/infisical-push-bridge
