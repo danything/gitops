@@ -58,17 +58,6 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
-    # 3proxy(px.doany.io)。TLS は Pod 内のサイドカーが終端するので、ここは SNI で振り分けて素通しする。
-    # Cilium の TLS 終端リスナーには TCPRoute を付けられないため(docs/decisions.md)、passthrough にしている。
-    - name: tls-px
-      protocol: TLS
-      port: 443
-      hostname: px.doany.io
-      tls:
-        mode: Passthrough
-      allowedRoutes:
-        namespaces:
-          from: All
     - name: https-apex
       protocol: HTTPS
       port: 443

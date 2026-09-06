@@ -5,6 +5,9 @@ metadata:
   namespace: 3proxy
 spec:
   replicas: 1
+  # hostPort を持つので新旧の Pod が同じポートを奪い合わないように Recreate にする。
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: 3proxy
@@ -28,6 +31,9 @@ spec:
           ports:
             - name: proxy-tls
               containerPort: 3129
+              # Gateway は使わない。443 では TLS 終端(HTTPS リスナー)と passthrough が共存できず
+              # ProtocolConflict になるため(docs/decisions.md)、このサイドカーがホストの 8443 で直接受ける。
+              hostPort: 8443
           volumeMounts:
             - name: tls-terminator-config
               mountPath: /etc/nginx/nginx.conf

@@ -199,11 +199,17 @@ Traefik では `IngressRouteTCP` が `HostSNI(px.doany.io)` で受けて **TLS �
 
 取りうる形は 3 つ。
 
-| 案 | 中身 | 評価 |
-| --- | --- | --- |
-| **TLS 終端を Pod 側に寄せる** | 3proxy の Pod に TLS を終端するサイドカー(nginx stream か envoy)を足し、Gateway は `mode: Passthrough` + TLSRoute で SNI だけ見て流す | 移行できる。証明書は cert-manager の Secret をサイドカーがマウントする。**推奨** |
-| 3proxy を Traefik に残す | この 1 本のためだけに Traefik を生かす | hostPort 443 が Gateway と衝突するので、別ポートか別アドレスが要る |
-| 素の TCP で別ポートに出す | TLS をやめる | 公開プロキシなので不可 |
+**さらに、passthrough で逃げる案も 443 では成立しない。** 同じポートに HTTPS(Terminate)のリスナーと
+TLS(Passthrough)のリスナーを同居させると Gateway API の規則で **ProtocolConflict** になり、両方が Invalid になる。
+実際に試して、443 の `https` リスナーごと落ちることを確認した。
+
+**採った形(2026-09-06): Gateway を使わず、Pod のサイドカーがホストのポートを直接受ける。**
+
+- 3proxy の Pod に nginx(stream)のサイドカーを足し、`3129` で TLS を終端して `127.0.0.1:3128` に渡す
+- 証明書は cert-manager が `px.doany.io` で発行し、サイドカーがマウントする(Traefik 内蔵 ACME の置き換え)
+- サイドカーは **hostPort 8443** で公開する。443 は Gateway が使うため
+- **クライアント側の設定変更が要る**(`px.doany.io:443` → `px.doany.io:8443`)。
+  443 のまま出したければ、px 専用の IP を LB-IPAM で払い出してルータ側で振り分ける形になる
 
 ### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
 
