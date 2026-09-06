@@ -223,8 +223,12 @@ Infisical から作って `imagePullSecrets` で参照している(tamasagashi�
   `/dev/dvb` と B-CAS リーダーに依存している。選択肢:
   1. **チューナーを別の箱に出す。** tuner-agent は denpa とネットワーク越しに話す設計(`docs/agent.md`)なので、
      PT3 と B-CAS リーダーを小さな Linux 機に移して tuner-agent だけそこで動かせば、Talos 側は素のままでよい。一番確実。
-  2. 上流に PR。`siderolabs/pkgs` で `CONFIG_DVB_PT3=m` にし、`siderolabs/extensions/dvb/pt3` を cx23885 と同じ形で足す。
-     in-tree ドライバなので作業は小さいが、取り込まれて次の minor に乗るまで待つ。
+  2. **上流に PR 済み(2026-09-06)**: [siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682)
+     (`CONFIG_DVB_PT3=m` の 1 行。依存する tc90522 / qm1d1c0042 / mxl301rf は既に `m`)と
+     [siderolabs/extensions#1238](https://github.com/siderolabs/extensions/pull/1238)(`dvb/pt3` extension、cx23885 と同じ形)。
+     後者は前者が入って Talos のリリースに乗るまでビルドできないので順番待ち。取り込まれれば 1 の VM を畳んで extension に戻せる。
+     **DCO の Signed-off-by は git config の `Ruk Doe <info@doany.io>` で入れた。conform が GPG 署名も要求しているので、
+     必要なら本人の鍵で commit を作り直す。extension の `compatibility.talos.version` は `>= v1.15.0` と当て推量。**
   3. `imager` で自前のカーネル/extension を焼く。Image Factory が使えなくなり、アップグレードのたびに自前ビルドになるので勧めない。
   1 を軸に 2 を並行、が現実的。
 
