@@ -22,6 +22,9 @@ spec:
       - secretRef:
           name: traefik-cloudflare
     deployment:
+      # hostPort を持つので RollingUpdate だと新旧の Pod がポートを奪い合って新しい方が Pending になる。
+      # DaemonSet なら古い Pod を落としてから作るので単一ノードでも詰まらない。
+      kind: DaemonSet
       additionalVolumes:
         - name: traefik-acme
           persistentVolumeClaim:
