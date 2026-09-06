@@ -20,6 +20,22 @@ spec:
       containers:
         - name: adguardhome
           image: adguard/adguardhome:latest
+          # ServiceLB(k3s 組み込み)をやめたので、ノードの全アドレスで受けるために hostPort を持つ。
+          # Talos には ServiceLB 相当が無いので、この形がそのまま移行先でも使える。
+          # hostPort は送信元 IP を保つので、AdGuard のクライアント別統計も従来どおり。
+          ports:
+            - name: dns-udp
+              containerPort: 53
+              hostPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              hostPort: 53
+              protocol: TCP
+            - name: dot
+              containerPort: 853
+              hostPort: 853
+              protocol: TCP
           env:
             - name: TZ
               value: Asia/Tokyo

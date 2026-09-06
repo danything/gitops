@@ -51,6 +51,15 @@ spec:
           image: mattermost/mattermost-enterprise-edition:11.9.0
           ports:
             - containerPort: 8065
+            # Calls の RTC。ServiceLB をやめたので hostPort でノードのアドレスに直接出す。
+            - name: rtc-udp
+              containerPort: 8443
+              hostPort: 8443
+              protocol: UDP
+            - name: rtc-tcp
+              containerPort: 8443
+              hostPort: 8443
+              protocol: TCP
           env:
             # POSTGRES_PASSWORD is only defined so the two DSNs below can
             # interpolate it -- kubelet expands $(VAR) against env entries
