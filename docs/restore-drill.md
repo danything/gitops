@@ -61,12 +61,6 @@ sudo k3s kubectl get pods -A
 `RESTORE_DRILL=1` がやること: bond0/eno4 のプロファイルを当てない、k3s の `flannel-iface` を外す、`k3s-backup.timer` を有効にしない
 (VM のスナップショットを本番の restic リポジトリに混ぜない)。
 
-## 片付け
-
-```shell
-sudo kill $(cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-drill
-```
-
 ## 結果(2026-09-06)
 
 サーバ上の QEMU/KVM(Ubuntu 26.04 cloud image、4 vCPU / 8 GB、hostname は `main`)で 2 回実施した。
@@ -85,7 +79,11 @@ sudo kill $(cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-d
 結果は 45 Running / 17 Completed、`InfisicalSecret` 15 件すべて OK。起動しなかった 2 つはどちらも VM の都合で、
 `denpa/tuner-agent`(PT3 が無い)と `wireguard/wg-easy`(カーネルに wireguard モジュールが無い)。
 
-## 片付けの前に
+## 片付け
 
-VM の中で `k3s kubectl` を叩けば本物と同じ構成が動いている。データの中身(Mattermost の投稿数、ERPNext の DB 一覧など)を
-見たいときはここで。終わったら QEMU を落として `/var/tmp/restore-drill` を消す。
+VM の中で `k3s kubectl` を叩けば本物と同じ構成が動いているので、データの中身(Mattermost の投稿数、
+ERPNext の DB 一覧など)を確かめたいときはここで。終わったら落とす。
+
+```shell
+sudo kill $(cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-drill
+```
