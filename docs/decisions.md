@@ -129,6 +129,46 @@ operator が `Required GatewayAPI resources are not found` を出して GatewayC
 **1.20 のドキュメントは TCPRoute / UDPRoute を optional but supported として挙げていて、CRD も適用できた**。
 3proxy の TCP ルートは TCPRoute で移せる見込み(実際の疎通は未確認)。
 
+### 本番での実施結果(段階 1、2026-09-06)
+
+k3s の config に `flannel-backend: none` / `disable-network-policy` / `disable-kube-proxy` を足して再起動し、
+Cilium 1.20.1 を Helm で導入。**Traefik と Ingress はこの段階では触っていない。**
+
+- ノードが Ready に戻り、`KubeProxyReplacement: True`、IPAM はデュアルスタックで 45 アドレス払い出し、
+  全 50 Pod が Running、外形も全サイト 200/302。**所要は 30 分ほど**(うち大半は下の 2 つの詰まり)
+- **詰まり 1: flannel の残骸が Cilium の VXLAN と衝突する。** `flannel.1` / `flannel-v6.1` / `cni0` が
+  インターフェースとして残っていると、Cilium が `cilium_vxlan` を作れず `address already in use` で
+  datapath 初期化が延々とリトライする。Pod は `FailedCreatePodSandBox` で止まったまま。
+  `ip link delete` で 3 つ消したら即座に復旧した。**CNI 設定ファイル(`10-flannel.conflist`)を退避するだけでは足りない。**
+- **詰まり 2: `terminationGracePeriodSeconds` が長い Pod は Recreate 戦略と組み合わさると復帰しない。**
+  denpa と tuner-agent(21900 秒 = 6 時間)が Terminating のまま残り、通信は既に死んでいるのに
+  新しい Pod が作られない。**強制削除(`--grace-period=0 --force`)が要る。** 猶予は「録画を最後まで流す」ためだが、
+  CNI を抜いた時点でネットワークは死んでいるので待つ意味は無い。
+- **残った差異: ノード自身と Pod から `10.10.0.4`(eno4 の LAN IP)に届かない。** LAN の他のマシンからは届く。
+  AdGuard の split-horizon でこの IP に解決される名前だけ、ノード内から引けなくなった。
+  ServiceLB(klipper)の hostPort と Cilium の socket-LB の組み合わせが原因と見られる。
+  **段階 2 で ServiceLB を Cilium LB-IPAM に置き換えると経路ごと変わる**ので、そこで解消するか再評価する。
+
+### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
+
+「Entra 側でトークンを小さくして Cilium の Envoy 機能で OIDC を賄う」案を検討したが、**Cilium には
+Gateway API の OIDC が無い**。トークンの大きさ以前に機能が無い。
+
+- `CiliumEnvoyConfig` で Envoy の `oauth2` フィルタを直接書く道は、公式に未サポートで
+  「フィルタの型を解決できない」という報告がある(cilium/cilium#24848)。HTTPRoute と併用するのも難しい(#30587)
+- HTTPRoute の `ExternalAuth`(GEP-1494)は**まだ未実装**で issue が開いたまま(cilium/cilium#45704)。
+  引き継ぎメモの「1.20 pre-release で入った」は誤り
+- Keycloak で OAuth2 を組もうとした事例も未解決のまま(cilium/cilium#38889)
+
+したがって forward-auth が要るルートは、**oauth2-proxy を「前段のプロキシ」として置く**
+(HTTPRoute → oauth2-proxy → アプリ)か、そのルートだけ Traefik か Envoy Gateway に残す。
+幸い forward-auth を使っているのは Traefik ダッシュボードと `sub` の 2 本だけで、
+アプリ側(ArgoCD、ERPNext、Mattermost、denpa、wg-easy)はそれぞれ自前で OIDC を持っている。
+
+**Entra 側でトークンを小さくすること自体は独立して価値がある。** グループクレームを全部載せるのをやめて
+**アプリロール**に切り替えると `roles: ["admin"]` の数十バイトで済む。将来 Envoy Gateway の内蔵 OIDC を
+使う場合の前提にもなる。
+
 ### 却下した案
 
 | 案 | 理由 |

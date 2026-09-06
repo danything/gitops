@@ -56,17 +56,18 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
 - [ ] **Gateway API v1.6.1 の CRD を入れる**(Cilium 1.20 はこのバージョンを要求する。v1.4.0 だと
       GatewayClass が `Waiting for controller` のまま止まる)。gatewayclasses / gateways / httproutes /
       referencegrants / grpcroutes / backendtlspolicies / tlsroutes、必要なら tcproutes / udproutes。
-- [ ] **段階 1: CNI を Cilium に替える。** `/etc/rancher/k3s/config.yaml` に `flannel-backend: none`、
-      `disable-network-policy: true`、`disable-kube-proxy: true` を足して k3s を再起動 → Cilium を Helm で導入。
-      **Traefik と Ingress はこの段階では触らない。** 全 Pod が Running に戻ること、外形(各サイトの HTTPS)を確認。
-      戻すときは config.yaml を戻して k3s 再起動で flannel に復帰する。
+- [x] **段階 1: CNI を Cilium に替えた(2026-09-06)。** 全 50 Pod Running、全サイト応答、KubeProxyReplacement 有効。
+      詰まった点(flannel の残骸が VXLAN と衝突、grace period の長い Pod は強制削除が要る)は
+      [docs/decisions.md](docs/decisions.md)「本番での実施結果」。戻すときは `config.yaml.pre-cilium` に戻して k3s 再起動。
 - [ ] **段階 2: ServiceLB を Cilium LB-IPAM に替える。** `disable: [servicelb]` を足し、
       `CiliumLoadBalancerIPPool` と `CiliumL2AnnouncementPolicy` を作る。`type: LoadBalancer` の 3 つ
       (adguardhome-dns、mattermost-calls、traefik)にアドレスが付くことを確認。**アプリのマニフェストは変えない。**
 - [ ] **段階 3: Ingress を HTTPRoute に移す。** cert-manager(Cloudflare DNS-01)を入れ、Cilium Gateway を立てて
       `ingress2gateway` で変換した HTTPRoute を **Ingress と並置**でコミット。1 サイトずつ切り替える。
       `IngressRoute` 4 本と `Middleware` 4 つ、`IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
-      forward-auth は oauth2-proxy を ext auth として残す(Entra のトークンが大きく Cookie 方式は使えない)。
+      **forward-auth は Cilium の Gateway では賄えない**(OIDC 内蔵なし、ExternalAuth も未実装)。
+      該当は Traefik ダッシュボードと `sub` の 2 本だけなので、oauth2-proxy を前段プロキシにするか、
+      そのルートだけ別コントローラに残す(decisions.md「認証は Cilium の Gateway では賄えない」)。
 - [ ] 全部移ったら Traefik を落とす(`disable: [traefik]`)。
 - [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
       `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
