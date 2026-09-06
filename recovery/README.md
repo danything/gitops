@@ -29,4 +29,4 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 age -p -o recovery/env.age /etc/k3s-backup/env
 ```
 
-リハーサルの手順と結果は [`../bootstrap/docs/restore-drill.md`](../bootstrap/docs/restore-drill.md)。
+リハーサルの手順と結果は [`../docs/restore-drill.md`](../docs/restore-drill.md)。
