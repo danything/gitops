@@ -23,6 +23,14 @@ metadata:
 spec:
   gatewayClassName: cilium
   listeners:
+    # HTTP は全部 HTTPS に飛ばす(Traefik の redirect-https ミドルウェアの置き換え)。
+    # 実際のリダイレクトは apps/gateway-routes/redirect-https.yaml の HTTPRoute フィルタが行う。
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
     # `*.doany.io` は 1 段だけなので apex は別リスナーが要る(証明書は同じ)。
     - name: https
       protocol: HTTPS
