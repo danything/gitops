@@ -85,3 +85,51 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig talosconfig kubeconfig
   選択肢は ROADMAP の未決事項を参照。
 - Secure Boot を切る(上記)。
 - iLO の IP(10.0.0.3)と管理者パスワードを手元に。ISO 起動も再インストールも全部ここからできる。
+
+## machine config の作法(v1.14 で確認)
+
+2026-09-06 に QEMU/KVM で v1.14.0 を実際に起動して確かめたこと。**1.13 以前の書き方は通らない。**
+
+### 設定が複数ドキュメントに分かれた
+
+`talosctl gen config` は v1alpha1 の 1 枚ではなく、`KubeNetworkConfig` / `KubeletConfig` /
+`UnattendedInstallConfig` / `ResolverConfig` / `KubeNodeConfig` … という**型付きドキュメントの束**を吐く。
+同じ項目を v1alpha1 側にも書くと apply が弾かれる(`... is already set in v1alpha1 config`)。
+
+| やりたいこと | 1.14 での書き場所 |
+| --- | --- |
+| pod / service の CIDR | `KubeNetworkConfig` の `podSubnets` / `serviceSubnets` |
+| インストール先ディスク | `UnattendedInstallConfig` の `provisioning.diskSelector.match`(**CEL 式**。例 `disk.dev_path == "/dev/sda"`) |
+| host DNS | `ResolverConfig`。**既定で有効**なので普通は書かなくてよい |
+| kubelet の `extraMounts` | `KubeletConfig` には無い。**`KubeletConfig` を `$patch: delete` してから** v1alpha1 の `machine.kubelet` に書く |
+| control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。`KubeNodeConfig` の `taints` を消す必要があるが、**strategic merge の空マップ(`taints: {}`)では消えなかった**。talhelper 経由か、起動後に `kubectl taint nodes --all node-role.kubernetes.io/control-plane-` |
+
+### service の IPv6 CIDR は `/108` 以下
+
+`fd43::/64` は `service subnets: invalid subnet: fd43::/64 is too large, it must be at least /108` で弾かれる。
+k3s はこれを許していたので、**移行時に `fd43::/108` へ変更が要る**(ClusterIP が振り直しになる)。
+pod 側の `fd42::/64` はそのままでよい。検証では `10.43.0.10` と `fd43::a` の両方が付いた。
+
+### Pod Security Admission が既定で `baseline`
+
+`KubeAdmissionControlConfig` に `enforce: baseline`(例外は `kube-system` のみ)が入っている。k3s には無かった制限で、
+**`hostPath` / `privileged` / `hostNetwork` を使う workload は namespace にラベルが要る**。
+
+```shell
+kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged
+```
+
+実際に local-path-provisioner はこれで詰まった(ヘルパー Pod が `hostPath` を使うため PVC が Pending のまま)。
+ラベルを付けたら PVC が Bound になり、Pod から書いた内容がディスク上の
+`/var/local-path-provisioner/pvc-…_<ns>_<pvc>` に残ることまで確認した。
+
+移行時にラベルが要る namespace(現構成から): `local-path-storage`、`wireguard`(privileged + hostNetwork)、
+`denpa`(`/dev/dvb`・`/dev/bus`・`/dev/dri` の hostPath)。
+
+### 動いたこと
+
+- ISO(Image Factory の schematic `2d61dd07…`)から UEFI で起動、maintenance mode の API はポート 50000
+- `apply-config` → 自動でディスクへインストール → 再起動 → `bootstrap` → kubeconfig 取得
+- **`cluster.inlineManifests` は期待どおり適用された**(仕込んだ Namespace がラベルごと存在した)。
+  `bootstrap/` をここに載せる案([decisions.md](decisions.md))は成立する
+- flannel でデュアルスタック、CoreDNS / kube-proxy / scheduler すべて Running

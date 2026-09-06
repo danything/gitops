@@ -61,32 +61,18 @@ Talos のインストールメディアは [`docs/talos-install-media.md`](docs/
 
 ### Phase 1 — Talos の検証(本番に触らない)
 
-**2026-09-06 に QEMU/KVM で v1.14.0 を起動して分かったこと(machine config は未完成):**
-
-- **Talos 1.14 の machine config は複数ドキュメント形式**になっていて、v1alpha1 の同じ項目と**併記できない**。
-  `KubeNetworkConfig`(podSubnets/serviceSubnets)、`KubeletConfig`、`UnattendedInstallConfig` などが自動生成され、
-  `cluster.network` / `machine.kubelet` / `machine.install` を v1alpha1 側に書くと apply 時に弾かれる。
-  片方に寄せるか、要らないドキュメントを `$patch: delete` で消す。`talconfig.yaml` は talhelper が面倒を見るが、
-  手書きのパッチはこの形に合わせる必要がある。
-- **`machine.kubelet.extraMounts` は `KubeletConfig` ドキュメントに無い。** local-path 用の bind mount を入れるには
-  `KubeletConfig` を `$patch: delete` してから v1alpha1 の `machine.kubelet` に書く。
-- **service の IPv6 CIDR `fd43::/64` は Talos では通らない。** `service subnets: invalid subnet: fd43::/64 is too large,
-  it must be at least /108` と言われる。いまの k3s は通っているので、**移行時に `fd43::/108` 等へ変更が要る**
-  (Service の ClusterIP が振り直しになるので、切り替えの一部として扱う)。
-- ISO は Image Factory の schematic `2d61dd07…` から起動。UEFI(OVMF)で問題なく上がり、maintenance mode の
-  API はポート 50000 で応答した。
-
-- [ ] Hyper-V に Talos を 1 台(ISO の作り方と実機の iLO 手順は [docs/talos-install-media.md](docs/talos-install-media.md))。
-      talhelper + SOPS で machine config を生成し、talconfig とパッチをこの repo に置く。
-- [ ] 確認項目: bond0(balance-alb、eno1+eno2)、eno4 の static、dual-stack、**IPv6 の token `::2` 相当が設定できるか**(できなければ EUI-64 か DDNS で代替)、
-      wg-easy の hostNetwork UDP 51820。
-- [ ] local-path-provisioner(`/var/local-path-provisioner`)、ArgoCD を helm source で導入し、ApplicationSet が動くこと。
-      HelmChart CRD 依存(argocd/infisical/push-bridge)を ArgoCD の Application に書き直す。
-- [ ] **Ingress / LoadBalancer の置き換え(比較は下の「ルーティングの選定」)。** k3s 同梱の ServiceLB が無くなるので
-      LoadBalancer 型 Service(adguardhome-dns、mattermost-calls)のために MetalLB(L2)がどの案でも要る。
-- [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に対して PVC バックアップと `backupcommand` の dump が取れること。
+- [x] QEMU/KVM(サーバ上)で v1.14.0 を起動 → `apply-config` → `bootstrap` → kubeconfig 取得まで通した(2026-09-06)。
+      **`inlineManifests` が効くこと、デュアルスタック、local-path での PVC 作成を確認**。
+      1.14 の machine config の作法(複数ドキュメント、service の IPv6 は `/108` 以下、PSA が既定 `baseline`)は
+      [docs/talos-install-media.md](docs/talos-install-media.md) の「machine config の作法」にまとめた。
+- [ ] `talos/talconfig.yaml` を 1.14 の形に書き直す(talhelper + SOPS)。いまの内容は 1.13 以前の書き方で通らない。
+- [ ] 実機固有の確認: bond0(balance-alb、eno1+eno2)、eno4 の static、**IPv6 の token `::2` 相当**(無ければ
+      stable-privacy + cloudflare-ddns で代替)、wg-easy の hostNetwork UDP 51820。QEMU の user-mode では試せない。
+- [ ] PSA のラベルが要る namespace を洗い出して manifest に入れる(`local-path-storage`、`wireguard`、`denpa`)。
+- [ ] HelmChart CRD 依存(argocd / infisical / push-bridge)を ArgoCD の Application に書き直す。
+- [ ] Envoy Gateway + cert-manager + MetalLB を組み、`ingress2gateway` で HTTPRoute を作って各 repo に **Ingress と並置**でコミットする。
+- [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に PVC バックアップと `backupcommand` の dump が取れること。
 - [ ] `talosctl etcd snapshot` → 別 VM で `talosctl bootstrap --recover-from` の復元リハーサル。
-- [ ] Talos 期の公開復元手順を書く: ISO boot → `apply-config` → etcd 復元(または git から ArgoCD 再構築)→ Job で restic から PV を戻す。
 
 ### Phase 2 — 切り替え(停止を伴う)
 
