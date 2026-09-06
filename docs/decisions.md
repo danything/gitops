@@ -174,6 +174,19 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 3. **hostPort と RollingUpdate は両立しない。** 新旧の Pod が同じホストポートを奪い合い、新しい方が Pending で止まる。
    AdGuard は `strategy: Recreate`、Traefik は `deployment.kind: DaemonSet` にして解決した。
 
+### Gateway API の土台で分かったこと(2026-09-06)
+
+- **Cilium 1.20 は Gateway API v1.6.1 の CRD を要求する。** k3s の Traefik が v1.5.1 を入れているので
+  `--server-side --force-conflicts` で上書きが要る。バージョンが合わないと GatewayClass が
+  `Waiting for controller` のまま無言で止まる。CRD を入れ替えたあと **cilium-operator の再起動**も要る。
+- **Gateway はアドレスが付くまで `Programmed=False` のまま**で、Envoy にリスナーが載らない。
+  hostPort ではアドレスが付かないので、`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` が要る。
+- **`l2announcements.enabled` は ConfigMap に入るだけでは効かない。** cilium エージェント(DaemonSet)の
+  再起動が必要。再起動前は ARP に応答せず「No route to host」になる。
+- **LB IP は ICMP に応答しない。** `ping` では確認できないので TCP で叩く。
+- cert-manager は `config.enableGatewayAPI=true` で Gateway の `cert-manager.io/cluster-issuer` 注釈を見る。
+  Cloudflare のトークンは **cert-manager の namespace にも** Secret が要る(ClusterIssuer は自分の namespace しか読まない)。
+
 ### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
 
 「Entra 側でトークンを小さくして Cilium の Envoy 機能で OIDC を賄う」案を検討したが、**Cilium には

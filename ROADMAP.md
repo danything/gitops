@@ -62,13 +62,20 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
 - [x] **段階 2: ServiceLB をやめて hostPort に寄せた(2026-09-06)。** LB-IPAM ではなく hostPort を選んだ理由と
       詰まった点は [docs/decisions.md](docs/decisions.md)「LoadBalancer をどう置き換えるか」。
       Cilium 側は `hostPort.enabled` / `nodePort.enabled` / `externalIPs.enabled` を有効にする必要がある(既定は無効)。
-- [ ] **段階 3: Ingress を HTTPRoute に移す。** cert-manager(Cloudflare DNS-01)を入れ、Cilium Gateway を立てて
-      `ingress2gateway` で変換した HTTPRoute を **Ingress と並置**でコミット。1 サイトずつ切り替える。
+- [x] **段階 3 の土台(2026-09-06)**: cert-manager(Cloudflare DNS-01)と Cilium Gateway を導入し、
+      **yk.doany.io を Traefik と並走で HTTPRoute に載せて実際に配信できることを確認**(Let's Encrypt 証明書付き)。
+      Gateway の待ち受けは LB-IPAM + L2 アナウンス(作業用に 10.10.0.50-55)。
+      AdGuard の DoT 証明書も Traefik の acme.json 監視(acme-watcher)をやめて cert-manager 発行の Secret に移した。
+- [ ] **段階 3 の本番移行**: 残り 14 ホストの `Ingress` を `ingress2gateway` で HTTPRoute に変換し、
+      **Ingress と並置**でコミットして 1 つずつ切り替える。`IngressRoute` 4 本と `Middleware` 4 つ、
+      `IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
       `IngressRoute` 4 本と `Middleware` 4 つ、`IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
       **forward-auth は Cilium の Gateway では賄えない**(OIDC 内蔵なし、ExternalAuth も未実装)。
       該当は Traefik ダッシュボードと `sub` の 2 本だけなので、oauth2-proxy を前段プロキシにするか、
       そのルートだけ別コントローラに残す(decisions.md「認証は Cilium の Gateway では賄えない」)。
-- [ ] 全部移ったら Traefik を落とす(`disable: [traefik]`)。
+- [ ] 全部移ったら Gateway の待ち受けを 80/443 の hostPort(または本番アドレス)に移し、
+      Traefik を落とす(`disable: [traefik]`)。**Traefik が hostPort 80/443 を持っている間は Gateway と共存できない**ので、
+      切り替えは同時に行う。
 - [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
       `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
 
