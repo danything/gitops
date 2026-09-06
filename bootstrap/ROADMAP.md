@@ -124,6 +124,9 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 
 ### Phase 2 — 切り替え(停止を伴う)
 
+- [x] メンテナンスページの仕組み(`bootstrap/maintenance/`、手順は [docs/maintenance.md](docs/maintenance.md))。
+      `*.doany.io` の proxied を倒すと Cloudflare の Worker が受けてメンテ表示になる。**Worker の deploy は未実施**。
+- [ ] 当日: `maintenance.sh on` → 作業 → `maintenance.sh off`。作業は LAN か iLO から(外からは入れない)。
 - [ ] 最終バックアップ(Phase 0 のホスト側 restic)を取り、`restic check` を通す。
 - [ ] Talos を実機にインストール、machine config 適用。
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。

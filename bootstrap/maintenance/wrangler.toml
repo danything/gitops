@@ -1,0 +1,16 @@
+# Cloudflare Worker (メンテナンス/障害ページ)。deploy は手元から:
+#   npx wrangler login      # 初回だけ。Workers Scripts:Edit を持つトークンでもよい
+#   npx wrangler deploy
+#
+# route は proxied (オレンジ雲) のホストにしか当たらない。平常時に proxied なのは
+# apex と l / ts / w / x / y だけなので、それ以外はここに書いてあっても普段は無効。
+# メンテのときに maintenance.sh on で *.doany.io を proxied にすると全部に当たる。
+name = "doany-maintenance"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = false
+
+routes = [
+  { pattern = "doany.io/*", zone_name = "doany.io" },
+  { pattern = "*.doany.io/*", zone_name = "doany.io" },
+]
