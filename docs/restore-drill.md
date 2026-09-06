@@ -67,73 +67,23 @@ sudo k3s kubectl get pods -A
 sudo kill $(cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-drill
 ```
 
-## 2026-09-06 の結果
+## 結果(2026-09-06)
 
-サーバ上の QEMU/KVM(Ubuntu 26.04 cloud image、4 vCPU / 8 GB、hostname `main`)。スナップショットは 09:06 の 7.45 GiB。
+サーバ上の QEMU/KVM(Ubuntu 26.04 cloud image、4 vCPU / 8 GB、hostname は `main`)で 2 回実施した。
+**2 回目で全項目クリア。** 復元は 7 GiB を 2 分弱、k3s は同じバージョンで起動し、PV も Node 名もそのまま戻る。
 
-| 項目 | 結果 |
-| --- | --- |
-| restic restore(R2 → VM、slirp 経由) | 1 分 43 秒 |
-| k3s | 同じ v1.36.2+k3s1 が入り、Node `main`(62d)として Ready。PV 23 個 Bound |
-| 遮断 | Cloudflare API / LE / 本番 IP / SMTP / IPv6 は落ちたまま。DNS 書き換え・証明書発行・通知は出ていない |
-| 見つかった問題 | 下記 3 件。1 と 2 は直した |
+1 回目で見つかった 4 件と、その対処:
 
-1. **state.db に replicas=0 が焼き込まれていた。** backup.sh が scale down の後にスナップショットを取っていたため。
-   git 管理のものは ArgoCD の selfHeal が戻すが、手で apply した Infisical(HelmChart)は 0 のまま。
-   → スナップショットを scale down の前に取るよう修正(bootstrap `5717b28`)。修正後の最初のスナップショットは翌 04:00 JST。
-   それ以前のスナップショットから戻す場合は `kubectl -n infisical scale deploy/infisical sts/postgresql sts/redis-master --replicas=1` を手で。
-2. **復元直後に名前解決が死ぬ。** AdGuard の LoadBalancer(:53)に endpoint が無い間、kube-proxy が `--dst-type LOCAL --dport 53` を REJECT し、
-   systemd-resolved のスタブ(127.0.0.53)が巻き込まれる。containerd がレジストリを引けず、AdGuard 自身も上がれない。
-   → restore.sh で `/etc/resolv.conf` をスタブから `/run/systemd/resolve/resolv.conf` に差し替え(recovery `d9ed258`)。
-3. **Infisical operator が作った Secret を ArgoCD が prune する。** operator は InfisicalSecret CR の annotation を Secret にコピーするので、
-   `argocd.argoproj.io/tracking-id` も付いてしまい、ArgoCD(v3.5)はその Secret を Application の資源として認識する
-   (本番でも `status.resources` に `Secret mattermost/mattermost` などが載っている)。git には無いので、sync 操作が走ると prune される。
-   本番では Infisical が生きているので operator がすぐ作り直して見えないが、復元直後は Infisical が落ちていて作り直せず、
-   mattermost / xool / lgtm / wg-easy / cloudflare-ddns / erpnext が `CreateContainerConfigError` のまま止まった。
-   kine の履歴でも、ArgoCD の一斉 sync(Ingress や Namespace の更新が並ぶ revision 帯)の中で削除されている。
-   → **ArgoCD の `resource.exclusions` で Secret を管理対象から外した**(bootstrap `e787d70`、本番適用済み)。
-   git に平文 Secret を置かない方針なので ArgoCD が Secret を作ることは無く、外して困らない。
-   CR に `argocd.argoproj.io/sync-options: Prune=false` を付ける案(gitops #3)は、operator が annotation をコピーするのが
-   Secret 作成時だけで既存の Secret には効かないため、単独では不十分だった(付けたままにしてある)。
-4. **Infisical は起動時に SMTP 接続を検証し、届かないと HTTP を listen し始めない。** リハーサルでは私の遮断(587 を DROP)が原因で
-   10 分以上 0/1 のままだった。本番の復元でも Exchange Online に届かない状況だと Infisical が上がらず、operator 製 Secret も戻らない。
-   遮断するなら DROP ではなく REJECT(即座に失敗させる)。
+| 見つかったこと | 原因 | 対処 |
+| --- | --- | --- |
+| Deployment が全部 `replicas: 0` で戻る | state.db のスナップショットを scale down の**後**に取っていた | 取る順序を入れ替えた(`backup/k3s-backup`)。git 管理外の Infisical が上がらず気付いた |
+| 復元直後に名前解決が死ぬ | AdGuard の LoadBalancer(:53)に endpoint が無い間、kube-proxy がローカル宛 53 を REJECT し、systemd-resolved のスタブが巻き込まれる | `restore.sh` が `/etc/resolv.conf` をスタブから外す |
+| Secret が 4 つ消える | **Argo CD が prune していた**。Infisical operator が CR の annotation(tracking-id 含む)を Secret にコピーするため、Argo CD が「git に無い管理対象」と誤認する | Argo CD の `resource.exclusions` で Secret を管理対象から外した |
+| Infisical が起動しない | 起動時の SMTP 接続検証が通るまで HTTP を listen しない | 遮断するなら DROP ではなく **REJECT** で即座に落とす |
 
-5. **クラスタにしか無い Secret が復元後に消えた。** スナップショットには 70 個の Secret があったのに、
-   復元 1 時間後のクラスタには 55 個しかなかった。差分 15 個のうち 11 個は Helm のリリース履歴
-   (`sh.helm.release.v1.*` の v2 以降。v1 だけ残った)。残り 4 個のうち 3 個は **`InfisicalSecret` が無く、
-   手で `kubectl apply` しただけの Secret** だった。
-
-   | Secret | その後 | 対処 |
-   | --- | --- | --- |
-   | `wireguard/wg-easy-init` | 誰も作り直せず wg-easy が起動不能 | セットアップ済みなら `INIT_*` は無視されるので Secret ごと廃止。参照は `optional: true` |
-   | `wireguard/wg-easy-oidc` | 同上 | OIDC は Entra 側の仕様で元々使えないので Secret を作らない。Deployment の参照を `optional: true` にして、無くても起動するようにした |
-   | `blog/artalk-secrets` | 同上 | **未使用**なので放置(消してもよい) |
-   | `tamasagashi/ghcr-pull` | Infisical から作り直された | 対処不要(最初から `InfisicalSecret` があった) |
-
-   Infisical operator が管理している Secret は、Infisical が上がった時点で全部作り直された(15 件すべて OK)。
-   **消えたのは「git にも Infisical にも無く、クラスタにしか存在しない」ものだけ。** 犯人は特定できていない
-   (Argo CD の sync 結果にもログにも出ておらず、kine のトムストーンは compaction で消えていた)。
-   次回のリハーサル(`resource.exclusions` 適用後のスナップショット)で再現するか確かめる。
-
-## 2 回目 (2026-09-06、修正後のスナップショットで再確認)
-
-1 回目で見つけた 3 件を直したあと、手動でバックアップを取り直して同じ手順を回した。**すべて解消していた。**
-
-| 1 回目の問題 | 2 回目 |
-| --- | --- |
-| `replicas: 0` が焼き込まれる | **解消**。`replicas=0` の Deployment/StatefulSet は 0 件。Infisical も自力で起動 |
-| 復元直後に DNS が死ぬ | **解消**。restore.sh が `/etc/resolv.conf` をスタブから外し、イメージ取得が最初から通った |
-| Secret が消える | **解消**。1 回目に消えた 4 つ(`wireguard/wg-easy-init`、`wg-easy-oidc`、`tamasagashi/ghcr-pull`、`blog/artalk-secrets`)は全部残っていた |
-
-これで **Argo CD が犯人だったことが確定した**。`resource.exclusions` で Secret を管理対象から外しただけで、
-operator 製・手動作成の両方が消えなくなった。
-
-結果: 45 Running / 17 Completed、`InfisicalSecret` は 15 件すべて OK、Argo CD も Healthy。復元は 2 分。
-起動しなかったのは 2 つだけで、どちらも VM の都合:
-
-- `denpa/tuner-agent` … PT3 が無い (ContainerCreating)
-- `wireguard/wg-easy` … カーネルに wireguard モジュールが無く `wg-quick up wg0` が失敗 (CrashLoopBackOff)
+2 回目ではいずれも再発せず、消えていた Secret も全部残っていた(Argo CD が犯人だったことがこれで確定)。
+結果は 45 Running / 17 Completed、`InfisicalSecret` 15 件すべて OK。起動しなかった 2 つはどちらも VM の都合で、
+`denpa/tuner-agent`(PT3 が無い)と `wireguard/wg-easy`(カーネルに wireguard モジュールが無い)。
 
 ## 片付けの前に
 
