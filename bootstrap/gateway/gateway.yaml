@@ -15,6 +15,20 @@ spec:
     - doany.io
     - "*.doany.io"
 ---
+# `sub`(*.s.doany.io)は 2 段のワイルドカードなので上の証明書では覆えない。別に発行する。
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: doany-sub-wildcard
+  namespace: kube-system
+spec:
+  secretName: doany-sub-wildcard-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.s.doany.io"
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -42,6 +56,22 @@ spec:
           - kind: Secret
             name: doany-wildcard-tls
       allowedRoutes:
+        namespaces:
+          from: All
+    # 3proxy(px.doany.io)。TLS はここで終端し、中身は素の TCP として 3128 に流す。
+    # Traefik の IngressRouteTCP(HostSNI + certResolver)の置き換え。
+    - name: tls-px
+      protocol: TLS
+      port: 443
+      hostname: px.doany.io
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: doany-wildcard-tls
+      allowedRoutes:
+        kinds:
+          - kind: TCPRoute
         namespaces:
           from: All
     - name: https-apex
