@@ -226,26 +226,26 @@ Infisical から作って `imagePullSecrets` で参照している(tamasagashi�
 
 **結論: node 単位へ寄せた(2026-09-06、Talos を待たず k3s 側で実施)。** アプリを足すたびに Secret を用意する必要が無くなった。
 
+## PT3 チューナー(Talos で動かすための算段)
+
+実機には Earthsoft PT3(`earth_pt3`、Altera 1172:4c15)が刺さっていて、Talos のカーネルは `CONFIG_DVB_PT3` を
+有効にしておらず、公式 extension にも無い。denpa の tuner-agent はこの箱の `/dev/dvb` と B-CAS リーダーに依存している。
+**余っている箱は無い**(2026-09-06 本人談)ので、次の 2 本立てで進めている。
+
+1. **上流に PR 済み(本命)**: [siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682)
+   (`CONFIG_DVB_PT3=m` の 1 行。依存する tc90522 / qm1d1c0042 / mxl301rf は既に `m`)と
+   [siderolabs/extensions#1238](https://github.com/siderolabs/extensions/pull/1238)(`dvb/pt3` extension、cx23885 と同じ形)。
+   後者は前者が入って Talos のリリースに乗るまでビルドできないので順番待ち。取り込まれれば Talos 側は素のままで済む。
+   DCO の Signed-off-by は git config の `Ruk Doe <info@doany.io>`。conform が GPG 署名も求めるので、必要なら本人の鍵で作り直す。
+   extension の `compatibility.talos.version` は `>= v1.15.0` と当て推量。
+2. **入らなかった場合の保険: KubeVirt の VM にパススルー。** 実機で確認済み — VT-d 有効(IOMMU グループ 66 個)、
+   PT3(05:00.0)は**グループ 36 に単独**、B-CAS は USB(Gemalto GemPC Twin 08e6:3437)。Talos のカーネルは
+   `vfio-pci` / `vfio_iommu_type1` / KVM を持っている(`talos/patches/main.yaml` で `intel_iommu=on` と vfio を指定済み)。
+   tuner-agent だけ VM(Ubuntu)で動かせば Talos 本体は素のまま、アップグレードも Image Factory のままでいける。
+
+自前 extension を `imager` で焼く案は、Image Factory から外れてアップグレードのたびに自前ビルドになるので採らない。
+
 ## 未決事項
 
-- **PT3 チューナーが Talos で動かない(要決断)。** 実機には Earthsoft PT3(`earth_pt3`、Altera 1172:4c15)が刺さっていて、
-  Talos のカーネルは `CONFIG_DVB_PT3` を有効にしておらず、公式 extension にも無い。denpa の tuner-agent はこの箱の
-  `/dev/dvb` と B-CAS リーダーに依存している。選択肢:
-  1. **チューナーを別の箱に出す。** tuner-agent は denpa とネットワーク越しに話す設計(`docs/agent.md`)なので、
-     PT3 と B-CAS リーダーを小さな Linux 機に移して tuner-agent だけそこで動かせば、Talos 側は素のままでよい。一番確実。
-  2. **上流に PR 済み(2026-09-06)**: [siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682)
-     (`CONFIG_DVB_PT3=m` の 1 行。依存する tc90522 / qm1d1c0042 / mxl301rf は既に `m`)と
-     [siderolabs/extensions#1238](https://github.com/siderolabs/extensions/pull/1238)(`dvb/pt3` extension、cx23885 と同じ形)。
-     後者は前者が入って Talos のリリースに乗るまでビルドできないので順番待ち。取り込まれれば 1 の VM を畳んで extension に戻せる。
-     **DCO の Signed-off-by は git config の `Ruk Doe <info@doany.io>` で入れた。conform が GPG 署名も要求しているので、
-     必要なら本人の鍵で commit を作り直す。extension の `compatibility.talos.version` は `>= v1.15.0` と当て推量。**
-  3. `imager` で自前のカーネル/extension を焼く。Image Factory が使えなくなり、アップグレードのたびに自前ビルドになるので勧めない。
-  1 を軸に 2 を並行、が現実的。
-
-- ~~サーバのファイルシステム~~ → ext4 on LVM、VG の空きが 0 なので LVM スナップショットは使えない。停止時間は scale down 方式のまま(30 秒前後)。
-- ~~消した namespace(epg、vpn、opengist)の PV ディレクトリ~~ → Released の PV オブジェクトを削除し、ディレクトリ 16 個(541 MiB)は
-  `/var/lib/k3s-storage-trash/` に退避(2026-09-06)。バックアップ対象外になった。問題なければ `rm -rf` する。
-  denpa の Released PV 2 つ(mirakc-config、mirakc-epg)と `yosegaki_yosegaki-db`(4K)は namespace が生きている / 指示外なので残した。
-- 本番 2 回目の実行で「120 秒待っても Pod が残る」警告が denpa 除外後にも出た。どの namespace かはログに出していなかったので、
-  出すように直した。次回(04:00 JST)のログで特定する。
-- Talos で IPv6 token が使えなかった場合の AAAA の運用(EUI-64 で MAC を出すか、DDNS に任せるか)。
+- 録画データ(`denpa-recorded`、1.6 GB)をバックアップ対象から外すか。R2 は 3.3 GiB / 無料枠 10 GB で今は困っていないので保留。
+- `/var/lib/k3s-storage-trash/`(消した epg / vpn / opengist の PV、541 MiB)を `rm -rf` するか。中身が要らないと確信したら消す。
