@@ -111,6 +111,21 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 
 ### Phase 1 — Talos の検証(本番に触らない)
 
+**2026-09-06 に QEMU/KVM で v1.14.0 を起動して分かったこと(machine config は未完成):**
+
+- **Talos 1.14 の machine config は複数ドキュメント形式**になっていて、v1alpha1 の同じ項目と**併記できない**。
+  `KubeNetworkConfig`(podSubnets/serviceSubnets)、`KubeletConfig`、`UnattendedInstallConfig` などが自動生成され、
+  `cluster.network` / `machine.kubelet` / `machine.install` を v1alpha1 側に書くと apply 時に弾かれる。
+  片方に寄せるか、要らないドキュメントを `$patch: delete` で消す。`talconfig.yaml` は talhelper が面倒を見るが、
+  手書きのパッチはこの形に合わせる必要がある。
+- **`machine.kubelet.extraMounts` は `KubeletConfig` ドキュメントに無い。** local-path 用の bind mount を入れるには
+  `KubeletConfig` を `$patch: delete` してから v1alpha1 の `machine.kubelet` に書く。
+- **service の IPv6 CIDR `fd43::/64` は Talos では通らない。** `service subnets: invalid subnet: fd43::/64 is too large,
+  it must be at least /108` と言われる。いまの k3s は通っているので、**移行時に `fd43::/108` 等へ変更が要る**
+  (Service の ClusterIP が振り直しになるので、切り替えの一部として扱う)。
+- ISO は Image Factory の schematic `2d61dd07…` から起動。UEFI(OVMF)で問題なく上がり、maintenance mode の
+  API はポート 50000 で応答した。
+
 - [ ] Hyper-V に Talos を 1 台(ISO の作り方と実機の iLO 手順は [docs/talos-install-media.md](docs/talos-install-media.md))。
       talhelper + SOPS で machine config を生成し、talconfig とパッチをこの repo に置く。
 - [ ] 確認項目: bond0(balance-alb、eno1+eno2)、eno4 の static、dual-stack、**IPv6 の token `::2` 相当が設定できるか**(できなければ EUI-64 か DDNS で代替)、
