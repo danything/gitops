@@ -46,22 +46,36 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
 
-### Phase 1.5 — LoadBalancer を MetalLB に置き換える(k3s のまま)
+### Phase 1.5 — k3s のまま Cilium + Gateway API に寄せる
 
-**Ingress は Traefik のまま続ける**(決定 2026-09-06、理由は [docs/decisions.md](docs/decisions.md)「ルーティングの選定」)。
-Gateway API への移行は保留。ここでやるのは **Talos に無い ServiceLB の穴を先に埋めること**だけ。
+**決定 2026-09-06**: CNI を Cilium にして、kube-proxy・ServiceLB・Traefik をまとめて置き換える
+(理由と検証結果は [docs/decisions.md](docs/decisions.md)「ルーティングの選定」)。
+**Talos で後から替えるのが高いのは CNI だけ**なので、k3s のうちにここを済ませて OS 交換時の変数を減らす。
+VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod の通信が一度切れる**ので、段階を分ける。
 
-- [ ] MetalLB を入れて IP プールを 1 つ用意する(単一ノードの L2)。namespace に
-      `pod-security.kubernetes.io/enforce: privileged` のラベルを付ける(Talos で必要になるので今から付けておく)。
-- [ ] k3s の ServiceLB を止める(`--disable servicelb`)。`type: LoadBalancer` の Service
-      (`adguardhome-dns`、`mattermost-calls`、traefik 本体)がそのまま動くことを確認する。**アプリのマニフェストは変えない。**
+- [ ] **Gateway API v1.6.1 の CRD を入れる**(Cilium 1.20 はこのバージョンを要求する。v1.4.0 だと
+      GatewayClass が `Waiting for controller` のまま止まる)。gatewayclasses / gateways / httproutes /
+      referencegrants / grpcroutes / backendtlspolicies / tlsroutes、必要なら tcproutes / udproutes。
+- [ ] **段階 1: CNI を Cilium に替える。** `/etc/rancher/k3s/config.yaml` に `flannel-backend: none`、
+      `disable-network-policy: true`、`disable-kube-proxy: true` を足して k3s を再起動 → Cilium を Helm で導入。
+      **Traefik と Ingress はこの段階では触らない。** 全 Pod が Running に戻ること、外形(各サイトの HTTPS)を確認。
+      戻すときは config.yaml を戻して k3s 再起動で flannel に復帰する。
+- [ ] **段階 2: ServiceLB を Cilium LB-IPAM に替える。** `disable: [servicelb]` を足し、
+      `CiliumLoadBalancerIPPool` と `CiliumL2AnnouncementPolicy` を作る。`type: LoadBalancer` の 3 つ
+      (adguardhome-dns、mattermost-calls、traefik)にアドレスが付くことを確認。**アプリのマニフェストは変えない。**
+- [ ] **段階 3: Ingress を HTTPRoute に移す。** cert-manager(Cloudflare DNS-01)を入れ、Cilium Gateway を立てて
+      `ingress2gateway` で変換した HTTPRoute を **Ingress と並置**でコミット。1 サイトずつ切り替える。
+      `IngressRoute` 4 本と `Middleware` 4 つ、`IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
+      forward-auth は oauth2-proxy を ext auth として残す(Entra のトークンが大きく Cookie 方式は使えない)。
+- [ ] 全部移ったら Traefik を落とす(`disable: [traefik]`)。
 - [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
       `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
-- [ ] Traefik を HelmChart CRD から ArgoCD の helm source に移す(Talos には HelmChart CRD が無いため)。
 
-### Phase 2 — k3s → Talos(停止を伴う。**Ingress 構成は変えない**)
+### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
 
-OS 交換だけに集中する。Ingress は Phase 1.5 で落ち着いた構成のまま持っていく。
+OS 交換だけに集中する。Cilium と Gateway API は Phase 1.5 で落ち着いた構成のまま持っていく。
+Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` にして、Cilium は
+`k8sServicePort: 7445`(KubePrism)、`cgroup.autoMount.enabled: false` + `hostRoot: /sys/fs/cgroup` を足すだけ。
 
 - [ ] 作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から。cloudflared 経由の ssh は使えない。
       作業中の見せ方は未定(Cloudflare のワイルドカード CNAME を proxied にすれば全サブドメインを Cloudflare 受けにできるが、
@@ -75,12 +89,6 @@ OS 交換だけに集中する。Ingress は Phase 1.5 で落ち着いた構成�
 - [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、wireguard、AdGuard の公開リゾルバを確認。
-
-### Phase 2.5 — Gateway API(保留)
-
-いまはやらない。再検討する条件は [docs/decisions.md](docs/decisions.md)「Gateway API を再検討する条件」。
-やるときは `ingress2gateway` で機械変換 → `Ingress` と並置でコミット → 切替、の順。
-Traefik v3 自体が Gateway API 実装を持つので、**コントローラを替えずに API モデルだけ先に移す**道もある。
 
 ### Phase 3 — Talos 定常運用
 
