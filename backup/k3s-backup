@@ -7,6 +7,7 @@
 #   /var/lib/k3s-backup/state.db                  k3s の datastore(全 k8s オブジェクト)の sqlite ホットバックアップ
 #   /var/lib/k3s-backup/k3s-version               restore.sh が同じ k3s バージョンを入れるためのメモ
 #   /etc/rancher/k3s/config.yaml                  k3s のホスト設定(旧 k3s-server-config.yaml)
+#   /etc/rancher/k3s/registries.yaml              ghcr の pull 資格情報(ノード単位。imagePullSecrets の代わり)
 #   /etc/NetworkManager/system-connections/       bond0 / eno4 のプロファイル(旧 setup-network.sh)
 #   /etc/netplan/                                 Ubuntu では NM が profile を netplan 経由でここに書く
 #   /etc/NetworkManager/conf.d/20-no-auto-default.conf
@@ -48,7 +49,9 @@ fi
 for skip in $SKIP_SCALE_NAMESPACES; do
 	TARGET_NAMESPACES="$(printf '%s\n' $TARGET_NAMESPACES | grep -vx "$skip" | tr '\n' ' ')"
 done
-KEEP="${RESTIC_KEEP:---keep-daily 7 --keep-weekly 4 --keep-monthly 6}"
+# 保持は「1 週間は日単位、1 か月は週単位、その先 2 か月」= 最大 13 世代。
+# R2 の無料枠 10 GB に対して余裕を持たせるため 17 世代から減らした (2026-09-06)。
+KEEP="${RESTIC_KEEP:---keep-daily 7 --keep-weekly 4 --keep-monthly 2}"
 # --no-scale: 初回の暖機用(稼働中のまま取る。整合性は保証されないが、次回の scale down 中のアップロードが差分だけになる)
 NO_SCALE=0
 [ "${1:-}" = "--no-scale" ] && NO_SCALE=1
@@ -139,6 +142,7 @@ for p in \
 	"$K3S_SERVER_DIR/tls" "$K3S_SERVER_DIR/cred" "$K3S_SERVER_DIR/token" \
 	"$SNAP_DIR" \
 	/etc/rancher/k3s/config.yaml \
+	/etc/rancher/k3s/registries.yaml \
 	/etc/NetworkManager/system-connections \
 	/etc/NetworkManager/conf.d/20-no-auto-default.conf \
 	/etc/netplan \

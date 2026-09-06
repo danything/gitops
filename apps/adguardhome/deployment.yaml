@@ -3,6 +3,10 @@ kind: Deployment
 metadata:
   name: adguardhome
   namespace: adguardhome
+  annotations:
+    # AdGuard の設定は PVC の中 (AdGuardHome.yaml) にあり git では管理していない。
+    # クエリログの保持は 90d だと querylog.json だけで 2 GB に育ち、毎日のバックアップに乗るので
+    # 7d に縮めた (2026-09-06)。変えるときは UI の 設定 > 一般設定 > クエリログの保存期間 から。
 spec:
   replicas: 1
   selector:
