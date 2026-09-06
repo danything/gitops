@@ -187,6 +187,24 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 - cert-manager は `config.enableGatewayAPI=true` で Gateway の `cert-manager.io/cluster-issuer` 注釈を見る。
   Cloudflare のトークンは **cert-manager の namespace にも** Secret が要る(ClusterIssuer は自分の namespace しか読まない)。
 
+### 3proxy(TLS 終端 + 素の TCP)は Cilium の Gateway では素直に移せない
+
+Traefik では `IngressRouteTCP` が `HostSNI(px.doany.io)` で受けて **TLS をここで終端し、中身を素の TCP として
+3proxy:3128 に流して**いた。Gateway API で同じことをしようとすると詰まる。
+
+- `protocol: TLS` + `mode: Terminate` のリスナーに **TCPRoute は付けられない**
+  (`No matching listener protocol; route requires one of: [TCP]`)
+- Cilium はそのリスナーに **TLSRoute しか許さず**、TLSRoute は本来 passthrough 用
+  (`Listener not valid. None of the Allowed Route Kinds are supported.`)
+
+取りうる形は 3 つ。
+
+| 案 | 中身 | 評価 |
+| --- | --- | --- |
+| **TLS 終端を Pod 側に寄せる** | 3proxy の Pod に TLS を終端するサイドカー(nginx stream か envoy)を足し、Gateway は `mode: Passthrough` + TLSRoute で SNI だけ見て流す | 移行できる。証明書は cert-manager の Secret をサイドカーがマウントする。**推奨** |
+| 3proxy を Traefik に残す | この 1 本のためだけに Traefik を生かす | hostPort 443 が Gateway と衝突するので、別ポートか別アドレスが要る |
+| 素の TCP で別ポートに出す | TLS をやめる | 公開プロキシなので不可 |
+
 ### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
 
 「Entra 側でトークンを小さくして Cilium の Envoy 機能で OIDC を賄う」案を検討したが、**Cilium には

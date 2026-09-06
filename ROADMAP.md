@@ -70,7 +70,8 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       証明書はワイルドカード 1 枚、HTTP → HTTPS の 301 リダイレクトも Gateway 側に用意した。
       本番トラフィックはまだ Traefik(hostPort 80/443)が捌いている。
 - [ ] **切り替え前に残っているもの**:
-      - `px.doany.io`(3proxy)の `IngressRouteTCP` → TLSRoute か TCPRoute
+      - `px.doany.io`(3proxy)。**TLS 終端 + 素の TCP は Cilium の Gateway では直接書けない**ことが判明
+        (decisions.md「3proxy は素直に移せない」)。Pod 側に TLS 終端のサイドカーを足して passthrough にする案が有力
       - forward-auth の 2 本(Traefik ダッシュボードと `sub`)。**Cilium の Gateway では賄えない**ので、
         oauth2-proxy を前段プロキシにするか、この 2 本のためだけに Traefik を残すか決める
       - yuzuriha の `compress` ミドルウェア(Gateway API に相当機能なし。諦めるかアプリ側で)
