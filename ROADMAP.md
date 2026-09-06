@@ -46,24 +46,18 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
 
-### Phase 1.5 — k3s のまま LB / Ingress を試す(Talos より先)
+### Phase 1.5 — LoadBalancer を MetalLB に置き換える(k3s のまま)
 
-**OS 交換・コントローラ交換・API モデル移行を同時にやらない**([docs/decisions.md](docs/decisions.md)「段階移行」)。
-単一ノードなので、同時にやると障害の切り分けができない。Gateway API は可搬なので各段階で戻せる。
+**Ingress は Traefik のまま続ける**(決定 2026-09-06、理由は [docs/decisions.md](docs/decisions.md)「ルーティングの選定」)。
+Gateway API への移行は保留。ここでやるのは **Talos に無い ServiceLB の穴を先に埋めること**だけ。
 
-- [ ] **Entra ID の生の ID トークン長を測る(最優先)。** ブラウザでログインして `IdToken` Cookie の長さを見るのが早い。
-      4096 を超えると Envoy Gateway の OIDC が無言で落ちる(envoyproxy/gateway#7315)。
-      参考: oauth2-proxy が redis に持つセッション(3 トークン + メタデータをまとめて暗号化)は **4293 バイト**だった(2026-09-06 実測)。
-      個々のトークンは 4096 を下回っているはずだが余裕は小さい。4 KB 超ならクレームを削るか、Envoy Gateway の OIDC を諦めて
-      oauth2-proxy を残す(その場合 B の主要な動機が消えるので A の継続も再検討する)。
-- [ ] Gateway API の CRD を自前で入れる。
-- [ ] **ServiceLB を MetalLB に置き換える**(`--disable servicelb`)。Talos には ServiceLB 相当が無いので、
-      この差分を k3s のうちに埋めておくと OS 交換時の変数が減る。**単一ノードなら Envoy Gateway を hostNetwork にして
-      LB コントローラ無しで済ませる案もある**ので、両方試して決める。
-- [ ] Envoy Gateway を入れる。**Traefik は止めない**(`--disable traefik` は不要)。GatewayClass が別なので並走でき、
-      HTTPRoute を 1 つずつ移せる。まず 1 サービスだけ移して観察する。
-- [ ] cert-manager を Gateway API 対応で入れる(`config.enableGatewayAPI=true` の明示が要る。**まだ Beta**)。
-- [ ] `externalTrafficPolicy` かクライアント IP の保持方法を先に決める(`Cluster` だと SNAT されてレート制限や IP 制限が壊れる)。
+- [ ] MetalLB を入れて IP プールを 1 つ用意する(単一ノードの L2)。namespace に
+      `pod-security.kubernetes.io/enforce: privileged` のラベルを付ける(Talos で必要になるので今から付けておく)。
+- [ ] k3s の ServiceLB を止める(`--disable servicelb`)。`type: LoadBalancer` の Service
+      (`adguardhome-dns`、`mattermost-calls`、traefik 本体)がそのまま動くことを確認する。**アプリのマニフェストは変えない。**
+- [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
+      `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
+- [ ] Traefik を HelmChart CRD から ArgoCD の helm source に移す(Talos には HelmChart CRD が無いため)。
 
 ### Phase 2 — k3s → Talos(停止を伴う。**Ingress 構成は変えない**)
 
@@ -82,12 +76,11 @@ OS 交換だけに集中する。Ingress は Phase 1.5 で落ち着いた構成�
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、wireguard、AdGuard の公開リゾルバを確認。
 
-### Phase 2.5 — Ingress 15 本を HTTPRoute に移す(落ち着いてから)
+### Phase 2.5 — Gateway API(保留)
 
-- [ ] `ingress2gateway` で機械変換 → 各 repo の `deploy/` に **Ingress と並置**でコミット。
-- [ ] `IngressRoute` 4 本と `Middleware` 4 つを手で移す(ここが実工数。中身の棚卸しが要る)。
-- [ ] `IngressRouteTCP`(3proxy)は TLSRoute か TCPRoute へ。
-- [ ] 全部 Gateway API に揃った時点で Ingress 側と Traefik を落とす。HTTPRoute はコントローラを差し替えてもそのまま動く。
+いまはやらない。再検討する条件は [docs/decisions.md](docs/decisions.md)「Gateway API を再検討する条件」。
+やるときは `ingress2gateway` で機械変換 → `Ingress` と並置でコミット → 切替、の順。
+Traefik v3 自体が Gateway API 実装を持つので、**コントローラを替えずに API モデルだけ先に移す**道もある。
 
 ### Phase 3 — Talos 定常運用
 

@@ -99,10 +99,45 @@ forward-auth の先は oauth2-proxy + redis(IdP は Entra ID)。LoadBalancer は
 | C. Cilium(CNI + Gateway API + L2 LB) | B と同程度 + **CNI 交換** | HTTPRoute の ExternalAuth(GEP-1494)が 1.20 pre-release。fail-open のバグ報告あり。OIDC 内蔵は無い | **TLSRoute のみ**(TCPRoute/UDPRoute 非対応) | cert-manager | 1 つで CNI + LB + Ingress を賄えるのは魅力だが、OS 交換と同時の CNI 交換は影響範囲が大きい |
 | ingress-nginx / HAProxy / Kong / Istio | — | — | — | — | 前者は EOL。後者は単一ノードに過剰か、Gateway API 対応で B に劣る |
 
-**結論: B(Envoy Gateway)を第一候補とするが、下の検証を通してから確定する。** 当初「oauth2-proxy と redis が撤去できる」を
-決め手にしていたが、それは条件付きだと分かった(下記)。時間が無ければ A に倒せる。A は Talos 上でも問題なく動く。
+**結論: A(Traefik 継続)。Gateway API への移行は保留する。**(2026-09-06 決定)
 
-### B を選ぶ前に必ず確認すること
+理由は 3 つ。
+
+1. **いま困っていない。** ingress-nginx の EOL はこの構成に関係がない(使っていない)。`Ingress` API が凍結されたのは
+   「新機能が入らない」という意味で、動かなくなるわけではない。Traefik v3 は現役で、Talos でもそのまま動き、
+   ACME(mydnschallenge)も Middleware も IngressRouteTCP も今のまま使える。**書き換えは 0。**
+2. **移行の主目的は OS の入れ替えであって、ルーティングの刷新ではない。** 単一ノードで 1 人運用なのに、
+   OS・LB・Ingress コントローラ・API モデルを同時に動かすと、何かが壊れたときに切り分けができない。
+3. **B の主要な動機(oauth2-proxy + redis の撤去)が条件付きだった。** Envoy Gateway の OIDC は
+   トークンを Cookie に持つため 4096 バイトの壁があり、超えると**ログすら出ずに**認証がループする。
+   さらに MetalLB を入れれば部品数は差し引きゼロ。cert-manager の Gateway API 対応はまだ Beta で、
+   Envoy Gateway 自体もマイナーが 2 週間強に 1 回出る。**得るものに対して回すコストが見合わない。**
+
+### ただし LoadBalancer だけは Talos の前に解決が要る
+
+Ingress の選択とは独立した話。**Talos には k3s の ServiceLB(Klipper)に相当するものが無い**ので、
+`type: LoadBalancer` の Service(`adguardhome-dns`、`mattermost-calls`、traefik 本体)をどう受けるか決めておく。
+
+| 案 | 中身 | 評価 |
+| --- | --- | --- |
+| **MetalLB(L2)** | controller + speaker の 2 Pod。`type: LoadBalancer` のまま動く | **推奨。アプリ側のマニフェストを 1 行も変えずに済む**。Talos でよく使われる道 |
+| hostNetwork / hostPort | 追加コンポーネント無し | 部品は減るが Service と Deployment の書き換えが要り、ポートの衝突を手で管理することになる |
+
+単一ノードなら hostNetwork でも成立するが、**移行時の差分を最小にする方が大事**なので MetalLB を採る。
+PSA のラベル(`pod-security.kubernetes.io/enforce: privileged`)が speaker に要る点だけ注意。
+
+### Gateway API を再検討する条件
+
+保留であって否定ではない。次のどれかが起きたら測り直す。
+
+- cert-manager の Gateway API 対応が **GA** になる(いまは Beta で `--enable-gateway-api` の明示が要る)
+- Envoy Gateway の OIDC の既知問題(#7315 の Cookie 4096 バイト、#8441、#8649)が解決する
+- Traefik 側で実際に困る(必要な機能が無い、v3 のサポートが切れる、など)
+- Ingress を触る用事がまとまって発生する(そのとき `ingress2gateway` で機械変換すればよい)
+
+Traefik v3 自体が Gateway API 実装を持っているので、**コントローラを替えずに API モデルだけ先に移す**道も残っている。
+
+### 参考: B を選ぶなら確認が要ること(保留中)
 
 **Envoy Gateway の OIDC はトークンをブラウザの Cookie に保存する。** redis が要らなくなるのはこのためだが、既知の問題がある。
 
@@ -113,10 +148,9 @@ forward-auth の先は oauth2-proxy + redis(IdP は Entra ID)。LoadBalancer は
 | envoyproxy/gateway#8649 | Gateway レベルとルートレベルで SecurityPolicy を二重掛けすると CSRF 検証で落ちる |
 
 Entra ID はグループクレームが増えると 4 KB を容易に超える。**実測(2026-09-06)**: oauth2-proxy が redis に置いている
-セッションは **4293 バイト**だった(1 セッション)。これは ID トークン・アクセストークン・リフレッシュトークンと
-メタデータをまとめて暗号化した値なので、**個々のトークンはそれぞれ 4096 を下回っている**と読める。
-ただし余裕は大きくない。確定させるには生の ID トークン長を測る必要がある(ブラウザでログインして
-`IdToken` Cookie の長さを見るのが早い)。4 KB を超えるならクレームを削るか、B の主要な動機が消える。
+セッションは **4293 バイト**(1 セッション)。ID・アクセス・リフレッシュの 3 トークンとメタデータをまとめて
+暗号化した値なので個々は 4096 を下回っているはずだが、余裕は小さい。B を再検討するときは
+生の ID トークン長(ブラウザの `IdToken` Cookie の長さ)を測ってから決める。
 
 `cookieDomain` はサブドメイン間で共有するなら root domain(`.doany.io`)を指定する。後から変えるとブラウザに残った
 古い Cookie が優先されて認証が壊れるので、変更時は Cookie クリアが要る。
@@ -141,12 +175,11 @@ GitHub スターは約 2.9K と少なく見えるが、2022 年発表と新し�
 Contour / Emissary を統合した共通コアとして設計され実利用の多くが下流製品経由であることによる。
 同カテゴリ(Kong IC、NGINX Gateway Fabric、Contour)も 2〜4K のレンジ。ただし日本語の事例が少ないのは実害。
 
-### 残っている論点
+### 保留中に残る論点(いま決めなくてよい)
 
-- **Entra ID の生の ID トークン長**(最優先。上記)
-- `IngressRouteTCP` 1 本(3proxy)の中身。TLS passthrough で足りるなら C の TLSRoute でも代替できるか
-- 単一ノードで MetalLB を使うか、hostNetwork で済ませるか
-- `IngressRoute` 4 本と `Middleware` の具体的な中身(機械変換できない部分の実工数)
+- Entra ID の生の ID トークン長(B を再検討するときの前提)
+- `IngressRoute` 4 本と `Middleware` 4 つの中身。機械変換できない部分の実工数はここで決まる
+- `IngressRouteTCP`(3proxy)は TLS passthrough で足りるか
 
 ## ghcr の pull 認証
 
