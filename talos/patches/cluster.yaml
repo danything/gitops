@@ -3,7 +3,9 @@
 machine:
   sysctls:
     # bond0 の SLAAC を stable-privacy にする(EUI-64 で MAC を出さない)。
-    # NetworkManager の ipv6.token ::2 に相当する設定は Talos に無いので、AAAA は cloudflare-ddns に任せる。
+    # **公開する AAAA は下の静的アドレス(::2)。** SLAAC のぶんは並んで付くだけ。
+    # 実機の NetworkManager も ipv6.token は使っておらず、静的アドレスを直接書いている
+    # (`ip token show` はどのインタフェースも `token ::`)。
     net.ipv6.conf.bond0.addr_gen_mode: "2"
     # IPv6 は bond0 に一本化する。eno4 側の RA でデフォルトルートを奪われると非対称ルーティングになる。
     net.ipv6.conf.eno4.disable_ipv6: "1"
@@ -16,6 +18,8 @@ machine:
         source: /var/local-path-provisioner
         options: [bind, rshared, rw]
   network:
+    # 名前は main 固定。local-path の PV の nodeAffinity が main を指している。
+    hostname: main
     interfaces:
       - interface: bond0
         bond:
@@ -25,7 +29,13 @@ machine:
         dhcp: false
         addresses:
           - 10.0.0.2/24
+          # **実機と同じ静的アドレス。** プレフィックスは ISP 由来なので変わりうるが、
+          # それは NetworkManager で運用しているいまも同じリスク。変わったときは
+          # cloudflare-ddns(local.iface.stable:bond0)が実際のアドレスを公開する。
+          - 240f:6d:842b:1::2/64
         routes:
+          # IPv6 の既定経路は RA 由来(`default via fe80::… proto ra`)なので書かない。
+          # 実機で上げたあと `talosctl get routes` で載っていることを確かめること。
           - network: 0.0.0.0/0
             gateway: 10.0.0.1
       - interface: eno4
@@ -50,3 +60,21 @@ serviceSubnets:
     - 10.43.0.0/16
     # **/64 は Talos に弾かれる(/108 以下が必須)。k3s の fd43::/64 から変わるので ClusterIP は振り直しになる。
     - fd43::/108
+---
+# **HostnameConfig は消して v1alpha1 側に書く。** gen config が既定で入れる
+# `auto: stable` と `hostname` は併記できず、パッチからは `auto` を消せない
+# (`auto: null` も `$patch: replace` も効かない)。KubeletConfig と同じ手で
+# ドキュメントごと落としてから、下の machine.network.hostname を効かせる。
+apiVersion: v1alpha1
+kind: HostnameConfig
+$patch: delete
+---
+# ノード自身の名前解決。実機の systemd-resolved と同じ Cloudflare を見る。
+# クラスタ内の名前解決は CoreDNS、LAN 向けの公開リゾルバは AdGuard で、どちらもこれとは別。
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+    - address: 2606:4700:4700::1111
+    - address: 2606:4700:4700::1001
+    - address: 1.1.1.1
+    - address: 1.0.0.1

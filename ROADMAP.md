@@ -36,8 +36,18 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
 - [x] `talos/` を 1.14 の形に書き直した(2026-09-06)。talhelper はやめて `talosctl gen config` + パッチだけにし、
       **`talosctl validate -m metal` が通ることを確認**。カーネル引数は Image Factory の schematic
       (`32820716…`)に移した。手順は [talos/README.md](talos/README.md)。
-- [ ] 実機固有の確認: bond0(balance-alb、eno1+eno2)、eno4 の static、**IPv6 の token `::2` 相当**(無ければ
-      stable-privacy + cloudflare-ddns で代替)、wg-easy の hostNetwork UDP 51820。QEMU の user-mode では試せない。
+- [x] **実機固有の確認は VM を待たずにほぼ片付いた(2026-09-07)。**
+      - **ドライバは Talos のカーネルに全部ある**(siderolabs/pkgs の `config-amd64` で確認)。
+        NIC は Broadcom BCM5719(HP 331i 4 ポート)で `CONFIG_TIGON3=m`、`CONFIG_BONDING=y`、
+        `CONFIG_WIREGUARD=y`。wg-easy で Ubuntu の AppArmor 回避が要ったのは Talos では不要。
+      - **IPv6 は「token `::2` 相当が無い」という前提が誤りだった。** 実機の NetworkManager も
+        `ipv6.address1: 240f:6d:842b:1::2/64` を静的に書いているだけで、`ip token` はどの
+        インタフェースにも設定されていない。Talos にもそのまま静的アドレスとして書いた。
+      - `talos/patches/cluster.yaml` を実機の `ip -brief addr` と `/proc/net/bonding/bond0` から
+        起こし直し、**`talosctl validate -m metal` が通ることを確認**。
+- [ ] 残るのは実際に上げてみる分だけ: bond0 が balance-alb で上がるか、IPv6 の既定経路が RA で
+      載るか、wg-easy の hostNetwork UDP 51820。**QEMU を user-mode ではなく tap/bridge で
+      2 本挿せば VM でも試せる**(いまの復元リハーサルは user-mode なので試せていない)。
 - [x] **PSA のラベルが要る namespace を洗い出して manifest に入れた(2026-09-07)。** 走っている Pod の spec を
       直接数えたら想定より多く、9 つあった。**baseline は hostPort も弾く**のを見落としていた。
       一覧と洗い出しのコマンドは [docs/talos.md](docs/talos.md)「PSA のラベル」。
