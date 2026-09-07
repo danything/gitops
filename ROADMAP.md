@@ -51,7 +51,13 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
             (decisions.md「erpnext だけは素直に移せない」)。
       - [ ] infisical(Postgres の PVC 持ち。ArgoCD に預けると鶏卵になるので Talos では inlineManifests)。
       - argocd は移さない(自分自身。Talos では inlineManifests)。
-- [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に PVC バックアップと `backupcommand` の dump が取れること。
+- [ ] k8up を導入し、Phase 0 と同じ restic リポジトリに PVC バックアップと `backupcommand` の dump が取れること。
+      - [x] operator を入れて、**`backend` を書かずにグローバル設定へ寄せれば R2 へ書ける**ことを確認(2026-09-07)。
+            endpoint も含めて秘密は git に置かない形にできた。`backend.envFrom` だけでは動かない
+            (k8up が空の `RESTIC_REPOSITORY` を必ず入れて上書きする)。詳細は [apps/k8up/README.md](apps/k8up/README.md)。
+      - [ ] `Schedule` を namespace ごとに置く。**`Prune` がリポジトリ全体を見るかどうかを先に確かめる**
+            (ホストのスクリプトのスナップショットを消しかねない)。
+      - [ ] DB は `k8up.io/backupcommand` で dump を流す。ホストのスクリプトには無い利点で、ここが本当の動機。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
