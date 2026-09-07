@@ -17,5 +17,9 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: wg-easy
-          port: 51821
+        # **SSO の後ろ。** wg-easy 自身の認証は切れない(要望 wg-easy#1923 が open のまま)ので
+        # 二重ログインになるが、**ログインフォームをインターネットに晒さない**ことに意味がある。
+        # 名前空間をまたぐので auth 側に ReferenceGrant がある。
+        - name: auth-wg
+          namespace: auth
+          port: 4180
