@@ -33,7 +33,8 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 
 ## 何をどう取っているか
 
-`Schedule` は [schedules.yaml](schedules.yaml) に 9 本まとめてある(時刻と決まりごともあちら)。
+`Schedule` は [schedules.yaml](schedules.yaml) に 11 本まとめてある(時刻と決まりごともあちら)。
+**注釈だけでは動かない** ── その namespace に `Schedule` が無いとジョブが作られない。
 **取る中身を決めているのは Pod 側の注釈**で、それがどこにあるかがここ。
 
 | namespace | 中身 | `k8up.io/backupcommand` の在処 |
@@ -43,6 +44,7 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 | infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
 | lgtm / xool / worklog / denpa / blog | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
 | netbird | `store.db` / `idp.db` / `events.db` を tar 1 本に | [../netbird/deployment.yaml](../netbird/deployment.yaml) |
+| adguardhome / portainer | ファイルだけ(下記) | ─ |
 
 PVC のファイルは `k8up.io/backup: "true"` を付けたものだけ取る。operator が
 `BACKUP_SKIP_WITHOUT_ANNOTATION=true` なので、**注釈がその宣言そのもの**。
