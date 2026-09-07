@@ -319,6 +319,51 @@ Cloudflare のトークンは `bootstrap/cert-manager/cloudflare-secret.yaml` �
 Envoy Gateway 自体はマイナーが 2 週間強に 1 回出てサポート窓も短い。
 **Talos / Kubernetes / Gateway API CRD / Envoy Gateway の 4 つのバージョンマトリクス**を回す前提でコストを見る。
 
+## HelmChart CRD から ArgoCD の Application へ(2026-09-07)
+
+`HelmChart`(`helm.cattle.io`)は k3s の helm-controller が提供するもので **Talos には無い**。
+OS 交換時の変数を減らすため、k3s のうちに ArgoCD の `Application` へ移す。
+
+**移す前に必ず `helm template` の出力と live を突き合わせる。** リリース名まで揃えれば
+描き出されるものは一致し、引き取っても Pod は入れ替わらない(実測: cloudflare-ddns・
+infisical-operator・infisical-push-bridge の 3 つとも `kubectl diff` が空、Pod の AGE も変わらなかった)。
+`secrets-operator` のように名前を切り詰める chart があるので、**リリース名を変えると別物として作り直しになる**。
+
+### **CR を消すと helm がアンインストールされる**
+
+helm-controller は `wrangler.cattle.io/on-helm-chart-remove` finalizer で削除ジョブを走らせる。
+finalizer を先に外しても**すぐ付け直される**ので効かない。しかも `secrets-operator` は
+CRD を `crds/` ではなく `templates/` に置いているため、**アンインストールすると CRD ごと消えて
+`InfisicalSecret` 15 本が巻き添えになる**(Secret は `creationPolicy: Orphan` なので残るが、
+値の同期は止まる)。
+
+**手順(この順番でやる)**:
+
+```shell
+# 1. Application を先に作って Synced になるのを確かめる(diff が空なら Pod は入れ替わらない)
+kubectl apply -f apps/<name>/application.yaml
+# 2. helm のリリース Secret を消す。これでアンインストールが「対象なし」になる
+kubectl -n <targetNamespace> delete secret -l owner=helm,name=<releaseName>
+# 3. HelmChart CR を消す。削除ジョブは走るが何も消さない
+kubectl -n kube-system delete helmchart <name>
+```
+
+`apps/` に置いたものは ArgoCD が prune するので、git から消すだけで CR も消える。
+その場合はアンインストールが走るので、**状態を持つものでは必ず先に 2 をやる**
+(cloudflare-ddns では手を抜いて走らせたら Deployment が一度消えて、ArgoCD が数秒で作り直した)。
+
+### 残り
+
+| chart | 状態 | 扱い |
+| --- | --- | --- |
+| cloudflare-ddns | 移行済み | `apps/cloudflare-ddns/application.yaml` |
+| infisical-secrets-operator | 移行済み | `apps/infisical-operator/` |
+| infisical-push-bridge | 移行済み | `apps/infisical-push-bridge/` |
+| erpnext | 未 | PVC と MariaDB を持つ。上の手順なら安全だが、描き出しの突き合わせを丁寧にやってから |
+| yosegaki | 未 | PVC を持つ。blog リポジトリ側 |
+| infisical | 未 | Postgres の PVC を持つ。**Infisical より下の層**なので ArgoCD に預けると鶏卵になる |
+| argocd | 移さない | 自分自身。Talos では machine config の `inlineManifests` に載せる |
+
 ## ghcr の pull 認証
 
 いまは repo が private なのでパッケージも private で、名前空間ごとに `ghcr-pull`(PAT の dockerconfigjson)を
