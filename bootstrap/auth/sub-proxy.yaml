@@ -65,10 +65,11 @@ spec:
           value: 'true'
         - name: OAUTH2_PROXY_UPSTREAMS
           value: http://sub-backend.kube-system.svc.cluster.local
+        # a.doany.io 側と同じ。理由は deployment.yaml
         - name: OAUTH2_PROXY_SESSION_STORE_TYPE
-          value: redis
-        - name: OAUTH2_PROXY_REDIS_CONNECTION_URL
-          value: redis://auth-redis.auth.svc.cluster.local:6379
+          value: cookie
+        - name: OAUTH2_PROXY_SESSION_COOKIE_MINIMAL
+          value: 'true'
         ports:
         - containerPort: 4180
 ---

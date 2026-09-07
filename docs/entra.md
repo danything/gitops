@@ -1,9 +1,30 @@
-# Entra ID のトークンを小さくして redis を捨てる
+# Entra ID のアプリロールと、oauth2-proxy のセッション
 
-いまの forward-auth は oauth2-proxy + redis で、**redis はセッション(トークン)を持つためだけに居る**。
-Entra が返す ID トークンが大きいのは `groups` クレームに**所属グループを全部載せている**ためで、
-実測でセッションが 4293 バイトある。ここを小さくできれば oauth2-proxy を Cookie セッション
-(`--session-store-type=cookie`)に変えられて、redis の Deployment と Service が消える。
+## まず訂正: グループクレームは redis の理由ではなかった(2026-09-07)
+
+長らく「Entra の `groups` クレームに所属グループが全部載るのでセッションが Cookie に
+収まらない、だから redis が要る」と書いていたが、**これは誤りだった**。
+
+数えたところ、このテナントで管理者ユーザーが所属するグループは **2 つだけ**
+(`admins` と `All Company`)。GUID は 1 つ 36 文字なので、`groups` クレームは
+せいぜい 100 バイト強しかない。4293 バイトあったセッションの中身は
+**ID トークン・アクセストークン・リフレッシュトークンそのもの**で、
+グループを削ってもほとんど減らない。
+
+**効いたのは `--session-cookie-minimal`。** Cookie セッションからその 3 つのトークンを落とす。
+残るのは Email と User だけで、`X-Auth-Request-*` を出すには十分。
+`--pass-authorization-header` / `--set-authorization-header` / `--pass-access-token` /
+`--cookie-refresh` とは併用できない(どれも落とすトークンを必要とする)が、どれも使っていない。
+
+**アプリロールへの移行はそれとは独立に価値がある**(下記)。トークンが小さくなることは
+主目的ではなくなった、というだけ。
+
+## アプリロールに移す理由(トークンの大きさとは別)
+
+- **設定が読める。** `g, 5847ec59-0f80-4713-89f9-3624cc217468, role:admin` が `g, admin, role:admin` になる
+- **移植できる。** グループの Object ID は Entra 固有の GUID。ロール名なら別の IdP でも通る
+- **トークンがテナントの都合に左右されない。** 将来グループが増えても `roles: ["admin"]` のまま
+- Microsoft 自身も新規のアプリではロールを勧めている
 
 ## いま `groups` を読んでいるもの
 
@@ -149,9 +170,10 @@ kubectl exec -n auth deploy/auth-redis -- sh -c \
 
 ## redis を捨てる
 
-1. `bootstrap/auth/deployment.yaml` の `auth` と `auth-sub` から
-   `OAUTH2_PROXY_SESSION_STORE_TYPE=redis` と `OAUTH2_PROXY_REDIS_CONNECTION_URL` を外す
-   (既定が `cookie` なので、明示するなら `OAUTH2_PROXY_SESSION_STORE_TYPE=cookie`)
-2. `bootstrap/auth/redis-deployment.yaml` と `redis-service.yaml` を消す
-3. `bootstrap/` は Argo CD の同期対象外なので手で `kubectl apply` して、redis を `kubectl delete`
-4. **切り戻し**は redis を戻して環境変数を足すだけ。セッションは消えるので入り直しになる
+1. ~~`OAUTH2_PROXY_SESSION_STORE_TYPE` を `cookie` にする~~ **済み(2026-09-07)。**
+   あわせて `OAUTH2_PROXY_SESSION_COOKIE_MINIMAL=true` を入れた
+2. **実機でログインし直して通ることを確かめる** ← いまここ
+3. 通ったら `bootstrap/auth/redis-deployment.yaml` と `redis-service.yaml` を消して、
+   `kubectl delete` する。**確かめるまで redis は動かしたまま**にしてある
+4. **切り戻し**は `SESSION_STORE_TYPE=redis` と `REDIS_CONNECTION_URL` を戻すだけ。
+   セッションは消えるので入り直しになる
