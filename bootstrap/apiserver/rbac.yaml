@@ -49,8 +49,8 @@ roleRef:
   kind: ClusterRole
   name: bootstrap-applier
 subjects:
-  # authentication-config.yaml の claimMappings.username が作る名前。
-  # prefix `gha:` + GitHub OIDC の sub。
+  # authentication-config.yaml の claimMappings.username.expression が作る名前。
+  # `sub` は組織 ID / リポジトリ ID 入りの形に変わったので使っていない。
   - apiGroup: rbac.authorization.k8s.io
     kind: User
-    name: "gha:repo:danything/gitops:ref:refs/heads/main"
+    name: "gha:danything/gitops:refs/heads/main"
