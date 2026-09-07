@@ -42,7 +42,7 @@ spec:
         # 値は openssl rand -base64 32 なので `A-Za-z0-9+/=` しか含まれない
         # --- sed の区切りを `|` にしてあれば安全(`&` も `\` も出てこない)。
         - name: render-config
-          image: busybox:1.37.0
+          image: busybox:1.38.0
           command:
             - sh
             - -ec
