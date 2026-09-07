@@ -85,6 +85,9 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       **取りこぼし**: denpa と yosegaki は自分で配っている chart 側で公開していたので、
       `Ingress` を数えるだけでは見つからなかった(`dp.doany.io` が一時 404)。chart に
       `httpRoute.enabled` を足して移した。`dp.l.doany.io` 用に `*.l.doany.io` のリスナーも足した。
+      **障害 1 件**: d.doany.io の backend を平文の 80 にしたら AdGuard の DoH が死に、
+      これをセキュア DNS にしていたブラウザの名前解決が全部止まった(2026-09-07 06:34〜10:20)。
+      nginx サイドカー経由に直した。詳細は decisions.md「AdGuard の DoH は backend が HTTPS でないと出ない」。
 - [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
       `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
 
