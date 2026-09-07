@@ -128,6 +128,20 @@ Cilium の Gateway コントローラが Service を作り直すので、**ノ�
 `externalTrafficPolicy` はあるが、ポート番号の指定は無い)。
 `restore.sh` が復元の最後に当て直すようにした。
 
+**2026-09-08 追記。** #91 で Gateway を hostNetwork にしたとき、「Envoy がホストの
+80/443 を直接 bind するので当て直しは要らない」と判断して `restore.sh` から消した。
+**これは誤りで、戻した。** Envoy は確かに `0.0.0.0:80` を LISTEN しているが、
+そのソケットに直接来た接続は通らない ── 実通信は Cilium の L7LB リダイレクト
+(`cilium-dbg bpf lb list` の `[NodePort, l7-load-balancer]`)を経由して Envoy に入る。
+本番で port-80 の nodePort だけ 30080 に振り直して確かめた:
+
+```
+外部 http  → 000    外部 https → 401(無事)
+LAN(Pod から 10.10.0.4:80)→ 000
+ホスト(127.0.0.1 / 10.0.0.2 / 10.10.0.4 の :80)→ 000
+ss: 0.0.0.0:80 は cilium-envoy が LISTEN したまま
+```
+
 **それ以外は健全。** 44 Running / 12 Completed、Gateway は `Accepted=True Programmed=True` で
 LB-IPAM の `10.10.0.53` も 15 本のルートも戻った。全 Application が `Synced`。
 

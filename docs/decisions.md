@@ -141,7 +141,8 @@ Cilium 1.20.1 を Helm で導入。**Traefik と Ingress はこの段階では�
   ServiceLB(klipper)の hostPort と Cilium の socket-LB の組み合わせが原因と見られる。
   **段階 2 でほぼ解消した**(2026-09-07 実測)。hostPort と Gateway の hostNetwork に寄せた結果、
   Pod からは `10.10.0.4` のどのポートにも届く。ノード自身から届かないのは **80/443 だけ**で、
-  これは Gateway の Service が握ったままの nodePort が原因(bootstrap/cilium/values.yaml の `nodePort`)。
+  これは Gateway の nodePort が L7LB リダイレクトとして載っているため(同上の `nodePort`)。
+  そのリダイレクトは**外から来る通信の経路そのもの**なので外せない。
 
 ### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
 
@@ -155,7 +156,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 
 | 対象 | hostPort |
 | --- | --- |
-| Gateway(`cilium-gateway-doany`) | 80 / 443。**Envoy が hostNetwork で直接 bind する**(2026-09-07。それまでは手で当てた nodePort だった) |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(2026-09-08 実測。`bootstrap/cilium/values.yaml` の `nodePort`)。手で当てた 80/443 は今も要る |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | mattermost(calls) | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
