@@ -74,14 +74,17 @@ jobs:
           helm repo add cilium https://helm.cilium.io >/dev/null
           helm template cilium cilium/cilium --version "${{ steps.v.outputs.chart }}" \
             -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$KV" \
-            --show-only templates/cilium-configmap.yaml > rendered.yaml
+            --show-only templates/cilium-configmap.yaml \
+            | yq -o=json '.data' > rendered.json
 
-          k -n kube-system get cm cilium-config -o yaml > live.yaml
+          k -n kube-system get cm cilium-config -o json | jq '.data' > live.json
 
+          # YAML はここまでで JSON にしてある。python は標準ライブラリだけで済ませる
+          # (ランナーに PyYAML が入っている保証は無い)。
           python3 - <<'PY'
-          import sys, yaml
-          r = yaml.safe_load(open("rendered.yaml"))["data"]
-          l = yaml.safe_load(open("live.yaml"))["data"]
+          import sys, json
+          r = json.load(open("rendered.json"))
+          l = json.load(open("live.json"))
           only_git  = sorted(set(r) - set(l))
           only_live = sorted(set(l) - set(r))
           differ    = sorted(k for k in set(r) & set(l) if r[k] != l[k])

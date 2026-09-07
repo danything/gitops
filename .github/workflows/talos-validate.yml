@@ -80,6 +80,7 @@ jobs:
             'token.actions.githubusercontent.com' \
             'claims.repository == "danything/gitops"' \
             'service-node-port-range: 80-32767' \
+            'cilium-drift.yml' \
             'balance-alb'
           do
             grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
