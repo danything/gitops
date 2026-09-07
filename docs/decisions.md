@@ -445,6 +445,14 @@ Renovate は共有プリセット(`5ym/renovate-config`)を使っていて、**�
 **直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/renovate-config#2)。
 パッチとマイナーはこれまでどおり 1 つにまとめて自動マージする。小さくて頻繁で、タグを戻せば済むため。
 
+いまの自動マージの範囲(プリセット `5ym/renovate-config`):
+
+| まとまり | 自動マージ |
+| --- | --- |
+| `all dependencies`(メジャー以外の全部) | する |
+| `major dependencies` | しない |
+| `helm charts`(更新の種類を問わない) | しない |
+
 **PostgreSQL は 17 の線に固定した**(`renovate.json` の `allowedVersions: "<18"`)。理由は 2 つ:
 
 - Mattermost が公表しているのは**下限(14.0+)だけ**で、18 を検証したとは書いていない
@@ -462,8 +470,12 @@ postgres 17.10 → 17.11(パッチ、無害)と **erpnext 8.0.15 → 8.0.78**。
 入れ替えで、values に書いてあったチューニングが丸ごと無効になった。
 
 **版の番号は中身の大きさを表さない。** chart の場合はとくにそうで、自動マージに任せる範囲を
-決めるときは「メジャーかどうか」だけでは足りない。いまは事後に気付いて上限を入れ直したが、
-再発を嫌うなら chart(helm datasource)は自動マージから外すのが確実。
+決めるときは「メジャーかどうか」だけでは足りない。
+
+**そこでプリセット側で `helm` の datasource を丸ごと自動マージから外した**
+(5ym/renovate-config#3)。chart は更新の種類を問わず人が見る。`helm charts` という別の
+グループにしてあるのは、chart を止めることで `all dependencies` の PR まで自動マージ
+されなくなるのを避けるため。
 
 ### erpnext 8.0.78 は Dragonfly をやめて Valkey になる
 
