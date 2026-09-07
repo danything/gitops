@@ -359,10 +359,27 @@ kubectl -n kube-system delete helmchart <name>
 | cloudflare-ddns | 移行済み | `apps/cloudflare-ddns/application.yaml` |
 | infisical-secrets-operator | 移行済み | `apps/infisical-operator/` |
 | infisical-push-bridge | 移行済み | `apps/infisical-push-bridge/` |
-| erpnext | 未 | PVC と MariaDB を持つ。上の手順なら安全だが、描き出しの突き合わせを丁寧にやってから |
-| yosegaki | 未 | PVC を持つ。blog リポジトリ側 |
+| yosegaki | 移行済み | blog リポジトリの `deploy/yosegaki-application.yaml`。PVC 持ちなので上の手順で移した |
+| erpnext | **保留** | 下記 |
 | infisical | 未 | Postgres の PVC を持つ。**Infisical より下の層**なので ArgoCD に預けると鶏卵になる |
 | argocd | 移さない | 自分自身。Talos では machine config の `inlineManifests` に載せる |
+
+### erpnext だけは素直に移せない
+
+chart が **Job の名前に描き出した時刻を入れる**(`erpnext-new-site-20260907103337`、
+`erpnext-conf-bench-20260907103337`)。ArgoCD は同期のたびに描き直すので、そのまま Application にすると
+**毎回名前の違う Job を作っては前のを prune する**。サイト作成ジョブがそれをやるので受け入れられない。
+
+取りうる形は 2 つ。
+
+1. **ジョブを止める。** サイトはもう出来ているので `jobs.createSite.enabled: false` と
+   `jobs.configure.enabled: false`(既定は true)にする。まっさらから入れ直すときだけ 1 回有効にして、
+   終わったら戻す。**Talos で作り直すときの手順に書いておくこと。**
+2. **`jobs.<name>.jobName` で名前を固定する**(chart に値がある)。ただし Job の spec は不変なので、
+   中身が変わったときに `Replace=true` が要る。Application 全体に付けると StatefulSet まで
+   置き換わるので、そこは慎重に。
+
+どちらも本番の ERP に触るので、**時間のあるときに 1 の形で移す。**
 
 ## ghcr の pull 認証
 

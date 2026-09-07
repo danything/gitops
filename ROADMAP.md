@@ -45,7 +45,10 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       - [x] cloudflare-ddns・infisical-secrets-operator・infisical-push-bridge(2026-09-07)。
             **Pod を入れ替えずに引き取れる**ことと、**CR を消すとアンインストールが走る**ことが分かった。
             手順は [docs/decisions.md](docs/decisions.md)「HelmChart CRD から ArgoCD の Application へ」。
-      - [ ] erpnext・yosegaki(どちらも PVC 持ち)。
+      - [x] yosegaki(PVC 持ち。blog リポジトリ側、2026-09-07)。
+      - [ ] erpnext。**chart が Job 名に描き出した時刻を入れる**ので、そのままでは同期のたびに
+            サイト作成ジョブが作り直される。`jobs.createSite` と `jobs.configure` を止めてから移す
+            (decisions.md「erpnext だけは素直に移せない」)。
       - [ ] infisical(Postgres の PVC 持ち。ArgoCD に預けると鶏卵になるので Talos では inlineManifests)。
       - argocd は移さない(自分自身。Talos では inlineManifests)。
 - [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に PVC バックアップと `backupcommand` の dump が取れること。
