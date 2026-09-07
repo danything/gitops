@@ -67,6 +67,32 @@ nodePort:
 # Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
 gatewayAPI:
   enabled: true
+  # **Envoy をホストネットワークで待たせる(2026-09-07)。** LoadBalancer Service も
+  # nodePort も介さず、ノードの 80/443 に直接 bind する。
+  #
+  # ## なぜ変えたか
+  #
+  # 以前は Service の nodePort を **手で 80/443 に当てて**いた。Cilium は手で入れた
+  # nodePort を上書きしないので動いてはいたが、**git にもどこにも書けない状態**だった
+  # (`CiliumGatewayClassConfig.spec.service` にポート番号の項目が無い)。
+  # 復元リハーサルで実際に壊れた ── Cilium が Service を作り直して 31024/30229 になり、
+  # **ノード IP 経由の公開 Web が全部死んだ**(docs/restore-drill.md)。
+  #
+  # hostNetwork なら**この値ごと git に入る**ので、復元しても再現される。
+  #
+  # ## 経路が変わらないことの確認(2026-09-07 実測)
+  #
+  # | 経路 | 前 | 後 |
+  # | --- | --- | --- |
+  # | 外部(router → 10.0.0.2:443) | nodePort | ノード IP なのでそのまま |
+  # | LAN(10.10.0.4:443。AdGuard の *.l.doany.io はここを指す) | nodePort | そのまま |
+  # | 10.10.0.53(LB-IPAM) | 200 | **無くなる** ── 参照はドキュメントの中だけだった |
+  #
+  # **ポートの指定は無い。** Gateway のリスナー(80 / 443)がそのままホストに bind される。
+  # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`
+  # 側の項目で、こちらには無い(値の見た目が似ているので混同しやすい)。
+  hostNetwork:
+    enabled: true
   # **gRPC を通すのに要る(2026-09-07)。** 既定は false で、その場合 Envoy は TLS の
   # ALPN で `h2` を広告しない。grpc-go のクライアントは ALPN の合意を必須にしているので、
   # NetBird のピアが `missing selected ALPN property` で管理サーバに繋げなかった。
