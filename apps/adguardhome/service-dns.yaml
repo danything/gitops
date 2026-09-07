@@ -4,8 +4,7 @@ metadata:
   name: adguardhome-dns
   namespace: adguardhome
 spec:
-  # **ClusterIP でよい(2026-09-07)。** `type: LoadBalancer` は k3s の ServiceLB 時代の名残で、
-  # LB-IPAM のアドレスは誰も使っていなかった。実際の経路は Pod の hostPort と下の externalIPs。
+  # ClusterIP でよい理由は docs/decisions.md「ルーティングの選定」の hostPort の表
   type: ClusterIP
   # Dual-stack: without this the Service is IPv4-only, yet the CNI still
   # installs hostPort DNAT rules for v6 :53 -- so IPv6 queries reach the
