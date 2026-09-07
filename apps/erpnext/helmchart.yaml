@@ -34,32 +34,22 @@ spec:
     # chart has no mariadb-sts branch for DB_ROOT_USER, falls back to this
     dbRootUser: root
 
-    # Dragonfly sizes one io_uring ring per proactor thread and defaults to
-    # one thread per CPU -- 44 here, ~98KB of ring per thread, so ~4.3MB of
-    # locked memory per instance. io_uring accounts that against the uid's
-    # RLIMIT_MEMLOCK, which is 8MiB for containers under the k3s unit and is
-    # shared across processes, so whichever of cache/queue starts second ran
-    # out of it and SIGSEGV'd in a crash loop (taking the workers, scheduler
-    # and socketio down with it). Four threads is plenty for ERPNext's cache
-    # and job queue and keeps both instances well inside the limit.
+    # **キャッシュとキューは Valkey。** chart 8.0.78 で Dragonfly から入れ替わった
+    # (それ以前は dragonfly-cache / dragonfly-queue で、io_uring の ring が
+    # RLIMIT_MEMLOCK を食い潰して片方が SIGSEGV する事故があり proactor_threads を
+    # 4 に絞っていた。Valkey は Redis 系なのでその問題自体が無い)。
     #
-    # maxmemory is capped separately: left unset, Dragonfly reads the node's
-    # free memory and sizes itself at ~31GiB per instance, which is a
-    # standing OOM risk for everything else on this node. Real usage is
-    # single-digit MiB (cache ~4MiB, queue ~2MiB), so 1GiB is generous. The
-    # container limit sits above maxmemory to leave room for Dragonfly's own
-    # overhead; no CPU limit, since throttling the proactor threads hurts
-    # latency more than an idle-at-30m instance can justify.
+    # **上限は自分で入れる。** subchart の既定は resources も maxmemory も空で、
+    # 何も書かないとノードの空きメモリまで伸びうる。実使用は cache が数 MiB、
+    # queue も数 MiB なので 1gb で十分に余裕がある。コンテナの上限を maxmemory の
+    # 上に置いてあるのは Valkey 自身のオーバーヘッドぶん。CPU の上限は付けない。
     #
-    # cache_mode (LRU-style eviction as maxmemory is approached) is on for
-    # the cache only -- dropping a cache entry is free, whereas the queue's
-    # default noeviction keeps enqueued background jobs from silently
-    # disappearing if it ever does fill up.
-    dragonfly-cache:
-      extraArgs:
-        - "--proactor_threads=4"
-        - "--maxmemory=1gb"
-        - "--cache_mode=true"
+    # eviction は用途で分ける。キャッシュは捨てて構わないので allkeys-lru、
+    # キューは既定の noeviction のまま(溢れたときに積んだジョブが黙って消えないように)。
+    valkey-cache:
+      valkeyConfig: |
+        maxmemory 1gb
+        maxmemory-policy allkeys-lru
       resources:
         requests:
           cpu: 100m
@@ -67,10 +57,10 @@ spec:
         limits:
           memory: 1536Mi
 
-    dragonfly-queue:
-      extraArgs:
-        - "--proactor_threads=4"
-        - "--maxmemory=1gb"
+    valkey-queue:
+      valkeyConfig: |
+        maxmemory 1gb
+        maxmemory-policy noeviction
       resources:
         requests:
           cpu: 100m
