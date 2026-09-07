@@ -70,6 +70,9 @@ spec:
                     # database with it.
                     storageClass: local-path-retain
                     size: 5Gi
+                podAnnotations:
+                    k8up.io/backupcommand: /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" /opt/bitnami/postgresql/bin/pg_dump -U infisical -d infisicalDB --clean --if-exists'
+                    k8up.io/file-extension: .sql
         redis:
             enabled: true
             auth:
@@ -90,6 +93,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-09-06T10:49:49Z"
-    mac: ENC[AES256_GCM,data:/JFZm3W/AKMQChkrdkN26c+HTvsjUehdWJMa5UYwCFyqrcpeod4m5+P64Im/EqU5+AmlRQU2xKnJUsC8PB9DxXHpl58saqnfzCaCyt+xOz+g5yY1f1OJJq8vokSalJg1cSbzWFaPUAW1/3Xd9Fv6ntYlPZIQeaOMwItE8B2WHM8=,iv:yAohU+twZg06W3KPQsU0GwNF8e8ZpH6pjlSaeF86dCI=,tag:FyT5kQaykmBbo1FC7owGpA==,type:str]
+    lastmodified: "2026-09-07T05:13:45Z"
+    mac: ENC[AES256_GCM,data:WzM5pYJBk+CAUMuVVRCNOl+pIOeAWyIWFATDHE9np8uEeoKrYYA+n48Rh3EBncKKVJF8+TBONexS9tZi5m7ysveSXdUM+/BIazC7ALPAFkfsJbdNIXKgeA4h6t41dQ1M6VuugLa/NDtK3qLRisdeHT7Df4hpnML6qQrpWp4Xvh8=,iv:XY3RQxAduUsblhzt0a1jRH87KoT6rppn6ggvdViHeWY=,tag:FwK5xcdKZAo6KbrMaXwLhQ==,type:str]
     version: 3.13.3
