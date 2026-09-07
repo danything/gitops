@@ -46,18 +46,27 @@ sudo sh -c '. /etc/k3s-backup/env
 
 ## いま動いているもの
 
-`apps/mattermost/k8up-schedule.yaml` の 1 本だけ。**論理バックアップ専用**で、
-PVC のファイルは引き続きホストの `backup/k3s-backup` が見ている
-(mattermost の PVC には `k8up.io/backup: "false"` を付けてある)。
+`apps/mattermost/k8up-schedule.yaml` と `apps/erpnext/k8up-schedule.yaml` の 2 本。
+**どちらも論理バックアップ専用**で、PVC のファイルは引き続きホストの `backup/k3s-backup` が見ている。
+
+PVC を取らせない仕掛けは operator の `BACKUP_SKIP_WITHOUT_ANNOTATION=true`
+(注釈が無い PVC は対象外)。mattermost の PVC にはそれとは別に
+`k8up.io/backup: "false"` も明示してある。**Talos に移ってホストのスクリプトが
+使えなくなったら、この設定を外して PVC も k8up に寄せる。**
 
 | | |
 | --- | --- |
-| バックアップ | 毎日 15:00 UTC(ホストのスクリプトは 19:00 UTC。restic のロックを避ける) |
-| prune | 毎週日曜 16:00 UTC、`keepDaily 7 / keepWeekly 4 / keepMonthly 6`、**タグは `k8up`** |
-| 中身 | `/mattermost-postgres.sql`(実測 9.3 MB) |
+| バックアップ | mattermost 15:00 UTC / erpnext 15:30 UTC(ホストのスクリプトは 19:00 UTC。restic のロックを避ける) |
+| prune | 毎週日曜 16:00 / 16:30 UTC、`keepDaily 7 / keepWeekly 4 / keepMonthly 6`、**タグは `k8up`** |
+| 中身 | mattermost `/mattermost-postgres.sql`(9.3 MB)、erpnext `/erpnext-gunicorn.sql`(10.7 MB) |
+
+erpnext だけ形が違う。**chart の `mariadb-sts` の StatefulSet テンプレートに
+`podAnnotations` が無い**ので、MariaDB の Pod には注釈を付けられない。代わりに
+gunicorn の Pod から `mariadb-dump` を打っている。あちらには `site_config.json`
+(`db_host` / `db_name` / `db_password`)と `mariadb-dump` が入っていて、
+root のパスワードも要らない。
 
 ## 次にやること
 
-- erpnext の MariaDB も同じ形に。chart 管理の StatefulSet なので values 経由になる
 - 残りの namespace の PVC をどうするか。いまはホストのスクリプトが全部見ているので、
   **Talos に移る時点で k8up 側に寄せる**(ホストにシェルが無くなるため)
