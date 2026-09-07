@@ -4,7 +4,7 @@ Talos に移ったあとのバックアップの担い手。いまの `backup/k3
 「サーバに入って PVC のディレクトリを restic に流す」形なので、**ホストにシェルが無い Talos では成立しない**。
 k8up は Pod として同じ restic リポジトリ(Cloudflare R2 の `doany-restic`)に書く。
 
-**いまは operator を置いてあるだけで `Schedule` は無い。** 本番のバックアップは引き続きホストのスクリプト。
+**論理バックアップは k8up、PVC のファイルはまだホストのスクリプト**、という切り分けで動いている。
 
 ## 秘密の渡し方
 
@@ -31,6 +31,33 @@ sudo sh -c '. /etc/k3s-backup/env
 operator が `CreateContainerConfigError` で上がらなかった)。
 **Talos に移ったら Infisical に移す**(ホストに env ファイルが無くなるため)。
 
+## 何をどう取っているか
+
+`Schedule` は [schedules.yaml](schedules.yaml) に 9 本まとめてある(時刻と決まりごともあちら)。
+**取る中身を決めているのは Pod 側の注釈**で、それがどこにあるかがここ。
+
+| namespace | 中身 | `k8up.io/backupcommand` の在処 |
+| --- | --- | --- |
+| mattermost | postgres の `pg_dump` | [../mattermost/postgres.yaml](../mattermost/postgres.yaml) |
+| erpnext | mariadb の `mariadb-dump` | 上流 chart の `worker.gunicorn.podAnnotations`([application.yaml](../erpnext/application.yaml)) |
+| infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
+| lgtm / xool / worklog / denpa / blog | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
+| netbird | `store.db` / `idp.db` / `events.db` を tar 1 本に | [../netbird/deployment.yaml](../netbird/deployment.yaml) |
+
+**PVC のファイルは k8up では取っていない。** operator が `BACKUP_SKIP_WITHOUT_ANNOTATION=true` なので
+注釈の無い PVC は素通りする。ファイルの担当は今もホストの `backup/k3s-backup`。
+**Talos に移る時点でここを寄せ替える**(下の「ファイルの PVC をどう移すか」)。
+
+erpnext だけ形が違う。**chart の `mariadb-sts` の StatefulSet テンプレートに `podAnnotations` が無い**
+ので、MariaDB の Pod には注釈を付けられない。代わりに gunicorn の Pod から `mariadb-dump` を打っている。
+あちらには `site_config.json`(`db_host` / `db_name` / `db_password`)と `mariadb-dump` が入っていて、
+root のパスワードも要らない。
+
+Infisical の Postgres は**クラスタで一番失えないデータ**(全アプリの秘密)。DB そのものは
+`ENCRYPTION_KEY` で暗号化されているのでダンプだけ手に入っても読めない ── **復元にはその鍵も要る**。
+Infisical 本体は `bootstrap/` に居るが、Schedule は `apps/` に置いて Argo CD に見てもらっている
+(バックアップはアプリ層の関心事で、Infisical より下の層である必要が無いため)。
+
 ## 確かめたこと(2026-09-07)
 
 - **`backend.envFrom` だけでは動かない。** k8up は `Backend` が nil でなければ
@@ -38,35 +65,20 @@ operator が `CreateContainerConfigError` で上がらなかった)。
   実際に `Fatal: Please specify repository location` で落ちた。
   グローバル設定に寄せる(`backend` を書かない)のが正解。
 - `backend` を持たない `Backup` が R2 へ書けることを、使い捨ての PVC で確認済み(確認後に削除)。
-- **ホストのスクリプトとは衝突しない。** あちらは `restic forget --tag k3s-host` でタグを絞っているので、
-  k8up のスナップショット(タグ無し・`hostname` は namespace)を消さない。
-  **逆方向は確認した(2026-09-07)**: k8up の `Prune` は `retention.tags` を書かないと
-  `restic forget` を**リポジトリ全体**に効かせる(`operator/prunecontroller/executor.go` の
-  `setupArgs` はタグがあるときだけ `--tag` を渡す)。バックアップに `tags: [k8up]`、
-  prune に `retention.tags: [k8up]` を付けて隔離すること。**これを忘れるとホストの
-  スナップショットが消える。**
+- **ホストのスクリプトとは衝突しない。** 実測したスナップショットの内訳:
 
-## いま動いているもの
+  ```
+     1  host=erpnext      tags=['k8up']      path=/erpnext-gunicorn.sql
+     1  host=infisical    tags=['k8up']      path=/infisical-postgresql.sql
+     1  host=mattermost   tags=['k8up']      path=/mattermost-postgres.sql
+     4  host=main         tags=['k3s-host']  path=/etc/...
+  ```
 
-`apps/mattermost/k8up-schedule.yaml` と `apps/erpnext/k8up-schedule.yaml` の 2 本。
-**どちらも論理バックアップ専用**で、PVC のファイルは引き続きホストの `backup/k3s-backup` が見ている。
-
-PVC を取らせない仕掛けは operator の `BACKUP_SKIP_WITHOUT_ANNOTATION=true`
-(注釈が無い PVC は対象外)。mattermost の PVC にはそれとは別に
-`k8up.io/backup: "false"` も明示してある。**Talos に移ってホストのスクリプトが
-使えなくなったら、この設定を外して PVC も k8up に寄せる。**
-
-| | |
-| --- | --- |
-| バックアップ | mattermost 15:00 UTC / erpnext 15:30 UTC(ホストのスクリプトは 19:00 UTC。restic のロックを避ける) |
-| prune | 毎週日曜 16:00 / 16:30 UTC、`keepDaily 7 / keepWeekly 4 / keepMonthly 6`、**タグは `k8up`** |
-| 中身 | mattermost `/mattermost-postgres.sql`(9.3 MB)、erpnext `/erpnext-gunicorn.sql`(10.7 MB) |
-
-erpnext だけ形が違う。**chart の `mariadb-sts` の StatefulSet テンプレートに
-`podAnnotations` が無い**ので、MariaDB の Pod には注釈を付けられない。代わりに
-gunicorn の Pod から `mariadb-dump` を打っている。あちらには `site_config.json`
-(`db_host` / `db_name` / `db_password`)と `mariadb-dump` が入っていて、
-root のパスワードも要らない。
+  **k8up の `hostname` は namespace**、ホストのスクリプトは `main`。
+  `restic/cli/prune.go` は `--host=<自分の namespace>` を必ず渡すので、
+  **prune は他の namespace にもホストのぶんにも届かない**。`tags: [k8up]` は二重の歯止め
+  (`--tag` は `retention.tags` があるときだけ渡る)。
+  **同じ理由で prune は namespace ごとに要る** ── 1 本にまとめても他には効かない。
 
 ## CRD がまだ無いクラスタで apps を止めないこと
 
@@ -81,62 +93,71 @@ Application が先に通る。
 **「git がバックアップより進んでいる」状態は復元では普通に起きる**ので、
 スナップショットが古かったから、では済まない。
 
-## 次にやること
+## SQLite を整合したまま取る(2026-09-07 実施)
 
-- 残りの namespace の PVC をどうするか。いまはホストのスクリプトが全部見ているので、
-  **Talos に移る時点で k8up 側に寄せる**(ホストにシェルが無くなるため)
+ホストのスクリプトは **scale down してから** PVC を写している。k8up は**動いたまま**取るので、
+ファイルをそのままコピーすると **本体と `-wal`(または `-journal`)が別の瞬間のものになりうる**。
+アプリのデータはほぼ全部 SQLite なので、ここを先に片付けた。
 
-## ファイルの PVC をどう移すか(2026-09-07 調査)
+**`bun -e` で済む。イメージには何も足さない。**
 
-**Talos にはシェルが無いので、`backup/k3s-backup` の形は持っていけない。** いまホストのスクリプトが
-全 PVC を見ているぶんを k8up に寄せる必要がある(ROADMAP の Phase 2)。ただし**そのまま寄せると壊れる**。
-
-### 何が問題か
-
-ホストのスクリプトは **scale down してから取っている**。k8up の PVC バックアップは
-**動いたまま**取るので、**開いている DB のファイルをコピーすることになる**。
-
-実際に中を見たら、アプリのデータはほぼ全部 **SQLite の WAL モード**だった:
-
-```
-lgtm.db / lgtm.db-shm / lgtm.db-wal
-xool.db / xool.db-shm / xool.db-wal
-worklog.db / worklog.db-shm / worklog.db-wal
-denpa.db (20 MB) / denpa.db-wal (5 MB)
+```yaml
+k8up.io/backupcommand: >-
+  bun -e 'process.stdout.write(new(require("bun:sqlite").Database)("/usr/src/app/data/lgtm.db",{readonly:true}).serialize())'
+k8up.io/file-extension: .db
 ```
 
-restic はファイルを順に読むので、**本体と WAL が別の瞬間のものになりうる**。
-「ファイルはホスト、論理は k8up」という今の切り分けは、**ホスト側が scale down している**という
-前提の上に成り立っていた。
+- `serialize()` は SQLite の pager を通して読むので、**書き込み中でも 1 つのコミット済みの状態**が出る
+- **自前アプリ 5 つは全部 bun で動いている**ので `bun:sqlite` が最初から使える。
+  当初は「イメージに `sqlite3` を足す PR が 5 本要る」と見積もっていたが、要らなかった
+- **スクリプトに空白を入れない。** k8up は注釈を `qsplit` でシェル風に分割する
+  (`restic/kubernetes/pod_exec.go`)。引用符が効く範囲を `-e` の前後だけにしておくと確実
+- netbird だけ `"` で括って中を **バッククォート**にしてある。qsplit の既定の引用符は
+  `'` と `"` の 2 つだけなので、バッククォートは素通りする
 
-### 対象と手当て
+本番の Pod で実測(`live_rows` は今の DB、`copy_rows` はコピーを開き直して数えたもの):
+
+| | bytes | live_rows | copy_rows | tables | integrity |
+| --- | --- | --- | --- | --- | --- |
+| lgtm | 69,632 | 132 | 132 | 4 | ok |
+| xool | 237,568 | 242 | 242 | 8 | ok |
+| worklog | 167,936 | 107 | 107 | 13 | ok |
+| denpa | 20,598,784 | 30,309 | 30,309 | 12 | ok |
+| yosegaki | 53,248 | 0 | 0 | 4 | ok |
+
+### netbird はサイドカーで取る
+
+上流イメージ(`netbirdio/netbird-server`)には `sqlite3` が無く、あるのは perl だけ。
+こちらでは変えられないので、**`oven/bun:1.4.2-slim` のサイドカーを足して
+`k8up.io/backupcommand-container: backup` でそちらを指している**。
+PVC は `readOnly: true` でマウントする。
+
+`store.db` / `idp.db` / `events.db` の 3 つを `serialize()` して tar 1 本にまとめる。
+同じ PVC の `GeoLite2-City`(65 MB)と `geonames`(7 MB)は**入れない** ── 起動時に落とし直せる。
+
+実際の PVC を読み取り専用でマウントして確認済み:
+
+```
+exit=0 bytes=911360
+-rw-r--r-- root/root 745472 ./store.db
+-rw-r--r-- root/root  36864 ./events.db
+-rw-r--r-- root/root 122880 ./idp.db
+```
+
+**ハングした書き込みが残っていると失敗する。** 3 つとも rollback journal モードなので、
+放置された `-journal` があると読み取り専用の接続はロールバックできず `SQLITE_READONLY_ROLLBACK`
+で落ちる。そのときは k8up のジョブが失敗として見える(黙って壊れたコピーが残るよりよい)。
+
+## ファイルの PVC をどう移すか(Talos で外す時)
+
+ホストの `backup/k3s-backup` が見ているぶんを k8up に寄せる(ROADMAP の Phase 2)。
+SQLite は上で片付いたので、残りは注釈を足すだけ。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `lgtm-db` `xool-db` `worklog-db` `denpa-data` `yosegaki-db` | SQLite(WAL) | **イメージに `sqlite3` を足して `k8up.io/backupcommand`。** どれも自前のイメージなので入れられる |
-| `netbird-data` | SQLite(`store.db` / `idp.db`) | **サイドカーを足す。** 上流イメージに `sqlite3` が無く、こちらでは変えられない |
-| `portainer-data` | boltdb | **シェルすら無い**(`exec: "sh": executable file not found`)。Portainer の backup API(`POST /api/backup`)を叩くサイドカーか、この 1 本だけ別扱い |
-| `adguardhome-*` `denpa-library` `erpnext-sites` `mattermost-data` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `agent-config` `netbird-routing-peer-data` | ファイル | **そのまま `k8up.io/backup: "true"` でよい。** 書き換わっても部分的に古いだけで壊れない |
-| `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | **もう論理バックアップがある**。PVC 側は `false` のまま |
+| `adguardhome-*` `denpa-library` `erpnext-sites` `mattermost-data` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `agent-config` `netbird-routing-peer-data` | ファイル | `k8up.io/backup: "true"` を付けるだけ。書き換わっても部分的に古いだけで壊れない |
+| `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
+| `denpa-data` `netbird-data` | SQLite + ファイル | DB は済み。**ファイルの方が残っている** ── `denpa-data/logos/`、`netbird-data` の GeoLite と geonames。GeoLite と geonames は起動時に落とし直せるので要らないが、`logos/` は要る。`k8up.io/backup: "true"` を付けると DB のファイルまで一緒に入るので、`k8up.io/backup-restic-args` で `--exclude` する |
+| `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | もう論理バックアップがある。mattermost の 2 本には `k8up.io/backup: "false"` を明示してある(注釈が無ければ既に対象外だが、意図して外していると分かるように) |
+| `portainer-data` | boltdb | **未解決。** シェルが無く(`exec: "sh": executable file not found`)、SQLite でもないので同じ手が使えない。取るなら PVC のファイルとしてそのまま(整合は保証されない)か、Portainer の backup API(`POST /api/backup`)を叩くサイドカー。**中身は OIDC 設定とエンドポイント 1 本だけで、画面から数分で作り直せる**ので、優先度は低い |
 | `denpa-recorded` | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |
-
-### 確認したこと
-
-```
-lgtm / xool / worklog / denpa / yosegaki … sqlite3 無し
-portainer                                … sh すら無い
-```
-
-**どのイメージにも `sqlite3` が入っていない。** つまり「注釈を足すだけ」では終わらず、
-**自前イメージ 5 つに `sqlite3` を足す PR が要る**(Alpine なら `apk add --no-cache sqlite` の 1 行)。
-
-`backupcommand` はこの形になる:
-
-```yaml
-annotations:
-  k8up.io/backupcommand: sh -c 'sqlite3 /usr/src/app/data/lgtm.db ".backup /tmp/b" && cat /tmp/b'
-  k8up.io/file-extension: .db
-```
-
-`.backup` は**開いたままでも整合したコピーを作る**ので、scale down が要らなくなる。
-`VACUUM INTO` でもよいが、どちらも出力先に実ファイルが要るので `/tmp` を経由する。

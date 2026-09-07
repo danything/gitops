@@ -184,7 +184,7 @@ Failed | one or more synchronization tasks are not valid:
   the server could not find the requested resource (retried 5 times)
 ```
 
-git には `apps/{mattermost,erpnext,infisical}/k8up-schedule.yaml`(`k8up.io/v1` の `Schedule`)があるのに、
+git には `k8up.io/v1` の `Schedule`(いまは `apps/k8up/schedules.yaml`)があるのに、
 復元したクラスタに k8up の CRD が無い。**CRD を入れる当の Application(`apps/k8up/`)が同じ同期に含まれている**ので抜けられない。
 Argo CD は同期前に全マニフェストを検証し、1 つでも通らなければ**何も適用しない**ため、
 `apps/` の下は丸ごと止まる。子 Application が 5 つ(cloudflare-ddns / erpnext / infisical-operator /
