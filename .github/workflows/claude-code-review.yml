@@ -79,9 +79,14 @@ jobs:
               突き合わせて**影響を言うこと (例: PVC の PG_VERSION と major の不一致)
             - リリースノートが本当に見つからなければ、探した先を書いたうえで「要確認」とすること
 
+          # WebFetch と gh release はリリースノートを読むため。**読み取りだけ**に絞る。
+          # 取ってくる中身は第三者が書いたもので、レビュー本文への指示が混ざりうる
+          # (プロンプトインジェクション)。このワークフローはコメントしかできず、
+          # マージも push もできないので影響は限定される。
+          #
+          # **注釈をこのブロックの中に書かないこと。** `claude_args: |` は YAML の
+          # ブロックスカラーなので `#` はコメントにならず、そのまま CLI の引数として
+          # 渡って --allowedTools の解釈が壊れる(2026-09-07 に踏んだ。レビューが
+          # 「WebFetch の権限が無い」と言うのに設定上は許可されている、という形で出た)。
           claude_args: |
-            # WebFetch と gh release はリリースノートを読むため。**読み取りだけ**に絞る。
-            # 取ってくる中身は第三者が書いたもので、レビュー本文への指示が混ざりうる
-            # (プロンプトインジェクション)。このワークフローはコメントしかできず、
-            # マージも push もできないので影響は限定される。
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*),WebFetch"
