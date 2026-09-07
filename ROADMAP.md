@@ -242,15 +242,11 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 
 ## 未決事項
 
-- **`local-path-retain` をやめて「git で消したものは消える」に寄せる(方針は決定、実施は順番待ち)。**
-  今日の掃除で 35 日・44 日放置された Released の PV が 3 本見つかった。**Retain は追われない状態を作る。**
-  ただし外すと誤削除の復旧手段がバックアップ 1 本になるので、**復元リハーサルが通ってから**やる
-  (2026-09-07 に通った)。やることは 3 つ:
-  - PVC 22 本中 19 本に付いている `Prune=false,Delete=false` を外す。**これが本丸**(これが無いと git から消しても消えない)
-  - 既存 PV の `persistentVolumeReclaimPolicy` を `Retain` → `Delete` にパッチする(PV は変更可能)
-  - **`storageClassName` はバインド済み PVC では変更も削除もできない**(API が拒否する)。
-    マニフェストから消すのは **Talos の再構築時**。そのとき既定の `local-path`(reclaim は `Delete`)になる
-- **ネットワークを見る画面(着手予定)。** 外部公開の全体像と、内部でどのコンテナ同士が通信しているかの両方。
-  前者はクラスタから生成する一枚、後者は **Hubble**。認証は `*.s.doany.io` と同じ oauth2-proxy 前段方式。
-  **Hubble を入れない判断は撤回した**(2026-09-07。「見たい」という要件が出たため)。
-  Cilium 側の Hubble は既に有効で `:4244` で待ち受けているので、足りないのは Relay と UI の 2 Pod だけ。
+- ~~**`local-path-retain` をやめて「git で消したものは消える」に寄せる。**~~ **実施した(2026-09-07)。**
+  `Prune=false,Delete=false` は全 PVC から外し、既存 PV の reclaim policy も `Delete` にパッチ済み。
+  **残るのは `storageClassName` の指定を消すことだけ**で、バインド済み PVC では API が拒否するため
+  Talos の再構築時(Phase 2)。誤削除の後ろ盾は日次の restic 1 本になった。
+- **外部公開の一覧を出す画面(未着手)。** 内部の通信は **Hubble** を入れて解決した
+  (2026-09-07、`hl.doany.io`。認証は `*.s.doany.io` と同じ oauth2-proxy 前段方式)。
+  残っているのは「何がインターネットに出ているか」の一枚で、いまは
+  `kubectl get httproute,grpcroute -A` が唯一の正確な索引。

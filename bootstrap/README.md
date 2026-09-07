@@ -1,9 +1,11 @@
 # bootstrap
 
-クラスタそのものを組む層。**Argo CD は同期しない**(`apps/` の外にあるため)。手で `kubectl apply` する。
-秘密を含む 4 ファイル(`infisical/secrets.yaml`、`infisical/helmchart.yaml`、`argocd/helmchart.yaml`、
-`cert-manager/cloudflare-secret.yaml`)は SOPS(age)で暗号化してあるので、適用は `sops -d <file> | kubectl apply -f -`。
-鍵は [`recovery/sops-age.key.age`](../recovery/)。
+クラスタそのものを組む層。**Argo CD は同期しない**(`apps/` の外にあるため)。
+代わりに **main へのマージで GitHub Actions が当てる**(下の「適用は GitHub Actions がやる」)。
+
+**SOPS(age)で暗号化した 4 ファイルだけは手で当てる** ── CI に復号鍵を渡さないため。
+`infisical/secrets.yaml`、`infisical/helmchart.yaml`、`argocd/helmchart.yaml`、
+`cert-manager/cloudflare-secret.yaml`。鍵は [`recovery/sops-age.key.age`](../recovery/)。
 
 いま動いているのは Ubuntu 26.04(NetworkManager、netplan バックエンド、TZ は UTC)の暫定構成で、
 最終形は Talos Linux。進捗は [ROADMAP.md](../ROADMAP.md)、なぜそうしたかは [docs/decisions.md](../docs/decisions.md)。
