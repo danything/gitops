@@ -17,7 +17,9 @@
 # env 自身もスナップショットに入るが、それ自身のパスフレーズで暗号化されているので問題ない。
 #
 # DB の整合性のため、対象 namespace の Deployment/StatefulSet を scale down してから取る。
-# wireguard も止まるので VPN 越しに手動実行すると自分のセッションが切れる。timer からなら関係ない。
+# netbird(VPN)も PVC を持つので止まる。**VPN 越しに手で実行すると自分のセッションが切れる。**
+# timer からなら関係ない。ピア同士の WireGuard 接続そのものは張られたまま残るが、
+# 制御チャネルと relay が落ちるので、その間に繋ぎ直すことはできない。
 
 set -eu
 

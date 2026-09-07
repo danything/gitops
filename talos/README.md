@@ -45,6 +45,7 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kub
 - **静的 IPv6 `::2` が SLAAC と並んで載る**。IPv6 の既定経路は RA で来る
   (ただし `net.ipv6.conf.bond0.accept_ra: "2"` が要る。無いと Kubernetes 起動後に消える)
 - **wireguard はカーネル組み込み**(`/sys/module/wireguard/version` = 1.0.0)。
+  **wg-easy は廃したが、NetBird も同じカーネルの wireguard を使うのでこの確認は生きている。**
   privileged + hostNetwork の Pod で `wg-quick up` が通り、UDP 51820 がホスト netns で LISTEN する。
   Ubuntu で要った AppArmor の回避は不要
 - eno4 相当の `disable_ipv6: "1"`、`UnattendedInstallConfig` の CEL diskSelector、

@@ -61,7 +61,7 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 - **k3s 期**: 今の backup.sh どおり、対象 namespace の Deployment/StatefulSet を scale down してからコピー。
   停止時間を縮めたければ scale down → LVM/btrfs スナップショット → scale up → スナップショットから restic、にする(FS を要確認)。
 - **Talos 期**: scale down せず、k8up の `k8up.io/backupcommand` 注釈で `pg_dump` / `mariadb-dump` を取るアプリ整合方式に切り替える。
-  対象: infisical(Postgres)、mattermost(Postgres)、erpnext(MariaDB)。ファイルだけの PV(メディア、adguard、wireguard)はそのまま。
+  対象: infisical(Postgres)、mattermost(Postgres)、erpnext(MariaDB)。ファイルだけの PV(メディア、adguard)はそのまま。netbird は sqlite なので、いずれ論理バックアップ側に寄せる。
 
 
 ## Talos では `bootstrap/` をどう適用するか
@@ -280,7 +280,7 @@ Gateway API の OIDC が無い**。トークンの大きさ以前に機能が無
 したがって forward-auth が要るルートは、**oauth2-proxy を「前段のプロキシ」として置く**
 (HTTPRoute → oauth2-proxy → アプリ)か、そのルートだけ Traefik か Envoy Gateway に残す。
 幸い forward-auth を使っているのは Traefik ダッシュボードと `sub` の 2 本だけで、
-アプリ側(ArgoCD、ERPNext、Mattermost、denpa、wg-easy)はそれぞれ自前で OIDC を持っている。
+アプリ側(ArgoCD、ERPNext、Mattermost、denpa、NetBird)はそれぞれ自前で OIDC を持っている。
 
 **Entra 側でトークンを小さくすること自体は独立して価値がある。** グループクレームを全部載せるのをやめて
 **アプリロール**に切り替えると `roles: ["admin"]` の数十バイトで済む。将来 Envoy Gateway の内蔵 OIDC を
@@ -603,3 +603,43 @@ R2 の無料枠は 10 GB。実サイズは 2026-09-06 時点で 3.3 GiB だっ�
 | `denpa-recorded`(生 TS の作業領域) | **除外した(2026-09-07)。** 1.6 GB だったものが **14 GB** まで育ち、リポジトリ実サイズが 13.92 GiB と **R2 の無料枠 10 GB を超えていた**。エンコードが終われば消える置き場で、中身は数時間で入れ替わるので日次のスナップショットに残す意味も薄い |
 | 保持世代 | 17 → **13**(`--keep-daily 7 --keep-weekly 4 --keep-monthly 2`)。遡れる範囲は約 2 か月 |
 | 消した namespace の PV(epg / vpn / opengist、541 MiB) | 退避のうえ削除済み。バックアップ対象外 |
+
+## VPN を wg-easy から NetBird にした(2026-09-07)
+
+wg-easy を使う理由は **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・iLO(10.0.0.3)に入る**の 3 つだけで、
+どれも「自宅の LAN に入れれば済む」もの。UI に不満はあったが、**スマホを足すときの QR は実際よく使う**ので
+UI を捨てる方向は取らなかった。
+
+比較したもの:
+
+| | 結論 |
+| --- | --- |
+| **wg-easy 続投** | 動いてはいる。ただし自前の認証を切れず(要望 [wg-easy#1923](https://github.com/wg-easy/wg-easy/issues/1923) が 2025-06 から open)、SSO の後ろに置いても**二重ログイン**が残る |
+| **wg-portal** | star は少ないが機能は足りる。ただし乗り換える動機が wg-easy 比で薄い |
+| **Headscale** | 完成度は高い。**が、FAQ が「headscale を動かすマシンをサブネットルータにするな」と明記している。** ノードが 1 台のこの構成では回避できない。コンテナは「サポート対象外」だが放置ではなく(コンテナ/プロキシ関連の PR は 48 本マージ済み、[#3292](https://github.com/juanfont/headscale/pull/3292) は reverse-proxy のドキュメントを書き直している)、境界の引き方の問題 |
+| **NetBird** | **採用。** routing peer が独立した概念で、コンテナで動かす前提のドキュメントがある。1 台構成でも上の問題が起きない |
+
+star は headscale が 43.6k、netbird が 29.0k で headscale のほうが多い。**が、動いている量は netbird が上**
+(2026-09-07 時点、直近 30 日のコミット 119 対 45、作者 21 人対 10 人、直近 90 日のマージ済み PR 399 対 51、
+1 年のリリース 109 対 16)。netbird の open issue 1,583 は放置ではなく分母の差で、
+GUI クライアント・IdP 連携・ポリシーまで同じリポジトリに入っている。
+
+**公式 Helm chart は使わない。** [netbirdio/helms](https://github.com/netbirdio/helms) の `charts/netbird` は
+2026-04-24 から更新が止まっていて appVersion `0.46.0`(本体は `0.78.1`)。
+[#39](https://github.com/netbirdio/helms/issues/39) で指摘され、中の人が「combined に寄せるか両対応か」と
+返したきり半年動いていない。archived ではないので廃止ではなく**宙に浮いている**。
+上流は v0.65.0 で management/signal/relay を 1 つにまとめた **combined コンテナ**に移っており、
+素の Deployment で足りる(`apps/netbird/`)。
+
+組み方で引っかかった点:
+
+- **gRPC と HTTP が同じホスト名・同じポートに混在する。** `management.ManagementService` と
+  `signalexchange.SignalExchange` を GRPCRoute に、`/api` `/oauth2` `/relay` `/ws-proxy` を HTTPRoute に、
+  残りをダッシュボードに振った。GRPCRoute なら Cilium が backend を h2c 扱いするので、
+  `enable-gateway-api-app-protocol` を有効にせずに済む(= Gateway の設定を触らない)。
+  同じリスナー・同じホスト名に GRPCRoute と HTTPRoute を同居させても既存の 16 ルートは無傷だった
+- **STUN(UDP 3478)はリバースプロキシを通せない**ので hostPort。namespace の PSA が `privileged` なのはこのため
+- **`livenessProbe` は付けない。** healthcheck は `localhost:9000` にしか bind されず、kubelet からは必ず落ちる
+- **外部 IdP(Entra)は設定ファイルに書けない。** 0.62 以降、外部 IdP は config ではなく**ストアに入るデータ**になった。
+  ダッシュボードか `POST /api/identity-providers` で足す。リダイレクト URI は issuer + `/callback` で
+  決まる(`idp/dex/connector.go`)ので `https://nd.doany.io/oauth2/callback` 固定、Entra 側を先に作れる

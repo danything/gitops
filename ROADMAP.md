@@ -190,7 +190,7 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 - [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
 - [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
-- [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、wireguard、AdGuard の公開リゾルバを確認。
+- [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
 
 ### Phase 3 — Talos 定常運用
 
