@@ -38,10 +38,10 @@ spec:
               containerPort: 3129
               hostPort: 3129
             # 旧ポート。移行のあいだだけ両方で受ける。**ルータの転送とクライアントの設定を
-            # 3129 に変えたらこの 6 行を消す。** 8443 は mattermost-calls が使っているので
-            # 当時 8444 にしていた。
+            # 3129 に変えたらこの 4 行と tls-terminator-config.yaml の 8444 の server を消す。**
+            # 8443 は mattermost-calls が使っているので当時 8444 にしていた。
             - name: proxy-tls-old
-              containerPort: 3129
+              containerPort: 8444
               hostPort: 8444
           volumeMounts:
             - name: tls-terminator-config
