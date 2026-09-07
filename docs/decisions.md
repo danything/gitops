@@ -220,6 +220,26 @@ Envoy Gateway はこれを実装しているので、443 のままにしたい�
   443 のままにしたい場合の代案は、px 専用の IP を LB-IPAM で払い出してルータ側で振り分けるか、
   Envoy Gateway に替えて TLS 終端リスナー + TCPRoute を使うか
 
+### クライアント IP(2026-09-07 確認、`Cluster` のままでよい)
+
+Gateway の Service は `externalTrafficPolicy: Cluster`(Cilium の `gateway-api-service-externaltrafficpolicy`)。
+一般には `Cluster` は別ノードへ回すときに SNAT するが、**単一ノードでは backend が必ず同じノードに居るので
+SNAT されない**。実際にクライアント IP は端まで届いている。
+
+確かめ方(どちらも実測):
+
+- **denpa** は `TRUSTED_NETWORKS=10.10.0.0/16` と `ADDRESS_HEADER=x-forwarded-for` で動いている。
+  公開側から `dp.doany.io` を叩くと **401**、LAN から叩くと **200**。SNAT されていれば
+  X-Forwarded-For がノードの `10.10.0.4` になり、公開側からでも通ってしまう。**通らない**ので届いている。
+- **AdGuard の DoH** のクエリログに、Gateway 経由でも端末のグローバル IPv6 がそのまま残っている。
+  サイドカーは `$http_x_forwarded_for` をそのまま渡し、AdGuard は `trusted_proxies` に
+  `127.0.0.0/8` を持っているので、loopback からの接続でもヘッダ側を採る。
+
+**ノードを足すときにやること**: `externalTrafficPolicy: Local` に変える
+(Cilium の Helm 値 `gatewayAPI.externalTrafficPolicy`)。そうしないと Envoy が居ないノードに
+届いたぶんが SNAT されて、AdGuard のクライアント別統計と denpa の住所判定が壊れる。
+`Local` にすると Envoy の居るノードだけが応答するので、L2 アナウンスか外側の振り分けもそれに合わせる。
+
 ### AdGuard の DoH は backend が HTTPS でないと出ない(2026-09-07 障害)
 
 **切り替えの翌朝、ブラウザの名前解決が全部死んだ。** 原因は d.doany.io の backend を平文の 80 にしたこと。
