@@ -63,5 +63,19 @@ jobs:
             - 問題が無ければ簡潔に問題無しと述べること。無理に指摘を作らないこと
             - スタイルの好みだけの指摘や、変更されていない箇所の指摘はしないこと
 
+            依存の更新 PR (Renovate) のとき:
+            - **リリースノートを実際に読むこと。** 「未参照」で済ませない。
+              Renovate の本文に載っていないことがある (Docker タグの更新では元リポジトリを
+              辿れず、Release Notes の節ごと欠ける)。その場合は自分で探す:
+              `gh release view <tag> -R <owner>/<repo>` か、無ければ WebFetch で公式の
+              リリースノートを読む
+            - 見るのは破壊的変更・移行手順・既定値の変更。**このリポジトリの設定と
+              突き合わせて**影響を言うこと (例: PVC の PG_VERSION と major の不一致)
+            - リリースノートが本当に見つからなければ、探した先を書いたうえで「要確認」とすること
+
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            # WebFetch と gh release はリリースノートを読むため。**読み取りだけ**に絞る。
+            # 取ってくる中身は第三者が書いたもので、レビュー本文への指示が混ざりうる
+            # (プロンプトインジェクション)。このワークフローはコメントしかできず、
+            # マージも push もできないので影響は限定される。
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*),WebFetch"
