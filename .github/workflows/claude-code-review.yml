@@ -6,13 +6,24 @@ on:
 
 jobs:
   claude-review:
-    # Draft PR と bot (renovate/dependabot) の PR はスキップ。
-    # fork からの PR も対象外 (secrets が渡らないため) —
+    # Draft PR はスキップ。fork からの PR も対象外 (secrets が渡らないため) —
     # そちらは claude-code-review-fork.yml がラベル起動で処理する。
+    #
+    # bot の PR も原則スキップするが、**`needs-review` ラベルが付いていれば見る**。
+    # 自分でマージされる PR をレビューしても誰も読まないので飛ばす。人を待つ PR は
+    # レビューする価値がある、という切り分け。Renovate は自動マージしないまとまり
+    # (メジャーと chart) にだけこのラベルを付ける (5ym/renovate-config)。
+    #
+    # 実例: #7 に postgres 17 → 18 が入っていた。PVC の PG_VERSION は 17 なので
+    # そのまま上げると起動を拒否する。1 行の差分でも、依存そのものに内在するリスクは
+    # レビューで拾える。
     if: >-
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      !endsWith(github.event.pull_request.user.login, '[bot]')
+      (
+        !endsWith(github.event.pull_request.user.login, '[bot]') ||
+        contains(github.event.pull_request.labels.*.name, 'needs-review')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
