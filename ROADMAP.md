@@ -56,9 +56,8 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
             **Pod を入れ替えずに引き取れる**ことと、**CR を消すとアンインストールが走る**ことが分かった。
             手順は [docs/decisions.md](docs/decisions.md)「HelmChart CRD から ArgoCD の Application へ」。
       - [x] yosegaki(PVC 持ち。blog リポジトリ側、2026-09-07)。
-      - [ ] erpnext。**chart が Job 名に描き出した時刻を入れる**ので、そのままでは同期のたびに
-            サイト作成ジョブが作り直される。`jobs.createSite` と `jobs.configure` を止めてから移す
-            (decisions.md「erpnext だけは素直に移せない」)。
+      - [x] erpnext(2026-09-07)。`jobs.createSite` と `jobs.configure` を止めてから移した。
+            描き出しの差は**その 2 つの Job だけ**で、Pod は入れ替わっていない。
       - [ ] infisical(Postgres の PVC 持ち。ArgoCD に預けると鶏卵になるので Talos では inlineManifests)。
       - argocd は移さない(自分自身。Talos では inlineManifests)。
 - [ ] k8up を導入し、Phase 0 と同じ restic リポジトリに PVC バックアップと `backupcommand` の dump が取れること。
