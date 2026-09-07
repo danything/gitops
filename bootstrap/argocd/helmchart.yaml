@@ -50,8 +50,7 @@ spec:
                 policy.default: role:readonly
                 policy.csv: |
                     g, admin, role:admin
-                    g, 5847ec59-0f80-4713-89f9-3624cc217468, role:admin
-                scopes: '[roles, groups, email]'
+                scopes: '[roles, email]'
         notifications:
             secret:
                 # Helm's own empty placeholder secret would fight any externally
@@ -174,6 +173,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-09-07T03:00:32Z"
-    mac: ENC[AES256_GCM,data:u8jvp2tSySHwhpcwVoRT35RlhApIimP4h23RT7qF6iNsfodRITi9zHvTlcMpU3IS1QzFOArteUz20mMo2PNc4Z6gUO1yeVRMXO6WDJg7iLoL0YEl6vab0TNwf6dP4033kMrWSDYnydkE0uGBBZrmFEeNUbiS1Gaky0Vg6UVQLd4=,iv:f+Zl1SDRXM5r4q+0NlUyMVrXMD1GZNvpmz0OfWE4mdc=,tag:doNWXaXbe4XBvqLPulnt+g==,type:str]
+    lastmodified: "2026-09-07T03:17:43Z"
+    mac: ENC[AES256_GCM,data:E7sWPyy9nJuw+vlxjcxuRSywrBdVekazBXc9mXthXrkcnlV7yMGCLhvjilkpwn+KyiTCMUibWbGcilZnRPutPUUJoqFbH0ZJYjiaxMXOJSt5je+uG+dsofEgg26RhJKEiSEto5fve5NbgeBJfUZoTqiG/+kqQUk77r2kjg4SDiY=,iv:4YeqtRl6pC5Vai7i/wxXI4AvSf7Yi9EXlgCEdlvzIR0=,tag:zizMkcMzofWaA30t16I78A==,type:str]
     version: 3.13.3

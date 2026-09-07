@@ -90,7 +90,7 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
         (ProtocolConflict)ため。8443 は Mattermost calls が先に取っている。**クライアントのポート変更が要る**
       - [x] forward-auth の 2 本。`sub`(`*.s.doany.io`)は **oauth2-proxy を前段プロキシにする方式**で移した
         (専用インスタンス `auth-sub` が `--upstream` で LAN のホストへ中継。コールバックは既存の
-        a.doany.io 側が受け、cookie secret と redis を共有)。Traefik ダッシュボードは Traefik ごと消えるので対処不要
+        a.doany.io 側が受け、cookie secret を共有)。Traefik ダッシュボードは Traefik ごと消えるので対処不要
       - [x] yuzuriha の `compress` はアプリ側(Caddy ではなく `server.ts`)で zstd/gzip を返す形に置き換えた
 - [x] **切り替え本番(2026-09-06 完了)。** Traefik の hostPort 80/443 を外し、Gateway の Service を
       80/443 の nodePort として同時に開いた。15 ホストすべてを LAN(10.10.0.4)と公開 IP の両方で確認済み。
@@ -138,12 +138,6 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 
 
 ## 未決事項
-
-- **redis を捨てられるか(検証待ち)。** **「グループクレームが大きいから redis が要る」は誤りだった**
-  (2026-09-07)。所属グループは 2 つだけで、4293 バイトのセッションの中身は ID / アクセス /
-  リフレッシュの各トークンそのもの。`--session-cookie-minimal` でその 3 つを落とし、
-  Cookie セッションに切り替え済み。**実機でログインし直して通ることを確かめたら redis を消す。**
-  それまで redis は動かしたままにしてある。経緯は [docs/entra.md](docs/entra.md)。
 
 - ~~**Hubble を入れるか。**~~ **入れないと決めた(2026-09-07 本人判断)。** 単一ノードで Relay と UI の
   Pod が 2 つ増えるわりに、NetworkPolicy を書き始めるまでは見る場面が無い。書き始めるときに入れ直す。

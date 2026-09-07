@@ -153,20 +153,25 @@ az rest --method POST   --url "https://graph.microsoft.com/v1.0/servicePrincipal
 | Argo CD | `scopes: '[roles, groups, email]'`、`policy.csv` に両方の行 |
 | oauth2-proxy | **`roles` のみ**(`--oidc-groups-claim` は 1 つしか取れない)。`ALLOWED_GROUPS=admin` |
 
-**残り**: 実機でログインし直して `roles` で通ることを確かめる → Entra のグループ要求を消す
-→ セッションを測って redis を落とす → 各アプリから GUID を落とす。
+**完了(2026-09-07)。** ログインが `roles` で通ることをログで確認し
+(`[AuthSuccess] ... groups:[admin]`)、Entra のグループ要求を消して
+(`groupMembershipClaims: null`)、redis を落とし、各アプリから GUID を落とした。
+
+**`appRoleAssignmentRequired` は `false` のままにしてある。** `はい` にすると
+ロールを割り当てていない人がこの登録の後ろにあるアプリ全部から締め出される。
+ERPNext はテナントのゲストも使うので、そこは開けておく
+(ERPNext は OIDC のスコープが `openid profile email` だけで、グループもロールも見ていない)。
 
 ## 効いたかの確かめ方
 
-セッションの大きさは redis から直接測る。
+oauth2-proxy のログにセッションの中身が出る。
 
 ```shell
-kubectl exec -n auth deploy/auth-redis -- sh -c \
-  'redis-cli --scan --pattern "*" | head -1 | xargs -I{} redis-cli STRLEN {}'
+kubectl logs -n auth deploy/auth --since=10m | grep AuthSuccess
 ```
 
-**4096 バイトを下回れば Cookie セッションに移せる。** 一度ログアウトしてから測ること
-(古いセッションは前のトークンのまま残っている)。
+`groups:[admin]` ならロールで通っている(oauth2-proxy はロールも `groups` として扱う)。
+`refresh_token:false` なら `session-cookie-minimal` が効いてトークンが落ちている。
 
 ## redis を捨てる
 
