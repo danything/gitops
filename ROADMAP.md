@@ -165,9 +165,18 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 
 ### 積み残し
 
-- **復元リハーサルを Cilium 構成でやり直す。** 記録にある 2 回はどちらも flannel の頃のもので、
-  CNI と入口を替えたあとで通したことがまだ無い。確かめたいのは Cilium が自力で上がるか、
-  Gateway が戻るか、hostPort が張られるかの 3 つ([docs/restore-drill.md](docs/restore-drill.md))。
+- ~~**復元リハーサルを Cilium 構成でやり直す。**~~ **2026-09-07 に実施、3 問とも Yes**
+  ([docs/restore-drill.md](docs/restore-drill.md))。Cilium は k3s 起動の 40 秒後に自分で CNI 設定を書いて上がり、
+  Gateway は `PROGRAMMED=True` で LB-IPAM も L2 アナウンスも初回で決まり、AdGuard の hostPort も張られた。
+  移行のときに要ったエージェント再起動や Pod 作り直しは**一度きりの手当て**で、復元では要らない。
+  47 Running / 15 Completed、起動しなかったのは前回と同じ `denpa/tuner-agent` と `wireguard/wg-easy` の 2 つだけ。
+- **`Schedule` に `SkipDryRunOnMissingResource=true` を付ける。** 上のリハーサルで見つかった。
+  git に `k8up.io/v1` の `Schedule` があるのに復元先に k8up の CRD がまだ無いと、
+  Argo CD は `apps/` の同期を**丸ごと**失敗させる(CRD を入れる Application 自身が同じ同期の中にあるので抜けられない)。
+  子 Application が 5 つ作られないまま止まった。3 つの `Schedule` に
+  `argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true` を付けるか、sync-wave で k8up を先に回す。
+- **`k8up-global` Secret は git だけからは再建できない。** 手で作るものなので、state.db に無いスナップショットから
+  戻すと operator が `CreateContainerConfigError` で止まる。作り方は [apps/k8up/README.md](apps/k8up/README.md)。
 
 ## 未決事項
 
