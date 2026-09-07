@@ -34,7 +34,8 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 
 ## 何をどう取っているか
 
-`Schedule` は [schedules.yaml](schedules.yaml) に 11 本まとめてある(時刻と決まりごともあちら)。
+`Schedule` は [schedules.yaml](schedules.yaml) に 12 本まとめてある(時刻と決まりごともあちら)。
+11 本が namespace ごとの backup + prune で、**残り 1 本はリポジトリ全体の `check`**。
 **注釈だけでは動かない** ── その namespace に `Schedule` が無いとジョブが作られない。
 **取る中身を決めているのは Pod 側の注釈**で、それがどこにあるかがここ。
 
