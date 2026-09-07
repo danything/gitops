@@ -1,0 +1,28 @@
+# Cilium Gateway([../gateway/](../gateway/))に付ける HTTPRoute。証明書は Gateway 側の
+# リスナーに cert-manager がワイルドカードで発行したものが付いているので、ここでは指定しない。
+#
+# **この層は ArgoCD が同期しない。** 手で `kubectl apply` する(../README.md)。
+# 元は `apps/gateway-routes/` にあったが、**ArgoCD が「ArgoCD 自身や認証の前段を公開している
+# 経路」を握っているのは層が逆**なので、公開される当のものと同じ場所に移した(2026-09-07)。
+#
+# **backend は Hubble UI ではなく oauth2-proxy。** UI 自身は認証を持たないので
+# 直接繋いではいけない(bootstrap/auth/hubble-proxy.yaml)。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hubble
+  namespace: auth
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["hl.doany.io"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: auth-hubble
+          port: 4180
