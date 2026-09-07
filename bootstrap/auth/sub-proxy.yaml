@@ -51,8 +51,12 @@ spec:
           value: .doany.io
         - name: OAUTH2_PROXY_EMAIL_DOMAINS
           value: '*'
+        # a.doany.io 側と同じく Entra のアプリロール admin で絞る。
+        # グループクレームから移した理由は docs/entra.md
+        - name: OAUTH2_PROXY_OIDC_GROUPS_CLAIM
+          value: roles
         - name: OAUTH2_PROXY_ALLOWED_GROUPS
-          value: 5847ec59-0f80-4713-89f9-3624cc217468
+          value: admin
         - name: OAUTH2_PROXY_REVERSE_PROXY
           value: 'true'
         - name: OAUTH2_PROXY_SET_XAUTHREQUEST
