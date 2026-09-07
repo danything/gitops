@@ -20,7 +20,7 @@ spec:
         # TLS を終端して 127.0.0.1:3128 に渡すだけのサイドカー。証明書は cert-manager が発行する。
         # 更新は Secret の中身が変わるだけなので、nginx を定期的に読み直させる。
         - name: tls-terminator
-          image: nginx:1.29-alpine
+          image: nginx:1.31-alpine
           command: ["/bin/sh", "-c"]
           args:
             - |
