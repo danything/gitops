@@ -91,6 +91,11 @@ gatewayAPI:
   # **ポートの指定は無い。** Gateway のリスナー(80 / 443)がそのままホストに bind される。
   # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`
   # 側の項目で、こちらには無い(値の見た目が似ているので混同しやすい)。
+  #
+  # **Service は消えず NodePort になる**(`operator/pkg/model/translation/gateway-api/translator.go`
+  # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。
+  # 割り当てられるポートはランダムだが、**実通信はそこを通らない**ので気にしなくてよい。
+  # 効果として **LoadBalancer が 1 つも無くなる**ので、LB-IPAM と L2 アナウンスを外せる。
   hostNetwork:
     enabled: true
   # **gRPC を通すのに要る(2026-09-07)。** 既定は false で、その場合 Envoy は TLS の

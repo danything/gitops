@@ -153,7 +153,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 
 | 対象 | hostPort |
 | --- | --- |
-| Gateway(`cilium-gateway-doany`) | 80 / 443。ここだけ hostPort ではなく nodePort |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。**Envoy が hostNetwork で直接 bind する**(2026-09-07。それまでは手で当てた nodePort だった) |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | mattermost(calls) | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
