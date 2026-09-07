@@ -26,6 +26,12 @@ spec:
       valuesObject:
         k8up:
           envVars:
+            # **注釈の無い PVC は取らない。** k8up には論理バックアップ
+            # (backupcommand の出力)だけ取らせて、PVC のファイルは引き続き
+            # ホストの backup/k3s-backup に任せる。Talos に移ってホストの
+            # スクリプトが使えなくなったら、ここを外して PVC も k8up に寄せる。
+            - name: BACKUP_SKIP_WITHOUT_ANNOTATION
+              value: "true"
             - name: BACKUP_GLOBALS3ENDPOINT
               valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
             - name: BACKUP_GLOBALS3BUCKET

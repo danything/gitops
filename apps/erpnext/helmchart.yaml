@@ -68,6 +68,24 @@ spec:
         limits:
           memory: 1536Mi
 
+    # **k8up に論理バックアップを取らせる。** ホストの backup/k3s-backup は
+    # PVC のディレクトリを丸ごと写すだけなので、動いている DB のファイルは
+    # よくてクラッシュ一貫性しかない。
+    #
+    # **MariaDB の Pod には注釈を付けられない。** chart の mariadb-sts の
+    # StatefulSet テンプレートに podAnnotations が無い。代わりに gunicorn の Pod から
+    # mariadb-dump を打つ。あちらには site_config.json(db_host / db_name /
+    # db_password)と mariadb-dump が入っていて、root のパスワードも要らない。
+    #
+    # k8up は注釈の値を引用符を見て分割する(qsplit)ので、python -c に渡す 1 行は
+    # シングルクォートでまとめれば 1 引数として届く。実測 10.7 MB。
+    worker:
+      gunicorn:
+        podAnnotations:
+          k8up.io/backupcommand: |-
+            python3 -c 'import json,os,subprocess,sys;c=json.load(open("sites/en.doany.io/site_config.json"));os.environ["MYSQL_PWD"]=c["db_password"];sys.exit(subprocess.call(["mariadb-dump","-h",c["db_host"],"-P",str(c.get("db_port",3306)),"-u",c["db_name"],"--single-transaction","--routines","--events",c["db_name"]]))'
+          k8up.io/file-extension: .sql
+
     jobs:
       createSite:
         enabled: true
