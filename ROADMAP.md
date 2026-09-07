@@ -140,6 +140,15 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       **障害 1 件**: d.doany.io の backend を平文の 80 にしたら AdGuard の DoH が死に、
       これをセキュア DNS にしていたブラウザの名前解決が全部止まった(2026-09-07 06:34〜10:20)。
       nginx サイドカー経由に直した。詳細は decisions.md「AdGuard の DoH は backend が HTTPS でないと出ない」。
+- [x] **Gateway を hostNetwork にして LB-IPAM と L2 アナウンスを撤去した(2026-09-07)。**
+      Envoy がノードの 80/443 を直接 bind する(`gatewayAPI.hostNetwork` + `NET_BIND_SERVICE`)。
+      **手で当てていた nodePort が git に書けない状態だったのを解消**するのが目的で、実際に
+      復元リハーサルではそこが壊れていた。結果 LoadBalancer Service が 0 になったので
+      `bootstrap/gateway/lb-ipam.yaml` と `l2announcements` を削除。Gateway の住所はノードの
+      `10.0.0.2` になる。**Cilium の `nodePort.range: "80,443"` と k3s の
+      `service-node-port-range` はまだ外せない** — Gateway の Service が NodePort 型のまま
+      80/443 を握っているため。副作用として**ホスト自身**からノードの 80/443 に繋げない
+      (外部・Pod からは通る。ホスト上に使っているものは無い)。
 - [x] **クライアント IP は保たれている(2026-09-07 確認)。`externalTrafficPolicy` は `Cluster` のまま**。
       単一ノードでは backend が必ず同じノードに居るので Cilium は SNAT しない。
       証拠と、ノードを足すときにやることは [docs/decisions.md](docs/decisions.md)「クライアント IP」。

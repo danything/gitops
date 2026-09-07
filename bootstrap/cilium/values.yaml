@@ -1,20 +1,14 @@
 # **Cilium の Helm 値。これがクラスタの土台。**
 #
-# **これまで git に無かった(2026-09-07 に取り込んだ)。** 入れたのは手で `helm install` した
-# ときの一度きりで、以後の調整は `cilium-config` の ConfigMap を直接いじって当てていた。
-#
 # ## **`helm upgrade` する前に必ずここを読むこと**
 #
-# ConfigMap を直接いじった設定は Helm のリリースに記録されていない。つまり
-# **素で `helm upgrade` すると黙って元に戻り、外向きの通信が壊れる。**
-# 実際に記録から漏れていたのは次の 2 つ(2026-09-07 に確認):
+# 2026-09-07 まで、この値は git に無かった。入れたのは手で `helm install` した一度きりで、
+# 以後の調整は `cilium-config` の ConfigMap を直接いじって当てていた。**ConfigMap 直いじりは
+# Helm のリリースに残らないので、素で `helm upgrade` すると黙って元に戻る。**
+# 実際に漏れていたのが `node-port-range: "80,443"` で、既定の 30000-32767 に戻ると
+# Gateway の Service の割り当てが無効になり、**公開している Web が全部落ちる**。
 #
-# | 設定 | live の ConfigMap | Helm の values(当時) | 戻ると何が起きるか |
-# | --- | --- | --- | --- |
-# | `node-port-range` | `80,443` | 無し | Gateway の Service は 80/443 を固定の nodePort で持っている。既定の 30000-32767 に戻ると割り当てが無効になり、**公開している Web が全部落ちる** |
-# | `enable-l2-announcements` | `true` | 無し | LB-IPAM の 10.10.0.53 が ARP に応答しなくなる |
-#
-# **このファイルはその 2 つを含んだ「あるべき値」。** 以後の変更はここを直してから
+# **このファイルが「あるべき値」。** 以後の変更はここを直してから
 #
 #   helm upgrade cilium cilium/cilium --version 1.20.1 -n kube-system -f bootstrap/cilium/values.yaml
 #
@@ -59,9 +53,20 @@ externalIPs:
   enabled: true
 nodePort:
   enabled: true
-  # **80 と 443 だけ。** Gateway の Service にこの 2 つを固定で割り当てている。
+  # **80 と 443 だけ。** Gateway の Service がこの 2 つを nodePort として握っている。
   # 範囲を広げると、その中に入る hostPort を Cilium が張らなくなる
   # (AdGuard の 853、Mattermost calls の 8443、3proxy の 3129 が一斉に落ちた)。
+  #
+  # **hostNetwork にしても外せない。** Service は NodePort 型のまま残り(下の
+  # gatewayAPI.hostNetwork のコメント)、既に割り当て済みの 80/443 を持ち続ける。
+  # ここを既定に戻すと、その Service を次に更新したとき API サーバが弾く。
+  # 外すには先に Service の nodePort を高位に振り直す必要がある(未実施)。
+  #
+  # 副作用: この 2 つの NodePort フロントエンドは L7LB リダイレクト
+  # (`cilium-dbg bpf lb list` に `l7-load-balancer / L7LB Proxy Port: 80`)として載り、
+  # **ホスト自身から** ノードの 80/443 に繋ぐと応答が返らない(2026-09-07 実測)。
+  # 外から来る通信と Pod からの通信は Envoy が直接 bind したソケットに入るので影響しない。
+  # ホスト上にこの経路を使うものは無い(`grep -rl doany.io /usr/local/bin /etc/cron.d` が空)。
   range: "80,443"
 
 # Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
@@ -95,7 +100,8 @@ gatewayAPI:
   # **Service は消えず NodePort になる**(`operator/pkg/model/translation/gateway-api/translator.go`
   # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。
   # 割り当てられるポートはランダムだが、**実通信はそこを通らない**ので気にしなくてよい。
-  # 効果として **LoadBalancer が 1 つも無くなる**ので、LB-IPAM と L2 アナウンスを外せる。
+  # 効果として **LoadBalancer Service が 1 つも無くなった**ので、LB-IPAM と L2 アナウンスは
+  # 撤去した(2026-09-07)。Gateway の `status.addresses` はノードの `10.0.0.2` になる。
   hostNetwork:
     # **下の envoy.securityContext とセット。** 80/443 は特権ポートなので、
     # NET_BIND_SERVICE が無いと `cannot bind '0.0.0.0:80': Permission denied` で
@@ -116,11 +122,6 @@ gatewayAPI:
   # チャートの注記どおり appProtocol サポートも一緒に有効になるが、
   # **このクラスタに appProtocol を宣言している Service は 1 つも無い**ので影響しない。
   enableAlpn: true
-
-# LB-IPAM が払い出したアドレスを LAN に知らせる。**ConfigMap に入れるだけでは効かない** —
-# cilium エージェント(DaemonSet)の再起動が要る。
-l2announcements:
-  enabled: true
 
 # **クラスタ内の通信を見る画面。** Cilium 本体の hubble は元から有効(:4244 で待ち受け)で、
 # 足りていなかったのは Relay と UI の 2 Pod だけ。
