@@ -184,10 +184,11 @@ kubectl logs -n auth deploy/auth --since=10m | grep AuthSuccess
 
 ## redis を捨てる
 
-1. ~~`OAUTH2_PROXY_SESSION_STORE_TYPE` を `cookie` にする~~ **済み(2026-09-07)。**
-   あわせて `OAUTH2_PROXY_SESSION_COOKIE_MINIMAL=true` を入れた
-2. **実機でログインし直して通ることを確かめる** ← いまここ
-3. 通ったら `bootstrap/auth/redis-deployment.yaml` と `redis-service.yaml` を消して、
-   `kubectl delete` する。**確かめるまで redis は動かしたまま**にしてある
-4. **切り戻し**は `SESSION_STORE_TYPE=redis` と `REDIS_CONNECTION_URL` を戻すだけ。
+**全部済んだ(2026-09-07)。**
+
+1. `OAUTH2_PROXY_SESSION_STORE_TYPE` を `cookie` にし、`OAUTH2_PROXY_SESSION_COOKIE_MINIMAL=true` を入れた
+2. 実機のログインで通ることを確認
+   (`[AuthSuccess] … refresh_token:false groups:[admin]`)。`a.doany.io`・`*.s.doany.io`・Argo CD とも本人確認済み
+3. `redis-deployment.yaml` と `redis-service.yaml` を削除し、実機からも `kubectl delete` した
+4. **切り戻すなら** `SESSION_STORE_TYPE=redis` と `REDIS_CONNECTION_URL` を戻して redis を入れ直す。
    セッションは消えるので入り直しになる
