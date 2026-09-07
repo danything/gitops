@@ -171,9 +171,9 @@ spec:
           # client secret は無い(PKCE)。
           env:
             - name: NETBIRD_MGMT_API_ENDPOINT
-              value: https://nd.doany.io
+              value: https://nb.doany.io
             - name: NETBIRD_MGMT_GRPC_API_ENDPOINT
-              value: https://nd.doany.io
+              value: https://nb.doany.io
             - name: AUTH_AUDIENCE
               value: netbird-dashboard
             - name: AUTH_CLIENT_ID
@@ -181,7 +181,7 @@ spec:
             - name: AUTH_CLIENT_SECRET
               value: ""
             - name: AUTH_AUTHORITY
-              value: https://nd.doany.io/oauth2
+              value: https://nb.doany.io/oauth2
             - name: USE_AUTH0
               value: "false"
             - name: AUTH_SUPPORTED_SCOPES
