@@ -113,6 +113,36 @@ sudo k3s kubectl get pods -A
 本番サーバの上でやるなら `sudo cat /etc/k3s-backup/env` をそのまま VM に流し込めば済み、パスフレーズは要らない
 (中身は `env.age` と同じもの)。
 
+## 結果(2026-09-07 その 2、NetBird / bootstrap の Actions 化のあと)
+
+**新しく見つかったこと: Gateway の nodePort が 80/443 で戻らない。**
+
+```
+復元後: cilium-gateway-doany  80:31024/TCP,443:30229/TCP
+本番  : cilium-gateway-doany  80:80/TCP,443:443/TCP
+```
+
+Cilium の Gateway コントローラが Service を作り直すので、**ノードの IP 経由の公開 Web が全部死ぬ**。
+本番の 80/443 は手で当てた値で、**git にも `CiliumGatewayClassConfig` にも書けない**
+(`spec.service` に nodePort の項目が無い ── `allocateLoadBalancerNodePorts` や
+`externalTrafficPolicy` はあるが、ポート番号の指定は無い)。
+`restore.sh` が復元の最後に当て直すようにした。
+
+**それ以外は健全。** 44 Running / 12 Completed、Gateway は `Accepted=True Programmed=True` で
+LB-IPAM の `10.10.0.53` も 15 本のルートも戻った。全 Application が `Synced`。
+
+起動しなかったものは、**どれもスナップショットが古いことの表れ**で欠陥ではない
+(このリハーサルは 9/6 のスナップショットに対して行った):
+
+| | |
+| --- | --- |
+| `denpa/tuner-agent` | PT3 が無い。VM では毎回こうなる |
+| `netbird/*` | **9/6 の時点で NetBird は存在しない。** git だけが先に進んでいるので Pod は作られるが、Infisical 側に Secret が無く `CreateContainerConfigError` |
+| `erpnext` の socketio と worker | `ENOTFOUND erpnext-dragonfly-queue`。git の chart が valkey → dragonfly に進んでいて、スナップショットの Service 名と食い違う |
+| `k8up` | リハーサルの手当てで `k8up-global` を消しているため。意図どおり |
+
+**「git がバックアップより進んでいる」状態は復元では普通に起きる**、を改めて確認した形になった。
+
 ## 結果(2026-09-07、Cilium 1.20.1 + Gateway API)
 
 3 回目。CNI を Cilium(kubeProxyReplacement / LB-IPAM / L2 アナウンス)に、入口を Gateway API に替えたあと、

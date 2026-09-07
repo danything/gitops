@@ -66,22 +66,14 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 
 ## Talos では `bootstrap/` をどう適用するか
 
-いまの `bootstrap/` は「Argo CD より下の層」なので Argo CD が同期できず、手で `kubectl apply` している。
-Talos ではホストにログインできないが、**machine config の `cluster.inlineManifests`** がその役をそのまま引き受ける。
+**下の「Talos の起動順序をどう組むか(2026-09-07)」に書き直した。** ここには当初の見立てだけ残す:
 
-- `inlineManifests` は machine config に YAML を埋め込む形式で、**クラスタの bootstrap 時に Talos 自身が apply する**
-  (kubectl を打てるようになる前に終わっている)。URL から取る `extraManifests` もあるが、外部依存が増えるので使わない。
-- 追加専用の性質がある(Talos は一度作ったリソースを消さない)。**種を蒔く仕組み**であって継続的な reconcile ではないので、
-  以後の変更は Argo CD に任せる。Argo CD 自身の install が inlineManifests に入っていれば、そこから先は自走する。
-- 秘密も machine config に入るが、machine config は talhelper + SOPS(いまの age 鍵と同じ)で暗号化して git に置くので、
-  公開 repo のままで問題ない。`bootstrap/` の SOPS ファイルと鍵が共通になる。
-- 結果として **「手で apply する層」が消える**。復元も `talosctl apply-config` 一発になり、
-  `restore.sh` のような k3s 期専用のスクリプトは要らなくなる。
-
-移行時の作業は、`bootstrap/*/*.yaml` を talhelper の patch に流し込む変換(1 ファイル 1 inlineManifest)。
-HelmChart CRD 依存(argocd / infisical / push-bridge)は Argo CD の Application に書き換えるので、
-inlineManifests に載るのは「Argo CD 本体 + repo-creds + apps Application + Infisical の根っこ」だけになる見込み。
-
+- `machine config` の inlineManifests が「Argo CD より下の層」を引き受ける、という筋は変わっていない
+- **ただし当初「手で apply する層が消える」と書いたのは外れた。** 実際には二段階になり、
+  適用は GitHub Actions に移った([bootstrap/README.md](../bootstrap/README.md))。
+  machine config が持つのは「そこへ辿り着くまで」だけ
+- **inlineManifests は「追加専用」どころか create-once。** 既にあるものは更新もしない
+  (`manifest_apply.go` が inventory を見てスキップする)。**継続的な reconcile ではない**
 
 ## ルーティングの選定(2026-09-06)
 
