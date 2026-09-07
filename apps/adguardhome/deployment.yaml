@@ -4,6 +4,15 @@ metadata:
   name: adguardhome
   namespace: adguardhome
   annotations:
+    # **AdGuard 自身の認証は切ってある**(`users: []`、2026-09-07)。守っているのは前段の
+    # oauth2-proxy(bootstrap/auth/adguard-proxy.yaml)で、通るのは Entra のアプリロール
+    # `admin` を持つ人だけ。AdGuard には SSO も利用者管理も無く、上流の認証プロキシ対応も
+    # 2020 年から open のままなので、認証を 1 か所(Entra)に寄せた。
+    # **Web の口はクラスタ内からは無認証**になる。外からは Gateway 経由だけで、その手前に SSO がある。
+    #
+    # **`users:` を戻すときは Pod を止めてから編集すること。** AdGuard は停止時に設定ファイルを
+    # 書き直すので、動いたまま書き換えると消える。
+    #
     # AdGuard の設定は PVC の中 (AdGuardHome.yaml) にあり git では管理していない。
     # クエリログの保持は 90d だと querylog.json だけで 2 GB に育ち、毎日のバックアップに乗るので
     # 7d に縮めた (2026-09-06)。変えるときは UI の 設定 > 一般設定 > クエリログの保存期間 から。
