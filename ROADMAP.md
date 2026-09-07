@@ -61,16 +61,20 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
 - [x] **PSA のラベルが要る namespace を洗い出して manifest に入れた(2026-09-07)。** 走っている Pod の spec を
       直接数えたら想定より多く、9 つあった。**baseline は hostPort も弾く**のを見落としていた。
       一覧と洗い出しのコマンドは [docs/talos.md](docs/talos.md)「PSA のラベル」。
-- [ ] HelmChart CRD 依存を ArgoCD の Application に書き直す。
+- [x] **HelmChart CRD 依存を ArgoCD の Application に書き直した(2026-09-07)。**
+      **アプリ層からは無くなった。** 残る 2 つ(argocd 自身と infisical)は**移さないという決定**で、
+      Talos では machine config の inlineManifests に載る(Phase 2)。
       - [x] cloudflare-ddns・infisical-secrets-operator・infisical-push-bridge(2026-09-07)。
             **Pod を入れ替えずに引き取れる**ことと、**CR を消すとアンインストールが走る**ことが分かった。
             手順は [docs/decisions.md](docs/decisions.md)「HelmChart CRD から ArgoCD の Application へ」。
       - [x] yosegaki(PVC 持ち。blog リポジトリ側、2026-09-07)。
       - [x] erpnext(2026-09-07)。`jobs.createSite` と `jobs.configure` を止めてから移した。
             描き出しの差は**その 2 つの Job だけ**で、Pod は入れ替わっていない。
-      - [ ] infisical(Postgres の PVC 持ち。ArgoCD に預けると鶏卵になるので Talos では inlineManifests)。
-      - argocd は移さない(自分自身。Talos では inlineManifests)。
-- [ ] k8up を導入し、Phase 0 と同じ restic リポジトリに PVC バックアップと `backupcommand` の dump が取れること。
+      - **infisical と argocd は移さない。** infisical は Postgres の PVC を持ち、ArgoCD に
+        預けると鶏卵になる。argocd は自分自身。どちらも Talos では inlineManifests(Phase 2)。
+- [x] **k8up を導入した(2026-09-07)。** Phase 0 と同じ restic リポジトリに `backupcommand` の
+      dump が入るところまで確認済み。**ファイルはホストのスクリプト、論理バックアップは k8up**、と
+      切り分けた。ホストのスクリプトを畳むのは Talos に移る時点(Phase 2)。
       - [x] operator を入れて、**`backend` を書かずにグローバル設定へ寄せれば R2 へ書ける**ことを確認(2026-09-07)。
             endpoint も含めて秘密は git に置かない形にできた。`backend.envFrom` だけでは動かない
             (k8up が空の `RESTIC_REPOSITORY` を必ず入れて上書きする)。詳細は [apps/k8up/README.md](apps/k8up/README.md)。
@@ -88,8 +92,6 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
             本体は bootstrap に居るが、`Schedule` は apps に置いた(バックアップはアプリ層の関心事)。
       - [x] operator を `skipWithoutAnnotation: true` にして「注釈の無い PVC は取らない」側に倒した。
             k8up は論理バックアップ専用、ファイルはホストのスクリプト、という切り分け。
-      - [ ] 残りの namespace の PVC をどうするか決める。いまはホストのスクリプトが全部見ているので、
-            **Talos に移る時点で k8up 側に寄せる**(ホストにシェルが無くなるため)。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
@@ -189,6 +191,12 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
 - [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
 - [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
+- [ ] **infisical と argocd を inlineManifests に載せる。** この 2 つだけ ArgoCD の Application に
+      移していない(argocd は自分自身、infisical は ArgoCD が依存する Secret の供給元で鶏卵になるため)。
+      Talos では machine config が下の層になるので、そこに置けば順序が素直に解ける。
+- [ ] **ファイルの PVC バックアップを k8up 側に寄せる。** いまはホストの `k3s-backup` が
+      全 PVC を見ているが、**Talos にはシェルが無い**。論理バックアップ(k8up)と同じ仕組みに統一する。
+      対象の切り分けは `apps/k8up/README.md`。
 - [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を
       参照していて、**バインド済み PVC の `storageClassName` は API が変更を拒否する**ので今は消せない。
       PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
