@@ -133,21 +133,6 @@ if [ "${RESTORE_DRILL:-0}" != 1 ] && command -v nmcli >/dev/null 2>&1; then
 fi
 systemctl enable --now k3s
 
-# **Gateway の Service に 80/443 の nodePort を当て直す。**
-# Cilium の Gateway コントローラが Service を作り直すので、**復元すると 31024/30229 のような
-# ランダムな値になり、ノードの IP 経由の公開 Web が全部死ぬ**(2026-09-07 のリハーサルで発覚)。
-# 本番の 80/443 は手で当てた値で、git にも CiliumGatewayClassConfig にも書けない
-# (`spec.service` に nodePort の項目が無い)。Cilium は手で入れた nodePort を上書きしないので、
-# ここで一度当てれば残る。
-for i in $(seq 1 60); do
-	k3s kubectl -n kube-system get svc cilium-gateway-doany >/dev/null 2>&1 && break
-	sleep 5
-done
-k3s kubectl -n kube-system patch svc cilium-gateway-doany --type=json -p '[
-  {"op":"replace","path":"/spec/ports/0/nodePort","value":80},
-  {"op":"replace","path":"/spec/ports/1/nodePort","value":443}
-]' || echo "WARNING: Gateway の nodePort を当てられなかった。手で 80/443 にすること" >&2
-
 # k8up が R2 を見るための Secret。**git には無い**(バックアップの資格情報そのものなので、
 # 公開リポジトリには置けない)。値は復元した /etc/k3s-backup/env に入っているので、
 # ここで作り直す。これが無いと k8up の operator が CreateContainerConfigError で上がらない
