@@ -412,7 +412,7 @@ kubectl -n kube-system delete helmchart <name>
 | infisical-secrets-operator | 移行済み | `apps/infisical-operator/` |
 | infisical-push-bridge | 移行済み | `apps/infisical-push-bridge/` |
 | yosegaki | 移行済み | blog リポジトリの `deploy/yosegaki-application.yaml`。PVC 持ちなので上の手順で移した |
-| erpnext | **保留** | 下記 |
+| erpnext | 移行済み | `apps/erpnext/application.yaml`。**サイト作成と conf-bench の Job は止めてある**(下記) |
 | infisical | 未 | Postgres の PVC を持つ。**Infisical より下の層**なので ArgoCD に預けると鶏卵になる |
 | argocd | 移さない | 自分自身。Talos では machine config の `inlineManifests` に載せる |
 
@@ -431,7 +431,13 @@ chart が **Job の名前に描き出した時刻を入れる**(`erpnext-new-sit
    中身が変わったときに `Replace=true` が要る。Application 全体に付けると StatefulSet まで
    置き換わるので、そこは慎重に。
 
-どちらも本番の ERP に触るので、**時間のあるときに 1 の形で移す。**
+**1 の形で移した(2026-09-07)。** `jobs.createSite` と `jobs.configure` を `false` にして
+ArgoCD の Application にした。描き出しを突き合わせると**消えるのはその 2 つの Job だけ**で、
+残り 25 個は同一だった。引き取っても Pod は入れ替わっていない。
+
+**まっさらから入れ直すときは 1 回だけ `true` にする。** `jobs.configure` は
+`common_site_config.json`(DB と Redis の宛先)を書くので、chart を大きく上げて
+その宛先が変わるときも 1 回有効にして戻すこと(8.0.78 の Dragonfly → Valkey が実例)。
 
 ## ghcr の pull 認証
 

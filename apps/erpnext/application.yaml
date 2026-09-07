@@ -1,0 +1,134 @@
+# **ERPNext。k3s の HelmChart CRD ではなく ArgoCD の Application で入れる。**
+# HelmChart(helm.cattle.io)は k3s 固有で Talos には無い。
+#
+# **サイト作成と conf-bench の Job は止めてある**(`jobs.createSite` と `jobs.configure`)。
+# chart が Job の名前に描き出した時刻を入れる(`erpnext-new-site-20260907103337`)ので、
+# 有効なままだと ArgoCD が同期のたびに名前の違う Job を作っては前のを prune する。
+# サイトはもう出来ているので走らせる必要も無い。
+#
+# **まっさらから入れ直すときは 1 回だけ有効にする。** `jobs.configure` は
+# `common_site_config.json`(DB と Redis の宛先)を書くので、chart を大きく上げて
+# その宛先が変わるときも 1 回有効にして戻すこと。実際 8.0.78 で Dragonfly が
+# Valkey に変わったときは conf-bench が書き直している。
+#
+# **finalizer は付けない。** 付けると Application を消したときに ERPNext ごと消える。
+# 本番の ERP なので、消すときは中身を意識して消す。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: erpnext
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: erpnext
+  source:
+    repoURL: https://helm.erpnext.com
+    chart: erpnext
+    targetRevision: 8.0.78
+    helm:
+      # リリース名を揃えないと描き出される名前が変わって作り直しになる。
+      releaseName: erpnext
+      valuesObject:
+        image:
+          tag: version-15
+
+        # Externally-managed PVC (see pvc.yaml) so site data survives even if
+        # this release ever gets uninstalled/reinstalled by the helm-controller.
+        persistence:
+          worker:
+            existingClaim: erpnext-sites
+
+        # rootPassword explicitly emptied (not omitted -- an omitted key falls
+        # back to the chart's own default "changeit", which re-enables the
+        # chart's auto-created Secret and collides with our externally-managed
+        # one). Empty disables that Secret template, so the ExternalSecret-managed
+        # Secret of the same name/key (erpnext-secrets.yaml, values in Infisical)
+        # provides it instead.
+        mariadb-sts:
+          enabled: true
+          rootPassword: ""
+          persistence:
+            storageClass: local-path-retain
+
+        # chart has no mariadb-sts branch for DB_ROOT_USER, falls back to this
+        dbRootUser: root
+
+        # **キャッシュとキューは Valkey。** chart 8.0.78 で Dragonfly から入れ替わった
+        # (それ以前は dragonfly-cache / dragonfly-queue で、io_uring の ring が
+        # RLIMIT_MEMLOCK を食い潰して片方が SIGSEGV する事故があり proactor_threads を
+        # 4 に絞っていた。Valkey は Redis 系なのでその問題自体が無い)。
+        #
+        # **上限は自分で入れる。** subchart の既定は resources も maxmemory も空で、
+        # 何も書かないとノードの空きメモリまで伸びうる。実使用は cache が数 MiB、
+        # queue も数 MiB なので 1gb で十分に余裕がある。コンテナの上限を maxmemory の
+        # 上に置いてあるのは Valkey 自身のオーバーヘッドぶん。CPU の上限は付けない。
+        #
+        # eviction は用途で分ける。キャッシュは捨てて構わないので allkeys-lru、
+        # キューは既定の noeviction のまま(溢れたときに積んだジョブが黙って消えないように)。
+        valkey-cache:
+          valkeyConfig: |
+            maxmemory 1gb
+            maxmemory-policy allkeys-lru
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 1536Mi
+
+        valkey-queue:
+          valkeyConfig: |
+            maxmemory 1gb
+            maxmemory-policy noeviction
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 1536Mi
+
+        # **k8up に論理バックアップを取らせる。** ホストの backup/k3s-backup は
+        # PVC のディレクトリを丸ごと写すだけなので、動いている DB のファイルは
+        # よくてクラッシュ一貫性しかない。
+        #
+        # **MariaDB の Pod には注釈を付けられない。** chart の mariadb-sts の
+        # StatefulSet テンプレートに podAnnotations が無い。代わりに gunicorn の Pod から
+        # mariadb-dump を打つ。あちらには site_config.json(db_host / db_name /
+        # db_password)と mariadb-dump が入っていて、root のパスワードも要らない。
+        #
+        # k8up は注釈の値を引用符を見て分割する(qsplit)ので、python -c に渡す 1 行は
+        # シングルクォートでまとめれば 1 引数として届く。実測 10.7 MB。
+        worker:
+          gunicorn:
+            podAnnotations:
+              k8up.io/backupcommand: |-
+                python3 -c 'import json,os,subprocess,sys;c=json.load(open("sites/en.doany.io/site_config.json"));os.environ["MYSQL_PWD"]=c["db_password"];sys.exit(subprocess.call(["mariadb-dump","-h",c["db_host"],"-P",str(c.get("db_port",3306)),"-u",c["db_name"],"--single-transaction","--routines","--events",c["db_name"]]))'
+              k8up.io/file-extension: .sql
+
+        # **どちらも false。理由はファイル冒頭。** chart が Job の名前に時刻を入れるので、
+        # 有効なままだと同期のたびに作り直される。まっさらから入れ直すときだけ
+        # 1 回 true にして、走り終えたら戻す。
+        jobs:
+          createSite:
+            enabled: false
+            siteName: en.doany.io
+            adminExistingSecret: erpnext
+            adminExistingSecretKey: admin-password
+          configure:
+            # chart の既定は true。common_site_config.json(DB と Redis の宛先)を書く。
+            enabled: false
+
+        # The post-install OIDC/SMTP setup job used to live here as
+        # jobs.custom, but Job specs are immutable and this chart's custom-job
+        # mechanism doesn't expose an annotations field, so every edit required
+        # manually deleting the Job before it could be re-applied. It's now a
+        # plain manifest (job-setup-oidc.yaml) with an ArgoCD Replace=true
+        # sync-option, which handles that automatically.
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
