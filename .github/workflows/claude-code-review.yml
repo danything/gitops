@@ -2,7 +2,10 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # **`labeled` が要る。** bot の PR は `opened` の時点ではスキップされるので、
+    # あとから `needs-review` を貼っても再実行されなかった(2026-09-07 に #85 で発覚)。
+    # 下の `if` がラベルの有無を見ているので、無関係なラベルで起動しても素通りする。
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 jobs:
   claude-review:
