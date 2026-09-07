@@ -133,12 +133,11 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 
 ## 未決事項
 
-- **Entra ID のトークンを小さくして redis を廃止できるか。** いまの forward-auth は oauth2-proxy + redis で、
-  redis はセッション(トークン)を持つためだけに居る。Entra 側で**グループクレームを全部載せるのをやめて
-  アプリロールに切り替える**と `roles: ["admin"]` の数十バイトになり、oauth2-proxy を Cookie セッション
-  (`--session-store-type=cookie`)に変えられて redis が消せる。実測ではいまのセッションが 4293 バイトで、
-  Cookie の 4096 バイト制限に収まっていない。手順は Entra の アプリの登録 > トークン構成 で
-  groups クレームを外し、アプリロールを定義してユーザー/グループを割り当てる。
-  副次的に、将来 Gateway 内蔵の OIDC(Envoy Gateway など)を使う道も開く。
+- **Entra ID のトークンを小さくして redis を廃止できるか。** redis はセッション(トークン)を
+  持つためだけに居る。Entra の `groups` クレームに所属グループを全部載せているのが原因で、
+  実測でセッションが 4293 バイト、Cookie の 4096 バイトに収まっていない。
+  **手順は [docs/entra.md](docs/entra.md) に書いた**(推奨は「アプリに割り当てたグループだけ」に
+  する設定。アプリ側の変更が要らない)。**Azure の操作は本人でないとできない。**
+
 - ~~**Hubble を入れるか。**~~ **入れないと決めた(2026-09-07 本人判断)。** 単一ノードで Relay と UI の
   Pod が 2 つ増えるわりに、NetworkPolicy を書き始めるまでは見る場面が無い。書き始めるときに入れ直す。
