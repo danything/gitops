@@ -30,7 +30,7 @@ spec:
         # means a CrashLoopBackOff until PostgreSQL catches up. Waiting here
         # keeps that first rollout clean.
         - name: wait-for-postgres
-          image: postgres:17.10
+          image: postgres:17.11
           command:
             - bash
             - -c
@@ -48,7 +48,7 @@ spec:
           # visible and searchable. Nothing is deleted when that's crossed, so
           # switching to mattermost-team-edition later (same database, same
           # env) trades SSO back for unlimited history.
-          image: mattermost/mattermost-enterprise-edition:11.9.0
+          image: mattermost/mattermost-enterprise-edition:11.10.1
           ports:
             - containerPort: 8065
             # Calls の RTC。ServiceLB をやめたので hostPort でノードのアドレスに直接出す。
