@@ -29,6 +29,21 @@ spec:
   dnsNames:
     - "*.s.doany.io"
 ---
+# `dp.l.doany.io`(宅内向けの denpa)も 2 段のワイルドカードなので別に発行する。
+# 公開 DNS には無く AdGuard の rewrite だけで引ける名前だが、DNS-01 なので A レコードは要らない。
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: doany-lan-wildcard
+  namespace: kube-system
+spec:
+  secretName: doany-lan-wildcard-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.l.doany.io"
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -68,6 +83,19 @@ spec:
         certificateRefs:
           - kind: Secret
             name: doany-sub-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    # *.l.doany.io(宅内からだけ引ける名前。いまは dp.l.doany.io だけ)。
+    - name: https-lan
+      protocol: HTTPS
+      port: 443
+      hostname: "*.l.doany.io"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: doany-lan-wildcard-tls
       allowedRoutes:
         namespaces:
           from: All
