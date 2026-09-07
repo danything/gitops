@@ -3,8 +3,6 @@ kind: PersistentVolumeClaim
 metadata:
   name: portainer-data
   namespace: portainer
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes:
     - ReadWriteOnce
