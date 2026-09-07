@@ -38,11 +38,26 @@ sudo sh -c '. /etc/k3s-backup/env
 - `backend` を持たない `Backup` が R2 へ書けることを、使い捨ての PVC で確認済み(確認後に削除)。
 - **ホストのスクリプトとは衝突しない。** あちらは `restic forget --tag k3s-host` でタグを絞っているので、
   k8up のスナップショット(タグ無し・`hostname` は namespace)を消さない。
-  **逆方向は未確認** — k8up の `Prune` はリポジトリ全体を見るので、**入れるときにスコープを確かめること。**
+  **逆方向は確認した(2026-09-07)**: k8up の `Prune` は `retention.tags` を書かないと
+  `restic forget` を**リポジトリ全体**に効かせる(`operator/prunecontroller/executor.go` の
+  `setupArgs` はタグがあるときだけ `--tag` を渡す)。バックアップに `tags: [k8up]`、
+  prune に `retention.tags: [k8up]` を付けて隔離すること。**これを忘れるとホストの
+  スナップショットが消える。**
+
+## いま動いているもの
+
+`apps/mattermost/k8up-schedule.yaml` の 1 本だけ。**論理バックアップ専用**で、
+PVC のファイルは引き続きホストの `backup/k3s-backup` が見ている
+(mattermost の PVC には `k8up.io/backup: "false"` を付けてある)。
+
+| | |
+| --- | --- |
+| バックアップ | 毎日 15:00 UTC(ホストのスクリプトは 19:00 UTC。restic のロックを避ける) |
+| prune | 毎週日曜 16:00 UTC、`keepDaily 7 / keepWeekly 4 / keepMonthly 6`、**タグは `k8up`** |
+| 中身 | `/mattermost-postgres.sql`(実測 9.3 MB) |
 
 ## 次にやること
 
-- `Schedule` を namespace ごとに置く(k8up は Schedule と同じ namespace の PVC だけを見る)
-- DB は `k8up.io/backupcommand` 注釈で dump を流す(ファイルコピーではなく論理バックアップにする)。
-  ホストのスクリプトには無い利点で、**ここが k8up を入れる本当の動機**
-- `Prune` のスコープを確かめてから retention を決める
+- erpnext の MariaDB も同じ形に。chart 管理の StatefulSet なので values 経由になる
+- 残りの namespace の PVC をどうするか。いまはホストのスクリプトが全部見ているので、
+  **Talos に移る時点で k8up 側に寄せる**(ホストにシェルが無くなるため)

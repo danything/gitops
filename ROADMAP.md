@@ -55,9 +55,16 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       - [x] operator を入れて、**`backend` を書かずにグローバル設定へ寄せれば R2 へ書ける**ことを確認(2026-09-07)。
             endpoint も含めて秘密は git に置かない形にできた。`backend.envFrom` だけでは動かない
             (k8up が空の `RESTIC_REPOSITORY` を必ず入れて上書きする)。詳細は [apps/k8up/README.md](apps/k8up/README.md)。
-      - [ ] `Schedule` を namespace ごとに置く。**`Prune` がリポジトリ全体を見るかどうかを先に確かめる**
-            (ホストのスクリプトのスナップショットを消しかねない)。
-      - [ ] DB は `k8up.io/backupcommand` で dump を流す。ホストのスクリプトには無い利点で、ここが本当の動機。
+      - [x] **`Prune` はタグを書かないとリポジトリ全体を消す**ことを確認(2026-09-07)。
+            `retention.tags` が無いと `restic forget` がリポジトリ全体に効く。バックアップに
+            `tags: [k8up]`、prune に `retention.tags: [k8up]` を付けて、ホストのスクリプト
+            (`--tag k3s-host`)と隔離した。
+      - [x] **mattermost の postgres を `k8up.io/backupcommand` で論理バックアップ**(2026-09-07)。
+            R2 に 9.3 MB の `pg_dump` が入ることまで確認済み。PVC には `k8up.io/backup: "false"` を
+            付けて、ファイルはホスト側、論理バックアップは k8up、と分けてある。
+      - [ ] erpnext の MariaDB も同じ形に。chart 管理の StatefulSet なので values 経由になる。
+      - [ ] 残りの namespace の PVC をどうするか決める(いまはホストのスクリプトが全部見ている。
+            Talos に移る時点で k8up 側に寄せる)。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
