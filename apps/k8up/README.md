@@ -4,7 +4,8 @@ Talos に移ったあとのバックアップの担い手。いまの `backup/k3
 「サーバに入って PVC のディレクトリを restic に流す」形なので、**ホストにシェルが無い Talos では成立しない**。
 k8up は Pod として同じ restic リポジトリ(Cloudflare R2 の `doany-restic`)に書く。
 
-**論理バックアップは k8up、PVC のファイルはまだホストのスクリプト**、という切り分けで動いている。
+**論理バックアップもファイルの PVC も、もう k8up が取っている**(2026-09-08 に全 11 namespace で成功を確認)。
+ホストのスクリプトはまだ並走していて、畳むのは Talos に移る時点。
 
 ## 秘密の渡し方
 
@@ -48,6 +49,9 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 
 PVC のファイルは `k8up.io/backup: "true"` を付けたものだけ取る。operator が
 `BACKUP_SKIP_WITHOUT_ANNOTATION=true` なので、**注釈がその宣言そのもの**。
+`"false"` と**注釈が無いのは同じ意味**(どちらも取らない)。同じファイルに `"true"` が
+並んでいるときだけ、取らない側にも `"false"` を書いて意図を見えるようにしてある。
+
 いまホストの `backup/k3s-backup` と二重に取っているが、restic は内容で重複を除くので
 実際に増えるのはメタデータだけ。**Talos に移る時点でホスト側を畳む**。
 
@@ -156,12 +160,15 @@ exit=0 bytes=911360
 ホストの `backup/k3s-backup` が見ているぶんを k8up に寄せる(ROADMAP の Phase 2)。
 SQLite は上で片付いたので、残りは注釈を足すだけ。
 
+**全部済んだ(2026-09-08)。** 残っているのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。
+
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `adguardhome-*` `erpnext-sites` `mattermost-data` `portainer-data` `netbird-routing-peer-data` | ファイル | **済み。** gitops にある PVC なのでここで注釈を付けた |
-| `denpa-library` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` | ファイル | **残り。** 各アプリのリポジトリ側にあるので、そちらで `k8up.io/backup: "true"` を付ける |
+| `adguardhome-*` `erpnext-sites` `mattermost-data` `portainer-data` `netbird-routing-peer-data` | ファイル | gitops にあるのでここで `"true"` |
+| `denpa-library` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
-| `denpa-data` `netbird-data` | SQLite + ファイル | DB は済み。**ファイルの方が残っている** ── `denpa-data/logos/`、`netbird-data` の GeoLite と geonames。GeoLite と geonames は起動時に落とし直せるので要らないが、`logos/` は要る。`k8up.io/backup: "true"` を付けると DB のファイルまで一緒に入るので、`k8up.io/backup-restic-args` で `--exclude` する |
+| `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`。DB は `backupcommand` で取っているので**ファイルとしては除外**し、`logos/` だけを取る。**この注釈は JSON でパースされる**(`backupcommand` の `qsplit` とは別の経路。`operator/backupcontroller/executor.go`)。**パースに失敗すると `continue` でその PVC が黙って飛ばされる**ので、変えたら実物を見ること |
+| `netbird-data` | SQLite + 再取得できるファイル | `"false"`。DB はサイドカーの `backupcommand` で取る。同居している GeoLite2-City(65 MB)と geonames(7 MB)は起動時に落とし直せる |
 | `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | もう論理バックアップがある。mattermost の 2 本には `k8up.io/backup: "false"` を明示してある(注釈が無ければ既に対象外だが、意図して外していると分かるように) |
 | `portainer-data` | boltdb | **ファイルとして取る。** シェルが無く(`exec: "sh": executable file not found`)SQLite でもないので `backupcommand` が使えない。動いたままのコピーなので**整合は保証されない**。中身は OIDC 設定とエンドポイント 1 本だけで画面から数分で作り直せるため、これで割り切る(厳密にやるなら backup API `POST /api/backup` を叩くサイドカー) |
 | `denpa-recorded` | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |

@@ -225,11 +225,13 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
       - [ ] **infisical を `apps/` の ArgoCD Application に移す。** 鶏卵は実際には無かった
             (ArgoCD は Secret が無くても起動し、SSO だけが効かない)。ただし
             **`admin.enabled: false` なのでその窓の間は UI に誰も入れない**。`kubectl` で見る
-- [ ] **ファイルの PVC バックアップを k8up 側に寄せる。** いまはホストの `k3s-backup` が
-      全 PVC を見ているが、**Talos にはシェルが無い**。論理バックアップ(k8up)と同じ仕組みに統一する。
-      **DB は済んでいる**ので残りは注釈だけ。ただし `denpa-data/logos/` のように DB と同居している
-      ファイルは `k8up.io/backup-restic-args` で `--exclude` が要る。portainer(boltdb・シェル無し)
-      だけ手が無い。対象の切り分けは [apps/k8up/README.md](apps/k8up/README.md)。
+- [x] **ファイルの PVC バックアップを k8up 側に寄せた(2026-09-08)。** ホストの `k3s-backup` は
+      **Talos にはシェルが無い**ので持っていけない。**全 11 namespace で成功を確認済み** ──
+      SQLite 6 本は `backupcommand`、ファイルは PVC の注釈。`denpa-data` は DB とファイルが
+      同居しているので `k8up.io/backup-restic-args` で `denpa.db*` を除外している。
+      portainer(boltdb・シェル無し)だけは整合を保証できないファイルコピーで割り切った。
+      対象の切り分けは [apps/k8up/README.md](apps/k8up/README.md)。
+      **残るのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。**
 - [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を
       参照していて、**バインド済み PVC の `storageClassName` は API が変更を拒否する**ので今は消せない。
       PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
