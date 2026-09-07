@@ -6,8 +6,11 @@
 #   /var/lib/rancher/k3s/server/{tls,cred,token}  クラスタ CA・証明書・join 資格情報(無いと復元後に別 CA が生成され state.db と食い違う)
 #   /var/lib/k3s-backup/state.db                  k3s の datastore(全 k8s オブジェクト)の sqlite ホットバックアップ
 #   /var/lib/k3s-backup/k3s-version               restore.sh が同じ k3s バージョンを入れるためのメモ
-#   /etc/rancher/k3s/config.yaml                  k3s のホスト設定(旧 k3s-server-config.yaml)
-#   /etc/rancher/k3s/registries.yaml              ghcr の pull 資格情報(ノード単位。imagePullSecrets の代わり)
+#   /etc/rancher/k3s/                             k3s のホスト設定一式。**ファイル名を列挙しない。**
+#                                                 config.yaml と registries.yaml だけ挙げていたら、
+#                                                 2026-09-07 に足した authentication-config.yaml が漏れていた。
+#                                                 config.yaml がそれを参照するので、**復元しても API サーバが起動しない**
+#                                                 という壊れ方をする。ディレクトリごと取れば同じ漏れは起きない
 #   /etc/NetworkManager/system-connections/       bond0 / eno4 のプロファイル(旧 setup-network.sh)
 #   /etc/netplan/                                 Ubuntu では NM が profile を netplan 経由でここに書く
 #   /etc/NetworkManager/conf.d/20-no-auto-default.conf
@@ -144,8 +147,7 @@ for p in \
 	"$K3S_STORAGE_DIR" \
 	"$K3S_SERVER_DIR/tls" "$K3S_SERVER_DIR/cred" "$K3S_SERVER_DIR/token" \
 	"$SNAP_DIR" \
-	/etc/rancher/k3s/config.yaml \
-	/etc/rancher/k3s/registries.yaml \
+	/etc/rancher/k3s \
 	/etc/NetworkManager/system-connections \
 	/etc/NetworkManager/conf.d/20-no-auto-default.conf \
 	/etc/netplan \
