@@ -436,6 +436,35 @@ Infisical から作って `imagePullSecrets` で参照している(tamasagashi�
 自前 extension を `imager` で焼く案は、Image Factory から外れてアップグレードのたびに自前ビルドになるので採らない。
 
 
+## 依存の更新をどこまで自動で入れるか(2026-09-07)
+
+Renovate は共有プリセット(`5ym/renovate-config`)を使っていて、**全部を 1 つの PR にまとめて自動マージ**する
+設定だった。`separateMajorMinor: false` も付いていたので、**postgres 17 → 18 が nginx のパッチと
+同じ PR に入り、自動マージの対象になっていた**(danything/gitops#7)。そのまま入っていたら Mattermost が落ちる。
+
+**直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/renovate-config#2)。
+パッチとマイナーはこれまでどおり 1 つにまとめて自動マージする。小さくて頻繁で、タグを戻せば済むため。
+
+**PostgreSQL は 17 の線に固定した**(`renovate.json` の `allowedVersions: "<18"`)。理由は 2 つ:
+
+- Mattermost が公表しているのは**下限(14.0+)だけ**で、18 を検証したとは書いていない
+- PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れる。イメージのタグを差し替えると
+  `database files are incompatible with server` で起動を拒否する。上げるには dump と restore が要る
+  (この DB は 89 MB なので作業自体は短いが、Mattermost を止める必要がある)
+
+17 のサポートは 2029-11 まであるので急がない。Mattermost が 18 を明記したらそのとき外す。
+
+### erpnext 8.0.78 は Dragonfly をやめて Valkey になる
+
+chart の 8.0.15 → 8.0.78 は patch に見えるが、**キャッシュとキューが Dragonfly から Valkey に入れ替わる**。
+`erpnext-dragonfly-cache` / `-queue` が消えて `erpnext-valkey-cache` / `-queue` になり、
+worker の接続先も変わる。いまの values にある Dragonfly のチューニング
+(`--proactor_threads=4` と `--maxmemory=1gb`、2026-08 の事故対応)は**丸ごと効かなくなる**。
+
+Valkey は Redis 系なので io_uring の RLIMIT_MEMLOCK 問題は無く、`proactor_threads` は要らない。
+ただし chart の既定は `resources: {}` で上限が無いので、**メモリの上限は自分で入れる**こと。
+mariadb は `mariadb:10.6` のままなので DB のメジャーは動かない。
+
 ## バックアップに何を含めるか
 
 R2 の無料枠(10 GB)に対して実サイズは 3.3 GiB。容量を削るために外した / 外さなかったもの:
