@@ -97,6 +97,12 @@ gatewayAPI:
   # 割り当てられるポートはランダムだが、**実通信はそこを通らない**ので気にしなくてよい。
   # 効果として **LoadBalancer が 1 つも無くなる**ので、LB-IPAM と L2 アナウンスを外せる。
   hostNetwork:
+    # **下の envoy.securityContext とセット。** 80/443 は特権ポートなので、
+    # NET_BIND_SERVICE が無いと `cannot bind '0.0.0.0:80': Permission denied` で
+    # **公開 Web が全部落ちる**(2026-09-07 に実際にやった)。
+    # 実際に付いていることは fork 後のプロセスで確認する:
+    #   kubectl -n kube-system exec ds/cilium-envoy -- grep CapEff /proc/7/status
+    #   → 0000000000000400 (CAP_NET_BIND_SERVICE のみ。starter が他を落とす)
     enabled: true
   # **gRPC を通すのに要る(2026-09-07)。** 既定は false で、その場合 Envoy は TLS の
   # ALPN で `h2` を広告しない。grpc-go のクライアントは ALPN の合意を必須にしているので、
@@ -127,6 +133,23 @@ hubble:
     enabled: true
   ui:
     enabled: true
+
+# **Envoy に特権ポートを bind させるための権限。** Gateway のリスナーは 80/443 で、
+# hostNetwork にするとホストのその番号を直接掴む。既定の Envoy にはこの権限が無い。
+#
+# **2 つ要る。** コンテナに capability を渡すだけでは足りず、`cilium-envoy-starter` が
+# fork 後に全部落とすので、`keepCapNetBindService` で明示的に残す必要がある
+# (chart の values のコメントに書いてある)。
+#
+# 既定は `[NET_ADMIN, SYS_ADMIN]`。**既定を消さないよう両方書く。**
+envoy:
+  securityContext:
+    capabilities:
+      envoy:
+        - NET_ADMIN
+        - SYS_ADMIN
+        - NET_BIND_SERVICE
+      keepCapNetBindService: true
 
 securityContext:
   privileged: true
