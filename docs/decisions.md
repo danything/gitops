@@ -220,6 +220,31 @@ Envoy Gateway はこれを実装しているので、443 のままにしたい�
   443 のままにしたい場合の代案は、px 専用の IP を LB-IPAM で払い出してルータ側で振り分けるか、
   Envoy Gateway に替えて TLS 終端リスナー + TCPRoute を使うか
 
+### AdGuard の DoH は backend が HTTPS でないと出ない(2026-09-07 障害)
+
+**切り替えの翌朝、ブラウザの名前解決が全部死んだ。** 原因は d.doany.io の backend を平文の 80 にしたこと。
+AdGuard は **DoH(`/dns-query`)を HTTPS の口(443)でしか出さない**。80 は 404 を返す。
+Edge の「セキュア DNS」に `https://d.doany.io/dns-query` を入れていたので、DoH が死んだ時点で
+そのブラウザからは何も引けなくなった。クエリログでは 06:34 を最後に DoH の問い合わせが止まっている
+(DoT と plain は生きていたので、OS の名前解決は動いたまま**ブラウザだけ**死ぬ、という分かりにくい形になった)。
+
+Traefik では `serversscheme: https` + `insecureSkipVerify` の `ServersTransport` で backend も HTTPS に繋いでいた。
+その置き換えを「クラスタ内なので平文でよい」と判断したのが誤り。**DoH は平文の口には出ない。**
+
+試して駄目だったもの:
+
+| 案 | 結果 |
+| --- | --- |
+| `BackendTLSPolicy`(Gateway API 標準) | **Cilium 1.20.1 は Accepted にするだけで実装していない。** Envoy の cluster に `transport_socket` が付かず、backend へ平文のまま繋ぐ。`sectionName` をポート名にしても番号にしても同じ。Web UI まで 400 になった |
+| AdGuard の `tls.allow_unencrypted_doh: true` | **AdGuard は停止時に設定ファイルを書き直す**ので、Pod を止めずに足した値は消える。入れるには Pod を止めてから編集する必要がある |
+
+**採った形: nginx のサイドカーを足して `/dns-query` だけをそこへ回す。** サイドカーは同じ Pod の
+`https://127.0.0.1:443` へ渡す(loopback なので証明書の検証はしない)。Web UI は 80 のまま。
+3proxy と同じ形なので、Cilium が `BackendTLSPolicy` を実装したら両方まとめて消せる。
+
+**教訓**: 前段の置き換えでは「同じ URL が同じものを返すか」だけでなく、**その backend が
+何をポートごとに出し分けているか**を見る。HTTP のステータスだけ見ていると気付けない。
+
 ### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
 
 「Entra 側でトークンを小さくして Cilium の Envoy 機能で OIDC を賄う」案を検討したが、**Cilium には
