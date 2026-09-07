@@ -66,7 +66,8 @@ nodePort:
   # (`cilium-dbg bpf lb list` に `l7-load-balancer / L7LB Proxy Port: 80`)として載り、
   # **ホスト自身から** ノードの 80/443 に繋ぐと応答が返らない(2026-09-07 実測)。
   # 外から来る通信と Pod からの通信は Envoy が直接 bind したソケットに入るので影響しない。
-  # ホスト上にこの経路を使うものは無い(`grep -rl doany.io /usr/local/bin /etc/cron.d` が空)。
+  # ホスト上にこの経路を使うものは無い
+  # (`grep -rl doany.io /usr/local/bin /etc/cron.d /etc/systemd/system` が空)。
   range: "80,443"
 
 # Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
