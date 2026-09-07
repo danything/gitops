@@ -8,8 +8,8 @@ metadata:
   name: postgres-data
   namespace: mattermost
   annotations:
-    # ファイルとしてのバックアップはホストの backup/k3s-backup がやっている。
-    # k8up には論理バックアップ(pg_dump)だけ取らせるので、PVC そのものは対象外にする。
+    # **DB はファイルとして取らない。** postgres.yaml の k8up.io/backupcommand が
+    # pg_dump を出しているので、そちらだけで足りる。
     k8up.io/backup: "false"
 spec:
   accessModes:
@@ -25,9 +25,9 @@ metadata:
   name: mattermost-data
   namespace: mattermost
   annotations:
-    # ファイルとしてのバックアップはホストの backup/k3s-backup がやっている。
-    # k8up には論理バックアップ(pg_dump)だけ取らせるので、PVC そのものは対象外にする。
-    k8up.io/backup: "false"
+    # **こちらはファイルとして取る。** 添付とプラグインだけで DB ではないので、
+    # 動いたままコピーしても部分的に古くなるだけ。
+    k8up.io/backup: "true"
 spec:
   accessModes:
     - ReadWriteOnce
