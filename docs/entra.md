@@ -172,7 +172,7 @@ wg-easy がそれを必須にしている)ので無視した。あちらには�
 `https://wg.doany.io/oauth2/callback` のリダイレクト URI は消してよい**(2026-09-07 に VPN を
 NetBird へ移した。理由は [decisions.md](decisions.md))。NetBird は内蔵 IdP(Dex)を持っていて、
 Entra は「外部 IdP」として NetBird のダッシュボードから足す形になる。
-リダイレクト URI は `https://nd.doany.io/oauth2/callback` で固定。
+リダイレクト URI は `https://nb.doany.io/oauth2/callback` で固定。
 
 **これでこのテナントに認可用のグループは無い。** 誰が管理者かは、アプリ登録 `Main` の
 エンタープライズ アプリケーション → ユーザーとグループ で `Admins` ロールを割り当てるかどうかだけで決まる。

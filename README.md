@@ -47,8 +47,8 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 
 | アプリ名 | 規則 | 結果 |
 | --- | --- | --- |
-| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`、Argo CD → `ac`、AdGuard Home → `ah` |
-| 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、netbird → `nd`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
+| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`、NetBird(Net + Bird)→ `nb`、Argo CD → `ac`、AdGuard Home → `ah` |
+| 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
 `l`(lgtm)・`p`(portainer)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。

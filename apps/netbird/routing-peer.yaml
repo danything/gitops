@@ -85,7 +85,7 @@ spec:
                   name: netbird-routing-peer
                   key: setup-key
             - name: NB_MANAGEMENT_URL
-              value: https://nd.doany.io
+              value: https://nb.doany.io
             - name: NB_LOG_LEVEL
               value: info
             # **既定の 51820 は wg-easy が hostNetwork で掴んでいる。**

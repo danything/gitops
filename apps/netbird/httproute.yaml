@@ -1,4 +1,4 @@
-# NetBird(nd.doany.io)。**1 つのホスト名に HTTP と gRPC が混在する**のが厄介なところで、
+# NetBird(nb.doany.io)。**1 つのホスト名に HTTP と gRPC が混在する**のが厄介なところで、
 # combined コンテナは同じ 80 番で
 #   - REST/WebSocket(/api、/oauth2、/relay、/ws-proxy/)
 #   - gRPC h2c(management.ManagementService、signalexchange.SignalExchange)
@@ -19,7 +19,7 @@ spec:
     - name: doany
       namespace: kube-system
       sectionName: https
-  hostnames: ["nd.doany.io"]
+  hostnames: ["nb.doany.io"]
   rules:
     - matches:
         # ピア(netbird クライアント)が繋ぎっぱなしにする管理チャネル
@@ -46,7 +46,7 @@ spec:
     - name: doany
       namespace: kube-system
       sectionName: https
-  hostnames: ["nd.doany.io"]
+  hostnames: ["nb.doany.io"]
   rules:
     # combined サーバが答える口。Gateway API は前方一致の長いほうが勝つので、
     # 下の `/` (ダッシュボード)より先に当たる。

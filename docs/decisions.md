@@ -643,7 +643,7 @@ GUI クライアント・IdP 連携・ポリシーまで同じリポジトリに
 - **`livenessProbe` は付けない。** healthcheck は `localhost:9000` にしか bind されず、kubelet からは必ず落ちる
 - **外部 IdP(Entra)は設定ファイルに書けない。** 0.62 以降、外部 IdP は config ではなく**ストアに入るデータ**になった。
   ダッシュボードか `POST /api/identity-providers` で足す。リダイレクト URI は issuer + `/callback` で
-  決まる(`idp/dex/connector.go`)ので `https://nd.doany.io/oauth2/callback` 固定、Entra 側を先に作れる
+  決まる(`idp/dex/connector.go`)ので `https://nb.doany.io/oauth2/callback` 固定、Entra 側を先に作れる
 
 ## 公開経路(HTTPRoute)をどこに置くか(2026-09-07)
 

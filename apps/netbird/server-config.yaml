@@ -19,7 +19,7 @@ data:
       # TLS は Cilium Gateway が終端するので、ここは平文 80 で待つ。
       listenAddress: ":80"
       # ピアが実際に繋ぎに来るアドレス。relay の rels:// URL もここから作られる。
-      exposedAddress: "https://nd.doany.io:443"
+      exposedAddress: "https://nb.doany.io:443"
       # 内蔵 STUN。**リバースプロキシを通せない**(UDP なので)ため hostPort でノードに直接出す。
       stunPorts:
         - 3478
@@ -34,13 +34,13 @@ data:
       auth:
         # 内蔵 IdP(Dex)。**外部 IdP は要らない**(0.62 以降)。Entra を足すのは後から
         # ダッシュボードの UI でできるので、まずはローカルユーザーだけで動かす。
-        issuer: "https://nd.doany.io/oauth2"
+        issuer: "https://nb.doany.io/oauth2"
         localAuthDisabled: false
         signKeyRefreshEnabled: true
         sessionCookieEncryptionKey: "@SESSION_COOKIE_ENCRYPTION_KEY@"
         dashboardRedirectURIs:
-          - "https://nd.doany.io/nb-auth"
-          - "https://nd.doany.io/nb-silent-auth"
+          - "https://nb.doany.io/nb-auth"
+          - "https://nb.doany.io/nb-silent-auth"
         cliRedirectURIs:
           - "http://localhost:53000/"
 
