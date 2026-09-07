@@ -15,6 +15,13 @@ rules:
   - apiGroups: [""]
     resources: [namespaces, services]
     verbs: [get, list, create, update, patch]
+  # cilium-drift.yml が git の値とクラスタを見比べるためだけの読み取り。
+  # **`resourceNames` でこの 1 つに絞ってある**ので、他の ConfigMap は読めない
+  # (`list` は名前で絞れないので付けない。`get` だけで足りる)。
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [cilium-config]
+    verbs: [get]
   - apiGroups: [apps]
     resources: [deployments]
     verbs: [get, list, create, update, patch]

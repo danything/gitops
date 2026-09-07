@@ -1,0 +1,8 @@
+# **cilium の chart のバージョンはここが唯一の出どころ。**
+# これまで README と values.yaml のコメントの中にしか無く、`helm upgrade --version 1.20.1` と
+# 手で打つ前提だった。**文章の中の数字は Renovate が追えない**ので、機械が読める形に出した。
+#
+# 追うのは .github/workflows/cilium-drift.yml と renovate.json の customManagers。
+# 形は talos/versions.yaml と揃えてある。
+# renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io
+version: 1.20.1

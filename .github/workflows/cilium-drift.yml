@@ -1,0 +1,99 @@
+# **cilium の値が git とクラスタでズレていないかを見る。読むだけ。**
+#
+# cilium は Argo CD の管理外(CNI 本体なので、それが動いていないと Argo CD も動かない)。
+# つまり bootstrap/cilium/values.yaml を直しても、**人が `helm upgrade` を打つまで
+# クラスタには届かない。** 逆に、クラスタ側だけ手でいじった設定も git には出てこない。
+# 実際にどちらも起きていて、`node-port-range` が Helm に記録されないまま動いていた。
+#
+# **当てるところまでは自動化しない。** `helm upgrade` には ClusterRole /
+# ClusterRoleBinding / Secret / DaemonSet の書き込みが要る ── **ClusterRoleBinding を
+# 書けるということは、自分に何の権限でも足せるということ**で、実質 cluster-admin になる。
+# 公開リポジトリの OIDC 主体に渡すものではない(bootstrap/apiserver/rbac.yaml の方針)。
+# Talos に移ると cilium は inlineManifests になり `helm upgrade` 自体を使わなくなるので、
+# ここに手をかけても捨てることになる。
+#
+# **代わりにズレを見つけるところまでを自動でやる。** 権限は cilium-config の `get` だけ。
+name: cilium drift
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - bootstrap/cilium/**
+      - .github/workflows/cilium-drift.yml
+  # クラスタ側だけを手でいじったときは push が無いので、定期的にも見る。
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+concurrency: cilium-drift
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: chart の版を読む
+        id: v
+        run: |
+          set -euo pipefail
+          V=$(yq -r '.version' bootstrap/cilium/version.yaml)
+          echo "chart=$V" >> "$GITHUB_OUTPUT"
+          echo "cilium chart $V"
+
+      - name: OIDC トークンを取る
+        id: token
+        run: |
+          set -euo pipefail
+          T=$(curl -sSf \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://ks.doany.io" | jq -r .value)
+          echo "::add-mask::${T}"
+          echo "token=${T}" >> "$GITHUB_OUTPUT"
+
+      - name: values.yaml から ConfigMap を描いて live と比べる
+        env:
+          T: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          k() {
+            kubectl --server=https://ks.doany.io:6443 \
+                    --certificate-authority=bootstrap/apiserver/ca.crt \
+                    --token="$T" "$@"
+          }
+          # **`--kube-version` を渡すこと。** チャートは Capabilities を見て分岐するので、
+          # 渡さないと helm の既定版で描かれて偽の差分が出る。
+          KV=$(k version -o json | jq -r .serverVersion.gitVersion)
+          echo "kube-version=$KV"
+
+          helm repo add cilium https://helm.cilium.io >/dev/null
+          helm template cilium cilium/cilium --version "${{ steps.v.outputs.chart }}" \
+            -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$KV" \
+            --show-only templates/cilium-configmap.yaml \
+            | yq -o=json '.data' > rendered.json
+
+          k -n kube-system get cm cilium-config -o json | jq '.data' > live.json
+
+          # YAML はここまでで JSON にしてある。python は標準ライブラリだけで済ませる
+          # (ランナーに PyYAML が入っている保証は無い)。
+          python3 - <<'PY'
+          import sys, json
+          r = json.load(open("rendered.json"))
+          l = json.load(open("live.json"))
+          only_git  = sorted(set(r) - set(l))
+          only_live = sorted(set(l) - set(r))
+          differ    = sorted(k for k in set(r) & set(l) if r[k] != l[k])
+          if not (only_git or only_live or differ):
+              print(f"一致({len(r)} キー)")
+              sys.exit(0)
+          for k in only_git:  print(f"::error::git にしか無い: {k} = {r[k]!r}")
+          for k in only_live: print(f"::error::live にしか無い: {k} = {l[k]!r}")
+          for k in differ:    print(f"::error::値が違う: {k}  git={r[k]!r}  live={l[k]!r}")
+          print("::error::bootstrap/cilium/README.md の手順で helm upgrade を当てること")
+          sys.exit(1)
+          PY

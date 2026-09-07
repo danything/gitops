@@ -22,13 +22,14 @@
             "datasourceTemplate": "helm"
         },
         {
-            "description": "talos/versions.yaml の `# renovate: datasource=… depName=…` の次の行にある version を見る。Talos の版は machine config にも README にも散らばるので、追う対象はこの 1 ファイルに寄せている。",
+            "description": "`# renovate: datasource=… depName=… [registryUrl=…]` の次の行にある version を見る。Talos の版は machine config にも README にも、cilium の chart の版は README と values.yaml のコメントにも散らばるので、追う対象をこの 2 ファイルに寄せている。",
             "customType": "regex",
             "managerFilePatterns": [
-                "^talos/versions\\.yaml$"
+                "^talos/versions\\.yaml$",
+                "^bootstrap/cilium/version\\.yaml$"
             ],
             "matchStrings": [
-                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
+                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
             ]
         }
     ],

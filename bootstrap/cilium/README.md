@@ -9,9 +9,11 @@ Argo CD は同期しない(`bootstrap/` は対象外)。手で当てる。
 
 ```shell
 helm repo add cilium https://helm.cilium.io
-helm upgrade --install cilium cilium/cilium --version 1.20.1 \
+helm upgrade --install cilium cilium/cilium --version "$(yq -r .version version.yaml)" \
   --namespace kube-system -f values.yaml
 ```
+
+版は [version.yaml](version.yaml) が唯一の出どころ(Renovate がここを追う)。
 
 ## **`helm upgrade` の前に必ず [values.yaml](values.yaml) を読むこと**
 
@@ -39,6 +41,19 @@ helm upgrade cilium cilium/cilium --version 1.20.1 -n kube-system -f values.yaml
   | sed -n '/^MANIFEST:/,$p' | tail -n +2 > /tmp/after.yaml
 diff -u /tmp/before.yaml /tmp/after.yaml | grep -E '^[+-][^+-]' | grep -vE 'ca\.crt|tls\.(crt|key)'
 ```
+
+## ズレは CI が見ている
+
+**当てるのは人だが、当て忘れとクラスタ側の直接編集は
+[../../.github/workflows/cilium-drift.yml](../../.github/workflows/cilium-drift.yml) が見つける。**
+`values.yaml` から ConfigMap を描いて live と突き合わせるだけで、**読むだけ**(権限は
+`cilium-config` の `get` 1 つ)。`bootstrap/cilium/**` を触ったときと毎週月曜に走る。
+
+**`helm upgrade` そのものは自動化しない。** ClusterRole / ClusterRoleBinding / Secret /
+DaemonSet の書き込みが要り、**ClusterRoleBinding を書けるということは自分に何の権限でも
+足せるということ**で、実質 cluster-admin を公開リポジトリの OIDC 主体に渡すことになる。
+Talos に移ると cilium は inlineManifests になって `helm upgrade` 自体を使わなくなるので、
+そこに手をかけても捨てることになる。
 
 ## 当てたあとに確認すること
 

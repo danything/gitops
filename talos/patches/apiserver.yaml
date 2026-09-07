@@ -53,5 +53,9 @@ configuration:
           message: "danything/gitops 以外は受け付けない"
         - expression: 'claims.ref == "refs/heads/main"'
           message: "main 以外のブランチからは受け付けない"
-        - expression: 'claims.workflow_ref.startsWith("danything/gitops/.github/workflows/bootstrap-apply.yml@")'
-          message: "bootstrap-apply.yml 以外のワークフローからは受け付けない"
+        # **bootstrap/apiserver/authentication-config.yaml と同じ内容にすること。**
+        # 2 つのワークフローを許している(bootstrap-apply は書き込み、cilium-drift は読むだけ)。
+        - expression: >-
+            ["bootstrap-apply.yml", "cilium-drift.yml"].exists(w,
+              claims.workflow_ref.startsWith("danything/gitops/.github/workflows/" + w + "@"))
+          message: "bootstrap-apply.yml と cilium-drift.yml 以外のワークフローからは受け付けない"
