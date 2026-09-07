@@ -37,6 +37,20 @@ ipam:
 ipv6:
   enabled: true
 
+# **送信元 IP を保つのに要る(2026-09-07)。** 既定は iptables で SNAT していて、
+# **hostPort に入ってくる IPv4 の送信元が cilium_host(10.42.0.148)に潰れていた。**
+# IPv6 は素通りしていたので気づきにくい。実害:
+#
+# | | |
+# | --- | --- |
+# | NetBird の STUN(3478) | 外側アドレスを誤って返す → **IPv4 の NAT 越えが成立せず relay 専用に落ちる** |
+# | AdGuard(53/853) | IPv4 クライアントのクエリログとクライアント別ルールが効かない |
+# | 3proxy(3129/8444)・Mattermost calls(8443) | 送信元が全部同じに見える |
+#
+# `kubeProxyReplacement: true` と組み合わせるときの推奨設定でもある。
+bpf:
+  masquerade: true
+
 # **既定はどれも無効。** 有効にしないと Pod は Running なのにホストのポートに何も来ない
 # (eBPF なので `ss` にも現れない。確認は `cilium-dbg service list`)。
 hostPort:
