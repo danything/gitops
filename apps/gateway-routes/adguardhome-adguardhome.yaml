@@ -17,7 +17,6 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        # **80 ではなく 443。** DoH(/dns-query)は AdGuard の HTTPS でしか出ない。
-        # backend 側の TLS 検証は backendtlspolicy.yaml。
+        # backend は平文の 80 を使う(理由は service-web.yaml)。
         - name: adguardhome-web
-          port: 443
+          port: 80
