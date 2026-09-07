@@ -371,6 +371,49 @@ Cilium 1.21 未満のあいだは Gateway 越しのセッション固定が無�
 Envoy Gateway 自体はマイナーが 2 週間強に 1 回出てサポート窓も短い。
 **Talos / Kubernetes / Gateway API CRD / Envoy Gateway の 4 つのバージョンマトリクス**を回す前提でコストを見る。
 
+## chart を配るときと、chart で入れるとき(2026-09-07)
+
+**「HelmChart」は 2 つの別物を指す。** ここを混ぜると話が噛み合わない。
+
+| | 何か | この構成での扱い |
+| --- | --- | --- |
+| `HelmChart` CRD(`helm.cattle.io/v1`) | **k3s の入れ方**。helm-controller が CR を見て helm を Job で走らせる | **やめた**(下記) |
+| Helm chart そのもの | **配る形**。`Chart.yaml` + `templates/` を OCI で push する | **続ける**。denpa と yosegaki は今も配っている |
+
+### `HelmChart` CRD をやめた理由
+
+chart が悪いのではなく、**入れ方**が合わなくなった。
+
+- **k3s 固有で Talos に無い。** OS を替える時点で全部書き直しになる
+- **CR を消すと helm がアンインストールされる。** finalizer 駆動なので外しても付け直される。
+  CRD を `templates/` に置く chart だと CRD ごと消えて CR が巻き添えになる
+- **ArgoCD と二重管理になる。** 同じリソースを 2 つのリコンサイラが見ることになり、
+  差分も同期状態も prune の制御も ArgoCD 側から見えない
+- **Job で走るので chart 側の事情が漏れる。** erpnext は Job 名に描き出した時刻を入れるので、
+  同期のたびに作り直される
+
+ArgoCD が居ない k3s 単体なら悪い選択ではない。**居るなら重複でしかない。**
+
+### 配る chart で気を付けること
+
+**このセッションで実際に踏んだものだけ**を挙げる。自分の chart(denpa / yosegaki)は
+どれも該当していない(CRD 無し、名前は固定、`podAnnotations` と `resources` を出せる)。
+
+| やらないこと | 踏んだ例 |
+| --- | --- |
+| **リソース名に時刻や乱数を入れない** | erpnext の `erpnext-new-site-20260907103337`。GitOps のリコンサイラは同期のたびに別物として作り直す。一度きりの Job なら名前を固定して、再実行は利用者に任せる |
+| **CRD は `templates/` ではなく `crds/` に置く** | infisical の `secrets-operator`。`templates/` にあるとアンインストールで CRD ごと消え、CR が全部巻き添えになる。`crds/` なら helm は消さない |
+| **全ワークロードに `podAnnotations` を出す** | erpnext の `mariadb-sts` に無く、k8up の `backupcommand` を付けられなかった。注釈は operator(k8up・Infisical・ArgoCD)が振る舞いを足す口 |
+| **`resources` を出す。既定を空にしない** | erpnext 8.0.78 が連れてきた valkey subchart が `resources: {}` かつ `maxmemory` 無し。ノードの空きまで伸びうる |
+| **patch で中身を入れ替えない** | erpnext 8.0.15 → 8.0.78(patch)が Dragonfly を Valkey に差し替え、values に書いたチューニングが黙って無効になった |
+| **入口を既定で作らない** | `Ingress` を既定 true にしない。denpa / yosegaki は `httpRoute` / `ingress` / `traefik` を全部既定 false にして選ばせている |
+
+### 入れ方は利用者に選ばせる
+
+chart 側は入れ方を知らなくていい。`helm install` でも ArgoCD の `Application` でも
+Flux の `HelmRelease` でも同じものが入るのが正しい。**このクラスタは ArgoCD の
+`Application` に統一した。**
+
 ## HelmChart CRD から ArgoCD の Application へ(2026-09-07)
 
 `HelmChart`(`helm.cattle.io`)は k3s の helm-controller が提供するもので **Talos には無い**。
