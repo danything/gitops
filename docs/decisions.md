@@ -569,6 +569,28 @@ Valkey は Redis 系なので io_uring の RLIMIT_MEMLOCK 問題は無く、`pro
 ただし chart の既定は `resources: {}` で上限が無いので、**メモリの上限は自分で入れる**こと。
 mariadb は `mariadb:10.6` のままなので DB のメジャーは動かない。
 
+## PVC を守る仕掛けをやめた(2026-09-07)
+
+**「git で消したものは消える」を優先する**、という判断(本人)。それまでは二重に守っていた。
+
+| 仕掛け | やめた理由 |
+| --- | --- |
+| PVC の `argocd.argoproj.io/sync-options: Prune=false,Delete=false` | **これが本丸。** これがある限り git から消しても PVC は残る。GitOps の一貫性を損なう |
+| StorageClass `local-path-retain`(`reclaimPolicy: Retain`) | **追われない状態を作る。** 実際、35 日と 44 日放置された Released の PV が 3 本あった(2026-09-07 の掃除で発見) |
+
+**代わりの後ろ盾はバックアップ。** 日次の restic(R2)に加えて、DB 3 つは k8up が論理バックアップを取る。
+誤って消したときの最大損失は 24 時間ぶん。**この判断は復元リハーサルが Cilium 構成で通ってから**行った
+([docs/restore-drill.md](restore-drill.md))。通らなければ守りを外す根拠が無かった。
+
+**承知しておくこと**: `Delete=false` も外したので、**Argo CD の Application を消すと PVC も消える**。
+マニフェストを消すのは git のレビューを通るが、Application の削除は UI のボタン 1 つで済む。
+そこの重みは違う、という点は残る。
+
+**`storageClassName` はバインド済み PVC では変更も削除もできない**(API が拒否する)。
+既存ぶんは `local-path-retain` のままで、PV の `persistentVolumeReclaimPolicy` を `Delete` に
+パッチして挙動だけ揃えた。マニフェストから消せるのは **Talos の再構築時**で、
+そのとき既定の `local-path`(reclaim は `Delete`)になる。
+
 ## バックアップに何を含めるか
 
 R2 の無料枠は 10 GB。実サイズは 2026-09-06 時点で 3.3 GiB だったが、**2026-09-07 に 13.92 GiB まで育って超えていた**

@@ -3,8 +3,6 @@ kind: PersistentVolumeClaim
 metadata:
   name: adguardhome-conf
   namespace: adguardhome
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes:
     - ReadWriteOnce
@@ -18,8 +16,6 @@ kind: PersistentVolumeClaim
 metadata:
   name: adguardhome-work
   namespace: adguardhome
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes:
     - ReadWriteOnce
@@ -33,8 +29,6 @@ kind: PersistentVolumeClaim
 metadata:
   name: adguardhome-ssl
   namespace: adguardhome
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes:
     - ReadWriteOnce
