@@ -58,12 +58,6 @@ nodePort:
   # (AdGuard の 853、Mattermost calls の 8443、3proxy の 3129 が一斉に落ちた)。
   #
   # **hostNetwork にしても外せない。** Service は NodePort 型のまま残り(下の
-  # gatewayAPI.hostNetwork のコメント)、既に割り当て済みの 80/443 を持ち続ける。
-  # ここを既定に戻すと、その Service を次に更新したとき API サーバが弾く。
-  # 外すには先に Service の nodePort を高位に振り直す必要がある(未実施)。
-  #
-  #
-  # **hostNetwork にしても外せない。** Service は NodePort 型のまま残り(下の
   # gatewayAPI.hostNetwork のコメント)、この 2 つの NodePort フロントエンドが
   # **経路そのもの**になっている ── 2026-09-08 に実測した。
   #
@@ -80,7 +74,8 @@ nodePort:
   #
   # 1. ここと k3s の `service-node-port-range=80-32767` は**外せない**
   # 2. **復元では当て直しが要る。** Cilium が Service を作り直すと API サーバが
-  #    範囲内のランダムな値を割り当てる。`recovery/restore.sh` がパッチを当てている
+  #    範囲内のランダムな値を割り当てる。k3s 期は `recovery/restore.sh` が、
+  #    Talos 期は `.github/workflows/bootstrap-apply.yml` がパッチを当てる
   # 3. 副作用として、**ホスト自身から**ノードの 80/443 に繋ぐと応答が返らない。
   #    ホスト上にこの経路を使うものは無い
   #    (`grep -rl doany.io /usr/local/bin /etc/cron.d /etc/systemd/system` が空)
