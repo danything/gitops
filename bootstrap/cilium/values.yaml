@@ -59,6 +59,18 @@ gatewayAPI:
 l2announcements:
   enabled: true
 
+# **クラスタ内の通信を見る画面。** Cilium 本体の hubble は元から有効(:4244 で待ち受け)で、
+# 足りていなかったのは Relay と UI の 2 Pod だけ。
+#
+# **UI 自身は認証を持たない。** oauth2-proxy を前段に置いて守る
+# (Cilium の Gateway には ext auth が無いので、*.s.doany.io と同じ「前段プロキシ」方式。
+# ../auth/hubble-proxy.yaml)。UI の Service を直接 HTTPRoute に繋がないこと。
+hubble:
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
 securityContext:
   privileged: true
 operator:
