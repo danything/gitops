@@ -29,12 +29,25 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kub
 
 `clusterconfig/` と平文の秘密は `.gitignore` 済み。
 
-## まだ確認できていないこと
+## 確認できたこと / できていないこと
 
-QEMU の user-mode ネットワークでは試せず、実機でしか確かめられないもの:
+`patches/` のインタフェース名とディスクだけを VM 用に読み替えて QEMU で実際に起動した
+(2026-09-07。手順と証拠は [../docs/talos.md](../docs/talos.md)「VM ブートドリル」)。
 
-- bond0(eno1 + eno2、balance-alb)と eno4 の static
-- **IPv6 の `::2` 固定**。NetworkManager の `ipv6.token` に相当する設定が Talos に見当たらないので、
-  `patches/cluster.yaml` では stable-privacy(MAC を出さない)にして、AAAA は cloudflare-ddns に任せる方針
-- wg-easy の hostNetwork UDP 51820
-- PT3 を KubeVirt に渡す vfio(`patches/main.yaml`)
+確認できた:
+
+- **bond0(balance-alb、miimon 100)が上がる**。片方の carrier を落とすとフェイルオーバーする
+- **静的 IPv6 `::2` が SLAAC と並んで載る**。IPv6 の既定経路は RA で来る
+  (ただし `net.ipv6.conf.bond0.accept_ra: "2"` が要る。無いと Kubernetes 起動後に消える)
+- **wireguard はカーネル組み込み**(`/sys/module/wireguard/version` = 1.0.0)。
+  privileged + hostNetwork の Pod で `wg-quick up` が通り、UDP 51820 がホスト netns で LISTEN する。
+  Ubuntu で要った AppArmor の回避は不要
+- eno4 相当の `disable_ipv6: "1"`、`UnattendedInstallConfig` の CEL diskSelector、
+  schematic のカーネル引数(`intel_iommu=on iommu=pt`)、`vfio_pci` / `vfio_iommu_type1` の読み込み
+
+まだ確認できていないこと(VM では原理的に確かめられない):
+
+- 実機の NIC 名(`eno1`/`eno2`/`eno4`)と tg3 ドライバでの bond、実際のスイッチ相手の balance-alb
+- ISP のルータからの RA と `240f:6d:842b:1::/64` の実プレフィックス
+- ディスクセレクタ `/dev/sda`(VM では `/dev/vda` で試した)
+- PT3 を KubeVirt に渡す vfio のパススルー本体(`patches/main.yaml`。モジュールが載ることまで)
