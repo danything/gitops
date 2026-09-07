@@ -3,29 +3,18 @@ kind: Service
 metadata:
   name: adguardhome-web
   namespace: adguardhome
-  annotations:
-    traefik.ingress.kubernetes.io/service.serversscheme: https
-    traefik.ingress.kubernetes.io/service.serverstransport: adguardhome-insecure-transport@kubernetescrd
 spec:
   selector:
     app: adguardhome
   ports:
-    - name: https
-      protocol: TCP
-      port: 443
-      targetPort: 443
-    # Gateway API 経由はこちらを使う。Traefik は backend も HTTPS で繋いでいて
-    # (上の serversscheme/serverstransport 注釈)、Gateway API で同じことをするには
-    # BackendTLSPolicy が要るうえ検証の省略が素直に書けない。クラスタ内の通信なので平文でよい。
+    # HTTPRoute はこちらの平文の 80 に繋ぐ。AdGuard 自身は 443 も待ち受けているが、
+    # backend を HTTPS にすると BackendTLSPolicy が要るうえ、自己署名なので検証の
+    # 省略を素直に書けない。クラスタ内の通信なので平文でよい。
     - name: http
       protocol: TCP
       port: 80
       targetPort: 80
----
-apiVersion: traefik.io/v1alpha1
-kind: ServersTransport
-metadata:
-  name: insecure-transport
-  namespace: adguardhome
-spec:
-  insecureSkipVerify: true
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443

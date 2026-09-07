@@ -1,0 +1,27 @@
+# *.s.doany.io の中継先。LAN のホスト(10.10.0.2)を名前で指せるようにするためだけの
+# Service と、手書きの EndpointSlice。Endpoint は selector では作れない(Pod ではない)。
+# 使うのは auth-sub の oauth2-proxy(sub-proxy.yaml の OAUTH2_PROXY_UPSTREAMS)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: sub-backend
+  namespace: kube-system
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: sub-backend-manual
+  namespace: kube-system
+  labels:
+    kubernetes.io/service-name: sub-backend
+addressType: IPv4
+ports:
+  - name: http
+    port: 80
+endpoints:
+  - addresses: ["10.10.0.2"]

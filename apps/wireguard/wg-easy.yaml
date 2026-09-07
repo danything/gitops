@@ -104,11 +104,11 @@ spec:
                       "$IPT6" -t mangle -A FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360
           env:
             # hostNetworkでは既定の0.0.0.0だとWeb UIがグローバルIPに直接露出する。
-            # ノードのLAN IPに限定し、公開はTraefik経由に統一する。
+            # ノードのLAN IPに限定し、公開は Gateway 経由に統一する。
             #
             # ただしLAN IPに絞っても、ルータがWANのtcp/51821を10.0.0.2へ
             # 転送しているぶんは外から直接叩けてしまう (実測で到達を確認)。
-            # バインド先はTraefikがServiceのエンドポイントとして叩く必要が
+            # バインド先は Gateway が Service のエンドポイントとして叩く必要が
             # あるので変えられないため、ホスト側で私設アドレス以外からの
             # tcp/51821 をdropしている:
             #   /etc/nftables.d/wg-easy-guard.nft + wg-easy-guard.service
@@ -121,7 +121,7 @@ spec:
             # INSECURE はリッスンをHTTPS化する設定ではなく、
             #   - OIDCのredirect_uriのスキーム (X-Forwarded-Proto は見ていない)
             #   - セッションcookieのSecure属性
-            # の2つを決めるだけ。Traefikで終端していてもブラウザとの間はHTTPSなので
+            # の2つを決めるだけ。Gateway で終端していてもブラウザとの間はHTTPSなので
             # false が正しい。true にすると redirect_uri が http:// になり、
             # Entra が AADSTS50011 (redirect URI mismatch) で拒否する。
             - name: INSECURE
@@ -230,36 +230,3 @@ spec:
       port: 51821
       targetPort: 51821
       protocol: TCP
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: wg-easy
-  namespace: wireguard
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls.certresolver: mydnschallenge
-    # forward-auth(oauth2-proxy)は利用者の判断で外している。
-    # 認証は wg-easy 自身のパスワードログインのみ。
-    #
-    # 参考: wg-easy のネイティブOIDCは Entra とは組み合わせられない。
-    # userinfo 応答に email_verified が含まれることを必須としているが
-    # (src/server/utils/oauth.ts の assertHasOauthProps)、Entraの userinfo は
-    # sub/name/family_name/given_name/picture/email しか返さず、しかも公式に
-    # 「追加・カスタマイズ不可」と明記されているため必ず401になる。
-spec:
-  ingressClassName: traefik
-  rules:
-    - host: wg.doany.io
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: wg-easy
-                port:
-                  number: 51821
-  tls:
-    - hosts:
-        - wg.doany.io

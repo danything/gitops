@@ -1,7 +1,7 @@
 # Calls carries its media over WebRTC on its own port, not over HTTP, so it
-# can't ride the Traefik ingress -- it needs 8443 exposed on the node itself,
+# can't ride the Gateway -- it needs 8443 exposed on the node itself,
 # the same way adguardhome publishes DNS. externalIPs adds the office LAN
-# side; ServiceLB covers the 10.0.0.2 side that the router forwards to.
+# side; the hostPort covers the 10.0.0.2 side that the router forwards to.
 #
 # externalTrafficPolicy: Local keeps the client IP intact, which is what the
 # plugin matches its ICE candidates against.

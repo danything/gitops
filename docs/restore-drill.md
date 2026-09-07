@@ -5,7 +5,7 @@ Hyper-V は WSL から管理者権限で触れないので、本番サーバ(46 
 
 ## 副作用を出さないための遮断(VM の中で最初にやる)
 
-復元されたクラスタは本物と同じ設定で立ち上がるので、そのままだと cloudflare-ddns が DNS を書き換え、Traefik が ACME を叩き、
+復元されたクラスタは本物と同じ設定で立ち上がるので、そのままだと cloudflare-ddns が DNS を書き換え、cert-manager が ACME を叩き、
 ArgoCD が Mattermost に通知し、Infisical がメールを出す。raw テーブルで先に落とす(k3s が後から入れる FORWARD のルールより先に評価される)。
 
 ```shell

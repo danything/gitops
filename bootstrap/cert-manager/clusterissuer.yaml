@@ -1,6 +1,6 @@
-# Let's Encrypt を Cloudflare の DNS-01 で。Traefik 内蔵 ACME(mydnschallenge)の置き換え先。
-# トークンは Traefik と同じ Secret を cert-manager の namespace にも置く必要がある
-# (cert-manager は自分の namespace の Secret しか読めない)。
+# Let's Encrypt を Cloudflare の DNS-01 で。ワイルドカード証明書を取るので DNS-01。
+# トークンは同じ namespace の Secret にしか置けない(cert-manager は自分の namespace の
+# Secret しか読まない)ので、cloudflare-secret.yaml がここに置いている。
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

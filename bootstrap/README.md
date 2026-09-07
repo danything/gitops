@@ -2,7 +2,7 @@
 
 クラスタそのものを組む層。**Argo CD は同期しない**(`apps/` の外にあるため)。手で `kubectl apply` する。
 秘密を含む 4 ファイル(`infisical/secrets.yaml`、`infisical/helmchart.yaml`、`argocd/helmchart.yaml`、
-`traefik/cloudflare-secret.yaml`)は SOPS(age)で暗号化してあるので、適用は `sops -d <file> | kubectl apply -f -`。
+`cert-manager/cloudflare-secret.yaml`)は SOPS(age)で暗号化してあるので、適用は `sops -d <file> | kubectl apply -f -`。
 鍵は [`recovery/sops-age.key.age`](../recovery/)。
 
 いま動いているのは Ubuntu 26.04(NetworkManager、netplan バックエンド、TZ は UTC)の暫定構成で、
@@ -16,7 +16,7 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
 `secrets.infisical.com/auto-reload` 注釈のある Deployment は Secret 更新時に自動で入れ替わる。
 認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
 
-- `infisical/` … Infisical 本体(HelmChart + Postgres/Redis)と Ingress。
+- `infisical/` … Infisical 本体(HelmChart + Postgres/Redis)。公開は `apps/gateway-routes/` の HTTPRoute。
   `secrets.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は `local-path-retain` で、バックアップ対象に入っている。
 - `infisical/operator.yaml` … 純正 operator の HelmChart と、認証用の SA `infisical-auth` + RBAC。

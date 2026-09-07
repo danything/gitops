@@ -18,8 +18,8 @@ spec:
           image: quay.io/oauth2-proxy/oauth2-proxy:latest
           args:
             - --http-address=0.0.0.0:4180
-            # Only trust X-Forwarded-* from in-cluster traffic (i.e. Traefik
-            # itself), not literally anyone per --reverse-proxy's default.
+            # Only trust X-Forwarded-* from in-cluster traffic (i.e. the Cilium
+            # Gateway's Envoy), not literally anyone per --reverse-proxy's default.
             - --trusted-proxy-ip=10.42.0.0/16
           ports:
             - containerPort: 4180

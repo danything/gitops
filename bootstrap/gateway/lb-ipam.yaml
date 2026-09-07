@@ -1,6 +1,7 @@
-# Cilium LB-IPAM。Gateway の待ち受けアドレスを LAN から払い出す。
-# 公開しているサービス(Traefik / AdGuard / Mattermost calls)は hostPort でノードの IP に直接出しているので、
-# ここのプールは Gateway API への移行中に使う作業用アドレス。
+# Cilium LB-IPAM。Gateway の待ち受けアドレスを LAN から払い出す(いまは 10.10.0.53)。
+# ノードの IP でも受けられるように、Gateway の Service は 80/443 を nodePort としても開いている
+# (Cilium の nodePort.range を 80,443 に絞ってあるのはこのため。docs/decisions.md)。
+# AdGuard の DNS と Mattermost calls は Gateway を通らないので hostPort でノードの IP に直接出している。
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
