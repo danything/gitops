@@ -81,9 +81,15 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       - [x] **mattermost の postgres を `k8up.io/backupcommand` で論理バックアップ**(2026-09-07)。
             R2 に 9.3 MB の `pg_dump` が入ることまで確認済み。PVC には `k8up.io/backup: "false"` を
             付けて、ファイルはホスト側、論理バックアップは k8up、と分けてある。
-      - [ ] erpnext の MariaDB も同じ形に。chart 管理の StatefulSet なので values 経由になる。
-      - [ ] 残りの namespace の PVC をどうするか決める(いまはホストのスクリプトが全部見ている。
-            Talos に移る時点で k8up 側に寄せる)。
+      - [x] **erpnext の MariaDB(2026-09-07)。** chart の `mariadb-sts` に `podAnnotations` が無いので、
+            gunicorn の Pod から `mariadb-dump` を打つ形にした。`site_config.json` から接続情報を読むので
+            root のパスワードも要らない。実測 10.7 MB。
+      - [x] **infisical の Postgres(2026-09-07)。** **クラスタで一番失えないデータ。** 実測 3.97 MB。
+            本体は bootstrap に居るが、`Schedule` は apps に置いた(バックアップはアプリ層の関心事)。
+      - [x] operator を `skipWithoutAnnotation: true` にして「注釈の無い PVC は取らない」側に倒した。
+            k8up は論理バックアップ専用、ファイルはホストのスクリプト、という切り分け。
+      - [ ] 残りの namespace の PVC をどうするか決める。いまはホストのスクリプトが全部見ているので、
+            **Talos に移る時点で k8up 側に寄せる**(ホストにシェルが無くなるため)。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
@@ -112,8 +118,9 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       証明書はワイルドカード 1 枚、HTTP → HTTPS の 301 リダイレクトも Gateway 側に用意した。
 - [x] **切り替え前に残っていたもの**:
       - [x] `px.doany.io`(3proxy)は Gateway を使わず、Pod のサイドカー(nginx stream)が TLS を終端して
-        **hostPort 8444** で直接受ける形にした。443 では HTTPS 終端と TLS passthrough が同居できない
-        (ProtocolConflict)ため。8443 は Mattermost calls が先に取っている。**クライアントのポート変更が要る**
+        ホストのポートで直接受ける形にした。443 では HTTPS 終端と TLS passthrough が同居できない
+        (ProtocolConflict)ため。当初 8444 だったが、分かりにくいので **3129**(平文 3128 の隣)に移した
+        (2026-09-07)。クライアントの設定変更が要ったが完了済み。
       - [x] forward-auth の 2 本。`sub`(`*.s.doany.io`)は **oauth2-proxy を前段プロキシにする方式**で移した
         (専用インスタンス `auth-sub` が `--upstream` で LAN のホストへ中継。コールバックは既存の
         a.doany.io 側が受け、cookie secret を共有)。Traefik ダッシュボードは Traefik ごと消えるので対処不要
@@ -134,6 +141,36 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
 - [x] **クライアント IP は保たれている(2026-09-07 確認)。`externalTrafficPolicy` は `Cluster` のまま**。
       単一ノードでは backend が必ず同じノードに居るので Cilium は SNAT しない。
       証拠と、ノードを足すときにやることは [docs/decisions.md](docs/decisions.md)「クライアント IP」。
+
+### Phase 1.7 — 運用まわりの整備(2026-09-07)
+
+Traefik の撤去と前後してまとめて片付けたぶん。**どれも Talos 移行の前提になる。**
+
+- [x] **HelmChart CRD をアプリ層から一掃した。** 残るのは `argocd` と `infisical` の 2 つだけで、
+      どちらも Talos では `inlineManifests` に載せるので意図的に据え置き。
+      **CR を消すと helm がアンインストールされる**(finalizer 駆動。外しても付け直される)ので、
+      移すときは「Application を作る → helm のリリース Secret を消す → CR を消す」の順。
+- [x] **Cilium の Helm 値を git に入れた。これが今日いちばん危なかった。**
+      値が git に無く、`node-port-range: "80,443"` と `enable-l2announcements: true` は
+      ConfigMap の直接編集で当たっていて Helm に記録されていなかった。つまり
+      **素で `helm upgrade` すると黙って元に戻り、公開している Web が全部落ちる**状態だった。
+      あるべき値は [bootstrap/cilium/values.yaml](bootstrap/cilium/values.yaml)。以後 ConfigMap は直接いじらない。
+- [x] **Entra の認可をグループからアプリロールへ移し、redis を廃止した。**
+      「グループクレームが大きいからセッションが Cookie に収まらない」という前提は**誤りだった**
+      (所属グループは 2 つだけ)。効いたのは oauth2-proxy の `--session-cookie-minimal` のほう。
+      テナントに P1 が無いのでロールの割り当てはユーザー単位。手順は [docs/entra.md](docs/entra.md)。
+- [x] **PSA のラベルを入れた**(9 namespace。`baseline` は hostPort も弾く)。
+- [x] **依存更新の範囲を決めた。** メジャーと Helm chart は自動マージしない。
+      **版の番号は中身の大きさを表さない**(erpnext は「patch」で Dragonfly を Valkey に入れ替え、
+      values のチューニングを無効にした)。Renovate の PR に Claude のレビューが効いていなかったのも直した
+      (bot を一律除外していたので、自動マージしないものだけ `needs-review` ラベルで拾う)。
+- [x] **Talos の更新ポリシーを決めた。** 版は [talos/versions.yaml](talos/versions.yaml) に寄せて
+      Renovate に追わせる。**検知は自動、適用は手動。** 単一ノードでは上げること自体が全停止を伴う
+      再起動になるので、コントローラ(tuppr / system-upgrade-controller)は 2 台目が入るまで使えない
+      (どちらも「自分が乗っているノードは自分で上げない」設計)。
+- [x] **R2 が無料枠を超えていたのを直した。** 3.3 GiB だったリポジトリが 13.92 GiB になっていた。
+      原因は生 TS の作業領域(`denpa-recorded`)が 14 GB に育ったこと。除外した。
+      保持世代が回れば実サイズも戻る。
 
 ### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
 
@@ -157,28 +194,42 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 
 ### Phase 3 — Talos 定常運用
 
-- [ ] k8up のスケジュールと保持(`keep-daily 7 / weekly 4 / monthly 6`)、失敗通知。
+- [ ] k8up の失敗通知。スケジュールと保持(`keep-daily 7 / weekly 4 / monthly 6`、タグは `k8up`)は
+      Phase 1 で入れた 3 本(mattermost / erpnext / infisical)に既に入っている。
+      **PVC のファイルを k8up 側に寄せるのはここ**(Talos ではホストのスクリプトが使えない)。
 - [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
 - [ ] `talosctl upgrade` / `upgrade-k8s` の手順を README に。
 
 
-### 積み残し
+## 積み残し
 
 - ~~**復元リハーサルを Cilium 構成でやり直す。**~~ **2026-09-07 に実施、3 問とも Yes**
   ([docs/restore-drill.md](docs/restore-drill.md))。Cilium は k3s 起動の 40 秒後に自分で CNI 設定を書いて上がり、
   Gateway は `PROGRAMMED=True` で LB-IPAM も L2 アナウンスも初回で決まり、AdGuard の hostPort も張られた。
   移行のときに要ったエージェント再起動や Pod 作り直しは**一度きりの手当て**で、復元では要らない。
   47 Running / 15 Completed、起動しなかったのは前回と同じ `denpa/tuner-agent` と `wireguard/wg-easy` の 2 つだけ。
-- **`Schedule` に `SkipDryRunOnMissingResource=true` を付ける。** 上のリハーサルで見つかった。
-  git に `k8up.io/v1` の `Schedule` があるのに復元先に k8up の CRD がまだ無いと、
-  Argo CD は `apps/` の同期を**丸ごと**失敗させる(CRD を入れる Application 自身が同じ同期の中にあるので抜けられない)。
-  子 Application が 5 つ作られないまま止まった。3 つの `Schedule` に
-  `argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true` を付けるか、sync-wave で k8up を先に回す。
-- **`k8up-global` Secret は git だけからは再建できない。** 手で作るものなので、state.db に無いスナップショットから
-  戻すと operator が `CreateContainerConfigError` で止まる。作り方は [apps/k8up/README.md](apps/k8up/README.md)。
+- ~~**`Schedule` に `SkipDryRunOnMissingResource=true` を付ける。**~~ **対処済み(2026-09-07)。**
+  git に `k8up.io/v1` の `Schedule` があるのに復元先に CRD がまだ無いと、Argo CD は `apps/` の同期を
+  **丸ごと**失敗させる(CRD を入れる Application 自身が同じ同期の中にあるので抜けられない)。
+  子 Application 5 つが作られないまま止まった。3 つの `Schedule` に注釈を付けて解決。
+  **「git がバックアップより進んでいる」状態は復元では普通に起きる**ので、snapshot が古かったから、では済まない。
+- ~~**`k8up-global` Secret は git だけからは再建できない。**~~ **対処済み(2026-09-07)。**
+  バックアップの資格情報そのものなので公開リポジトリには置けない。値は復元した `/etc/k3s-backup/env` に
+  あるので `restore.sh` が作り直すようにした。リハーサルモードでは作らない(VM の k8up が本番の
+  リポジトリに書きに行くため)。**Talos ではホストに env ファイルが無くなるので Infisical に移すこと。**
 
 ## 未決事項
 
-- ~~**Hubble を入れるか。**~~ **入れないと決めた(2026-09-07 本人判断)。** 単一ノードで Relay と UI の
-  Pod が 2 つ増えるわりに、NetworkPolicy を書き始めるまでは見る場面が無い。書き始めるときに入れ直す。
+- **`local-path-retain` をやめて「git で消したものは消える」に寄せる(方針は決定、実施は順番待ち)。**
+  今日の掃除で 35 日・44 日放置された Released の PV が 3 本見つかった。**Retain は追われない状態を作る。**
+  ただし外すと誤削除の復旧手段がバックアップ 1 本になるので、**復元リハーサルが通ってから**やる
+  (2026-09-07 に通った)。やることは 3 つ:
+  - PVC 22 本中 19 本に付いている `Prune=false,Delete=false` を外す。**これが本丸**(これが無いと git から消しても消えない)
+  - 既存 PV の `persistentVolumeReclaimPolicy` を `Retain` → `Delete` にパッチする(PV は変更可能)
+  - **`storageClassName` はバインド済み PVC では変更も削除もできない**(API が拒否する)。
+    マニフェストから消すのは **Talos の再構築時**。そのとき既定の `local-path`(reclaim は `Delete`)になる
+- **ネットワークを見る画面(着手予定)。** 外部公開の全体像と、内部でどのコンテナ同士が通信しているかの両方。
+  前者はクラスタから生成する一枚、後者は **Hubble**。認証は `*.s.doany.io` と同じ oauth2-proxy 前段方式。
+  **Hubble を入れない判断は撤回した**(2026-09-07。「見たい」という要件が出たため)。
+  Cilium 側の Hubble は既に有効で `:4244` で待ち受けているので、足りないのは Relay と UI の 2 Pod だけ。
