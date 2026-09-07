@@ -140,11 +140,5 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
   Cookie の 4096 バイト制限に収まっていない。手順は Entra の アプリの登録 > トークン構成 で
   groups クレームを外し、アプリロールを定義してユーザー/グループを割り当てる。
   副次的に、将来 Gateway 内蔵の OIDC(Envoy Gateway など)を使う道も開く。
-- **`px.doany.io` を 8444 のままにするか。** いまはサイドカーが hostPort 8444 で TLS を終端している。
-  443 に戻すには LB-IPAM から専用アドレスを 1 つ払い出して、そこだけ TLS passthrough のリスナーを持つ
-  Gateway を別に立てることになる。クライアント(2 台)の設定を書き換えるほうが安いなら 8444 のままでよい。
-- **Hubble を入れるか。** Cilium に同梱の可視化(フローログ、サービスマップ、UI)。CNI を Cilium にしたので
-  追加インストールは Helm の値 2 つ(`hubble.relay.enabled` と `hubble.ui.enabled`)で済む。
-  判断材料: 単一ノードでは Relay + UI で Pod が 2 つ増える、フローログはメモリを食う(既定のバッファは 4095 flow/ノード)、
-  一方で Cilium の NetworkPolicy を書くときに「何が落ちているか」が見えないと実質デバッグできない。
-  **NetworkPolicy を書き始めるなら実質必須、書かないなら不要**、という切り分けで決める。
+- ~~**Hubble を入れるか。**~~ **入れないと決めた(2026-09-07 本人判断)。** 単一ノードで Relay と UI の
+  Pod が 2 つ増えるわりに、NetworkPolicy を書き始めるまでは見る場面が無い。書き始めるときに入れ直す。

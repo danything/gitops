@@ -164,7 +164,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 | Gateway(`cilium-gateway-doany`) | 80 / 443。ここだけ hostPort ではなく nodePort |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | mattermost(calls) | 8443 UDP・8443 TCP |
-| 3proxy(tls-terminator サイドカー) | 8444 TCP |
+| 3proxy(tls-terminator サイドカー) | 3129 TCP(移行のあいだ 8444 も) |
 
 **詰まった点 3 つ:**
 
@@ -214,8 +214,9 @@ Envoy Gateway はこれを実装しているので、443 のままにしたい�
 
 - 3proxy の Pod に nginx(stream)のサイドカーを足し、`3129` で TLS を終端して `127.0.0.1:3128` に渡す
 - 証明書は cert-manager が `px.doany.io` で発行し、サイドカーがマウントする(Traefik 内蔵 ACME の置き換え)
-- サイドカーは **hostPort 8444** で公開する。443 は Gateway が使い、8443 は Mattermost calls が先に取っているため
-- **クライアント側の設定変更が要る**(`px.doany.io:443` → `px.doany.io:8444`)。
+- サイドカーは **hostPort 3129** で公開する。443 は Gateway が使うため。当初は 8444 だったが
+  (8443 は Mattermost calls が先に取っている)分かりにくいので、3proxy の平文 3128 の隣に移した(2026-09-07)
+- **クライアント側の設定変更が要る**(`px.doany.io:443` → `px.doany.io:3129`)。
   SNI で振り分けるより**ポートで分ける方が構成として素直**なので、これを本採用とした(2026-09-06 判断)。
   443 のままにしたい場合の代案は、px 専用の IP を LB-IPAM で払い出してルータ側で振り分けるか、
   Envoy Gateway に替えて TLS 終端リスナー + TCPRoute を使うか
@@ -294,7 +295,7 @@ Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**�
 **詰まった点 2 つ:**
 
 1. **Cilium は nodePort の範囲に入っている hostPort を張らない。** nodePort の範囲を `80-32767` に広げたら、
-   AdGuard の 853 と Mattermost calls の 8443、3proxy の 8444 が一斉に落ちた。範囲を `80,443` の
+   AdGuard の 853 と Mattermost calls の 8443、3proxy の TLS ポートが一斉に落ちた。範囲を `80,443` の
    2 つだけに絞る(`nodePort.range`)ことで両立する。
 2. **Traefik を消したあとも Service に残った `externalIPs: [10.10.0.4]` が 10.10.0.4:80/443 を黒穴にする。**
    DaemonSet を消しても Service は残り、Cilium はそのまま宛先無しの転送先を作り続ける。
