@@ -45,9 +45,19 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
         インタフェースにも設定されていない。Talos にもそのまま静的アドレスとして書いた。
       - `talos/patches/cluster.yaml` を実機の `ip -brief addr` と `/proc/net/bonding/bond0` から
         起こし直し、**`talosctl validate -m metal` が通ることを確認**。
-- [ ] 残るのは実際に上げてみる分だけ: bond0 が balance-alb で上がるか、IPv6 の既定経路が RA で
-      載るか、wg-easy の hostNetwork UDP 51820。**QEMU を user-mode ではなく tap/bridge で
-      2 本挿せば VM でも試せる**(いまの復元リハーサルは user-mode なので試せていない)。
+- [x] **残っていた 3 つを QEMU で実際に起動して確かめた(2026-09-07)。**
+      **tap/bridge は要らなかった。** `-netdev hubport` で QEMU の中だけに L2 セグメントを作れば
+      ホストに何も生やさずに bond のメンバー 2 本を同じセグメントに挿せるし、`-netdev user` の
+      `ipv6=on` は RA を送ってくるので RA 由来の既定経路も試せる(以前「user-mode では試せない」と
+      書いていたのは誤り)。`patches/*.yaml` からの読み替えはインタフェース名とディスクだけ。
+      - bond0 は `balance-alb` / `miimon 100` で上がり、片方の carrier を落とすとフェイルオーバーした。
+      - 静的 IPv6 `::2` は載る。**が、`net.ipv6.conf.bond0.accept_ra: "2"` が無いと
+        Kubernetes 起動後(forwarding=1)に RA の既定経路が消える。** `patches/cluster.yaml` を修正。
+        ついでに `addr_gen_mode: "2"` が `stable_secret` 未設定で EINVAL のまま失敗し続けていたのを
+        `"3"` に直した。
+      - wireguard はカーネル組み込み(`/sys/module/wireguard/version` = 1.0.0)で、
+        privileged + hostNetwork の Pod から `wg-quick up` が通った。AppArmor 回避は不要。
+      手順・証拠・VM では確かめられない残りは [docs/talos.md](docs/talos.md)「VM ブートドリル」。
 - [x] **PSA のラベルが要る namespace を洗い出して manifest に入れた(2026-09-07)。** 走っている Pod の spec を
       直接数えたら想定より多く、9 つあった。**baseline は hostPort も弾く**のを見落としていた。
       一覧と洗い出しのコマンドは [docs/talos.md](docs/talos.md)「PSA のラベル」。

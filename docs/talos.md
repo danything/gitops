@@ -199,6 +199,179 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
 
+## VM ブートドリル(2026-09-07、`talos/patches/` をそのまま起動した)
+
+`talosctl validate` が通るだけで一度も起動していなかった `talos/patches/cluster.yaml` /
+`main.yaml` を、**本番サーバ上の QEMU で実際に起動して**確かめた。ホストのネットワークには一切触っていない。
+
+### tap/bridge は要らない。QEMU の内部ハブで足りる
+
+「bond は user-mode ネットワークでは試せない」というのは誤りだった。`-netdev hubport` で
+**QEMU の中だけに L2 セグメントを作れる**ので、ホストに tap も bridge も作らずに 2 本の NIC を
+同じセグメントに挿せる。SLIRP(`-netdev user`)は `ipv6=on` で **RA を送ってくる**ので、
+RA 由来のデフォルトルートもここで試せる。
+
+```shell
+# hub 1 = bond のメンバー 2 本 + SLIRP(IPv6 あり)、hub 2 = eno4 相当の別 LAN
+qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 8192 \
+  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+  -drive if=pflash,format=raw,file=OVMF_VARS.fd \
+  -drive file=disk.qcow2,if=virtio,format=qcow2 \
+  -drive file=metal-amd64.iso,media=cdrom,readonly=on -boot order=dc \
+  -netdev 'user,id=n0,ipv4=on,net=10.0.0.0/24,host=10.0.0.1,dhcpstart=10.0.0.15,ipv6=on,ipv6-net=240f:6d:842b:1::/64,ipv6-host=240f:6d:842b:1::1,hostfwd=tcp:127.0.0.1:50001-10.0.0.15:50000,hostfwd=tcp:127.0.0.1:50011-10.0.0.2:50000,hostfwd=tcp:127.0.0.1:50021-10.0.0.2:6443' \
+  -netdev hubport,id=hp0,hubid=1,netdev=n0 \
+  -netdev hubport,id=hp1,hubid=1 -device virtio-net-pci,netdev=hp1,mac=52:54:00:aa:00:01 \
+  -netdev hubport,id=hp2,hubid=1 -device virtio-net-pci,netdev=hp2,mac=52:54:00:aa:00:02 \
+  -netdev 'user,id=n1,ipv4=on,ipv6=off,net=10.10.0.0/24,host=10.10.0.1' \
+  -netdev hubport,id=hp3,hubid=2,netdev=n1 \
+  -netdev hubport,id=hp4,hubid=2 -device virtio-net-pci,netdev=hp4,mac=52:54:00:bb:00:04 \
+  -display none -serial file:serial.log -monitor unix:monitor.sock,server,nowait
+```
+
+つまずいた点:
+
+- `ipv6=on` を付けると **`ipv4=on` を明示しないと** `IPv4 disabled but netmask/host/dns provided` で起動しない。
+- ISO は kernel コンソールを `console=tty0` にしか出さないので `-serial` にはブートメニューまでしか流れてこない。
+  **診断は全部 `talosctl` 側でやる**(`hostfwd` で 50000 番を借り出す)。
+- **v1.14 の `talosctl` は `--nodes` / `--endpoints` がグローバルフラグではない。**
+  `talosctl --insecure -n … get links` は `unknown command` になる。`talosctl get links --insecure -n … -e …` の順で書く。
+- maintenance mode は `-e 127.0.0.1:50001 -n 127.0.0.1:50001`。設定投入後は apid 経由になるので
+  **`-n` はノードの実アドレス**(`-n 10.0.0.2 -e 127.0.0.1:50011`)。`-n 127.0.0.1:50011` は `invalid target` になる。
+- `talosctl apply-config -m reboot` は無い(`auto` / `no-reboot` / `staged` / `try`)。
+- ハブの構成は monitor の `info network` で確認できる。
+
+`patches/*.yaml` からの読み替えは **インタフェース名とディスクだけ**にした
+(`eno1→enp0s3` `eno2→enp0s4` `eno4→enp0s5` `/dev/sda→/dev/vda`)。
+`mode: balance-alb`、`miimon: 100`、静的 IPv6 `240f:6d:842b:1::2/64`、
+アドレスとゲートウェイ、**v6 のデフォルトルートを書かないこと**はそのまま。
+
+### 1. bond0 は上がる
+
+```shell
+talosctl read /proc/net/bonding/bond0 -n 10.0.0.2 -e 127.0.0.1:50011
+```
+
+```
+Bonding Mode: adaptive load balancing      # = balance-alb
+Currently Active Slave: enp0s3
+MII Status: up
+MII Polling Interval (ms): 100             # = miimon
+Slave Interface: enp0s3 / MII Status: up / Link Failure Count: 0
+Slave Interface: enp0s4 / MII Status: up / Link Failure Count: 0
+```
+
+monitor から片方の carrier を落とす(`set_link virtio-net-pci.0 off`)と **8 秒以内に**
+`MII Status: down` / `Link Failure Count: 1` になり、`Currently Active Slave` が enp0s4 に移って
+`talosctl` の応答は途切れなかった。balance-alb らしく **メンバー間で MAC が入れ替わる**
+(`get links` で enp0s3 が `…aa:00:02`、enp0s4 が `…aa:00:01` になる)のも見えた。
+なお QEMU の `set_link … on` ではゲスト側の carrier が戻らないので、**復旧方向は確かめられていない**。
+
+### 2. 静的 IPv6 は載る。だが **`accept_ra: "2"` が無いと既定経路が消える**
+
+静的アドレスと SLAAC は素直に並ぶ。
+
+```
+bond0/10.0.0.2/24
+bond0/240f:6d:842b:1::2/64                      # patches に書いた静的アドレス
+bond0/240f:6d:842b:1:9f48:ba23:fcbb:1cd0/64     # SLAAC
+bond0/fe80::8628:e278:4977:732/64
+```
+
+問題は既定経路のほうで、**Kubernetes が上がった瞬間に IPv6 の default route が消えた**。
+
+| 時点 | `net.ipv6.conf.bond0.forwarding` | `accept_ra` | `protocol: ra` の default route |
+| --- | --- | --- | --- |
+| maintenance mode | 0 | 1(既定) | **あり** |
+| クラスタ起動後 | 1 | 1(既定) | **無い** |
+| クラスタ起動後 | 1 | **2** | **あり** |
+
+`accept_ra=1` は「forwarding が有効なら RA を無視する」という意味で、flannel / kube-proxy が
+`net.ipv6.conf.all.forwarding=1` にした時点でカーネルが RA 由来の経路を落とす。
+**Ubuntu 期にこれが問題にならなかったのは NetworkManager が userspace で RA を処理していたから**で、
+実機は現在 `bond0/accept_ra = 0` のまま `default via fe80::… proto ra metric 300` が載っている。
+Talos には RA を代行するものが無いので、カーネルに任せる = `accept_ra: "2"` が必須。
+
+`patches/cluster.yaml` に足した:
+
+```yaml
+net.ipv6.conf.bond0.accept_ra: "2"
+```
+
+入れたあとの確認(**クラスタが Ready になってから**見ること):
+
+```shell
+talosctl get routes -o yaml -n 10.0.0.2 -e … | grep -B10 'protocol: ra'
+#     id: bond0/inet6/fe80::2//1024
+#     dst: ""
+#     gateway: fe80::2
+#     outLinkName: bond0
+#     protocol: ra
+```
+
+### `addr_gen_mode: "2"` は書いても効かない(黙って失敗し続ける)
+
+同時に見つかった。`net.ipv6.conf.bond0.addr_gen_mode: "2"`(stable-privacy)は
+**`stable_secret` が未設定だとカーネルが EINVAL を返す**ので、一度も適用されない。
+`talosctl get addresses` は EUI-64 のまま(`240f:6d:842b:1:5054:ff:feaa:1`)で、
+`KernelParamSpecController` が数秒おきにこれを吐き続ける:
+
+```
+ERROR controller failed {"controller": "runtime.KernelParamSpecController",
+  "error": "write /proc/sys/net/ipv6/conf/bond0/addr_gen_mode: invalid argument"}
+```
+
+**`"3"`(random)に変えたら通った。** 書き込みが成功し、link-local も SLAAC も MAC 由来でなくなる
+(`fe80::8628:e278:4977:732` / `240f:6d:842b:1:9f48:ba23:fcbb:1cd0`)。
+実機の NetworkManager も同じ見た目(`240f:6d:842b:1:a096:1754:8738:2ede`)なので状態としては揃う。
+違いは **3 は再起動ごとに IID が変わる**こと。ブート間で固定したければ `stable_secret` を足して 2 に戻す
+(cloudflare-ddns の `local.iface.stable:bond0` が ::2 ではなく SLAAC 側を拾っていた場合はそれが要る)。
+
+### 3. wireguard はカーネル組み込み。AppArmor 相当の回避は要らない
+
+`/proc/modules` にも `/lib/modules/…/kernel/` にも wireguard は出てこない。**`=y` で組み込まれている**からで、
+
+```shell
+talosctl read /sys/module/wireguard/version -n 10.0.0.2 -e …   # => 1.0.0
+```
+
+実際に privileged + hostNetwork の Pod(namespace に `pod-security.kubernetes.io/enforce=privileged`)から
+`wg-quick up wg0` を通した:
+
+```
+[#] ip link add dev wg0 type wireguard
+[#] wg setconf wg0 /dev/fd/63
+[#] ip -4 address add 10.99.99.1/24 dev wg0
+[#] ip link set mtu 1420 up dev wg0
+interface: wg0 / listening port: 51820
+UNCONN 0 0 0.0.0.0:51820 0.0.0.0:*
+UNCONN 0 0    [::]:51820    [::]:*
+```
+
+ホスト側の `talosctl get links` にも `wg0 … KIND wireguard` が現れる。
+**Ubuntu で必要だった AppArmor プロファイルの無効化は Talos には存在しない**(そもそも LSM が SELinux)。
+
+### ついでに確認できたこと
+
+- `UnattendedInstallConfig` の CEL diskSelector で実際にインストールされた(`EPHEMERAL` が `/dev/vda4`)
+- schematic のカーネル引数が載る: `/proc/cmdline` に `intel_iommu=on iommu=pt`
+- `patches/main.yaml` の `vfio_pci` / `vfio_iommu_type1` が `/proc/modules` に出る
+- `net.ipv6.conf.eno4.disable_ipv6: "1"` は効く(相当インタフェースに v6 アドレスが一切付かない)
+- `bond0` は Talos が作ったあとに sysctl が適用される(存在しないパスなら ENOENT のはずが EINVAL だった)
+
+### VM では確かめられていないこと
+
+読み替えたぶんと、SLIRP が本物でないぶんは未検証のまま:
+
+- **インタフェース名**は `enp0s3/enp0s4/enp0s5`。実機は `eno1/eno2/eno4`(tg3)。
+  名前が違えば `machine.sysctls` のキーも `interfaces` も当たらないので、実機では
+  `talosctl get links` で名前を確認してから流すこと
+- **ディスクは `/dev/vda`** で試した。実機は `/dev/sda`(`talosctl get disks` で確定させる)
+- **相手が SLIRP**なので、balance-alb の ARP ネゴシエーションを本物のスイッチ相手に試したことにはならない。
+  ハブなので送ったフレームが相方の NIC にも返ってくるが、それで bond が壊れることは無かった
+- **RA も SLIRP のもの**(`fe80::2`、プレフィックス `240f:6d:842b:1::/64` は手で合わせた)。
+  ISP のルータの RA(MTU オプション、RDNSS、valid/preferred lifetime)は別物
+- carrier の**復旧**方向、PT3 の vfio パススルー本体
+
 ## ネットワークまわりの前提(移行前に押さえておくこと)
 
 ### 既定は Flannel + kube-proxy のまま

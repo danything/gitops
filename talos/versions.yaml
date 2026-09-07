@@ -1,0 +1,31 @@
+# **Talos と Kubernetes の版の出どころ。**
+#
+# ここは Renovate が書き換える。手で触るのは schematic を変えたときだけ
+# (拡張やカーネル引数を足したら Image Factory で新しい ID が出る)。
+#
+# **上げること自体は自動化しない。** このクラスタはノードが 1 台なので、Talos の
+# アップグレードは「唯一のノードの再起動 = 全停止」になる。無人で走らせる種類の作業ではない。
+# Renovate の PR は**新しい版が出たという通知**として使い、適用は自分の都合のいい時間に
+#
+#   talosctl upgrade --image factory.talos.dev/installer/<schematic>:<version>
+#
+# で行う。Talos のアップグレードは A/B なので、失敗すれば前のイメージに戻る。
+# Kubernetes は再起動を伴わない(`talosctl upgrade-k8s --to <version>`)。
+#
+# **ノードが増えたら**コントローラに任せる道が開く(tuppr / system-upgrade-controller)。
+# どちらも「自分が乗っているノードは自分で上げない」設計なので、1 台では成立しない。
+# 手順は ../docs/talos.md。
+
+talos:
+  # Image Factory の installer イメージをそのまま追う。この schematic で実際に出ている
+  # タグだけが候補になるので、素の siderolabs/talos を見るより正確。
+  # renovate: datasource=docker depName=factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
+  version: v1.14.0
+  # 拡張(intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ ID。
+  # 中身を変えたら Image Factory で作り直して、この値と上の depName の両方を差し替える。
+  schematic: 32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
+
+kubernetes:
+  # Talos に移ったあとの目標版。いまの k3s は v1.36.2+k3s1。
+  # renovate: datasource=github-releases depName=kubernetes/kubernetes
+  version: v1.36.2

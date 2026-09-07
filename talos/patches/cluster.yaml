@@ -2,11 +2,22 @@
 # 項目ごとに書く場所が決まっている(../docs/talos-install-media.md 参照)。
 machine:
   sysctls:
-    # bond0 の SLAAC を stable-privacy にする(EUI-64 で MAC を出さない)。
+    # **これが無いと IPv6 の既定経路が消える。** Kubernetes が上がると
+    # `net.ipv6.conf.{all,bond0}.forwarding` が 1 になり、既定の `accept_ra=1` は
+    # 「forwarding が有効なら RA を無視する」なのでカーネルが RA 由来の default route を落とす。
+    # 2 = forwarding でも RA を受ける。Ubuntu 期は NetworkManager が userspace で RA を
+    # 処理していた(実機は `accept_ra=0` のまま `proto ra` の既定経路が載っている)ので
+    # この問題が出なかった。QEMU で再現・修正を確認済み(../docs/talos.md「VM ブートドリル」)。
+    net.ipv6.conf.bond0.accept_ra: "2"
+    # bond0 の SLAAC の IID を MAC 由来(EUI-64)にしない。
+    # **値は 3(random)。** stable-privacy(2)は `stable_secret` が要り、未設定のまま 2 を書くと
+    # `write /proc/sys/net/ipv6/conf/bond0/addr_gen_mode: invalid argument` で
+    # KernelParamSpecController が数秒おきに失敗し続ける(実測)。
+    # 3 は再起動ごとに IID が変わる。ブート間で固定したくなったら `stable_secret` を足して 2 に戻す。
     # **公開する AAAA は下の静的アドレス(::2)。** SLAAC のぶんは並んで付くだけ。
     # 実機の NetworkManager も ipv6.token は使っておらず、静的アドレスを直接書いている
     # (`ip token show` はどのインタフェースも `token ::`)。
-    net.ipv6.conf.bond0.addr_gen_mode: "2"
+    net.ipv6.conf.bond0.addr_gen_mode: "3"
     # IPv6 は bond0 に一本化する。eno4 側の RA でデフォルトルートを奪われると非対称ルーティングになる。
     net.ipv6.conf.eno4.disable_ipv6: "1"
   kubelet:
@@ -35,7 +46,9 @@ machine:
           - 240f:6d:842b:1::2/64
         routes:
           # IPv6 の既定経路は RA 由来(`default via fe80::… proto ra`)なので書かない。
-          # 実機で上げたあと `talosctl get routes` で載っていることを確かめること。
+          # 上の `accept_ra: "2"` とセット。**Kubernetes が上がったあと**に
+          # `talosctl get routes -o yaml` で `protocol: ra` の `dst: ""` が残っていることを確かめること
+          # (クラスタ起動前だけ見ても意味が無い。forwarding が 1 になるのはそのあと)。
           - network: 0.0.0.0/0
             gateway: 10.0.0.1
       - interface: eno4
