@@ -21,5 +21,17 @@
             ],
             "datasourceTemplate": "helm"
         }
+    ],
+    "packageRules": [
+        {
+            "description": "Mattermost の DB。Mattermost が挙げているのは下限 (PostgreSQL 14.0+) だけで、18 を検証したとは書いていない。加えて PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れるので、タグを差し替えるだけでは上がらない (dump と restore が要る)。17 のサポートは 2029-11 まであるので、Mattermost が 18 を明記するまで 17 の線に留める。",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "postgres"
+            ],
+            "allowedVersions": "<18"
+        }
     ]
 }
