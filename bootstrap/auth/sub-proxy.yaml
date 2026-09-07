@@ -1,7 +1,7 @@
 # *.s.doany.io を SSO 付きで LAN のホスト(sub-backend)へ中継する oauth2-proxy。
 # Traefik では forward-auth ミドルウェアで実現していたが、Cilium の Gateway には ext auth が無いので
 # oauth2-proxy 自身を前段のプロキシとして置く(--upstream で中継先を持つ)。
-# コールバックは既存の a.doany.io 側インスタンスが受ける。cookie secret と redis を共有しているので
+# コールバックは既存の a.doany.io 側インスタンスが受ける。cookie secret を共有しているので
 # セッションはそのまま通る。
 apiVersion: apps/v1
 kind: Deployment
