@@ -47,6 +47,14 @@ kubeconfig も age 鍵も GitHub に置いていない。トークンは実行�
 権限も cluster-admin ではなく、この層で実際に使う種類だけ([apiserver/rbac.yaml](apiserver/rbac.yaml))。
 **Secret は含まれていない**ので、GitHub 側が落ちても Secret は読まれない。`delete` も渡していない。
 
+**設定を変えるときの手順**(2026-09-07 に実地で確認):
+
+| 変えるもの | 必要なこと |
+| --- | --- |
+| [apiserver/authentication-config.yaml](apiserver/authentication-config.yaml) | ホストの `/etc/rancher/k3s/` に置き直すだけ。**API サーバが自動で読み直す**(k8s 1.32+ の structured authn の再読み込み)。k3s の再起動は要らない |
+| [apiserver/rbac.yaml](apiserver/rbac.yaml) | **手で `kubectl apply`。** ワークフローには ClusterRole を作る権限を渡していない(自分の権限を書き換えられないように) |
+| `kube-apiserver-arg` / `tls-san`(`/etc/rancher/k3s/config.yaml`) | **k3s の再起動が要る。** 失敗すると API サーバが上がらないので、必ず `config.yaml.pre-oidc` のような退避を取ってから |
+
 **当たらないもの:**
 
 | | 理由 |
