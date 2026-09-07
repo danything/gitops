@@ -19,9 +19,11 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
 - `infisical/` … Infisical 本体(HelmChart + Postgres/Redis)。公開は `apps/gateway-routes/` の HTTPRoute。
   `secrets.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は `local-path-retain` で、バックアップ対象に入っている。
-- `infisical/operator.yaml` … 純正 operator の HelmChart と、認証用の SA `infisical-auth` + RBAC。
-  認証は Infisical の Kubernetes auth: operator が SA のトークンで Infisical にログインし、Infisical が
-  そのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を付けてある)。
+- **operator と push-bridge はここには無い。** ArgoCD の Application に移した(`apps/infisical-operator/`、
+  `apps/infisical-push-bridge/`)。ArgoCD 自身は operator に依存しないので、bootstrap に置く理由がない。
+  認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
+  Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を
+  付けてある)。SA と RBAC は `apps/infisical-operator/rbac.yaml`。
   operator 側に長期の資格情報は無い(`identityId` は秘密ではない)。
 
 このディレクトリは手で apply する(復元時はバックアップから丸ごと戻るので通常は不要):

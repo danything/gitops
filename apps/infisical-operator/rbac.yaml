@@ -1,0 +1,23 @@
+# InfisicalSecret が Infisical にログインするための SA。operator がこの SA の
+# トークンを作って提示し、Infisical が TokenReview で本物か確かめる
+# (長命の資格情報はどこにも無い)。マシンアイデンティティ側の許可リストは
+# (SA: infisical-auth, namespace: infisical)。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: infisical-auth
+  namespace: infisical
+---
+# TokenReview は提示されたトークン自身の権限で呼ばれるので system:auth-delegator が要る
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: infisical-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: infisical-auth
+    namespace: infisical

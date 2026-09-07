@@ -41,7 +41,13 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
 - [x] **PSA のラベルが要る namespace を洗い出して manifest に入れた(2026-09-07)。** 走っている Pod の spec を
       直接数えたら想定より多く、9 つあった。**baseline は hostPort も弾く**のを見落としていた。
       一覧と洗い出しのコマンドは [docs/talos.md](docs/talos.md)「PSA のラベル」。
-- [ ] HelmChart CRD 依存(argocd / infisical / push-bridge)を ArgoCD の Application に書き直す。
+- [ ] HelmChart CRD 依存を ArgoCD の Application に書き直す。
+      - [x] cloudflare-ddns・infisical-secrets-operator・infisical-push-bridge(2026-09-07)。
+            **Pod を入れ替えずに引き取れる**ことと、**CR を消すとアンインストールが走る**ことが分かった。
+            手順は [docs/decisions.md](docs/decisions.md)「HelmChart CRD から ArgoCD の Application へ」。
+      - [ ] erpnext・yosegaki(どちらも PVC 持ち)。
+      - [ ] infisical(Postgres の PVC 持ち。ArgoCD に預けると鶏卵になるので Talos では inlineManifests)。
+      - argocd は移さない(自分自身。Talos では inlineManifests)。
 - [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に PVC バックアップと `backupcommand` の dump が取れること。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
