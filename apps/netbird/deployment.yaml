@@ -1,0 +1,192 @@
+# NetBird の combined サーバ + ダッシュボード。wg-easy(apps/wireguard)とは**併存**させて、
+# 移行の可否を判断するために動かしている。理由と比較は docs/decisions.md「VPN を何にするか」。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: netbird-data
+  namespace: netbird
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # 既定の local-path(reclaim は Delete)。`local-path-retain` は使わない
+  # ---「git で消したものはちゃんと消える」に寄せた(docs/decisions.md)。
+  # 後ろ盾は日次の restic。
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netbird-server
+  namespace: netbird
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  # hostPort 3478 と RWO の PVC を新旧 Pod で共有できないので Recreate
+  # (apps/wireguard の wg-easy と同じ事情)。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: netbird-server
+  template:
+    metadata:
+      labels:
+        app: netbird-server
+    spec:
+      initContainers:
+        # config.yaml は環境変数を展開しない(combined/cmd/config.go は yaml.Unmarshal するだけ)。
+        # ConfigMap のテンプレートに Secret の値を差し込んで emptyDir に書く。
+        # 値は openssl rand -base64 32 なので `A-Za-z0-9+/=` しか含まれない
+        # --- sed の区切りを `|` にしてあれば安全(`&` も `\` も出てこない)。
+        - name: render-config
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -ec
+            - |
+              sed -e "s|@AUTH_SECRET@|$AUTH_SECRET|" \
+                  -e "s|@ENCRYPTION_KEY@|$ENCRYPTION_KEY|" \
+                  -e "s|@SESSION_COOKIE_ENCRYPTION_KEY@|$SESSION_COOKIE_ENCRYPTION_KEY|" \
+                  /tpl/config.yaml.tpl > /etc/netbird/config.yaml
+              grep -q '@' /etc/netbird/config.yaml && { echo "未展開のプレースホルダが残っている" >&2; exit 1; } || true
+          env:
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: netbird-secrets
+                  key: auth-secret
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: netbird-secrets
+                  key: datastore-encryption-key
+            - name: SESSION_COOKIE_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: netbird-secrets
+                  key: session-cookie-encryption-key
+          volumeMounts:
+            - name: tpl
+              mountPath: /tpl
+            - name: config
+              mountPath: /etc/netbird
+      containers:
+        - name: netbird-server
+          image: netbirdio/netbird-server:0.78.1
+          args: ["--config", "/etc/netbird/config.yaml"]
+          ports:
+            - name: http
+              containerPort: 80
+            # **STUN は UDP なのでゲートウェイを通せない。** ノードの IP に直接出す。
+            # インターネットから届かせるにはルータで UDP 3478 を 10.0.0.2 に転送する必要がある
+            # (無くても relay 経由で通信自体は成立する。直接 P2P にならないだけ)。
+            - name: stun
+              containerPort: 3478
+              hostPort: 3478
+              protocol: UDP
+          readinessProbe:
+            # 公式インストーラが起動判定に使っているのと同じ口(内蔵 IdP が答えられる = 一通り上がっている)
+            httpGet:
+              path: /oauth2/.well-known/openid-configuration
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          # **livenessProbe は付けない。** healthcheckAddress(:9000)は
+          # `http://localhost:9000/health` に bind されるので(起動ログで確認)、
+          # kubelet が Pod IP:9000 を叩いても接続を拒否される。tcpSocket でも httpGet でも
+          # 必ず落ちて 90 秒で再起動ループになる。readinessProbe の /oauth2/... は
+          # [::]:80 に出ているので届く。
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/netbird
+            - name: config
+              mountPath: /etc/netbird
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: netbird-data
+        - name: tpl
+          configMap:
+            name: netbird-server-config
+        - name: config
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netbird-server
+  namespace: netbird
+spec:
+  selector:
+    app: netbird-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netbird-dashboard
+  namespace: netbird
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netbird-dashboard
+  template:
+    metadata:
+      labels:
+        app: netbird-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: netbirdio/dashboard:v2.92.0
+          # getting-started.sh の render_dashboard_env() のとおり。
+          # 内蔵 IdP を使うので client-id / audience は固定文字列 `netbird-dashboard`、
+          # client secret は無い(PKCE)。
+          env:
+            - name: NETBIRD_MGMT_API_ENDPOINT
+              value: https://nd.doany.io
+            - name: NETBIRD_MGMT_GRPC_API_ENDPOINT
+              value: https://nd.doany.io
+            - name: AUTH_AUDIENCE
+              value: netbird-dashboard
+            - name: AUTH_CLIENT_ID
+              value: netbird-dashboard
+            - name: AUTH_CLIENT_SECRET
+              value: ""
+            - name: AUTH_AUTHORITY
+              value: https://nd.doany.io/oauth2
+            - name: USE_AUTH0
+              value: "false"
+            - name: AUTH_SUPPORTED_SCOPES
+              value: openid profile email groups
+            - name: AUTH_REDIRECT_URI
+              value: /nb-auth
+            - name: AUTH_SILENT_REDIRECT_URI
+              value: /nb-silent-auth
+            - name: NGINX_SSL_PORT
+              value: "443"
+            # TLS は Gateway が終端するのでコンテナ側では出さない
+            - name: LETSENCRYPT_DOMAIN
+              value: none
+          ports:
+            - name: http
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netbird-dashboard
+  namespace: netbird
+spec:
+  selector:
+    app: netbird-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
