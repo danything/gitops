@@ -5,6 +5,13 @@
 #          kube-apiserver-arg に `authentication-config=...` を足す
 #   Talos: machine config の cluster.apiServer に載せる(../../talos/patches/)
 #
+# **置き換えても API サーバの再起動は要らない。** 中身が変わると自動で読み直す
+# (2026-09-08 に実測。`apiserver_authentication_config_controller_automatic_reloads_total`
+# の `status="success"` が増え、`..._last_timestamp_seconds` が進む)。
+# **壊れた内容を置いても前の設定のまま動き続ける**ので、置いたあとはこの 2 つを見ること:
+#
+#   k3s kubectl get --raw /metrics | grep automatic_reload
+#
 # ## なぜこれが要るか
 #
 # 「サーバに何も置かず git だけで回す」ためには、**クラスタの外から apply する経路**が要る。
