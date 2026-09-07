@@ -155,8 +155,15 @@ do
 	[ -e "$p" ] && PATHS="$PATHS $p"
 done
 
+# **生 TS の作業領域は除く。** denpa の `denpa-recorded` はエンコード前の置き場で、
+# 終われば消える(エンコード済みの `denpa-library` のほうが本体)。ここが 14 GB まで育って
+# **R2 の無料枠 10 GB を超えていた**(2026-09-07、リポジトリ実サイズ 13.92 GiB)。
+# 中身は数時間で入れ替わるので、日次のスナップショットに残す意味も薄い。
+# 除外は PVC のディレクトリ名で当てる(local-path は <pv 名>_<ns>_<pvc 名> で掘る)。
+RECORDED_GLOB="${RECORDED_GLOB:-*_denpa_denpa-recorded}"
+
 # shellcheck disable=SC2086
-restic backup --tag "$TAG" --exclude-caches $PATHS
+restic backup --tag "$TAG" --exclude-caches --exclude "$RECORDED_GLOB" $PATHS
 
 # バックアップが終わった時点で戻す。forget/prune/check は動かしたままでよい。
 restore_replicas
