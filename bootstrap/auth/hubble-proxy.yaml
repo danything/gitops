@@ -2,8 +2,12 @@
 # **Hubble UI 自身は認証を持たない**ので、直接 HTTPRoute に繋いではいけない。
 # Cilium の Gateway には ext auth が無いので、*.s.doany.io と同じ「oauth2-proxy 自身を
 # 前段のプロキシにする」方式(--upstream で中継先を持つ)。
-# コールバックは既存の a.doany.io 側インスタンスが受ける。cookie secret を共有しているので
-# セッションはそのまま通る。
+# **コールバックは自分で受ける。** a.doany.io 側に投げると、あちらは元のホストを
+# 知らないので認証後に a.doany.io に着地してしまう(`*.s.doany.io` は名前が
+# ワイルドカードで Entra に個別の redirect URI を登録できないため共有しているが、
+# こちらは固定の 1 ホストなので自前で持てる)。
+# Entra のアプリ登録に https://hl.doany.io/oauth2/callback を追加済み。
+# cookie secret は a.doany.io 側と共有しているので、どちらかで入れば両方通る。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -45,7 +49,7 @@ spec:
               key: cookie-secret
               name: auth-secrets
         - name: OAUTH2_PROXY_REDIRECT_URL
-          value: https://a.doany.io/oauth2/callback
+          value: https://hl.doany.io/oauth2/callback
         - name: OAUTH2_PROXY_COOKIE_DOMAINS
           value: .doany.io
         - name: OAUTH2_PROXY_WHITELIST_DOMAINS
