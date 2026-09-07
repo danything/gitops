@@ -1,6 +1,8 @@
 # **k8up の Schedule を 1 か所にまとめてある。** 中身は名前と namespace と時刻しか
 # 違わないので、アプリごとにファイルを分けると同じ注意書きが 9 回並ぶ。
-# **何をバックアップするか**(どの Pod のどの注釈が効くか)は apps/k8up/README.md の表。
+# **何をバックアップするか**(どの Pod・どの PVC の注釈が効くか)は apps/k8up/README.md の表。
+# **注釈だけでは動かない。** その namespace に Schedule が無いとジョブ自体が作られないので、
+# PVC や Pod に注釈を足したら**ここに namespace があるかを必ず確かめる**。
 #
 # ## 決まりごと
 #
@@ -13,7 +15,7 @@
 #   namespace には効かない
 # - **時刻はホストのスクリプト(19:00 UTC = 04:00 JST)を避ける。** restic は
 #   リポジトリをロックするので、重なると片方が待たされる。
-#   バックアップは 15:00〜17:00 UTC、prune は日曜の 20:00〜22:00 UTC に置いてある
+#   バックアップは 15:00〜17:30 UTC、prune は日曜の 20:00〜22:30 UTC に置いてある
 # - 保持は全部 `keepDaily 7 / keepWeekly 4 / keepMonthly 6`
 # - **バックエンドは書かない。** 書くと R2 のエンドポイント(Cloudflare の
 #   アカウント ID を含む)が git に載る。operator のグローバル設定に寄せてある
@@ -201,6 +203,48 @@ spec:
     successfulJobsHistoryLimit: 1
   prune:
     schedule: "0 22 * * 0"
+    retention:
+      keepDaily: 7
+      keepWeekly: 4
+      keepMonthly: 6
+      tags: [k8up]
+---
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: adguardhome
+  namespace: adguardhome
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  backup:
+    schedule: "15 17 * * *"
+    tags: [k8up]
+    failedJobsHistoryLimit: 2
+    successfulJobsHistoryLimit: 1
+  prune:
+    schedule: "15 22 * * 0"
+    retention:
+      keepDaily: 7
+      keepWeekly: 4
+      keepMonthly: 6
+      tags: [k8up]
+---
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: portainer
+  namespace: portainer
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  backup:
+    schedule: "30 17 * * *"
+    tags: [k8up]
+    failedJobsHistoryLimit: 2
+    successfulJobsHistoryLimit: 1
+  prune:
+    schedule: "30 22 * * 0"
     retention:
       keepDaily: 7
       keepWeekly: 4

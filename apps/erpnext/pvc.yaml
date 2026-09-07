@@ -5,6 +5,8 @@ metadata:
   namespace: erpnext
   annotations:
     helm.sh/resource-policy: keep
+    # ファイルとして k8up に取らせる(サイトの設定と添付。DB は別に mariadb-dump がある)。
+    k8up.io/backup: "true"
 spec:
   accessModes:
     - ReadWriteOnce
@@ -18,6 +20,11 @@ kind: PersistentVolumeClaim
 metadata:
   name: data-erpnext-mariadb-sts-0
   namespace: erpnext
+  annotations:
+    # **DB はファイルとして取らない。** gunicorn の Pod から mariadb-dump を打っている
+    # (apps/k8up/README.md)。注釈が無ければどのみち対象外だが、意図して外していると
+    # 分かるように明示する。
+    k8up.io/backup: "false"
   labels:
     app.kubernetes.io/instance: erpnext
     app.kubernetes.io/name: erpnext-mariadb-sts

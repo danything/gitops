@@ -33,7 +33,8 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 
 ## 何をどう取っているか
 
-`Schedule` は [schedules.yaml](schedules.yaml) に 9 本まとめてある(時刻と決まりごともあちら)。
+`Schedule` は [schedules.yaml](schedules.yaml) に 11 本まとめてある(時刻と決まりごともあちら)。
+**注釈だけでは動かない** ── その namespace に `Schedule` が無いとジョブが作られない。
 **取る中身を決めているのは Pod 側の注釈**で、それがどこにあるかがここ。
 
 | namespace | 中身 | `k8up.io/backupcommand` の在処 |
@@ -43,10 +44,12 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 | infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
 | lgtm / xool / worklog / denpa / blog | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
 | netbird | `store.db` / `idp.db` / `events.db` を tar 1 本に | [../netbird/deployment.yaml](../netbird/deployment.yaml) |
+| adguardhome / portainer | ファイルだけ(下記) | ─ |
 
-**PVC のファイルは k8up では取っていない。** operator が `BACKUP_SKIP_WITHOUT_ANNOTATION=true` なので
-注釈の無い PVC は素通りする。ファイルの担当は今もホストの `backup/k3s-backup`。
-**Talos に移る時点でここを寄せ替える**(下の「ファイルの PVC をどう移すか」)。
+PVC のファイルは `k8up.io/backup: "true"` を付けたものだけ取る。operator が
+`BACKUP_SKIP_WITHOUT_ANNOTATION=true` なので、**注釈がその宣言そのもの**。
+いまホストの `backup/k3s-backup` と二重に取っているが、restic は内容で重複を除くので
+実際に増えるのはメタデータだけ。**Talos に移る時点でホスト側を畳む**。
 
 erpnext だけ形が違う。**chart の `mariadb-sts` の StatefulSet テンプレートに `podAnnotations` が無い**
 ので、MariaDB の Pod には注釈を付けられない。代わりに gunicorn の Pod から `mariadb-dump` を打っている。
@@ -155,9 +158,10 @@ SQLite は上で片付いたので、残りは注釈を足すだけ。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `adguardhome-*` `denpa-library` `erpnext-sites` `mattermost-data` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `agent-config` `netbird-routing-peer-data` | ファイル | `k8up.io/backup: "true"` を付けるだけ。書き換わっても部分的に古いだけで壊れない |
+| `adguardhome-*` `erpnext-sites` `mattermost-data` `portainer-data` `netbird-routing-peer-data` | ファイル | **済み。** gitops にある PVC なのでここで注釈を付けた |
+| `denpa-library` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` | ファイル | **残り。** 各アプリのリポジトリ側にあるので、そちらで `k8up.io/backup: "true"` を付ける |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
 | `denpa-data` `netbird-data` | SQLite + ファイル | DB は済み。**ファイルの方が残っている** ── `denpa-data/logos/`、`netbird-data` の GeoLite と geonames。GeoLite と geonames は起動時に落とし直せるので要らないが、`logos/` は要る。`k8up.io/backup: "true"` を付けると DB のファイルまで一緒に入るので、`k8up.io/backup-restic-args` で `--exclude` する |
 | `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | もう論理バックアップがある。mattermost の 2 本には `k8up.io/backup: "false"` を明示してある(注釈が無ければ既に対象外だが、意図して外していると分かるように) |
-| `portainer-data` | boltdb | **未解決。** シェルが無く(`exec: "sh": executable file not found`)、SQLite でもないので同じ手が使えない。取るなら PVC のファイルとしてそのまま(整合は保証されない)か、Portainer の backup API(`POST /api/backup`)を叩くサイドカー。**中身は OIDC 設定とエンドポイント 1 本だけで、画面から数分で作り直せる**ので、優先度は低い |
+| `portainer-data` | boltdb | **ファイルとして取る。** シェルが無く(`exec: "sh": executable file not found`)SQLite でもないので `backupcommand` が使えない。動いたままのコピーなので**整合は保証されない**。中身は OIDC 設定とエンドポイント 1 本だけで画面から数分で作り直せるため、これで割り切る(厳密にやるなら backup API `POST /api/backup` を叩くサイドカー) |
 | `denpa-recorded` | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |
