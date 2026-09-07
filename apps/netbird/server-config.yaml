@@ -35,7 +35,14 @@ data:
         # 内蔵 IdP(Dex)。**外部 IdP は要らない**(0.62 以降)。Entra を足すのは後から
         # ダッシュボードの UI でできるので、まずはローカルユーザーだけで動かす。
         issuer: "https://nb.doany.io/oauth2"
-        localAuthDisabled: false
+        # **ローカルのメール+パスワードを閉じる(2026-09-07)。** 入口は Entra だけ。
+        # 内蔵 IdP(Dex)自体は動いたままで、外部 IdP のコネクタを提供する役に徹する。
+        #
+        # **締め出したときの戻し方**: ここを false にして ArgoCD に流し、
+        # `kubectl -n netbird rollout restart deploy/netbird-server`。
+        # ピアの通信は認証と無関係に動き続けるので、影響はダッシュボードと API だけ。
+        # PAT は JWT のグループ判定も含めて素通りするので、API からの復旧手段も残る。
+        localAuthDisabled: true
         signKeyRefreshEnabled: true
         sessionCookieEncryptionKey: "@SESSION_COOKIE_ENCRYPTION_KEY@"
         dashboardRedirectURIs:
