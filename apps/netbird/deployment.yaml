@@ -129,6 +129,10 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+            # 待っている間は sleep しか居ない。上限が効くのは k8up が bun を
+            # exec している間だけで、実測のピークは 26 MB(VmHWM)。
+            limits:
+              memory: 128Mi
           volumeMounts:
             - name: data
               mountPath: /var/lib/netbird
