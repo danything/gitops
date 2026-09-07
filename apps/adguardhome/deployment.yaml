@@ -52,7 +52,7 @@ spec:
               mountPath: /opt/adguardhome/ssl
         # DoH(/dns-query)だけを平文で受けて AdGuard の HTTPS へ渡す。理由は doh-proxy-config.yaml。
         - name: doh-proxy
-          image: nginx:1.29-alpine
+          image: nginx:1.31-alpine
           ports:
             - name: doh
               containerPort: 8081
