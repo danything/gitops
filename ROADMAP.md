@@ -189,6 +189,10 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
 - [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
 - [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
+- [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を
+      参照していて、**バインド済み PVC の `storageClassName` は API が変更を拒否する**ので今は消せない。
+      PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
+      再構築でストレージを引き直すときに、各アプリのマニフェストから `local-path-retain` の指定ごと外す。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
 

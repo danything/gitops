@@ -1,0 +1,73 @@
+# bootstrap/ を main へのマージ時にクラスタへ当てる。
+#
+# **保存している秘密はゼロ。** GitHub Actions の OIDC トークンを API サーバが直接受ける
+# (bootstrap/apiserver/authentication-config.yaml)。kubeconfig も age 鍵も置いていない。
+#
+# **SOPS で暗号化した 4 ファイルは当てない**(復号鍵を GitHub に置かないため)。
+# あれらは滅多に変わらないので手で当てる。判定はファイルの中身を見てやっているので、
+# 暗号化ファイルが増えても自動で除外される。
+name: bootstrap apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - bootstrap/**
+      - .github/workflows/bootstrap-apply.yml
+  workflow_dispatch:
+
+# 同時に 2 つ走らせない
+concurrency: bootstrap-apply
+
+permissions:
+  # OIDC トークンの発行にこれが要る
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 当てるファイルを決める
+        id: files
+        run: |
+          set -euo pipefail
+          # cilium/values.yaml は Helm の値でマニフェストではない。
+          # `sops:` を含むファイル(= SOPS で暗号化済み)は除外する。
+          mapfile -d '' FILES < <(
+            find bootstrap -name '*.yaml' ! -path 'bootstrap/cilium/*' -print0 \
+              | xargs -0 grep -LZ '^sops:'
+          )
+          printf '  %s\n' "${FILES[@]}"
+          printf 'list=%s\n' "$(printf -- '-f %s ' "${FILES[@]}")" >> "$GITHUB_OUTPUT"
+
+      - name: OIDC トークンを取る
+        id: token
+        run: |
+          set -euo pipefail
+          T=$(curl -sSf \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://ks.doany.io" | jq -r .value)
+          # ログに出さない
+          echo "::add-mask::${T}"
+          echo "token=${T}" >> "$GITHUB_OUTPUT"
+
+      - name: 差分を出す（先に見る）
+        env:
+          T: ${{ steps.token.outputs.token }}
+        run: |
+          kubectl --server=https://ks.doany.io:6443 \
+                  --certificate-authority=bootstrap/apiserver/ca.crt \
+                  --token="$T" \
+                  diff ${{ steps.files.outputs.list }} || true
+
+      - name: apply
+        env:
+          T: ${{ steps.token.outputs.token }}
+        run: |
+          kubectl --server=https://ks.doany.io:6443 \
+                  --certificate-authority=bootstrap/apiserver/ca.crt \
+                  --token="$T" \
+                  apply ${{ steps.files.outputs.list }}
