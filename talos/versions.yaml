@@ -26,6 +26,10 @@ talos:
   schematic: 32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
 
 kubernetes:
-  # Talos に移ったあとの目標版。いまの k3s は v1.36.2+k3s1。
+  # **`gen config` に `--kubernetes-version` で渡すこと。** 渡さないと Talos の既定
+  # (v1.14.0 なら v1.37.0)になり、ここに書いた値は無視される。2026-09-07 の Talos ブート
+  # ドリルで、生成物が v1.37.0 になっているのを見つけた ── 移行当日に意図せず
+  # 1.36 → 1.37 の飛び級をするところだった。
+  # いまの k3s は v1.36.2+k3s1。
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   version: v1.36.2
