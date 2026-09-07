@@ -5,6 +5,11 @@ kind: PersistentVolumeClaim
 metadata:
   name: netbird-data
   namespace: netbird
+  annotations:
+    # **ファイルとしては取らない。** 下の backup サイドカーが store.db / idp.db /
+    # events.db を整合したコピーで取っている。ここに同居している GeoLite2-City(65 MB)と
+    # geonames(7 MB)は起動時に落とし直せるので、取る意味が無い。
+    k8up.io/backup: "false"
 spec:
   accessModes:
     - ReadWriteOnce
