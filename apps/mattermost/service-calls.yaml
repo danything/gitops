@@ -23,8 +23,7 @@ metadata:
   name: mattermost-calls
   namespace: mattermost
 spec:
-  # **ClusterIP でよい(2026-09-07)。** `type: LoadBalancer` は k3s の ServiceLB 時代の名残で、
-  # LB-IPAM のアドレスは誰も使っていなかった。実際の経路は Pod の hostPort と下の externalIPs。
+  # ClusterIP でよい理由は docs/decisions.md「ルーティングの選定」の hostPort の表
   type: ClusterIP
   # Dual-stack: the CNI installs hostPort DNAT rules for v6 8443 regardless of
   # this, so leaving the Service IPv4-only means IPv6 clients reach the svclb

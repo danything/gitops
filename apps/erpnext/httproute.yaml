@@ -1,5 +1,4 @@
-# Cilium Gateway(bootstrap/gateway/)に付ける HTTPRoute。証明書は Gateway 側の
-# リスナーに cert-manager が発行したものが付いているので、ここでは指定しない。
+# 公開経路。証明書は Gateway(bootstrap/gateway/)のリスナーに付いているので指定しない。
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

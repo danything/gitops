@@ -1,7 +1,5 @@
-# **PSA は privileged。** Talos は Pod Security Admission の既定が `baseline` で、
-# CAP_CHOWN の追加が baseline に通らない。
-# k3s では PSA を有効にしていないのでこのラベルは効かないが、Talos に持っていくために書いておく
-# (詳細は docs/talos.md「PSA のラベル」)。
+# **PSA は privileged。** 理由: CAP_CHOWN の追加が baseline に通らない。
+# 一覧と背景は docs/talos.md「PSA のラベル」(k3s では効かない。Talos のために書いておく)。
 apiVersion: v1
 kind: Namespace
 metadata:

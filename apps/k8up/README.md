@@ -68,6 +68,19 @@ gunicorn の Pod から `mariadb-dump` を打っている。あちらには `sit
 (`db_host` / `db_name` / `db_password`)と `mariadb-dump` が入っていて、
 root のパスワードも要らない。
 
+## CRD がまだ無いクラスタで apps を止めないこと
+
+`Schedule` には `argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true` を必ず付ける。
+
+ArgoCD は同期の前にマニフェスト一式を dry-run で検証する。**k8up の CRD が入る前だと
+「`k8up.io/v1` が引けない」で `apps/` 配下が丸ごと適用されなくなる** ── CRD を入れる
+Application 自身が同じ同期の中にいるので抜けられない(2026-09-07 の復元リハーサルで発覚。
+子 Application 5 本が作られなかった)。このリソースだけ dry-run を飛ばせば、CRD を入れる
+Application が先に通る。
+
+**「git がバックアップより進んでいる」状態は復元では普通に起きる**ので、
+スナップショットが古かったから、では済まない。
+
 ## 次にやること
 
 - 残りの namespace の PVC をどうするか。いまはホストのスクリプトが全部見ているので、
