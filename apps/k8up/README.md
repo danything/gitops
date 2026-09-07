@@ -72,3 +72,58 @@ root のパスワードも要らない。
 
 - 残りの namespace の PVC をどうするか。いまはホストのスクリプトが全部見ているので、
   **Talos に移る時点で k8up 側に寄せる**(ホストにシェルが無くなるため)
+
+## ファイルの PVC をどう移すか(2026-09-07 調査)
+
+**Talos にはシェルが無いので、`backup/k3s-backup` の形は持っていけない。** いまホストのスクリプトが
+全 PVC を見ているぶんを k8up に寄せる必要がある(ROADMAP の Phase 2)。ただし**そのまま寄せると壊れる**。
+
+### 何が問題か
+
+ホストのスクリプトは **scale down してから取っている**。k8up の PVC バックアップは
+**動いたまま**取るので、**開いている DB のファイルをコピーすることになる**。
+
+実際に中を見たら、アプリのデータはほぼ全部 **SQLite の WAL モード**だった:
+
+```
+lgtm.db / lgtm.db-shm / lgtm.db-wal
+xool.db / xool.db-shm / xool.db-wal
+worklog.db / worklog.db-shm / worklog.db-wal
+denpa.db (20 MB) / denpa.db-wal (5 MB)
+```
+
+restic はファイルを順に読むので、**本体と WAL が別の瞬間のものになりうる**。
+「ファイルはホスト、論理は k8up」という今の切り分けは、**ホスト側が scale down している**という
+前提の上に成り立っていた。
+
+### 対象と手当て
+
+| PVC | 中身 | どうするか |
+| --- | --- | --- |
+| `lgtm-db` `xool-db` `worklog-db` `denpa-data` `yosegaki-db` | SQLite(WAL) | **イメージに `sqlite3` を足して `k8up.io/backupcommand`。** どれも自前のイメージなので入れられる |
+| `netbird-data` | SQLite(`store.db` / `idp.db`) | **サイドカーを足す。** 上流イメージに `sqlite3` が無く、こちらでは変えられない |
+| `portainer-data` | boltdb | **シェルすら無い**(`exec: "sh": executable file not found`)。Portainer の backup API(`POST /api/backup`)を叩くサイドカーか、この 1 本だけ別扱い |
+| `adguardhome-*` `denpa-library` `erpnext-sites` `mattermost-data` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `agent-config` `netbird-routing-peer-data` | ファイル | **そのまま `k8up.io/backup: "true"` でよい。** 書き換わっても部分的に古いだけで壊れない |
+| `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | **もう論理バックアップがある**。PVC 側は `false` のまま |
+| `denpa-recorded` | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |
+
+### 確認したこと
+
+```
+lgtm / xool / worklog / denpa / yosegaki … sqlite3 無し
+portainer                                … sh すら無い
+```
+
+**どのイメージにも `sqlite3` が入っていない。** つまり「注釈を足すだけ」では終わらず、
+**自前イメージ 5 つに `sqlite3` を足す PR が要る**(Alpine なら `apk add --no-cache sqlite` の 1 行)。
+
+`backupcommand` はこの形になる:
+
+```yaml
+annotations:
+  k8up.io/backupcommand: sh -c 'sqlite3 /usr/src/app/data/lgtm.db ".backup /tmp/b" && cat /tmp/b'
+  k8up.io/file-extension: .db
+```
+
+`.backup` は**開いたままでも整合したコピーを作る**ので、scale down が要らなくなる。
+`VACUUM INTO` でもよいが、どちらも出力先に実ファイルが要るので `/tmp` を経由する。
