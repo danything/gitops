@@ -132,6 +132,36 @@ if [ "${RESTORE_DRILL:-0}" != 1 ] && command -v nmcli >/dev/null 2>&1; then
 	nmcli connection up eno4 || true
 fi
 systemctl enable --now k3s
+
+# k8up が R2 を見るための Secret。**git には無い**(バックアップの資格情報そのものなので、
+# 公開リポジトリには置けない)。値は復元した /etc/k3s-backup/env に入っているので、
+# ここで作り直す。これが無いと k8up の operator が CreateContainerConfigError で上がらない
+# (2026-09-07 の復元リハーサルで発覚)。
+#
+# **リハーサルでは作らない。** 作ると VM の k8up が本番の restic リポジトリに書きに行く。
+#
+# Talos に移ったらホストに env ファイルが無くなるので、Infisical に移すこと。
+if [ "${RESTORE_DRILL:-0}" != 1 ] && [ -f /etc/k3s-backup/env ]; then
+	for i in $(seq 1 60); do
+		k3s kubectl get ns k8up >/dev/null 2>&1 && break
+		sleep 5
+	done
+	if k3s kubectl get ns k8up >/dev/null 2>&1; then
+		# shellcheck disable=SC1091
+		. /etc/k3s-backup/env
+		raw="${RESTIC_REPOSITORY#s3:}"
+		k3s kubectl -n k8up create secret generic k8up-global \
+			--from-literal=endpoint="${raw%/*}" \
+			--from-literal=bucket="${raw##*/}" \
+			--from-literal=accessKeyId="$AWS_ACCESS_KEY_ID" \
+			--from-literal=secretAccessKey="$AWS_SECRET_ACCESS_KEY" \
+			--from-literal=repoPassword="$RESTIC_PASSWORD" \
+			--dry-run=client -o yaml | k3s kubectl apply -f - || true
+	else
+		echo "WARNING: namespace k8up did not appear; create the k8up-global secret by hand (apps/k8up/README.md)" >&2
+	fi
+fi
+
 [ "${RESTORE_DRILL:-0}" = 1 ] || systemctl start k3s-backup.timer || true
 FIN
 chmod +x /run/k3s-restore-finish.sh

@@ -26,7 +26,9 @@ sudo sh -c '. /etc/k3s-backup/env
     --dry-run=client -o yaml | k3s kubectl apply -f -'
 ```
 
-`/etc/k3s-backup/env` は `recovery/restore.sh` が復元するので、まっさらから戻すときもこの 1 コマンドで済む。
+`/etc/k3s-backup/env` は `recovery/restore.sh` が復元する。**復元時はスクリプトが
+この Secret も作り直すので手作業は要らない**(2026-09-07 に追加。それまでは作られず、
+operator が `CreateContainerConfigError` で上がらなかった)。
 **Talos に移ったら Infisical に移す**(ホストに env ファイルが無くなるため)。
 
 ## 確かめたこと(2026-09-07)
