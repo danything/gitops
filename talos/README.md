@@ -3,6 +3,11 @@
 実機(HP ProLiant DL360 Gen9)を Talos Linux に載せ替えるための machine config。
 **v1.14.0 の形で書いてある**(1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
 
+**版と schematic の出どころは [versions.yaml](versions.yaml)。** Renovate がそこを見て、
+新しい Talos が出たら PR を作る。**適用は自動化しない**(ノードが 1 台なので、
+上げることは全停止を伴う再起動になる)。理由と手順は versions.yaml のコメントに書いてある。
+下のコマンドに埋めてある版と schematic も、変えるときは versions.yaml と揃えること。
+
 talhelper は使わない。`talosctl gen config` にこのディレクトリのパッチを渡すだけで足りる。
 
 ```shell

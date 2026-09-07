@@ -20,6 +20,16 @@
                 "chart:\\s*(?<depName>\\S+)\\s*\\n\\s*repo:\\s*(?<registryUrl>\\S+)\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
             ],
             "datasourceTemplate": "helm"
+        },
+        {
+            "description": "talos/versions.yaml の `# renovate: datasource=… depName=…` の次の行にある version を見る。Talos の版は machine config にも README にも散らばるので、追う対象はこの 1 ファイルに寄せている。",
+            "customType": "regex",
+            "managerFilePatterns": [
+                "^talos/versions\\.yaml$"
+            ],
+            "matchStrings": [
+                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
+            ]
         }
     ],
     "packageRules": [
@@ -32,6 +42,15 @@
                 "postgres"
             ],
             "allowedVersions": "<18"
+        },
+        {
+            "description": "Talos と Kubernetes は自動マージしない。ノードが 1 台なので、Talos を上げることは唯一のノードの再起動、つまり全停止を意味する。PR は「新しい版が出た」という通知として使い、適用は talosctl upgrade で人がやる (talos/versions.yaml)。",
+            "matchFileNames": [
+                "talos/versions.yaml"
+            ],
+            "groupName": "talos",
+            "groupSlug": "talos",
+            "automerge": false
         }
     ]
 }
