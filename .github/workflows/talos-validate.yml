@@ -1,0 +1,82 @@
+# talos/patches/ が machine config として成立するかを PR ごとに検証する。
+#
+# **クラスタにも実機にも触らない。** 秘密は使い捨てのものをその場で作る
+# (検証したいのはパッチの構文とスキーマであって、鍵の中身ではない)。
+#
+# **適用はしない。** machine config の適用は再起動を伴うことがあり、1 ノード構成では
+# マージが即再起動になってしまう。Talos API は mTLS のみで OIDC を受けないので、
+# CI に渡すには os:admin のクライアント証明書を置くことになる ── そこまでは渡さない。
+# 「検出は自動、適用は手動」は Talos の版追従(talos/versions.yaml の Renovate)と同じ方針。
+name: talos validate
+
+on:
+  pull_request:
+    paths:
+      - talos/**
+      - .github/workflows/talos-validate.yml
+  push:
+    branches: [main]
+    paths:
+      - talos/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: versions.yaml から版と schematic を読む
+        id: v
+        run: |
+          set -euo pipefail
+          VER=$(yq -r '.talos.version' talos/versions.yaml)
+          SCH=$(yq -r '.talos.schematic' talos/versions.yaml)
+          echo "  talos=$VER schematic=$SCH"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "schematic=$SCH" >> "$GITHUB_OUTPUT"
+
+      - name: talosctl を入れる
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /usr/local/bin/talosctl \
+            "https://github.com/siderolabs/talos/releases/download/${{ steps.v.outputs.version }}/talosctl-linux-amd64"
+          chmod +x /usr/local/bin/talosctl
+          talosctl version --client
+
+      - name: machine config を生成する
+        run: |
+          set -euo pipefail
+          # **使い捨ての秘密。** 本物(talos/secrets.yaml、SOPS 済み)は使わない
+          talosctl gen secrets -o /tmp/secrets.yaml
+          talosctl gen config doany https://10.0.0.2:6443 \
+            --with-secrets /tmp/secrets.yaml \
+            --install-image "factory.talos.dev/installer/${{ steps.v.outputs.schematic }}:${{ steps.v.outputs.version }}" \
+            --config-patch @talos/patches/cluster.yaml \
+            --config-patch @talos/patches/main.yaml \
+            --config-patch @talos/patches/apiserver.yaml \
+            --output-dir /tmp/out
+
+      - name: validate
+        run: |
+          set -euo pipefail
+          talosctl validate --config /tmp/out/controlplane.yaml --mode metal
+          echo "  controlplane.yaml OK"
+
+      - name: 生成物に想定の設定が入っているか
+        run: |
+          set -euo pipefail
+          # パッチが黙って落ちていないことを確かめる(gen config は未知のキーを
+          # 警告なく無視することがある)
+          for needle in \
+            'ks.doany.io' \
+            'token.actions.githubusercontent.com' \
+            'claims.repository == "danything/gitops"' \
+            'balance-alb'
+          do
+            grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
+            echo "  ある: $needle"
+          done

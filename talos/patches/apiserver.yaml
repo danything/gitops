@@ -1,0 +1,50 @@
+# API サーバの公開まわり。**k3s 期の /etc/rancher/k3s/config.yaml と
+# bootstrap/apiserver/authentication-config.yaml をここへ持ってきたもの。**
+#
+# Talos には**専用の設定ドキュメントがある**ので、ホストにファイルを置いたり
+# extraVolumes でマウントしたりする必要はない(`machine.files` は非推奨でもある)。
+#
+# なぜこれが要るかは [../../bootstrap/apiserver/authentication-config.yaml](../../bootstrap/apiserver/authentication-config.yaml)
+# に書いてある。要点だけ言うと、**bootstrap 層を GitHub Actions から当てるため**で、
+# kubeconfig を GitHub に置かずに済ませる唯一の方法。
+---
+apiVersion: v1alpha1
+kind: KubeAPIServerConfig
+# 外から `kubectl --server=https://ks.doany.io:6443` を証明書検証つきで使うために要る。
+# Talos はマシンのアドレス・ホスト名・Kubernetes の名前は自動で入れるが、公開名は入らない。
+certExtraSANs:
+  - ks.doany.io
+---
+apiVersion: v1alpha1
+kind: KubeAuthenticationConfig
+# `configuration` の中身は **Kubernetes の AuthenticationConfiguration そのもの**
+# (apiVersion / kind は Talos が付けるので書かない)。
+#
+# **`anonymous` を消さないこと。** ここを与えると既定を置き換えるので、
+# 書き忘れると kubelet や LB のヘルスチェック(/livez /readyz /healthz)が
+# 匿名で叩けなくなり、コントロールプレーンが上がらなくなる。
+configuration:
+  anonymous:
+    enabled: true
+    conditions:
+      - path: /livez
+      - path: /readyz
+      - path: /healthz
+  jwt:
+    - issuer:
+        url: https://token.actions.githubusercontent.com
+        audiences:
+          - https://ks.doany.io
+      claimMappings:
+        # `sub` は組織 ID / リポジトリ ID 入りの形に変わったので使わない。
+        # 経緯は bootstrap/apiserver/authentication-config.yaml
+        username:
+          expression: '"gha:" + claims.repository + ":" + claims.ref'
+      # **issuer は誰でもトークンを取れる公開の IdP。** 効いているのはここ
+      claimValidationRules:
+        - expression: 'claims.repository == "danything/gitops"'
+          message: "danything/gitops 以外は受け付けない"
+        - expression: 'claims.ref == "refs/heads/main"'
+          message: "main 以外のブランチからは受け付けない"
+        - expression: 'claims.workflow_ref.startsWith("danything/gitops/.github/workflows/bootstrap-apply.yml@")'
+          message: "bootstrap-apply.yml 以外のワークフローからは受け付けない"

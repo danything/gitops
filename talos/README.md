@@ -22,6 +22,7 @@ talosctl gen config doany https://10.0.0.2:6443 \
   --install-image factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.0 \
   --config-patch @patches/cluster.yaml \
   --config-patch @patches/main.yaml \
+  --config-patch @patches/apiserver.yaml \
   --output-dir /tmp/talos-config
 shred -u /tmp/secrets.plain.yaml
 
@@ -33,6 +34,16 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kub
 ```
 
 `clusterconfig/` と平文の秘密は `.gitignore` 済み。
+
+**パッチは PR ごとに CI が検証する**([../.github/workflows/talos-validate.yml](../.github/workflows/talos-validate.yml))。
+使い捨ての秘密で `gen config` して `talosctl validate --mode metal` を通し、生成物に
+想定の設定(`ks.doany.io`・OIDC の issuer・bond の `balance-alb` など)が実際に入っているかまで見る
+── **`gen config` は知らないキーを警告なく捨てることがある**ので、通ったことだけでは足りない。
+
+**適用は CI にやらせない。** machine config の適用は再起動を伴うことがあり、1 ノードでは
+マージが即停止になる。Talos API は mTLS のみで OIDC を受けないため、CI に渡すには
+`os:admin` のクライアント証明書を置くことになる。**検出は自動、適用は手動**
+(`versions.yaml` の Renovate と同じ方針)。
 
 ## 確認できたこと / できていないこと
 
