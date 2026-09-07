@@ -147,6 +147,11 @@ systemctl enable --now k3s
 # つまりこの値は git にも CiliumGatewayClassConfig にも書けない
 # (`spec.service` に nodePort の項目が無い)まま、**依然として経路そのもの**。
 # Cilium は手で入れた nodePort を上書きしないので、ここで一度当てれば残る。
+#
+# **Talos 期はこのスクリプトが動かない**(ホストにシェルが無い)。同じことを
+# `.github/workflows/bootstrap-apply.yml` の最後のステップでもやっているので、
+# あちらを `workflow_dispatch` で流せば当たる。ここに残しているのは、
+# **VM の復元リハーサルでは GitHub Actions が VM の API サーバに届かない**ため。
 for i in $(seq 1 60); do
 	k3s kubectl -n kube-system get svc cilium-gateway-doany >/dev/null 2>&1 && break
 	sleep 5
