@@ -41,6 +41,23 @@ age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age
 sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 ```
 
+## ホスト名の付け方
+
+`*.doany.io` のサブドメインは短く付ける。**規則は 2 つだけ。**
+
+| アプリ名 | 規則 | 結果 |
+| --- | --- | --- |
+| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`、Argo CD → `ac`、wg-easy → `wg` |
+| 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
+
+**1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
+`l`(lgtm)・`p`(portainer)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。
+新しく足すときは上の規則で 2 文字にする(1 文字はもう埋まっているものが多い)。
+
+`doany.io` そのものはブログ。`*.s.doany.io` は SSO を通して LAN のホストへ中継する口で、
+`dp.l.doany.io` のように途中に段が入るものは**宅内からしか引けない名前**
+(Gateway のリスナーが段ごとに分かれている。[bootstrap/gateway/](bootstrap/gateway/))。
+
 ## アプリ
 
 | ディレクトリ | 内容 |
