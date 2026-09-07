@@ -95,6 +95,15 @@ sops -d infisical/secrets.yaml | kubectl apply -f -
 | 共有値 | `/shared/entra`(Entra 共用アプリの client-id / client-secret / issuer / admins-group)と `/shared/smtp`(info@doany.io)。各アプリのフォルダは `${prod.shared.entra.client-secret}` のような参照で、ローテーションは shared 側の 1 回で済む(operator が展開する) |
 | SMTP | info@doany.io(Exchange Online、mattermost/erpnext と同じ)。パスワードだけ Infisical の `/infisical/infisical-smtp` に置き、`infisical/smtp-secret.yaml` が Secret にする |
 
+### `Prune=false` を必ず付けること
+
+`InfisicalSecret` には `argocd.argoproj.io/sync-options: Prune=false` を付ける。
+
+**operator は CR の annotation を、作った `Secret` にもコピーする。** ArgoCD の
+tracking-id までコピーされると、ArgoCD がその `Secret` を「git に無い管理対象」と
+見なして sync のたびに prune する(復元リハーサル 2026-09-06 で発覚)。
+`Prune=false` も一緒にコピーさせて、prune の対象から外す。
+
 ### アプリ側の書き方
 
 各リポジトリの `deploy/` に `InfisicalSecret` を置く。フォルダ内のシークレットを全部そのままキーにするので、
