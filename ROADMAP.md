@@ -99,8 +99,9 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       **障害 1 件**: d.doany.io の backend を平文の 80 にしたら AdGuard の DoH が死に、
       これをセキュア DNS にしていたブラウザの名前解決が全部止まった(2026-09-07 06:34〜10:20)。
       nginx サイドカー経由に直した。詳細は decisions.md「AdGuard の DoH は backend が HTTPS でないと出ない」。
-- [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
-      `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
+- [x] **クライアント IP は保たれている(2026-09-07 確認)。`externalTrafficPolicy` は `Cluster` のまま**。
+      単一ノードでは backend が必ず同じノードに居るので Cilium は SNAT しない。
+      証拠と、ノードを足すときにやることは [docs/decisions.md](docs/decisions.md)「クライアント IP」。
 
 ### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
 
