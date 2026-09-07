@@ -103,6 +103,38 @@ Entra が返す ID トークンが大きいのは `groups` クレームに**所�
 > (`bootstrap/auth/deployment.yaml` のコメント)。いまは `entra-id` プロバイダで
 > `OAUTH2_PROXY_SCOPE` も明示しているので起きないはずだが、**1 ルートで確かめてから広げること。**
 
+## 実施ログ(2026-09-07)
+
+`az` で操作した。**テナントに Entra ID P1/P2 が無いので、ロールにグループは割り当てられない**
+(グループ単位のアプリロール割り当ては P1 以上の機能)。ユーザーを直接ロールに割り当ててある。
+管理者が増えたら、その人にもロールを割り当てる。
+
+| | |
+| --- | --- |
+| アプリ登録 | `Main`(`b0fa498f-…`、オブジェクト ID `89e18065-…`) |
+| 作ったロール | 表示名 `Admins` / 値 `admin` / ID `fd51fd21-182f-4eb1-971e-c545c5862667` |
+| 割り当て | ユーザー `info@doany.io` に直接 |
+| `appRoleAssignmentRequired` | **`false` のまま。** 「割り当てが必要」は元から `いいえ` だった(コードのコメントは誤り)。絞っているのは各アプリ側の判定 |
+
+```shell
+# 作ったときのコマンド(値は上のとおり)
+az rest --method PATCH --url "https://graph.microsoft.com/v1.0/applications/<オブジェクト ID>"   --headers "Content-Type=application/json" --body @approle.json
+az rest --method POST   --url "https://graph.microsoft.com/v1.0/servicePrincipals/<SP の ID>/appRoleAssignedTo"   --headers "Content-Type=application/json"   --body '{"principalId":"<ユーザーの ID>","resourceId":"<SP の ID>","appRoleId":"<ロールの ID>"}'
+```
+
+アプリ側は両対応にして deploy 済み。**Entra のグループ要求はまだ消していない**ので、
+いまはトークンに `groups` と `roles` の両方が載っている。
+
+| | 状態 |
+| --- | --- |
+| denpa | `roles` も見るようにした |
+| yosegaki | `adminGroups` に `admin` と GUID の両方 |
+| Argo CD | `scopes: '[roles, groups, email]'`、`policy.csv` に両方の行 |
+| oauth2-proxy | **`roles` のみ**(`--oidc-groups-claim` は 1 つしか取れない)。`ALLOWED_GROUPS=admin` |
+
+**残り**: 実機でログインし直して `roles` で通ることを確かめる → Entra のグループ要求を消す
+→ セッションを測って redis を落とす → 各アプリから GUID を落とす。
+
 ## 効いたかの確かめ方
 
 セッションの大きさは redis から直接測る。
