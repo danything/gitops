@@ -32,17 +32,11 @@ spec:
             # Gateway は使わない。443 では TLS 終端(HTTPS リスナー)と passthrough が共存できず
             # ProtocolConflict になるため(docs/decisions.md)、このサイドカーがホストのポートで直接受ける。
             #
-            # **3129 が本番のポート。** 3proxy 自身の平文が 3128(プロキシの慣用ポート)なので、
-            # その TLS 版として隣の 3129 にした。コンテナ側の待ち受けと同じ番号なので読み替えも要らない。
+            # 3proxy 自身の平文が 3128(プロキシの慣用ポート)なので、その TLS 版として隣の 3129。
+            # コンテナ側の待ち受けと同じ番号なので読み替えも要らない。
             - name: proxy-tls
               containerPort: 3129
               hostPort: 3129
-            # 旧ポート。移行のあいだだけ両方で受ける。**ルータの転送とクライアントの設定を
-            # 3129 に変えたらこの 4 行と tls-terminator-config.yaml の 8444 の server を消す。**
-            # 8443 は mattermost-calls が使っているので当時 8444 にしていた。
-            - name: proxy-tls-old
-              containerPort: 8444
-              hostPort: 8444
           volumeMounts:
             - name: tls-terminator-config
               mountPath: /etc/nginx/nginx.conf
