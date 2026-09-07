@@ -48,7 +48,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | アプリ名 | 規則 | 結果 |
 | --- | --- | --- |
 | 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`、Argo CD → `ac`、wg-easy → `wg` |
-| 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
+| 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、netbird → `nd`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
 `l`(lgtm)・`p`(portainer)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。
@@ -66,6 +66,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
 | [`erpnext/`](apps/erpnext/) | ERPNext (Helm chart + OIDC セットアップ) |
 | [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL |
+| [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`portainer/`](apps/portainer/) | Portainer |
 | [`wireguard/`](apps/wireguard/) | wg-easy (WireGuard VPN) |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
