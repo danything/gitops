@@ -1,0 +1,22 @@
+# **DoH(/dns-query)は AdGuard の HTTPS(443)でしか出ない。** 平文の 80 では 404 になる。
+# ブラウザや端末の「セキュア DNS」に https://d.doany.io/dns-query を入れている場合、
+# 前段が 80 に繋ぐと名前解決が全部死ぬ(2026-09-07 に実際に起きた)。
+# なので backend も HTTPS で繋ぐ。Traefik では serversscheme/serverstransport の注釈で
+# やっていたことの置き換え。
+#
+# 検証は省略しない。AdGuard が出す証明書は cert-manager が Let's Encrypt から取った
+# 本物(CN=d.doany.io)なので、システムの CA でそのまま検証できる。
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: adguardhome-web
+  namespace: adguardhome
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: adguardhome-web
+      sectionName: https
+  validation:
+    hostname: d.doany.io
+    wellKnownCACertificates: System
