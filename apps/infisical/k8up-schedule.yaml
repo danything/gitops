@@ -13,6 +13,13 @@
 apiVersion: k8up.io/v1
 kind: Schedule
 metadata:
+  # **CRD がまだ無いクラスタでも apps 全体を止めない。** ArgoCD は同期の前に
+  # マニフェスト一式を dry-run で検証するので、k8up の CRD が入る前だと
+  # 「k8up.io/v1 が引けない」で **apps/ 配下が丸ごと適用されなくなる**
+  # (2026-09-07 の復元リハーサルで発覚。子 Application 5 本が作られなかった)。
+  # このリソースだけ dry-run を飛ばせば、CRD を入れる Application が先に通る。
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
   name: infisical
   namespace: infisical
 spec:
