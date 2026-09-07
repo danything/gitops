@@ -1,0 +1,45 @@
+# k8up。**Talos に移ったあとのバックアップの担い手。** いまホストで動いている
+# backup/k3s-backup は「サーバに入って PVC のディレクトリを丸ごと restic に流す」形なので、
+# ホストにシェルが無い Talos では成立しない。k8up は Pod として同じ restic リポジトリに書く。
+#
+# **いまはまだ Schedule を持たせていない。** 本番のバックアップは引き続きホストのスクリプト。
+# ここでは operator を置いて、認証情報の渡し方と実際に R2 へ書けることの確認まで済ませてある。
+#
+# **秘密は git に置かない。** endpoint(アカウント ID を含む)も含めて全部 Secret から渡す。
+# Secret の作り方は README.md。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: k8up
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: k8up
+  source:
+    repoURL: https://k8up-io.github.io/k8up
+    chart: k8up
+    targetRevision: 4.10.0
+    helm:
+      releaseName: k8up
+      valuesObject:
+        k8up:
+          envVars:
+            - name: BACKUP_GLOBALS3ENDPOINT
+              valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
+            - name: BACKUP_GLOBALS3BUCKET
+              valueFrom: {secretKeyRef: {name: k8up-global, key: bucket}}
+            - name: BACKUP_GLOBALACCESSKEYID
+              valueFrom: {secretKeyRef: {name: k8up-global, key: accessKeyId}}
+            - name: BACKUP_GLOBALSECRETACCESSKEY
+              valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
+            - name: BACKUP_GLOBALREPOPASSWORD
+              valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
