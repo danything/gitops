@@ -144,6 +144,7 @@ kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged
 | `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort 4244/9234/9879/9963/9964)。Talos は既定でラベル済み |
 | `local-path-storage` | ヘルパー Pod の hostPath。**Talos で local-path-provisioner を入れるなら必須** |
 | `wireguard` | hostNetwork・privileged・hostPath・hostPort 51820/51821 |
+| `netbird` | hostPort 3478(内蔵 STUN。UDP なのでゲートウェイを通せない) |
 | `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`) |
 | `adguardhome` | hostPort 53 / 853 |
 | `mattermost` | hostPort 8443(calls の WebRTC) |

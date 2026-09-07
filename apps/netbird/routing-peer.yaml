@@ -1,0 +1,119 @@
+# NetBird の routing peer(サブネットルータ)。**自宅 LAN 10.0.0.0/24 への入口**で、
+# iLO(10.0.0.3)や AdGuard(10.0.0.2:53)にここ経由で届く。
+#
+# **Headscale を落として NetBird にした理由がここ。** headscale は FAQ で
+# 「headscale 自身を動かすマシンをサブネットルータにするな」と明記していて、
+# ノード 1 台のこの構成では回避できなかった。NetBird は routing peer が独立した
+# 概念で、コンテナで動かす前提のドキュメントがある(docs/decisions.md)。
+#
+# 上流の kubernetes-operator にも NetworkRouter があるが、あれは
+# **Kubernetes の Service を公開する**ためのもので、物理 LAN のサブネットルータではない。
+# ここが必要としているのは後者なので、素の Deployment + hostNetwork で組む。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: netbird-routing-peer-data
+  namespace: netbird
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # ピアの identity(秘密鍵)と設定だけ。消えると再登録が要る
+      storage: 128Mi
+---
+# 鍵は Infisical の /netbird/netbird-routing-peer に `setup-key` で置く。
+# ダッシュボードの Generate Setup Key で出るもの。
+apiVersion: secrets.infisical.com/v1alpha1
+kind: InfisicalSecret
+metadata:
+  name: netbird-routing-peer
+  namespace: netbird
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  hostAPI: http://infisical.infisical.svc:8080/api
+  authentication:
+    kubernetesAuth:
+      identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
+      autoCreateServiceAccountToken: true
+      serviceAccountRef:
+        name: infisical-auth
+        namespace: infisical
+      secretsScope:
+        projectSlug: doa
+        envSlug: prod
+        secretsPath: /netbird/netbird-routing-peer
+        recursive: false
+  managedKubeSecretReferences:
+    - secretName: netbird-routing-peer
+      secretNamespace: netbird
+      creationPolicy: Orphan
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netbird-routing-peer
+  namespace: netbird
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  # hostNetwork で WireGuard のポートを掴むので、新旧 Pod が並ぶと衝突する
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: netbird-routing-peer
+  template:
+    metadata:
+      labels:
+        app: netbird-routing-peer
+    spec:
+      # **hostNetwork。** LAN(10.0.0.0/24)へ素で出る必要があり、
+      # ルートと NAT もホスト側で成立させないと転送にならない。
+      # Pod の hostname がノード名(main)になるので、ダッシュボードにも `main` で出る。
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: netbird
+          image: netbirdio/netbird:0.78.1
+          env:
+            - name: NB_SETUP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: netbird-routing-peer
+                  key: setup-key
+            - name: NB_MANAGEMENT_URL
+              value: https://nd.doany.io
+            - name: NB_LOG_LEVEL
+              value: info
+            # **既定の 51820 は wg-easy が hostNetwork で掴んでいる。**
+            # 併走のあいだは衝突するのでずらす。wg-easy を撤去したら 51820 に戻してよいが、
+            # 戻す必然性は無い(STUN が外から通っているのでホールパンチは成立する。
+            # ルータでこのポートを転送する必要は無い)。
+            - name: NB_WIREGUARD_PORT
+              value: "51822"
+          securityContext:
+            capabilities:
+              add:
+                # WireGuard インタフェースとルート・NAT の操作
+                - NET_ADMIN
+                # 上流が docker で付けるよう案内しているもの(eBPF と raw socket を使う)
+                - SYS_ADMIN
+                - SYS_RESOURCE
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/netbird
+            # カーネルの wireguard が使えないときのユーザ空間フォールバック用。
+            # Talos でもカーネル組み込みは確認済み(talos/README.md)なので通常は使わない
+            - name: tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: netbird-routing-peer-data
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

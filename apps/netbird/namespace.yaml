@@ -1,0 +1,16 @@
+# **PSA は privileged。** STUN(UDP 3478)を hostPort でノードの IP に直接出すため。
+# Pod Security Standards の baseline は `hostPort` を許さない(許容値は未定義か 0 だけ)ので、
+# baseline のままだと Talos で Pod が作れなくなる。k3s では PSA を有効にしていないので
+# いまは効かないが、Talos に持っていくために書いておく(apps/wireguard と同じ理由)。
+#
+# STUN をゲートウェイ経由にできないのは NetBird 側の制約:
+# 「HTTP reverse proxies only handle TCP traffic; STUN requires direct UDP access」
+# (https://docs.netbird.io/selfhosted/external-reverse-proxy)。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netbird
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

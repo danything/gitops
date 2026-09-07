@@ -53,6 +53,18 @@ nodePort:
 # Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
 gatewayAPI:
   enabled: true
+  # **gRPC を通すのに要る(2026-09-07)。** 既定は false で、その場合 Envoy は TLS の
+  # ALPN で `h2` を広告しない。grpc-go のクライアントは ALPN の合意を必須にしているので、
+  # NetBird のピアが `missing selected ALPN property` で管理サーバに繋げなかった。
+  #
+  # 有効にすると全リスナーが「HTTP/2 を試して、駄目なら HTTP/1.1」を広告する。
+  # つまり**ブラウザからの既存サイトも HTTP/2 になる**。WebSocket は HTTP/2 上では
+  # 拡張 CONNECT が要るが、ブラウザはそれが使えなければ HTTP/1.1 の別接続に落ちるので
+  # Mattermost・ArgoCD・Infisical はそのまま動く(適用後に実際に確認した)。
+  #
+  # チャートの注記どおり appProtocol サポートも一緒に有効になるが、
+  # **このクラスタに appProtocol を宣言している Service は 1 つも無い**ので影響しない。
+  enableAlpn: true
 
 # LB-IPAM が払い出したアドレスを LAN に知らせる。**ConfigMap に入れるだけでは効かない** —
 # cilium エージェント(DaemonSet)の再起動が要る。

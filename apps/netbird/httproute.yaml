@@ -1,0 +1,66 @@
+# NetBird(nd.doany.io)。**1 つのホスト名に HTTP と gRPC が混在する**のが厄介なところで、
+# combined コンテナは同じ 80 番で
+#   - REST/WebSocket(/api、/oauth2、/relay、/ws-proxy/)
+#   - gRPC h2c(management.ManagementService、signalexchange.SignalExchange)
+# の両方を喋る。ゲートウェイ側で振り分ける必要がある
+# (https://docs.netbird.io/selfhosted/external-reverse-proxy の Required Routing Endpoints)。
+# ここでは gRPC ぶんを GRPCRoute に、それ以外を HTTPRoute に分けている。
+# GRPCRoute なら Cilium が backend を h2c として扱うので、Service 側に appProtocol を
+# 付けたり Cilium の enable-gateway-api-app-protocol を有効にしたりせずに済む。
+#
+# 証明書はワイルドカード `*.doany.io` が Gateway のリスナーに付いているので指定不要。
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: netbird-grpc
+  namespace: netbird
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["nd.doany.io"]
+  rules:
+    - matches:
+        # ピア(netbird クライアント)が繋ぎっぱなしにする管理チャネル
+        - method:
+            type: Exact
+            service: management.ManagementService
+        # ピア同士の WireGuard ハンドシェイクを仲介するシグナリング
+        - method:
+            type: Exact
+            service: signalexchange.SignalExchange
+      backendRefs:
+        # **HTTPRoute 側とは別の Service。** 同じ Service を指すと Envoy のクラスタが
+        # 1 つになり、h2c が HTTP/WebSocket 側にも及んで `/relay` が壊れる(deployment.yaml)
+        - name: netbird-server-grpc
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: netbird
+  namespace: netbird
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["nd.doany.io"]
+  rules:
+    # combined サーバが答える口。Gateway API は前方一致の長いほうが勝つので、
+    # 下の `/` (ダッシュボード)より先に当たる。
+    - matches:
+        - path: {type: PathPrefix, value: /api}
+        - path: {type: PathPrefix, value: /oauth2}       # 内蔵 IdP(Dex)
+        - path: {type: PathPrefix, value: /relay}        # WebSocket
+        - path: {type: PathPrefix, value: /ws-proxy}     # WebSocket(gRPC の代替経路)
+      backendRefs:
+        - name: netbird-server
+          port: 80
+    # 残りは全部ダッシュボード(SPA)。/nb-auth と /nb-silent-auth もここ。
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      backendRefs:
+        - name: netbird-dashboard
+          port: 80
