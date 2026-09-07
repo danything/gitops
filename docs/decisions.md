@@ -314,6 +314,37 @@ Traefik が持っていた ACME(`mydnschallenge`)は cert-manager の ClusterIss
 `bootstrap/traefik/` にあった `sub-backend` の Service と EndpointSlice は `bootstrap/auth/sub-backend.yaml` へ、
 Cloudflare のトークンは `bootstrap/cert-manager/cloudflare-secret.yaml` へ移した。
 
+### Traefik の sticky cookie に代替が無い(2026-09-07 調査)
+
+撤去した Traefik の Middleware / IngressRoute のうち、**Service の sticky cookie
+(`traefik.ingress.kubernetes.io/service.sticky.cookie.*`)だけは Cilium 側に受け皿が無い。**
+使っていたのは tamasagashi(`ts.doany.io`)1 本で、ローリング更新中に新旧 2 Pod が同時に配信される窓で
+「HTML を新 Pod から受けたブラウザが、ハッシュ付きの CSS/JS を旧 Pod に取りに行って 404」を防ぐためのものだった。
+
+- **Gateway API の session persistence(GEP-1619、`HTTPRoute.spec.rules[].sessionPersistence`)は使えない。**
+  入っている Gateway API CRD は **v1.6.1 の standard チャネル**で、`httproutes` の v1 の rule には
+  `backendRefs / filters / matches / name / timeouts` しか無い。`BackendLBPolicy` の CRD も入っていない
+  (どちらも experimental チャネル限定)
+- **Cilium 1.20.1 が未実装。** v1.20.1 タグのソースに `SessionPersistence` の文字が無く、ドキュメントのページも無い。
+  実装は cilium/cilium#48029 で 2026-09-01 に main へマージ(v1.20.1 のリリースは 2026-08-18)なので **1.21 から**。
+  GatewayClass `cilium` の `status.supportedFeatures` にも該当 feature は載っていない
+- **`Service.spec.sessionAffinity: ClientIP` は Gateway 経路には効かない。** 生成される
+  `CiliumEnvoyConfig/cilium-gateway-doany` の cluster は **type EDS**(lbPolicy 既定 = ROUND_ROBIN)で、
+  Envoy が EndpointSlice の Pod IP を直接見て振り分ける。sessionAffinity を実装している ClusterIP のデータパスを通らない。
+  仮に通っても Envoy から見た送信元 IP は全クライアント同じ(Gateway の Pod)なので per-client の固定にならない。
+  `service.cilium.io/affinity`(clustermesh の local/remote)や `service.cilium.io/lb-algorithm`(eBPF の random/maglev)も同じ理由で無関係
+
+**いまは穴が開いたまま受け入れている。** tamasagashi は replicas 1・状態なしで、影響は更新中の 15 秒ほどの窓に限られ、
+アプリ側の SvelteKit の版チェックと Cloudflare の Browser Cache TTL 設定で緩和してある(danything/tamasagashi の `deploy/README.md`)。
+**Cilium 1.21 に上げるときに、Gateway API CRD を experimental チャネルへ入れ替えたうえで
+`apps/gateway-routes/tamasagashi-tamasagashi.yaml` に `sessionPersistence` を足す**のが本筋。
+CRD 入れ替えの際は、いまの Gateway API CRD が Traefik 撤去後も `traefik-crd` の Helm リリース所有のまま
+(`helm.sh/resource-policy: keep` で残存)であることに注意。
+
+**Cookie を使う他のアプリ(auth の oauth2-proxy など)は影響を受けない。** どれも replicas 1 で、
+セッションは Cookie 自体か外部ストアに入っていて Pod のメモリに無い。**将来どれかを複数 replica にするなら、
+Cilium 1.21 未満のあいだは Gateway 越しのセッション固定が無いことを先に確認すること。**
+
 ### 却下した案
 
 | 案 | 理由 |
