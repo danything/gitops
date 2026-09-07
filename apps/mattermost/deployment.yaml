@@ -30,7 +30,7 @@ spec:
         # means a CrashLoopBackOff until PostgreSQL catches up. Waiting here
         # keeps that first rollout clean.
         - name: wait-for-postgres
-          image: postgres:17.10
+          image: postgres:17.11
           command:
             - bash
             - -c
