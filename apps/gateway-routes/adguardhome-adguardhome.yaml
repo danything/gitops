@@ -12,6 +12,18 @@ spec:
       sectionName: https
   hostnames: ["d.doany.io"]
   rules:
+    # DoH(/dns-query)は AdGuard の HTTPS でしか出ないので、サイドカーへ回す。
+    # Gateway API は長いパスを優先するので、下の / より先に当たる。
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /dns-query
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: adguardhome-web
+          port: 8081
+          weight: 1
     - matches:
         - path:
             type: PathPrefix

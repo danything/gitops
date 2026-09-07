@@ -1,0 +1,38 @@
+# DoH(/dns-query)を平文で受けて AdGuard の HTTPS(443)へ渡すだけのサイドカー設定。
+#
+# **なぜ要るのか。** AdGuard は DoH を HTTPS の口(443)でしか出さない。平文の 80 では 404 になる。
+# Gateway が backend へ平文で繋ぐ構成だと DoH が死に、これを「セキュア DNS」に入れている
+# ブラウザや端末は名前解決が全部できなくなる(2026-09-07 に実際に起きた)。
+#
+# **なぜ BackendTLSPolicy ではないのか。** Cilium 1.20.1 は BackendTLSPolicy を Accepted にするが
+# 実際には Envoy の cluster に transport_socket を付けない。backend に平文で繋いだままなので
+# AdGuard が 400(Client sent an HTTP request to an HTTPS server)を返す。
+# Cilium が実装したらこのサイドカーは消せる。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doh-proxy
+  namespace: adguardhome
+data:
+  nginx.conf: |
+    worker_processes 1;
+    error_log /dev/stderr warn;
+    pid /tmp/nginx.pid;
+    events { worker_connections 256; }
+    http {
+      access_log off;
+      server {
+        listen 8081;
+        location / {
+          proxy_pass https://127.0.0.1:443;
+          # 同じ Pod の中の loopback なので検証する意味がない(証明書の名前も一致しない)。
+          proxy_ssl_verify off;
+          proxy_ssl_server_name on;
+          proxy_ssl_name d.doany.io;
+          # AdGuard がクライアント別の統計に使う。Gateway(Envoy)が付けた値をそのまま渡す。
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto https;
+        }
+      }
+    }

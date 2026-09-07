@@ -18,3 +18,8 @@ spec:
       protocol: TCP
       port: 443
       targetPort: 443
+    # DoH は AdGuard の HTTPS でしか出ないので、サイドカー経由で渡す(deployment.yaml)。
+    - name: doh
+      protocol: TCP
+      port: 8081
+      targetPort: 8081
