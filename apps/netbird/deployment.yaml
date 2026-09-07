@@ -1,5 +1,5 @@
-# NetBird の combined サーバ + ダッシュボード。wg-easy(apps/wireguard)とは**併存**させて、
-# 移行の可否を判断するために動かしている。理由と比較は docs/decisions.md「VPN を何にするか」。
+# NetBird の combined サーバ + ダッシュボード。VPN はこれ 1 本(wg-easy は 2026-09-07 に撤去)。
+# 選定の理由と比較は docs/decisions.md「VPN を何にするか」。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -35,6 +35,20 @@ spec:
     metadata:
       labels:
         app: netbird-server
+      annotations:
+        # **バックアップは下の backup コンテナで取る。** netbird-server のイメージには
+        # sqlite3 が無く(あるのは perl だけ)、上流のイメージなのでこちらでは足せない。
+        k8up.io/backupcommand-container: backup
+        # store.db(ピアと設定)・idp.db(内蔵 IdP のユーザ)・events.db を、それぞれ
+        # SQLite の pager 越しに読んで tar 1 本にまとめる。同じ PVC に居る
+        # GeoLite2-City(65 MB)と geonames(7 MB)は入れない ── 起動時に落とし直せる。
+        #
+        # 3 つとも rollback journal モード(ヘッダの 18/19 バイト目が 1)。書き込み中の
+        # ファイルをそのままコピーすると本体と -journal がずれるが、serialize() は
+        # コミット済みの状態を返す。
+        k8up.io/backupcommand: >-
+          bun -e "const{Database}=require(`bun:sqlite`),fs=require(`fs`);const d=fs.mkdtempSync(`/tmp/nb-`);for(const n of [`store.db`,`idp.db`,`events.db`])fs.writeFileSync(`${d}/${n}`,new Database(`/var/lib/netbird/${n}`,{readonly:true}).serialize());process.stdout.write(Bun.spawnSync([`tar`,`-cf`,`-`,`-C`,d,`.`]).stdout);fs.rmSync(d,{recursive:true,force:true})"
+        k8up.io/file-extension: .tar
     spec:
       initContainers:
         # config.yaml は環境変数を展開しない(combined/cmd/config.go は yaml.Unmarshal するだけ)。
@@ -104,6 +118,25 @@ spec:
               mountPath: /var/lib/netbird
             - name: config
               mountPath: /etc/netbird
+        # **バックアップのためだけのサイドカー。** 上の k8up.io/backupcommand は
+        # ここで走る。bun には bun:sqlite が入っているので、sqlite3 を持つイメージを
+        # 自前で焼かずに済む(アプリ側の 5 つと同じ手)。
+        # 読み取り専用でマウントする ── このコンテナが DB を書き換えることは無い。
+        - name: backup
+          image: oven/bun:1.4.2-slim
+          command: ["sleep", "infinity"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            # 待っている間は sleep しか居ない。上限が効くのは k8up が bun を
+            # exec している間だけで、実測のピークは 26 MB(VmHWM)。
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/netbird
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:

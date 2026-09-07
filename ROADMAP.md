@@ -78,10 +78,11 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       - [x] operator を入れて、**`backend` を書かずにグローバル設定へ寄せれば R2 へ書ける**ことを確認(2026-09-07)。
             endpoint も含めて秘密は git に置かない形にできた。`backend.envFrom` だけでは動かない
             (k8up が空の `RESTIC_REPOSITORY` を必ず入れて上書きする)。詳細は [apps/k8up/README.md](apps/k8up/README.md)。
-      - [x] **`Prune` はタグを書かないとリポジトリ全体を消す**ことを確認(2026-09-07)。
-            `retention.tags` が無いと `restic forget` がリポジトリ全体に効く。バックアップに
-            `tags: [k8up]`、prune に `retention.tags: [k8up]` を付けて、ホストのスクリプト
-            (`--tag k3s-host`)と隔離した。
+      - [x] **`Prune` の効く範囲を確かめた(2026-09-07)。** `restic/cli/prune.go` は
+            `--host=<自分の namespace>` を必ず渡すので、他の namespace にもホストのスクリプト
+            (`host=main` / `--tag k3s-host`)にも届かない。`--tag` は `retention.tags` が
+            あるときだけ渡るので、`tags: [k8up]` は二重の歯止めとして付けている。
+            **同じ理由で prune は namespace ごとに要る**(1 本にまとめても他には効かない)。
       - [x] **mattermost の postgres を `k8up.io/backupcommand` で論理バックアップ**(2026-09-07)。
             R2 に 9.3 MB の `pg_dump` が入ることまで確認済み。PVC には `k8up.io/backup: "false"` を
             付けて、ファイルはホスト側、論理バックアップは k8up、と分けてある。
@@ -92,6 +93,15 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
             本体は bootstrap に居るが、`Schedule` は apps に置いた(バックアップはアプリ層の関心事)。
       - [x] operator を `skipWithoutAnnotation: true` にして「注釈の無い PVC は取らない」側に倒した。
             k8up は論理バックアップ専用、ファイルはホストのスクリプト、という切り分け。
+      - [x] **SQLite を持つ 6 つを `backupcommand` に寄せた(2026-09-07)。**
+            lgtm / xool / worklog / denpa / yosegaki / netbird。ファイルをそのままコピーすると
+            本体と `-wal` がずれるので、`bun -e` の `serialize()` で整合したコピーを標準出力に出す。
+            **イメージには何も足していない** ── 自前アプリは全部 bun で動いていて `bun:sqlite` が
+            最初から使える(当初は「`sqlite3` を足す PR が 5 本要る」と見積もっていた)。
+            netbird だけ上流イメージに何も無いので `oven/bun` のサイドカーを足した。
+            実測は [apps/k8up/README.md](apps/k8up/README.md)。
+      - [x] **`Schedule` を [apps/k8up/schedules.yaml](apps/k8up/schedules.yaml) に 9 本まとめた。**
+            中身は名前と namespace と時刻しか違わないので、アプリごとに置くと同じ注意書きが 9 回並ぶ。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
       詳細は [docs/talos.md](docs/talos.md)。
@@ -214,7 +224,9 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
             **`admin.enabled: false` なのでその窓の間は UI に誰も入れない**。`kubectl` で見る
 - [ ] **ファイルの PVC バックアップを k8up 側に寄せる。** いまはホストの `k3s-backup` が
       全 PVC を見ているが、**Talos にはシェルが無い**。論理バックアップ(k8up)と同じ仕組みに統一する。
-      対象の切り分けは `apps/k8up/README.md`。
+      **DB は済んでいる**ので残りは注釈だけ。ただし `denpa-data/logos/` のように DB と同居している
+      ファイルは `k8up.io/backup-restic-args` で `--exclude` が要る。portainer(boltdb・シェル無し)
+      だけ手が無い。対象の切り分けは [apps/k8up/README.md](apps/k8up/README.md)。
 - [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を
       参照していて、**バインド済み PVC の `storageClassName` は API が変更を拒否する**ので今は消せない。
       PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
@@ -225,7 +237,7 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 ### Phase 3 — Talos 定常運用
 
 - [ ] k8up の失敗通知。スケジュールと保持(`keep-daily 7 / weekly 4 / monthly 6`、タグは `k8up`)は
-      Phase 1 で入れた 3 本(mattermost / erpnext / infisical)に既に入っている。
+      [apps/k8up/schedules.yaml](apps/k8up/schedules.yaml) の 9 本に既に入っている。
       **PVC のファイルを k8up 側に寄せるのはここ**(Talos ではホストのスクリプトが使えない)。
 - [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
