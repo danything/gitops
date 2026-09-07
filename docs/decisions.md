@@ -677,3 +677,56 @@ ArgoCD は「git から消えた + 自分が追跡している」ものを prune
 - **`bootstrap/` へ移すもの** — 引き取り手が居ないのでこの手が使えない。先に
   `argocd.argoproj.io/sync-options: Prune=false` を live に効かせておき、そのあと移す。
   移し終えたら live の tracking-id 注釈を剥がして、`Prune=false` も外す
+
+## Talos の起動順序をどう組むか(2026-09-07)
+
+k3s の `HelmChart` CRD(`helm.cattle.io/v1`)は **Talos に無い**。いま `bootstrap/` に残っている
+argocd と infisical はどちらもそれで入れているので、移行時に置き換えが要る。
+「inlineManifests に載せる」と一言で書いていたが、**inlineManifests は Helm を実行できない**ので
+そのままでは移せない。
+
+### 前提の確認: ArgoCD は Infisical 無しで起動する
+
+「ArgoCD に infisical を預けると鶏卵になる」としていたが、**実際には循環していない**。
+ArgoCD の設定にある `$argocd-oidc:client-secret` のような参照は、
+[`util/settings/settings.go`](https://github.com/argoproj/argo-cd/blob/master/util/settings/settings.go) で
+こう扱われる:
+
+```go
+secretVal, ok := secretValues[secretKey]
+if !ok {
+    log.Warn("secret key does not exist in secret")   // 警告するだけ
+    return val                                         // 文字列をそのまま返す
+}
+```
+
+**Secret が無くても落ちない。** OIDC が未解決のまま起動し、**SSO ログインだけが効かない**。
+そして **同期の動作自体に誰のログインも要らない**。つまり順序は素直に解ける:
+
+**Cilium → ArgoCD 起動 → ArgoCD が Infisical を入れる → operator が Secret を作る → SSO が効くようになる**
+
+**承知しておくこと**: `admin.enabled: false` にしてあるので、**この窓の間は UI に誰も入れない**
+(SSO 未解決 + ローカル admin 無効)。困ることがあれば `kubectl` で見る。移行当日に UI が要るなら、
+一時的に `admin.enabled` を戻す。
+
+### 層の分け方
+
+| 層 | 中身 | 資格情報 |
+| --- | --- | --- |
+| **machine config(inlineManifests)** | Cilium(`helm template` の出力)、ArgoCD(同)、`bootstrap-applier` の RBAC、**SOPS 済みの Secret 4 つ** | machine config 自体が SOPS 済みなので同じ信頼水準 |
+| **GitHub Actions** | `bootstrap/` の残り(平文のもの) | OIDC。**Secret 権限なし・delete なし**の狭い RBAC |
+| **ArgoCD** | `apps/`(**Infisical もここに移す**) | — |
+
+**なぜ ArgoCD を CI 側に置かないか。** ArgoCD の導入には CRD・ClusterRole・Secret が要る ──
+つまり実質 cluster-admin。CI の RBAC を狭く保っている意味が消える
+([bootstrap/apiserver/rbac.yaml](../bootstrap/apiserver/rbac.yaml))。**入れるものと当てるものを層で分ける。**
+
+**なぜ SOPS の Secret を machine config に入れるか。** CI には age 鍵を渡さない方針なので、
+CI からは当てられない。一方 machine config は**もともと SOPS で暗号化して git に置いている**
+(クラスタ CA の秘密鍵を含むので当然)。**同じ場所に置いても信頼水準は変わらない**うえ、
+起動時点で存在するので順序の問題も消える。復号は手元の `talosctl gen config` のときだけ起きる。
+
+**Helm の出力をコミットすることについて。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
+`helm template` の出力を持つのは避けられない(Talos 公式も同じ形)。ArgoCD も同じ扱いにすれば、
+**Helm を実行する場所がクラスタの外(手元の生成時)だけ**になり、クラスタ内に Helm コントローラを
+持たなくて済む。版の追従は `talos/versions.yaml` と同じく Renovate に見せる。

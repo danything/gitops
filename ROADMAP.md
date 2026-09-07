@@ -191,9 +191,18 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
 - [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
 - [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
-- [ ] **infisical と argocd を inlineManifests に載せる。** この 2 つだけ ArgoCD の Application に
-      移していない(argocd は自分自身、infisical は ArgoCD が依存する Secret の供給元で鶏卵になるため)。
-      Talos では machine config が下の層になるので、そこに置けば順序が素直に解ける。
+- [ ] **起動順序を組み直す。** k3s の `HelmChart` CRD は Talos に無いので、argocd と infisical は
+      置き換えが要る。**inlineManifests は Helm を実行できない**ので、そのままでは移せない。
+      層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
+      - [ ] Cilium を `helm template` で書き出して inlineManifests に。CNI なので他に置きようがない
+      - [ ] ArgoCD も同じ形で inlineManifests に。**CI 側には置かない** ── 導入に CRD/ClusterRole/Secret が
+            要り、狭く保っている CI の RBAC の意味が消えるため
+      - [ ] SOPS 済みの Secret 4 つを inlineManifests に。**machine config はもともと SOPS 済み**なので
+            信頼水準は変わらず、CI に age 鍵を渡さない方針も保てる
+      - [ ] `bootstrap/apiserver/rbac.yaml` も inlineManifests に(CI が自分の権限を作れないため)
+      - [ ] **infisical を `apps/` の ArgoCD Application に移す。** 鶏卵は実際には無かった
+            (ArgoCD は Secret が無くても起動し、SSO だけが効かない)。ただし
+            **`admin.enabled: false` なのでその窓の間は UI に誰も入れない**。`kubectl` で見る
 - [ ] **ファイルの PVC バックアップを k8up 側に寄せる。** いまはホストの `k3s-backup` が
       全 PVC を見ているが、**Talos にはシェルが無い**。論理バックアップ(k8up)と同じ仕組みに統一する。
       対象の切り分けは `apps/k8up/README.md`。
