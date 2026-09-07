@@ -16,6 +16,10 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      # Traefik 期にあった sticky cookie(ローリング更新中の CSS/JS 404 対策)の代替はここに書けない。
+      # sessionPersistence は Gateway API の experimental フィールドで、入っている CRD は standard チャネル、
+      # かつ Cilium 1.20.1 が未実装(1.21 から)。詳細は docs/decisions.md の
+      # 「Traefik の sticky cookie に代替が無い」。
       backendRefs:
         - name: tamasagashi
           port: 3000
