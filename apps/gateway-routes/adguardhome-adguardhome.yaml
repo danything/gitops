@@ -29,6 +29,11 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        # backend は平文の 80 を使う(理由は service-web.yaml)。
-        - name: adguardhome-web
-          port: 80
+        # **管理画面は SSO の後ろ。** AdGuard 自身には SSO が無いので oauth2-proxy を
+        # 前段に置く(bootstrap/auth/adguard-proxy.yaml)。名前空間をまたぐので
+        # auth 側に ReferenceGrant がある。
+        # **`/dns-query` は上のルールで先に拾われる。** ここを通すと DoH に認証がかかって
+        # 名前解決が止まる(2026-09-07 朝の障害)。
+        - name: auth-adguard
+          namespace: auth
+          port: 4180

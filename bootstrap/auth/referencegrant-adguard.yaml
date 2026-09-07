@@ -1,0 +1,17 @@
+# adguardhome の HTTPRoute から auth の Service を指すための許可。
+# Gateway API は名前空間をまたぐ backendRef を既定で禁じているので、
+# **指される側**(auth)に置く必要がある。
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: adguardhome-to-auth
+  namespace: auth
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: adguardhome
+  to:
+    - group: ""
+      kind: Service
+      name: auth-adguard
