@@ -48,7 +48,7 @@ spec:
           # visible and searchable. Nothing is deleted when that's crossed, so
           # switching to mattermost-team-edition later (same database, same
           # env) trades SSO back for unlimited history.
-          image: mattermost/mattermost-enterprise-edition:11.10.1
+          image: mattermost/mattermost-enterprise-edition:11.11.0
           ports:
             - containerPort: 8065
             # Calls の RTC。ServiceLB をやめたので hostPort でノードのアドレスに直接出す。
