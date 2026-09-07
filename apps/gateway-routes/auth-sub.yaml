@@ -5,6 +5,12 @@ kind: HTTPRoute
 metadata:
   name: sub
   namespace: auth
+  # **一時的**: このルートは bootstrap/ に移す途中(danything/gitops の後続 PR)。
+  # `apps/` から消えた瞬間に ArgoCD が prune して公開経路が落ちるのを防ぐため、
+  # 先にこれを効かせて「git から消えても消さない」状態を作る。
+  # bootstrap/ 側に移し、live の tracking-id 注釈を剥がしたら、この注釈も外す。
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   parentRefs:
     - name: doany
