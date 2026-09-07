@@ -153,6 +153,12 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 - [ ] `talosctl upgrade` / `upgrade-k8s` の手順を README に。
 
 
+### 積み残し
+
+- **復元リハーサルを Cilium 構成でやり直す。** 記録にある 2 回はどちらも flannel の頃のもので、
+  CNI と入口を替えたあとで通したことがまだ無い。確かめたいのは Cilium が自力で上がるか、
+  Gateway が戻るか、hostPort が張られるかの 3 つ([docs/restore-drill.md](docs/restore-drill.md))。
+
 ## 未決事項
 
 - ~~**Hubble を入れるか。**~~ **入れないと決めた(2026-09-07 本人判断)。** 単一ノードで Relay と UI の
