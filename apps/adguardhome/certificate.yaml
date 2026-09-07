@@ -11,4 +11,8 @@ spec:
     name: letsencrypt
     kind: ClusterIssuer
   dnsNames:
+    # **移行のあいだは両方。** 命名規則(../../README.md「ホスト名の付け方」)では
+    # AdGuard Home は 2 語なので `ah`。`d` は規則より前に取ったもの。
+    # DoT と DoH をこの名前で設定している端末を移し終えたら `d.doany.io` を消す。
+    - ah.doany.io
     - d.doany.io
