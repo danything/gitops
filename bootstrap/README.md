@@ -34,6 +34,32 @@ sops -d infisical/secrets.yaml | kubectl apply -f -   # 暗号化してあるも
 kubectl apply -f gateway/ -f argocd/httproute.yaml -f auth/     # 公開経路もこの層
 ```
 
+### 適用は GitHub Actions がやる(2026-09-07)
+
+**main にマージすると [`.github/workflows/bootstrap-apply.yml`](../.github/workflows/bootstrap-apply.yml)
+がこの層を当てる。** 手で `kubectl apply` する必要は無くなった。
+
+**保存している秘密はゼロ。** GitHub Actions の OIDC トークンを API サーバが直接受ける
+([apiserver/authentication-config.yaml](apiserver/authentication-config.yaml))。
+kubeconfig も age 鍵も GitHub に置いていない。トークンは実行のたびに発行され数分で切れ、
+`danything/gitops` の `main` の `bootstrap-apply.yml` からのものだけが通る(CEL で固定)。
+
+権限も cluster-admin ではなく、この層で実際に使う種類だけ([apiserver/rbac.yaml](apiserver/rbac.yaml))。
+**Secret は含まれていない**ので、GitHub 側が落ちても Secret は読まれない。`delete` も渡していない。
+
+**当たらないもの:**
+
+| | 理由 |
+| --- | --- |
+| SOPS で暗号化した 4 ファイル | 復号鍵(age)を GitHub に置かないため。**手で当てる**(下記)。判定はファイルの中身を見ているので、暗号化ファイルが増えても自動で除外される |
+| `cilium/values.yaml` | Helm の値でマニフェストではない。`helm upgrade` で当てる(ファイル冒頭を読むこと) |
+
+暗号化してあるものは今までどおり:
+
+```shell
+sops -d infisical/secrets.yaml | kubectl apply -f -
+```
+
 ### 公開経路(HTTPRoute)もここにある
 
 **`httproute.yaml` は ArgoCD が同期しない。** 変更したら手で apply すること。

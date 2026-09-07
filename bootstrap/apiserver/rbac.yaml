@@ -1,0 +1,56 @@
+# GitHub Actions(bootstrap-apply.yml)がこのクラスタで何をしてよいかの定義。
+#
+# **cluster-admin は渡さない。** bootstrap/ の中で実際に使われている種類だけを列挙してある
+# (SOPS で暗号化した 4 ファイルはワークフロー側で除外しているので、**Secret は入っていない**)。
+# これで、GitHub 側が乗っ取られても Secret を読まれることはない。
+#
+# **delete も渡していない。** ワークフローは apply しかせず、prune もしない。
+# 消すのは人の手で、というのは apps/ の方針(git から消えたら消える)とは逆だが、
+# ここはクラスタの土台で、事故の範囲が違う。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bootstrap-applier
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, services]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gateways, httproutes, grpcroutes, referencegrants]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [cert-manager.io]
+    resources: [certificates, clusterissuers]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [cilium.io]
+    resources: [ciliumloadbalancerippools, ciliuml2announcementpolicies]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [secrets.infisical.com]
+    resources: [infisicalsecrets]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [argoproj.io]
+    resources: [applicationsets]
+    verbs: [get, list, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bootstrap-applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bootstrap-applier
+subjects:
+  # authentication-config.yaml の claimMappings.username が作る名前。
+  # prefix `gha:` + GitHub OIDC の sub。
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: "gha:repo:danything/gitops:ref:refs/heads/main"
