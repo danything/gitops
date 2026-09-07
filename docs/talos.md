@@ -136,8 +136,31 @@ kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged
 ラベルを付けたら PVC が Bound になり、Pod から書いた内容がディスク上の
 `/var/local-path-provisioner/pvc-…_<ns>_<pvc>` に残ることまで確認した。
 
-移行時にラベルが要る namespace(現構成から): `local-path-storage`、`wireguard`(privileged + hostNetwork)、
-`denpa`(`/dev/dvb`・`/dev/bus`・`/dev/dri` の hostPath)。
+**baseline は hostPort も弾く。** ここを見落としやすい。実際に走っている Pod を数えると、
+ラベルが要る namespace は次のとおり(2026-09-07 時点。`namespace.yaml` に書き込み済み):
+
+| namespace | baseline に通らない理由 |
+| --- | --- |
+| `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort 4244/9234/9879/9963/9964)。Talos は既定でラベル済み |
+| `local-path-storage` | ヘルパー Pod の hostPath。**Talos で local-path-provisioner を入れるなら必須** |
+| `wireguard` | hostNetwork・privileged・hostPath・hostPort 51820/51821 |
+| `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`) |
+| `adguardhome` | hostPort 53 / 853 |
+| `mattermost` | hostPort 8443(calls の WebRTC) |
+| `3proxy` | hostPort 8444(TLS 終端サイドカー) |
+| `cloudflare-ddns` | hostNetwork |
+| `erpnext` | `CAP_CHOWN` の追加(baseline が足せるのは `NET_BIND_SERVICE` だけ) |
+
+残りの namespace は baseline のままでよい。洗い出しは Pod の spec を直接数えて出す:
+
+```shell
+kubectl get pods -A -o json | jq -r '.items[] | . as $p | [$p.metadata.namespace] +
+  (if $p.spec.hostNetwork then ["hostNetwork"] else [] end) +
+  ($p.spec.containers[] | (.securityContext.privileged // false | if . then ["privileged"] else [] end) +
+   ((.securityContext.capabilities.add // []) | map("cap:"+.)) +
+   ((.ports // []) | map(select(.hostPort)) | map("hostPort:"+(.hostPort|tostring)))) +
+  (($p.spec.volumes // []) | map(select(.hostPath)) | map("hostPath")) | @tsv' | sort -u
+```
 
 ### 動いたこと
 
