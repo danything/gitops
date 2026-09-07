@@ -31,10 +31,14 @@ jwt:
       audiences:
         - https://ks.doany.io
     claimMappings:
-      # 例: gha:repo:danything/gitops:ref:refs/heads/main
+      # **`sub` をそのまま使わない。** GitHub の `sub` は
+      #   repo:danything@143234231/gitops@1311609465:ref:refs/heads/main
+      # のように**組織 ID とリポジトリ ID が埋め込まれる形**に変わっており、
+      # 見た目で読めないうえ、形式が変わると RBAC が黙って効かなくなる。
+      # 必要な情報(どのリポジトリのどのブランチか)から自分で組み立てる。
+      # 例: gha:danything/gitops:refs/heads/main
       username:
-        claim: sub
-        prefix: "gha:"
+        expression: '"gha:" + claims.repository + ":" + claims.ref'
     claimValidationRules:
       - expression: 'claims.repository == "danything/gitops"'
         message: "danything/gitops 以外は受け付けない"
