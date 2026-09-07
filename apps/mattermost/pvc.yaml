@@ -9,6 +9,9 @@ metadata:
   namespace: mattermost
   annotations:
     argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    # ファイルとしてのバックアップはホストの backup/k3s-backup がやっている。
+    # k8up には論理バックアップ(pg_dump)だけ取らせるので、PVC そのものは対象外にする。
+    k8up.io/backup: "false"
 spec:
   accessModes:
     - ReadWriteOnce
@@ -24,6 +27,9 @@ metadata:
   namespace: mattermost
   annotations:
     argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    # ファイルとしてのバックアップはホストの backup/k3s-backup がやっている。
+    # k8up には論理バックアップ(pg_dump)だけ取らせるので、PVC そのものは対象外にする。
+    k8up.io/backup: "false"
 spec:
   accessModes:
     - ReadWriteOnce

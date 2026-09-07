@@ -31,6 +31,13 @@ spec:
     metadata:
       labels:
         app: postgres
+      annotations:
+        # **k8up に論理バックアップを取らせる。** ホストの backup/k3s-backup は
+        # PVC のディレクトリを丸ごと写すだけなので、動いている DB のファイルは
+        # よくてクラッシュ一貫性しかない。pg_dump なら中身の整合が取れる。
+        # ローカルの unix socket 経由なのでパスワードは要らない(trust)。
+        k8up.io/backupcommand: /bin/sh -c 'pg_dump -U mattermost -d mattermost --clean --if-exists'
+        k8up.io/file-extension: .sql
     spec:
       containers:
         - name: postgres
