@@ -15,7 +15,7 @@ spec:
             enabled: false
         configs:
             params:
-                # TLS is terminated at traefik (mydnschallenge), so argocd-server
+                # TLS is terminated at the Cilium Gateway (cert-manager), so argocd-server
                 # talks plain HTTP internally to avoid a double-TLS redirect loop.
                 server.insecure: true
             cm:

@@ -15,7 +15,7 @@ k3s クラスタ上のセルフホストアプリを [Argo CD](https://argo-cd.r
 | | |
 | --- | --- |
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト |
-| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・Traefik・auth)。**Argo CD は触らない**(`apps/` の外にある)。手で `kubectl apply` する |
+| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある)。手で `kubectl apply` する |
 | [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
 | `talos/` | Talos への移行用 machine config(検証中。1.14 の形に書き直しが要る) |
@@ -32,7 +32,7 @@ k3s クラスタ上のセルフホストアプリを [Argo CD](https://argo-cd.r
 の注釈がある Deployment は Pod ごと入れ替わる。詳しくは [`bootstrap/README.md`](bootstrap/README.md)。
 
 **Infisical より下の層だけは Infisical から取れない**ので、`bootstrap/` の 4 ファイル(Infisical 自身の鍵、
-Argo CD が git を読む GitHub App 鍵、Traefik の Cloudflare トークン)は **SOPS + age** で該当キーだけ暗号化してある。
+Argo CD が git を読む GitHub App 鍵、cert-manager の Cloudflare トークン)は **SOPS + age** で該当キーだけ暗号化してある。
 鍵は [`recovery/sops-age.key.age`](recovery/)(バックアップの `env.age` と同じパスフレーズ)。
 
 ```shell

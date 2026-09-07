@@ -40,7 +40,6 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       stable-privacy + cloudflare-ddns で代替)、wg-easy の hostNetwork UDP 51820。QEMU の user-mode では試せない。
 - [ ] PSA のラベルが要る namespace を洗い出して manifest に入れる(`local-path-storage`、`wireguard`、`denpa`)。
 - [ ] HelmChart CRD 依存(argocd / infisical / push-bridge)を ArgoCD の Application に書き直す。
-- [ ] Envoy Gateway + cert-manager + MetalLB を組み、`ingress2gateway` で HTTPRoute を作って各 repo に **Ingress と並置**でコミットする。
 - [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に PVC バックアップと `backupcommand` の dump が取れること。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
       k8s オブジェクトは戻るが **PV の中身は戻らない**ので、Talos 期の復元は etcd → PV データ(restic/k8up)の 2 段になる。
@@ -53,7 +52,7 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
 **Talos で後から替えるのが高いのは CNI だけ**なので、k3s のうちにここを済ませて OS 交換時の変数を減らす。
 VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod の通信が一度切れる**ので、段階を分ける。
 
-- [ ] **Gateway API v1.6.1 の CRD を入れる**(Cilium 1.20 はこのバージョンを要求する。v1.4.0 だと
+- [x] **Gateway API v1.6.1 の CRD を入れた**(Cilium 1.20 はこのバージョンを要求する。v1.4.0 だと
       GatewayClass が `Waiting for controller` のまま止まる)。gatewayclasses / gateways / httproutes /
       referencegrants / grpcroutes / backendtlspolicies / tlsroutes、必要なら tcproutes / udproutes。
 - [x] **段階 1: CNI を Cilium に替えた(2026-09-06)。** 全 50 Pod Running、全サイト応答、KubeProxyReplacement 有効。
@@ -68,27 +67,21 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
       AdGuard の DoT 証明書も Traefik の acme.json 監視(acme-watcher)をやめて cert-manager 発行の Secret に移した。
 - [x] **Web の 15 ホストすべてを HTTPRoute に並置し、Gateway 経由で Traefik と同じ応答を確認(2026-09-06)。**
       証明書はワイルドカード 1 枚、HTTP → HTTPS の 301 リダイレクトも Gateway 側に用意した。
-      本番トラフィックはまだ Traefik(hostPort 80/443)が捌いている。
-- [ ] **切り替え前に残っているもの**:
+- [x] **切り替え前に残っていたもの**:
       - [x] `px.doany.io`(3proxy)は Gateway を使わず、Pod のサイドカー(nginx stream)が TLS を終端して
-        **hostPort 8443** で直接受ける形にした。443 では HTTPS 終端と TLS passthrough が同居できない
-        (ProtocolConflict)ため。**クライアントのポート変更が要る**(decisions.md 参照)
+        **hostPort 8444** で直接受ける形にした。443 では HTTPS 終端と TLS passthrough が同居できない
+        (ProtocolConflict)ため。8443 は Mattermost calls が先に取っている。**クライアントのポート変更が要る**
       - [x] forward-auth の 2 本。`sub`(`*.s.doany.io`)は **oauth2-proxy を前段プロキシにする方式**で移した
         (専用インスタンス `auth-sub` が `--upstream` で LAN のホストへ中継。コールバックは既存の
         a.doany.io 側が受け、cookie secret と redis を共有)。Traefik ダッシュボードは Traefik ごと消えるので対処不要
-      - [x] yuzuriha の `compress` は諦める(Gateway API に相当フィルタが無い。必要ならアプリ側で圧縮する)
-- [ ] **切り替え本番**(残りはこれだけ): Traefik の hostPort 80/443 を外すのと、Gateway の待ち受けを
-      そこに移すのを**同時に**行う。Gateway 側は `CiliumGatewayClassConfig` か Service の書き換えで
-      ノードのアドレスに出す形にする。そのあと `disable: [traefik]`、Ingress と IngressRoute の削除、
-      Traefik の PVC(`traefik-acme`)の破棄。
-      **切り戻し**は Traefik を戻して hostPort を返すだけ(Ingress は残してあるので即座に戻る)。
-      `IngressRoute` 4 本と `Middleware` 4 つ、`IngressRouteTCP`(3proxy → TCPRoute)は手で移す。
-      **forward-auth は Cilium の Gateway では賄えない**(OIDC 内蔵なし、ExternalAuth も未実装)。
-      該当は Traefik ダッシュボードと `sub` の 2 本だけなので、oauth2-proxy を前段プロキシにするか、
-      そのルートだけ別コントローラに残す(decisions.md「認証は Cilium の Gateway では賄えない」)。
-- [ ] 全部移ったら Gateway の待ち受けを 80/443 の hostPort(または本番アドレス)に移し、
-      Traefik を落とす(`disable: [traefik]`)。**Traefik が hostPort 80/443 を持っている間は Gateway と共存できない**ので、
-      切り替えは同時に行う。
+      - [x] yuzuriha の `compress` はアプリ側(Caddy ではなく `server.ts`)で zstd/gzip を返す形に置き換えた
+- [x] **切り替え本番(2026-09-06 完了)。** Traefik の hostPort 80/443 を外し、Gateway の Service を
+      80/443 の nodePort として同時に開いた。15 ホストすべてを LAN(10.10.0.4)と公開 IP の両方で確認済み。
+      詰まった点(Cilium は nodePort 範囲内の hostPort を張らない、Traefik の Service に残った externalIPs が
+      10.10.0.4:80/443 を黒穴にする)は [docs/decisions.md](docs/decisions.md)「切り替え本番」。
+- [x] **Traefik の撤去(2026-09-07)。** `disable: [traefik]`、`Ingress` 15 本・`IngressRoute` 4 本・
+      `Middleware` 4 つ・`IngressRouteTCP` 1 本と PVC `traefik-acme` を削除。マニフェストは gitops と
+      アプリ 6 repo から消した。**ここで切り戻しの道は閉じた**(戻すなら Traefik を入れ直すところから)。
 - [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
       `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
 
@@ -128,6 +121,9 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
   Cookie の 4096 バイト制限に収まっていない。手順は Entra の アプリの登録 > トークン構成 で
   groups クレームを外し、アプリロールを定義してユーザー/グループを割り当てる。
   副次的に、将来 Gateway 内蔵の OIDC(Envoy Gateway など)を使う道も開く。
+- **`px.doany.io` を 8444 のままにするか。** いまはサイドカーが hostPort 8444 で TLS を終端している。
+  443 に戻すには LB-IPAM から専用アドレスを 1 つ払い出して、そこだけ TLS passthrough のリスナーを持つ
+  Gateway を別に立てることになる。クライアント(2 台)の設定を書き換えるほうが安いなら 8444 のままでよい。
 - **Hubble を入れるか。** Cilium に同梱の可視化(フローログ、サービスマップ、UI)。CNI を Cilium にしたので
   追加インストールは Helm の値 2 つ(`hubble.relay.enabled` と `hubble.ui.enabled`)で済む。
   判断材料: 単一ノードでは Relay + UI で Pod が 2 つ増える、フローログはメモリを食う(既定のバッファは 4095 flow/ノード)、

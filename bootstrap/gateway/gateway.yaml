@@ -1,4 +1,4 @@
-# Cilium Gateway(Gateway API)。Traefik と並走させ、HTTPRoute を 1 つずつ移す。
+# Cilium Gateway(Gateway API)。公開している Web はすべてここを通る。
 # 証明書は cert-manager が ClusterIssuer letsencrypt(Cloudflare DNS-01)で発行する。
 # ワイルドカードなのでホストを足すたびに証明書を増やさなくてよい。
 apiVersion: cert-manager.io/v1
@@ -37,7 +37,7 @@ metadata:
 spec:
   gatewayClassName: cilium
   listeners:
-    # HTTP は全部 HTTPS に飛ばす(Traefik の redirect-https ミドルウェアの置き換え)。
+    # HTTP は全部 HTTPS に飛ばす。
     # 実際のリダイレクトは apps/gateway-routes/redirect-https.yaml の HTTPRoute フィルタが行う。
     - name: http
       protocol: HTTP

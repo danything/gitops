@@ -20,5 +20,5 @@ data:
     allow * * ichi-estate.com,souzokutochi-kokkokizoku.com 443 HTTPS
     deny * * * *
 
-    # TLS は Traefik が終端するので、ここは平文で待ち受ける
+    # TLS はサイドカー(tls-terminator)が終端するので、ここは平文で待ち受ける
     proxy -n -i0.0.0.0 -p3128

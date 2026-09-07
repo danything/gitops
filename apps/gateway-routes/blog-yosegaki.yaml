@@ -1,13 +1,5 @@
-# Traefik の Ingress から Gateway API へ移行中のルート。**Ingress と並置**してあり、
-# いまの本番トラフィックは引き続き Traefik(hostPort 80/443)が捌いている。
-# Cilium Gateway は別アドレス(LB-IPAM の 10.10.0.53)で待ち受けているので、
-#   curl --resolve <host>:443:10.10.0.53 https://<host>/
-# で個別に確認できる。全部確認できたら Traefik を落として Gateway を 80/443 に移す。
-#
-# 移せていないもの:
-#   d.doany.io (AdGuard Web) … backend が HTTPS(443)なので BackendTLSPolicy が要る
-#   px.doany.io (3proxy)     … IngressRouteTCP。TCPRoute か TLSRoute に置き換える
-#   yuzuriha の compress ミドルウェア … Gateway API に相当する標準フィルタが無い(圧縮は諦めるかアプリ側で)
+# Cilium Gateway(bootstrap/gateway/)に付ける HTTPRoute。証明書は Gateway 側の
+# リスナーに cert-manager が発行したものが付いているので、ここでは指定しない。
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

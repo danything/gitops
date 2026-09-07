@@ -85,7 +85,7 @@ inlineManifests に載るのは「Argo CD 本体 + repo-creds + apps Application
 
 ## ルーティングの選定(2026-09-06)
 
-いま Traefik に依存しているもの: 標準 `Ingress` 15、`IngressRoute` 4、`IngressRouteTCP` 1(3proxy)、
+移行前に Traefik に依存していたもの: 標準 `Ingress` 15、`IngressRoute` 4、`IngressRouteTCP` 1(3proxy)、
 `Middleware` 4、ACME は Traefik 内蔵(Cloudflare DNS-01)。forward-auth の先は oauth2-proxy + redis(IdP は Entra ID)。
 LoadBalancer は k3s 組み込みの ServiceLB(Klipper)。
 
@@ -161,9 +161,10 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 
 | 対象 | hostPort |
 | --- | --- |
-| traefik | 80 / 443 |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。ここだけ hostPort ではなく nodePort |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | mattermost(calls) | 8443 UDP・8443 TCP |
+| 3proxy(tls-terminator サイドカー) | 8444 TCP |
 
 **詰まった点 3 つ:**
 
@@ -172,7 +173,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
    確認は `cilium-dbg service list | grep HostPort`。
 2. **hostPort は Pod のサンドボックス作成時に設定される。** 設定を有効にしたあと、対象の Pod を作り直す必要がある。
 3. **hostPort と RollingUpdate は両立しない。** 新旧の Pod が同じホストポートを奪い合い、新しい方が Pending で止まる。
-   AdGuard は `strategy: Recreate`、Traefik は `deployment.kind: DaemonSet` にして解決した。
+   AdGuard と 3proxy は `strategy: Recreate` にして解決した(当時の Traefik は `deployment.kind: DaemonSet`)。
 
 ### Gateway API の土台で分かったこと(2026-09-06)
 
@@ -213,8 +214,8 @@ Envoy Gateway はこれを実装しているので、443 のままにしたい�
 
 - 3proxy の Pod に nginx(stream)のサイドカーを足し、`3129` で TLS を終端して `127.0.0.1:3128` に渡す
 - 証明書は cert-manager が `px.doany.io` で発行し、サイドカーがマウントする(Traefik 内蔵 ACME の置き換え)
-- サイドカーは **hostPort 8443** で公開する。443 は Gateway が使うため
-- **クライアント側の設定変更が要る**(`px.doany.io:443` → `px.doany.io:8443`)。
+- サイドカーは **hostPort 8444** で公開する。443 は Gateway が使い、8443 は Mattermost calls が先に取っているため
+- **クライアント側の設定変更が要る**(`px.doany.io:443` → `px.doany.io:8444`)。
   SNI で振り分けるより**ポートで分ける方が構成として素直**なので、これを本採用とした(2026-09-06 判断)。
   443 のままにしたい場合の代案は、px 専用の IP を LB-IPAM で払い出してルータ側で振り分けるか、
   Envoy Gateway に替えて TLS 終端リスナー + TCPRoute を使うか
@@ -238,6 +239,27 @@ Gateway API の OIDC が無い**。トークンの大きさ以前に機能が無
 **Entra 側でトークンを小さくすること自体は独立して価値がある。** グループクレームを全部載せるのをやめて
 **アプリロール**に切り替えると `roles: ["admin"]` の数十バイトで済む。将来 Envoy Gateway の内蔵 OIDC を
 使う場合の前提にもなる。
+
+### 切り替え本番と Traefik の撤去(2026-09-06 / 2026-09-07)
+
+Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**同時にしかできない**(片方が握っている間は
+もう片方が Pending になる)。Gateway 側は `CiliumGatewayClassConfig` ではなく Service の 80/443 を
+**nodePort として開く**形にした。これでノードのどのアドレスでも受けられる。
+
+**詰まった点 2 つ:**
+
+1. **Cilium は nodePort の範囲に入っている hostPort を張らない。** nodePort の範囲を `80-32767` に広げたら、
+   AdGuard の 853 と Mattermost calls の 8443、3proxy の 8444 が一斉に落ちた。範囲を `80,443` の
+   2 つだけに絞る(`nodePort.range`)ことで両立する。
+2. **Traefik を消したあとも Service に残った `externalIPs: [10.10.0.4]` が 10.10.0.4:80/443 を黒穴にする。**
+   DaemonSet を消しても Service は残り、Cilium はそのまま宛先無しの転送先を作り続ける。
+   削除は `service.kubernetes.io/load-balancer-cleanup` finalizer で止まるので、finalizer を null にして消した。
+
+翌 2026-09-07 に `Ingress` 15 本・`IngressRoute` 4 本・`Middleware` 4 つ・`IngressRouteTCP` 1 本と
+PVC `traefik-acme` を削除し、gitops とアプリ 6 repo からマニフェストも消した。
+Traefik が持っていた ACME(`mydnschallenge`)は cert-manager の ClusterIssuer `letsencrypt` が引き継いでいる。
+`bootstrap/traefik/` にあった `sub-backend` の Service と EndpointSlice は `bootstrap/auth/sub-backend.yaml` へ、
+Cloudflare のトークンは `bootstrap/cert-manager/cloudflare-secret.yaml` へ移した。
 
 ### 却下した案
 

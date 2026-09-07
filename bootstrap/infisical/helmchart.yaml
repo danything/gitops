@@ -52,7 +52,8 @@ spec:
                         key: SMTP_PASSWORD
                         optional: true
         ingress:
-            # The traefik Ingress is infisical/ingress.yaml, same shape as argocd/.
+            # Exposed through the Cilium Gateway instead; the HTTPRoute lives in
+            # apps/gateway-routes/infisical-infisical.yaml.
             enabled: false
             nginx:
                 # Also the on/off switch for the bundled ingress-nginx subchart.
