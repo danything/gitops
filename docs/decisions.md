@@ -644,3 +644,36 @@ GUI クライアント・IdP 連携・ポリシーまで同じリポジトリに
 - **外部 IdP(Entra)は設定ファイルに書けない。** 0.62 以降、外部 IdP は config ではなく**ストアに入るデータ**になった。
   ダッシュボードか `POST /api/identity-providers` で足す。リダイレクト URI は issuer + `/callback` で
   決まる(`idp/dex/connector.go`)ので `https://nd.doany.io/oauth2/callback` 固定、Entra 側を先に作れる
+
+## 公開経路(HTTPRoute)をどこに置くか(2026-09-07)
+
+`apps/gateway-routes/` に全部まとめていたのをやめ、**それぞれが公開しているものと同じ場所**に置いた。
+
+ArgoCD は `sourcePath` 配下を `recurse` で拾い、追跡は `argocd.argoproj.io/tracking-id` 注釈
+(`<app名>:<GVK>:<ns>/<name>`)で行うので、**ファイルの場所は挙動に影響しない**。純粋に読み手の都合。
+
+| 行き先 | 対象 |
+| --- | --- |
+| このリポジトリの `apps/<name>/httproute.yaml` | adguardhome / erpnext / infisical / mattermost / netbird / portainer |
+| 各アプリのリポジトリの `deploy/httproute.yaml` | blog / yosegaki / lgtm / tamasagashi / worklog / xool / yuzuriha |
+| `bootstrap/` | argocd / auth ×3 / redirect-https |
+
+**`bootstrap/` に移したものが本題。** `argocd` と `auth` の実体はこの層にあり、**ここは ArgoCD が
+同期していない**。つまり「ArgoCD が ArgoCD 自身を公開している経路を握っている」状態で、
+ArgoCD が壊れているときにその経路を ArgoCD 経由でしか直せない、という順序の逆転があった。
+
+**まとめて 1 か所に置く利点(公開しているものの一覧になる)は失う。** 代わりに
+`apps/gateway-routes/README.md` …ではなく、この表と `bootstrap/README.md` が索引になる。
+外部露出を一覧したいときは `kubectl get httproute,grpcroute -A` が正確で、git を読むより早い。
+
+### 落とさずに動かす手順
+
+ArgoCD は「git から消えた + 自分が追跡している」ものを prune する。単に移すと**移動の瞬間に
+公開経路が落ちる**。使った回避は 2 通り:
+
+- **別リポジトリへ移すもの** — 移送先を**先に**マージする。そのアプリの Application が同じ
+  ルートを apply した時点で tracking-id が書き換わり、元の Application の管理から外れる。
+  そのあと元から消せば prune は起きない。7 本とも移動後に tracking-id を確認してから消した
+- **`bootstrap/` へ移すもの** — 引き取り手が居ないのでこの手が使えない。先に
+  `argocd.argoproj.io/sync-options: Prune=false` を live に効かせておき、そのあと移す。
+  移し終えたら live の tracking-id 注釈を剥がして、`Prune=false` も外す

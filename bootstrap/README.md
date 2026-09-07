@@ -31,7 +31,21 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
 ```shell
 kubectl apply -f infisical/
 sops -d infisical/secrets.yaml | kubectl apply -f -   # 暗号化してあるものはこの形で
+kubectl apply -f gateway/ -f argocd/httproute.yaml -f auth/     # 公開経路もこの層
 ```
+
+### 公開経路(HTTPRoute)もここにある
+
+**`httproute.yaml` は ArgoCD が同期しない。** 変更したら手で apply すること。
+
+`argocd` と `auth` の HTTPRoute は元は `apps/gateway-routes/` にあり、ArgoCD が同期していた。
+**が、それは「ArgoCD が ArgoCD 自身を公開している経路を握っている」状態で、層が逆**だった
+(ArgoCD が壊れているときに、その経路を ArgoCD 経由でしか直せない)。2026-09-07 に、
+公開される当のものと同じ場所へ移した。`gateway/redirect-https.yaml` も Gateway そのものの
+設定なのでここ。
+
+アプリ側の経路は逆に**アプリと同じ場所**に置いてある(`apps/<name>/httproute.yaml`、
+または各アプリのリポジトリの `deploy/httproute.yaml`)。
 
 ### Infisical の中の構成
 
