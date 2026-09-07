@@ -35,9 +35,11 @@ jobs:
           set -euo pipefail
           VER=$(yq -r '.talos.version' talos/versions.yaml)
           SCH=$(yq -r '.talos.schematic' talos/versions.yaml)
-          echo "  talos=$VER schematic=$SCH"
+          K8S=$(yq -r '.kubernetes.version' talos/versions.yaml)
+          echo "  talos=$VER schematic=$SCH k8s=$K8S"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "schematic=$SCH" >> "$GITHUB_OUTPUT"
+          echo "k8s=$K8S" >> "$GITHUB_OUTPUT"
 
       - name: talosctl を入れる
         run: |
@@ -54,6 +56,7 @@ jobs:
           talosctl gen secrets -o /tmp/secrets.yaml
           talosctl gen config doany https://10.0.0.2:6443 \
             --with-secrets /tmp/secrets.yaml \
+            --kubernetes-version "${{ steps.v.outputs.k8s }}" \
             --install-image "factory.talos.dev/installer/${{ steps.v.outputs.schematic }}:${{ steps.v.outputs.version }}" \
             --config-patch @talos/patches/cluster.yaml \
             --config-patch @talos/patches/main.yaml \
@@ -72,6 +75,7 @@ jobs:
           # パッチが黙って落ちていないことを確かめる(gen config は未知のキーを
           # 警告なく無視することがある)
           for needle in \
+            "kube-apiserver:${{ steps.v.outputs.k8s }}" \
             'ks.doany.io' \
             'token.actions.githubusercontent.com' \
             'claims.repository == "danything/gitops"' \

@@ -19,6 +19,7 @@ sops -e -i secrets.yaml            # → talos/secrets.yaml (暗号化済み)
 sops -d secrets.yaml > /tmp/secrets.plain.yaml
 talosctl gen config doany https://10.0.0.2:6443 \
   --with-secrets /tmp/secrets.plain.yaml \
+  --kubernetes-version v1.36.2 \
   --install-image factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.0 \
   --config-patch @patches/cluster.yaml \
   --config-patch @patches/main.yaml \

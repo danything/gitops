@@ -199,6 +199,36 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
 
+## Talos ブートドリル 2 回目(2026-09-07、`apiserver.yaml` を足して実際に bootstrap まで)
+
+1 回目はネットワークだけを見た。2 回目は **API サーバの設定(`patches/apiserver.yaml`)を足して
+`bootstrap` まで通し、コントロールプレーンが上がるところまで**確かめた。
+
+**確かめられたこと:**
+
+- **`KubeAuthenticationConfig` を入れてもコントロールプレーンは上がる。**
+  `configuration` は既定を置き換えるので `anonymous` を書き忘れるとヘルスチェックが
+  匿名で通らなくなる ── と書いていたが、**明示して書けば正しく上がる**ことを実地で確認した。
+  `kube-apiserver` / `kube-controller-manager` / `kube-scheduler` の 3 つとも `CONTAINER_RUNNING`
+- **`certExtraSANs` は効く。** 6443 に繋いで証明書を見ると `DNS:ks.doany.io` が入っている
+- ネットワークは 1 回目と同じ(bond0 に `10.0.0.2/24` と静的 IPv6 `::2`、`enp0s4` に `10.10.0.4/24`)
+
+**見つかった問題: `versions.yaml` の Kubernetes 版が使われていなかった。**
+
+```
+生成物:        kube-apiserver:v1.37.0     ← Talos v1.14.0 の既定
+versions.yaml: kubernetes v1.36.2         ← 宣言しているだけ
+```
+
+`talosctl gen config` は `versions.yaml` を読まないので、**`--kubernetes-version` で渡さないと
+Talos の既定になる**。移行当日に意図せず 1.36 → 1.37 の飛び級をするところだった。
+README の手順と `talos-validate` のワークフローに `--kubernetes-version` を足し、
+**生成物に宣言どおりの版が入っているかも CI で見る**ようにした。
+
+**VM 側の読み替え**: NIC は `enp0s2`/`enp0s3`(bond)と `enp0s4`。1 回目の記録は
+`enp0s3`/`enp0s4`/`enp0s5` になっているが、**起動ごとに変わりうる**ので毎回 `talosctl get links` で見ること。
+KVM を使うので **qemu は sudo で起動する**(前回の記録に抜けていた)。
+
 ## VM ブートドリル(2026-09-07、`talos/patches/` をそのまま起動した)
 
 `talosctl validate` が通るだけで一度も起動していなかった `talos/patches/cluster.yaml` /
