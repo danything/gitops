@@ -168,6 +168,12 @@ SharePoint も付いていない)。唯一残っていた参照は別のアプ�
 **wg-easy の OIDC は上流の都合で使えない**(Entra の userinfo が `email_verified` を返さず、
 wg-easy がそれを必須にしている)ので無視した。あちらには本人のユーザー割り当ても別途ある。
 
+**wg-easy を廃したので、アプリ登録 `wg-easy` と、共用アプリ `Main` に残っている
+`https://wg.doany.io/oauth2/callback` のリダイレクト URI は消してよい**(2026-09-07 に VPN を
+NetBird へ移した。理由は [decisions.md](decisions.md))。NetBird は内蔵 IdP(Dex)を持っていて、
+Entra は「外部 IdP」として NetBird のダッシュボードから足す形になる。
+リダイレクト URI は `https://nd.doany.io/oauth2/callback` で固定。
+
 **これでこのテナントに認可用のグループは無い。** 誰が管理者かは、アプリ登録 `Main` の
 エンタープライズ アプリケーション → ユーザーとグループ で `Admins` ロールを割り当てるかどうかだけで決まる。
 
