@@ -82,6 +82,9 @@ VM では一通り動くことを確認済み。**本番は CNI 交換で全 Pod
 - [x] **Traefik の撤去(2026-09-07)。** `disable: [traefik]`、`Ingress` 15 本・`IngressRoute` 4 本・
       `Middleware` 4 つ・`IngressRouteTCP` 1 本と PVC `traefik-acme` を削除。マニフェストは gitops と
       アプリ 6 repo から消した。**ここで切り戻しの道は閉じた**(戻すなら Traefik を入れ直すところから)。
+      **取りこぼし**: denpa と yosegaki は自分で配っている chart 側で公開していたので、
+      `Ingress` を数えるだけでは見つからなかった(`dp.doany.io` が一時 404)。chart に
+      `httpRoute.enabled` を足して移した。`dp.l.doany.io` 用に `*.l.doany.io` のリスナーも足した。
 - [ ] クライアント IP の保持を決める(`externalTrafficPolicy: Local` か PROXY protocol)。
       `Cluster` のままだと SNAT されて AdGuard のクライアント別統計や IP 制限が壊れる。
 

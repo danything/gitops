@@ -255,6 +255,13 @@ Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**�
    DaemonSet を消しても Service は残り、Cilium はそのまま宛先無しの転送先を作り続ける。
    削除は `service.kubernetes.io/load-balancer-cleanup` finalizer で止まるので、finalizer を null にして消した。
 
+**自分で配っている Helm chart の分を取りこぼした(2026-09-07)。** denpa は gitops 側の `Ingress` ではなく
+**chart(`charts/denpa`)の `IngressRoute`** で公開していたので、Traefik の CRD を消した時点で
+`dp.doany.io` が 404 になっていた。gitops の `Ingress` を数えるだけでは足りない。
+chart に `httpRoute.enabled` を足して移した(denpa#70)。`ingress.enabled` と `traefik.enabled` は
+外にも配っている chart なので残してある。yosegaki の chart も同じ形にした。
+宅内向けの `dp.l.doany.io` は 2 段のワイルドカードなので、`*.l.doany.io` のリスナーと証明書を別に足した。
+
 翌 2026-09-07 に `Ingress` 15 本・`IngressRoute` 4 本・`Middleware` 4 つ・`IngressRouteTCP` 1 本と
 PVC `traefik-acme` を削除し、gitops とアプリ 6 repo からマニフェストも消した。
 Traefik が持っていた ACME(`mydnschallenge`)は cert-manager の ClusterIssuer `letsencrypt` が引き継いでいる。
