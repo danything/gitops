@@ -58,16 +58,27 @@ nodePort:
   # (AdGuard の 853、Mattermost calls の 8443、3proxy の 3129 が一斉に落ちた)。
   #
   # **hostNetwork にしても外せない。** Service は NodePort 型のまま残り(下の
-  # gatewayAPI.hostNetwork のコメント)、既に割り当て済みの 80/443 を持ち続ける。
-  # ここを既定に戻すと、その Service を次に更新したとき API サーバが弾く。
-  # 外すには先に Service の nodePort を高位に振り直す必要がある(未実施)。
+  # gatewayAPI.hostNetwork のコメント)、この 2 つの NodePort フロントエンドが
+  # **経路そのもの**になっている ── 2026-09-08 に実測した。
   #
-  # 副作用: この 2 つの NodePort フロントエンドは L7LB リダイレクト
-  # (`cilium-dbg bpf lb list` に `l7-load-balancer / L7LB Proxy Port: 80`)として載り、
-  # **ホスト自身から** ノードの 80/443 に繋ぐと応答が返らない(2026-09-07 実測)。
-  # 外から来る通信と Pod からの通信は Envoy が直接 bind したソケットに入るので影響しない。
-  # ホスト上にこの経路を使うものは無い
-  # (`grep -rl doany.io /usr/local/bin /etc/cron.d /etc/systemd/system` が空)。
+  # `cilium-dbg bpf lb list` にはこう出る:
+  #
+  #   10.0.0.2:80/TCP  0.0.0.0:0 (1189) [NodePort, l7-load-balancer] (L7LB Proxy Port: 80)
+  #
+  # Envoy は確かにホストの `0.0.0.0:80` を LISTEN しているが、**そのソケットに
+  # 直接来た接続は通らない**。実通信は L7LB リダイレクト経由で Envoy に入る。
+  # 試しに port-80 の nodePort だけ 30080 に振り直したところ、**外部・LAN・Pod・ホストの
+  # すべてから 80 番が死んだ**(443 は無事。すぐ戻した)。
+  #
+  # 帰結が 3 つある:
+  #
+  # 1. ここと k3s の `service-node-port-range=80-32767` は**外せない**
+  # 2. **復元では当て直しが要る。** Cilium が Service を作り直すと API サーバが
+  #    範囲内のランダムな値を割り当てる。k3s 期は `recovery/restore.sh` が、
+  #    Talos 期は `.github/workflows/bootstrap-apply.yml` がパッチを当てる
+  # 3. 副作用として、**ホスト自身から**ノードの 80/443 に繋ぐと応答が返らない。
+  #    ホスト上にこの経路を使うものは無い
+  #    (`grep -rl doany.io /usr/local/bin /etc/cron.d /etc/systemd/system` が空)
   range: "80,443"
 
 # Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
@@ -76,33 +87,28 @@ gatewayAPI:
   # **Envoy をホストネットワークで待たせる(2026-09-07)。** LoadBalancer Service も
   # nodePort も介さず、ノードの 80/443 に直接 bind する。
   #
-  # ## なぜ変えたか
+  # ## 何が変わったか
   #
-  # 以前は Service の nodePort を **手で 80/443 に当てて**いた。Cilium は手で入れた
-  # nodePort を上書きしないので動いてはいたが、**git にもどこにも書けない状態**だった
-  # (`CiliumGatewayClassConfig.spec.service` にポート番号の項目が無い)。
-  # 復元リハーサルで実際に壊れた ── Cilium が Service を作り直して 31024/30229 になり、
-  # **ノード IP 経由の公開 Web が全部死んだ**(docs/restore-drill.md)。
+  # **LoadBalancer Service が 1 つも無くなった。** それまで Gateway は LB-IPAM から
+  # `10.10.0.53` をもらう LoadBalancer で、参照はドキュメントの中だけだった。
+  # おかげで LB-IPAM と L2 アナウンスを撤去できた(2026-09-07)。
+  # Gateway の `status.addresses` はノードの `10.0.0.2` になる。
   #
-  # hostNetwork なら**この値ごと git に入る**ので、復元しても再現される。
+  # **Service は消えず NodePort になる**(`operator/pkg/model/translation/gateway-api/translator.go`
+  # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。
   #
-  # ## 経路が変わらないことの確認(2026-09-07 実測)
+  # ## **nodePort の手当ては消えなかった(2026-09-08 訂正)**
   #
-  # | 経路 | 前 | 後 |
-  # | --- | --- | --- |
-  # | 外部(router → 10.0.0.2:443) | nodePort | ノード IP なのでそのまま |
-  # | LAN(10.10.0.4:443。AdGuard の *.l.doany.io はここを指す) | nodePort | そのまま |
-  # | 10.10.0.53(LB-IPAM) | 200 | **無くなる** ── 参照はドキュメントの中だけだった |
+  # この変更は当初「手で当てていた nodePort 80/443 が要らなくなる」つもりで入れた。
+  # **それは誤りだった。** Envoy はホストの `0.0.0.0:80` を LISTEN するが、
+  # そこに直接来た接続は通らない ── 実通信は Cilium の L7LB リダイレクト経由で入る。
+  # 詳しくは上の `nodePort.range` のコメント(実測つき)。
+  #
+  # したがって **`recovery/restore.sh` の当て直しは今も要る**(#91 で消したが戻した)。
   #
   # **ポートの指定は無い。** Gateway のリスナー(80 / 443)がそのままホストに bind される。
   # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`
   # 側の項目で、こちらには無い(値の見た目が似ているので混同しやすい)。
-  #
-  # **Service は消えず NodePort になる**(`operator/pkg/model/translation/gateway-api/translator.go`
-  # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。
-  # 割り当てられるポートはランダムだが、**実通信はそこを通らない**ので気にしなくてよい。
-  # 効果として **LoadBalancer Service が 1 つも無くなった**ので、LB-IPAM と L2 アナウンスは
-  # 撤去した(2026-09-07)。Gateway の `status.addresses` はノードの `10.0.0.2` になる。
   hostNetwork:
     # **下の envoy.securityContext とセット。** 80/443 は特権ポートなので、
     # NET_BIND_SERVICE が無いと `cannot bind '0.0.0.0:80': Permission denied` で

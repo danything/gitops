@@ -78,3 +78,37 @@ jobs:
                   --certificate-authority=bootstrap/apiserver/ca.crt \
                   --token="$T" \
                   apply ${{ steps.files.outputs.list }}
+
+      # **Gateway の Service の nodePort を 80/443 に揃える。**
+      # これは git に書けない唯一の値で、しかも**公開経路そのもの**
+      # (Cilium の L7LB リダイレクト。bootstrap/cilium/values.yaml の `nodePort` に実測あり)。
+      # Cilium が Service を作り直すと API サーバが範囲内のランダムな値を割り当てるので、
+      # **復元後は必ずズレている。**
+      #
+      # k3s 期は `recovery/restore.sh` が当てているが、**Talos にはシェルが無い**ので
+      # あちらは持っていけない。復元手順を「machine config を当てる →
+      # このワークフローを `workflow_dispatch` で流す」にすると、両方の時代で同じ形になる。
+      #
+      # 冪等。既に 80/443 なら `unchanged` になるだけ。Service がまだ無ければ黙って諦める
+      # (Cilium が Gateway を処理する前に流したとき)。
+      - name: Gateway の nodePort を 80/443 に揃える
+        env:
+          T: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          k() {
+            kubectl --server=https://ks.doany.io:6443 \
+                    --certificate-authority=bootstrap/apiserver/ca.crt \
+                    --token="$T" "$@"
+          }
+          if ! k -n kube-system get svc cilium-gateway-doany >/dev/null 2>&1; then
+            echo "::warning::cilium-gateway-doany がまだ無い。Gateway が上がってから再実行すること"
+            exit 0
+          fi
+          k -n kube-system patch svc cilium-gateway-doany --type=json -p '[
+            {"op":"replace","path":"/spec/ports/0/nodePort","value":80},
+            {"op":"replace","path":"/spec/ports/1/nodePort","value":443}
+          ]'
+          k -n kube-system get svc cilium-gateway-doany \
+            -o jsonpath='{range .spec.ports[*]}{.name}={.nodePort} {end}'
+          echo
