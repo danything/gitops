@@ -23,12 +23,8 @@ metadata:
   name: mattermost-calls
   namespace: mattermost
 spec:
-  # **ClusterIP でよい(2026-09-07)。** `type: LoadBalancer` は k3s の ServiceLB(klipper)
-  # 時代の名残で、LB-IPAM が払い出したアドレスは**誰も使っていなかった**。
-  # 実際に外から届いている経路は 2 つ:
-  #   - Pod の hostPort(ノードの全アドレスで待つ)
-  #   - 下の externalIPs(10.10.0.4 = eno4 側のノード IP)
-  # これで LB-IPAM と L2 アナウンスの利用者が居なくなる。
+  # **ClusterIP でよい(2026-09-07)。** `type: LoadBalancer` は k3s の ServiceLB 時代の名残で、
+  # LB-IPAM のアドレスは誰も使っていなかった。実際の経路は Pod の hostPort と下の externalIPs。
   type: ClusterIP
   # Dual-stack: the CNI installs hostPort DNAT rules for v6 8443 regardless of
   # this, so leaving the Service IPv4-only means IPv6 clients reach the svclb

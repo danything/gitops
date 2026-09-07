@@ -1,9 +1,5 @@
-# Cilium Gateway([../gateway/](../gateway/))に付ける HTTPRoute。証明書は Gateway 側の
-# リスナーに cert-manager がワイルドカードで発行したものが付いているので、ここでは指定しない。
-#
-# **この層は ArgoCD が同期しない。** 手で `kubectl apply` する(../README.md)。
-# 元は `apps/gateway-routes/` にあったが、**ArgoCD が「ArgoCD 自身や認証の前段を公開している
-# 経路」を握っているのは層が逆**なので、公開される当のものと同じ場所に移した(2026-09-07)。
+# 公開経路。証明書は Gateway([../gateway/](../gateway/))のリスナーに付いているので指定しない。
+# **この層は ArgoCD が同期しない**(理由と手順は ../README.md「公開経路(HTTPRoute)もここにある」)。
 #
 # **backend は Hubble UI ではなく oauth2-proxy。** UI 自身は認証を持たないので
 # 直接繋いではいけない(bootstrap/auth/hubble-proxy.yaml)。
