@@ -1,0 +1,44 @@
+# **k3s の HelmChart CRD(helm.cattle.io)をやめて ArgoCD の Application にする。**
+# HelmChart は k3s 固有で Talos には無いので、いまのうちに移して OS 交換時の変数を減らす。
+#
+# **CR を消すと helm がアンインストールされる。** helm-controller は
+# `wrangler.cattle.io/on-helm-chart-remove` finalizer で削除ジョブを走らせるので、
+# 移すときは先に finalizer を外してから CR を消す(手順は docs/decisions.md)。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudflare-ddns
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudflare-ddns
+  source:
+    # OCI のレジストリはスキーム無しで書く(ArgoCD 3.x)。公開なので資格情報は要らない。
+    repoURL: ghcr.io/timothymiller
+    chart: cloudflare-ddns
+    targetRevision: 0.1.0
+    helm:
+      # HelmChart CRD 時代と同じリリース名にしておくと、描き出されるものが一致して
+      # そのまま引き取れる(実際に helm template と live の diff が空なのを確認済み)。
+      releaseName: cloudflare-ddns
+      valuesObject:
+        # API token は Infisical operator が作る Secret から(cloudflare-ddns-secrets.yaml)。
+        # キーは CLOUDFLARE_API_TOKEN。
+        cloudflare:
+          existingSecret: cloudflare-ddns-secrets
+        # 本物の A/AAAA を持つのは apex だけ。サブドメインは Cloudflare 側で apex への
+        # CNAME なので勝手に付いてくる。
+        domains: doany.io
+        proxied: "true"
+        # AAAA は bond0 の static な ::2(k3s のノード IP でもある)を使う。
+        # 外向きの probe が拾う一時アドレスではない。この provider は
+        # インタフェースを読んで temporary / deprecated を飛ばす。
+        ip6Provider: local.iface.stable:bond0
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
