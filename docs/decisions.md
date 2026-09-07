@@ -337,7 +337,8 @@ Cloudflare のトークンは `bootstrap/cert-manager/cloudflare-secret.yaml` �
 **いまは穴が開いたまま受け入れている。** tamasagashi は replicas 1・状態なしで、影響は更新中の 15 秒ほどの窓に限られ、
 アプリ側の SvelteKit の版チェックと Cloudflare の Browser Cache TTL 設定で緩和してある(danything/tamasagashi の `deploy/README.md`)。
 **Cilium 1.21 に上げるときに、Gateway API CRD を experimental チャネルへ入れ替えたうえで
-`apps/gateway-routes/tamasagashi-tamasagashi.yaml` に `sessionPersistence` を足す**のが本筋。
+tamasagashi の HTTPRoute(`danything/tamasagashi` の `deploy/httproute.yaml`)に
+`sessionPersistence` を足す**のが本筋。
 CRD 入れ替えの際は、いまの Gateway API CRD が Traefik 撤去後も `traefik-crd` の Helm リリース所有のまま
 (`helm.sh/resource-policy: keep` で残存)であることに注意。
 
