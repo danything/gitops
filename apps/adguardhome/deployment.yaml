@@ -50,6 +50,17 @@ spec:
               mountPath: /opt/adguardhome/work
             - name: adguardhome-ssl
               mountPath: /opt/adguardhome/ssl
+        # DoH(/dns-query)だけを平文で受けて AdGuard の HTTPS へ渡す。理由は doh-proxy-config.yaml。
+        - name: doh-proxy
+          image: nginx:1.29-alpine
+          ports:
+            - name: doh
+              containerPort: 8081
+              protocol: TCP
+          volumeMounts:
+            - name: doh-proxy-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
       volumes:
         - name: adguardhome-conf
           persistentVolumeClaim:
@@ -57,6 +68,9 @@ spec:
         - name: adguardhome-work
           persistentVolumeClaim:
             claimName: adguardhome-work
+        - name: doh-proxy-config
+          configMap:
+            name: doh-proxy
         # DoT(853)用の証明書。cert-manager が d.doany.io で発行した Secret を、
         # AdGuard の設定が見ているファイル名(server.crt / server.key)に読み替えて渡す。
         # 以前は Traefik の acme.json を監視する acme-watcher が PVC に書き出していた。
