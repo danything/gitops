@@ -84,7 +84,7 @@ LoadBalancer は k3s 組み込みの ServiceLB(Klipper)。
 前提: `Ingress` API は凍結済みで、**ingress-nginx は 2026-03-24 に retire**(read-only、CVE 修正なし)。
 新規に組むなら Gateway API。F5/NGINX Inc. の `nginxinc/kubernetes-ingress` は別プロジェクトで継続中。
 
-### 結論: Cilium(CNI + Gateway API + LB-IPAM)に寄せる
+### 結論: Cilium(CNI + Gateway API)に寄せる
 
 **Talos で後から替えるのが高いのは CNI だけ**なので、そこを先に決める。Ingress コントローラ・LB・証明書は
 Gateway API に寄せてあれば後から差し替えられる。単一ノードのうちは Cilium は過剰に見えるが、
@@ -94,7 +94,7 @@ Gateway API に寄せてあれば後から差し替えられる。単一ノー�
 | --- | --- | --- |
 | CNI | Cilium | flannel |
 | kube-proxy | Cilium の kubeProxyReplacement | kube-proxy |
-| LoadBalancer | Cilium LB-IPAM + L2 announcement | ServiceLB(Klipper)。**MetalLB は不要になる** |
+| LoadBalancer | 使わない(hostPort と Gateway の hostNetwork で足りた。下記) | ServiceLB(Klipper)。**MetalLB は不要になる** |
 | Ingress | Cilium Gateway(Gateway API) | Traefik |
 | 証明書 | cert-manager(Cloudflare DNS-01) | Traefik 内蔵 ACME |
 | 認証 | oauth2-proxy を ext auth で外付け(現状維持) | — |
@@ -139,7 +139,9 @@ Cilium 1.20.1 を Helm で導入。**Traefik と Ingress はこの段階では�
 - **残った差異: ノード自身と Pod から `10.10.0.4`(eno4 の LAN IP)に届かない。** LAN の他のマシンからは届く。
   AdGuard の split-horizon でこの IP に解決される名前だけ、ノード内から引けなくなった。
   ServiceLB(klipper)の hostPort と Cilium の socket-LB の組み合わせが原因と見られる。
-  **段階 2 で ServiceLB を Cilium LB-IPAM に置き換えると経路ごと変わる**ので、そこで解消するか再評価する。
+  **段階 2 でほぼ解消した**(2026-09-07 実測)。hostPort と Gateway の hostNetwork に寄せた結果、
+  Pod からは `10.10.0.4` のどのポートにも届く。ノード自身から届かないのは **80/443 だけ**で、
+  これは Gateway の Service が握ったままの nodePort が原因(bootstrap/cilium/values.yaml の `nodePort`)。
 
 ### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
 
@@ -173,10 +175,8 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
   `--server-side --force-conflicts` で上書きが要る。バージョンが合わないと GatewayClass が
   `Waiting for controller` のまま無言で止まる。CRD を入れ替えたあと **cilium-operator の再起動**も要る。
 - **Gateway はアドレスが付くまで `Programmed=False` のまま**で、Envoy にリスナーが載らない。
-  hostPort ではアドレスが付かないので、`CiliumLoadBalancerIPPool` + `CiliumL2AnnouncementPolicy` が要る。
-- **`l2announcements.enabled` は ConfigMap に入るだけでは効かない。** cilium エージェント(DaemonSet)の
-  再起動が必要。再起動前は ARP に応答せず「No route to host」になる。
-- **LB IP は ICMP に応答しない。** `ping` では確認できないので TCP で叩く。
+  当初は LB-IPAM + L2 アナウンスでアドレスを払い出していたが、**`gatewayAPI.hostNetwork` に
+  したらノードの IP がそのまま `status.addresses` に入った**ので、どちらも外した(2026-09-07)。
 - cert-manager は `config.enableGatewayAPI=true` で Gateway の `cert-manager.io/cluster-issuer` 注釈を見る。
   Cloudflare のトークンは **cert-manager の namespace にも** Secret が要る(ClusterIssuer は自分の namespace しか読まない)。
 
@@ -231,7 +231,8 @@ SNAT されない**。実際にクライアント IP は端まで届いている
 **ノードを足すときにやること**: `externalTrafficPolicy: Local` に変える
 (Cilium の Helm 値 `gatewayAPI.externalTrafficPolicy`)。そうしないと Envoy が居ないノードに
 届いたぶんが SNAT されて、AdGuard のクライアント別統計と denpa の住所判定が壊れる。
-`Local` にすると Envoy の居るノードだけが応答するので、L2 アナウンスか外側の振り分けもそれに合わせる。
+`Local` にすると Envoy の居るノードだけが応答するので、外側の振り分けもそれに合わせる
+(いまは Envoy が hostNetwork でノードの 80/443 を直接掴んでいるので、宛先はノードの IP そのもの)。
 
 ### AdGuard の DoH は backend が HTTPS でないと出ない(2026-09-07 障害)
 
