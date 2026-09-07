@@ -17,6 +17,8 @@
 #   リポジトリをロックするので、重なると片方が待たされる。
 #   バックアップは 15:00〜17:30 UTC、prune は日曜の 20:00〜22:30 UTC に置いてある
 # - 保持は全部 `keepDaily 7 / keepWeekly 4 / keepMonthly 6`
+# - **`check` だけは 1 本でよい。** `restic check` はリポジトリ全体を見るもので、
+#   prune と違って namespace には縛られない(`restic/cli/check.go` は `--host` を渡さない)
 # - **バックエンドは書かない。** 書くと R2 のエンドポイント(Cloudflare の
 #   アカウント ID を含む)が git に載る。operator のグローバル設定に寄せてある
 ---
@@ -250,3 +252,26 @@ spec:
       keepWeekly: 4
       keepMonthly: 6
       tags: [k8up]
+---
+# **リポジトリの健全性チェック。これだけ 1 本。**
+# ホストの `backup/k3s-backup` が `restic check --read-data-subset=5%` を回していたぶんで、
+# **Talos に移るとあれが無くなる**ので k8up 側に置いておく。
+# k8up の `check` は素の `restic check`(データの読み直しはせず、構造とインデックスを見る)。
+#
+# 日曜の prune(20:00〜22:30 UTC)がすべて終わったあとに置く。**重なっても壊れない。**
+# k8up の check と prune はどちらも `Exclusive()` で、locker が
+# 「排他ジョブが走っている間は始めない」を見ている(`operator/locker/locker.go` の
+# `isExclusiveJobRunning`)。始められなかった側は失敗せず、**30 秒ごとに待って再試行する**
+# (`controller.go` の `RequeueAfter: 30 * time.Second`)。restic のロック競合にはならない。
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: check
+  namespace: k8up
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  check:
+    schedule: "0 23 * * 0"
+    failedJobsHistoryLimit: 2
+    successfulJobsHistoryLimit: 1
