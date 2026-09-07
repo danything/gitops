@@ -4,7 +4,13 @@ metadata:
   name: adguardhome-dns
   namespace: adguardhome
 spec:
-  type: LoadBalancer
+  # **ClusterIP でよい(2026-09-07)。** `type: LoadBalancer` は k3s の ServiceLB(klipper)
+  # 時代の名残で、LB-IPAM が払い出したアドレスは**誰も使っていなかった**。
+  # 実際に外から届いている経路は 2 つ:
+  #   - Pod の hostPort(ノードの全アドレスで待つ)
+  #   - 下の externalIPs(10.10.0.4 = eno4 側のノード IP)
+  # これで LB-IPAM と L2 アナウンスの利用者が居なくなる。
+  type: ClusterIP
   # Dual-stack: without this the Service is IPv4-only, yet the CNI still
   # installs hostPort DNAT rules for v6 :53 -- so IPv6 queries reach the
   # svclb pod and are dropped there (klipper-lb only gets SRC_RANGES for v4).
@@ -12,7 +18,6 @@ spec:
   ipFamilies:
     - IPv4
     - IPv6
-  externalTrafficPolicy: Local
   externalIPs:
     - 10.10.0.4
   selector:
