@@ -142,8 +142,9 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 - **Entra ID のトークンを小さくして redis を廃止できるか。** redis はセッション(トークン)を
   持つためだけに居る。Entra の `groups` クレームに所属グループを全部載せているのが原因で、
   実測でセッションが 4293 バイト、Cookie の 4096 バイトに収まっていない。
-  **手順は [docs/entra.md](docs/entra.md) に書いた**(推奨は「アプリに割り当てたグループだけ」に
-  する設定。アプリ側の変更が要らない)。**Azure の操作は本人でないとできない。**
+  **手順は [docs/entra.md](docs/entra.md) に書いた。長く運用するなら「アプリロール」を採る
+  (Microsoft 自身の推奨でもある)。締め出されないよう、アプリ側を両対応にしてから Entra を触る。
+  **Azure の操作は本人でないとできない。**
 
 - ~~**Hubble を入れるか。**~~ **入れないと決めた(2026-09-07 本人判断)。** 単一ノードで Relay と UI の
   Pod が 2 つ増えるわりに、NetworkPolicy を書き始めるまでは見る場面が無い。書き始めるときに入れ直す。
