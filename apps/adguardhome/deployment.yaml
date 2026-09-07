@@ -71,7 +71,7 @@ spec:
         - name: doh-proxy-config
           configMap:
             name: doh-proxy
-        # DoT(853)用の証明書。cert-manager が d.doany.io で発行した Secret を、
+        # DoT(853)用の証明書。cert-manager が ah.doany.io で発行した Secret を、
         # AdGuard の設定が見ているファイル名(server.crt / server.key)に読み替えて渡す。
         # 以前は Traefik の acme.json を監視する acme-watcher が PVC に書き出していた。
         - name: adguardhome-ssl
