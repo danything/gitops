@@ -89,9 +89,10 @@ rm -f "$STATE_DB" "${STATE_DB}-wal" "${STATE_DB}-shm"
 cp "$SNAP_DIR/state.db" "$STATE_DB"
 rm -f "$SNAP_DIR/state.db"
 
-# 復元直後は AdGuard の LoadBalancer(port 53)に endpoint が無く、kube-proxy がローカル宛 53 番を REJECT する。
+# 復元直後は AdGuard の Service(port 53)に endpoint が無く、ローカル宛の 53 番が弾かれる。
 # systemd-resolved のスタブ(127.0.0.53)がそれに巻き込まれて名前解決が死に、containerd がイメージを取れず
-# AdGuard も上がらない、という鶏卵になる(2026-09-06 のリハーサルで発生)。スタブを外して上流 DNS を直接使う。
+# AdGuard も上がらない、という鶏卵になる(2026-09-06 のリハーサルで発生。当時は kube-proxy、
+# いまは Cilium の kubeProxyReplacement が同じことをする)。スタブを外して上流 DNS を直接使う。
 if [ -L /etc/resolv.conf ] && grep -q '127.0.0.53' /etc/resolv.conf 2>/dev/null && [ -f /run/systemd/resolve/resolv.conf ]; then
 	ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 	echo "resolv.conf: bypassing systemd-resolved stub (uses upstream DNS directly)"
@@ -99,8 +100,10 @@ fi
 
 systemctl daemon-reload
 if [ "$DRILL" = 1 ]; then
-	echo "DRILL: not enabling k3s-backup.timer, dropping flannel-iface from k3s config"
-	sed -i '/^flannel-iface:/d' /etc/rancher/k3s/config.yaml
+	# flannel-iface の削除は不要になった(2026-09-07)。CNI を Cilium にして
+	# config.yaml が flannel-backend: none になったので、そもそもその行が無い。
+	# Cilium はデバイスを自前で見つけるので、VM でも実機でも同じ設定で通る。
+	echo "DRILL: not enabling k3s-backup.timer"
 else
 	systemctl enable k3s-backup.timer 2>/dev/null || echo "WARNING: k3s-backup.timer not in snapshot; install it from the gitops repo (backup/)" >&2
 fi

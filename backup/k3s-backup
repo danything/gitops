@@ -39,7 +39,8 @@ export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-/var/cache/restic}"
 mkdir -p "$RESTIC_CACHE_DIR"
 
 # PVC を持つ(=中身の整合性が要る)namespace は PVC の一覧から毎回求める(固定リストだと陳腐化する)。
-# kube-system(traefik の ACME 用 PVC)は止めない。env の TARGET_NAMESPACES で上書き可。
+# kube-system は止めない(Cilium と CoreDNS が居る。止めるとクラスタごと黙る)。
+# env の TARGET_NAMESPACES で上書き可。
 # denpa(録画)は terminationGracePeriodSeconds=21900 で録画終了まで Pod が消えないので止めない
 # (止めると古い Pod と新しい Pod が同じチューナーと PVC を取り合う)。中身は crash-consistent で取る。
 SKIP_SCALE_NAMESPACES="${SKIP_SCALE_NAMESPACES:-denpa}"

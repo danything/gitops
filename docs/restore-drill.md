@@ -61,7 +61,26 @@ sudo k3s kubectl get pods -A
 `RESTORE_DRILL=1` がやること: bond0/eno4 のプロファイルを当てない、k3s の `flannel-iface` を外す、`k3s-backup.timer` を有効にしない
 (VM のスナップショットを本番の restic リポジトリに混ぜない)。
 
-## 結果(2026-09-06)
+## **この記録は Cilium 移行前のもの(要再実施)**
+
+2 回のリハーサルはどちらも **flannel + kube-proxy + ServiceLB + Traefik の頃**のもので、
+その後(2026-09-06〜07)に CNI を Cilium へ、入口を Gateway API へ替えた。
+**復元の道筋そのものは変わっていない**(state.db を戻せば Cilium の DaemonSet も
+Helm のリリース Secret も一緒に戻り、Cilium は hostNetwork なので CNI 無しで起動できる)が、
+**実際に通したことはまだ無い。**
+
+確かめたいのは次の 3 つ。
+
+- 復元した k3s(`flannel-backend: none` + `disable-kube-proxy`)で **Cilium が自力で上がるか**。
+  CNI の設定ファイルは cilium エージェントが起動時に書くので、鶏卵にはならないはず
+- **Gateway が戻るか**。LB-IPAM の払い出しと L2 アナウンスはエージェントの再起動が要るので、
+  復元直後に一度で決まるかどうか
+- **AdGuard の hostPort が張られるか**。Cilium の hostPort は Pod のサンドボックス作成時に設定される
+
+`RESTORE_DRILL=1` は flannel-iface を落とす処理を持っていたが、その行はもう config.yaml に無いので
+削除した(2026-09-07)。VM でも実機でも同じ設定で通る。
+
+## 結果(2026-09-06、flannel の頃)
 
 サーバ上の QEMU/KVM(Ubuntu 26.04 cloud image、4 vCPU / 8 GB、hostname は `main`)で 2 回実施した。
 **2 回目で全項目クリア。** 復元は 7 GiB を 2 分弱、k3s は同じバージョンで起動し、PV も Node 名もそのまま戻る。
