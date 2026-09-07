@@ -38,7 +38,9 @@ ApplicationSet も `deploy/argocd.yaml` だけを見る形にした。ArgoCD の
       (`32820716…`)に移した。手順は [talos/README.md](talos/README.md)。
 - [ ] 実機固有の確認: bond0(balance-alb、eno1+eno2)、eno4 の static、**IPv6 の token `::2` 相当**(無ければ
       stable-privacy + cloudflare-ddns で代替)、wg-easy の hostNetwork UDP 51820。QEMU の user-mode では試せない。
-- [ ] PSA のラベルが要る namespace を洗い出して manifest に入れる(`local-path-storage`、`wireguard`、`denpa`)。
+- [x] **PSA のラベルが要る namespace を洗い出して manifest に入れた(2026-09-07)。** 走っている Pod の spec を
+      直接数えたら想定より多く、9 つあった。**baseline は hostPort も弾く**のを見落としていた。
+      一覧と洗い出しのコマンドは [docs/talos.md](docs/talos.md)「PSA のラベル」。
 - [ ] HelmChart CRD 依存(argocd / infisical / push-bridge)を ArgoCD の Application に書き直す。
 - [ ] k8up を導入し、Phase 0 と同じ restic リポジトリ(別 path / tag)に PVC バックアップと `backupcommand` の dump が取れること。
 - [x] `talosctl etcd snapshot` → **空のディスクから `bootstrap --recover-from` で復旧するところまで確認**(2026-09-06)。
@@ -103,7 +105,8 @@ Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` に�
 - [ ] 最終バックアップを取り、`restic check` を通す。
 - [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
 - [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
-- [ ] PSA のラベルを付ける(`local-path-storage`、`wireguard`、`denpa`)。
+- [ ] PSA のラベルは manifest 側に入れてある。`local-path-storage` だけは Talos 側で作る namespace なので、
+      local-path-provisioner を入れるときに一緒に付ける。
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
 - [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
 - [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。

@@ -1,4 +1,12 @@
+# **PSA は privileged。** Talos は Pod Security Admission の既定が `baseline` で、
+# hostPort 53 / 853 が baseline に通らない。
+# k3s では PSA を有効にしていないのでこのラベルは効かないが、Talos に持っていくために書いておく
+# (詳細は docs/talos.md「PSA のラベル」)。
 apiVersion: v1
 kind: Namespace
 metadata:
   name: adguardhome
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
