@@ -54,6 +54,45 @@
             "addLabels": [
                 "needs-review"
             ]
+        },
+        {
+            "description": "リリースノートを PR 本文に載せるための sourceUrl。Renovate は docker のイメージから元リポジトリを OCI ラベル (org.opencontainers.image.source) で辿るが、**下の 5 つはラベルを持っていない** (2026-09-07 に registry のマニフェストを見て確認)。辿れないと Release Notes の節ごと欠け、レビューも「未参照」で終わる (#85)。adguard/adguardhome と netbirdio/dashboard はラベルを持っているので書かない。",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "mattermost/mattermost-enterprise-edition"
+            ],
+            "sourceUrl": "https://github.com/mattermost/mattermost"
+        },
+        {
+            "description": "netbird は 3 つのイメージが同じリポジトリから出ている (netbird = クライアント、netbird-server = combined サーバ、どちらも netbirdio/netbird)。dashboard だけは別リポジトリで、そちらは OCI ラベルを持っているので書かない。",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "netbirdio/netbird",
+                "netbirdio/netbird-server"
+            ],
+            "sourceUrl": "https://github.com/netbirdio/netbird"
+        },
+        {
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "frappe/erpnext"
+            ],
+            "sourceUrl": "https://github.com/frappe/erpnext"
+        },
+        {
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "portainer/portainer-ce"
+            ],
+            "sourceUrl": "https://github.com/portainer/portainer"
         }
     ]
 }

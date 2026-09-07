@@ -43,6 +43,12 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
+          # **Renovate の PR をレビューするのに要る。** action 自身が bot 起動を拒否し、
+          # `Workflow initiated by non-human actor` で落ちる(2026-09-07 に #85 で発覚)。
+          # 上の `if` で「bot は needs-review が付いているときだけ」に絞ってあるので、
+          # ここは `*` ではなく renovate だけを名指しする。`*` は公開リポジトリでは
+          # 外部の App がプロンプトを持ち込める(action のドキュメントの警告)。
+          allowed_bots: "renovate[bot]"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
