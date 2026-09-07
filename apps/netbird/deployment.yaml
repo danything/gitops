@@ -127,6 +127,27 @@ spec:
       port: 80
       targetPort: http
 ---
+# **gRPC 専用の Service。中身は上と同じ Pod・同じポート。**
+# Cilium は Envoy のクラスタを `<ns>:<service>:<port>` で作るので、GRPCRoute と HTTPRoute が
+# 同じ Service を指すと **1 つのクラスタが h2c になり、HTTP 側も巻き込まれる**。
+# netbird-server は h2c でも REST を返せるので `/api` などは通ってしまうが、
+# **WebSocket(`/relay`)が HTTP/2 上では拡張 CONNECT を要求されて壊れる**
+# (Envoy が `upstream connect error ... reset reason: protocol error` で 502)。
+# Service を分ければクラスタが分かれ、h2c になるのは gRPC 側だけになる。
+# 公式の Traefik 例が netbird-server と netbird-server-h2c の 2 つを定義しているのと同じ理由。
+apiVersion: v1
+kind: Service
+metadata:
+  name: netbird-server-grpc
+  namespace: netbird
+spec:
+  selector:
+    app: netbird-server
+  ports:
+    - name: grpc
+      port: 80
+      targetPort: http
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
