@@ -58,9 +58,7 @@ jobs:
             --with-secrets /tmp/secrets.yaml \
             --kubernetes-version "${{ steps.v.outputs.k8s }}" \
             --install-image "factory.talos.dev/installer/${{ steps.v.outputs.schematic }}:${{ steps.v.outputs.version }}" \
-            --config-patch @talos/patches/cluster.yaml \
-            --config-patch @talos/patches/main.yaml \
-            --config-patch @talos/patches/apiserver.yaml \
+            $(for f in talos/patches/*.yaml; do printf -- '--config-patch @%s ' "$f"; done) \
             --output-dir /tmp/out
 
       - name: validate
@@ -81,8 +79,18 @@ jobs:
             'claims.repository == "danything/gitops"' \
             'service-node-port-range: 80-32767' \
             'cilium-drift.yml' \
+            'enabled: false # Enable or disable kube-proxy' \
             'balance-alb'
           do
             grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
             echo "  ある: $needle"
+          done
+
+          # **無いことを確かめる側。** flannel は「ドキュメントが在ること」が
+          # 有効化の意味なので、消えていることを見るしかない(talos/patches/cni.yaml)。
+          for needle in \
+            'KubeFlannelCNIConfig'
+          do
+            ! grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が残っている"; exit 1; }
+            echo "  無い: $needle"
           done
