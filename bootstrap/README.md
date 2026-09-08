@@ -30,8 +30,11 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
 **argocd と infisical の版は 2026-09-08 に固定した**(argo-cd 10.8.1 /
 infisical-standalone 1.10.0)。それまでは `HelmChart` CR に `version:` が無く、
 コントローラが**そのときの最新**を入れていた ── 作り直すと別の版になるし、Renovate も追えない。
-**`chart:` `repo:` `version:` は連続 3 行**にしてある(`renovate.json` の customManager が
-その並びを見る)。
+**Renovate はこの 2 ファイルを見ない**(`renovate.json` の `ignorePaths`)。
+2026-09-08 に argo-cd 10.8.2 の PR が**暗号文の中の `version: 10.8.1` を平文置換して
+自動マージされ、MAC が壊れて `sops -d` が通らなくなった。** 暗号化したファイルの
+1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、
+再現性(固定されていること)を取っている** ── 新しい版は人が見る。
 
 **中を触るときは平文で書き足さないこと** ── MAC は暗号化していない値も含めて計算されるので、
 1 行足すだけで `sops -d` が壊れる。位置を選びたいので `sops set` ではなくこの順でやった:

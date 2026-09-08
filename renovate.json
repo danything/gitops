@@ -9,18 +9,12 @@
             "**/*.yaml"
         ]
     },
+    "ignorePathsDescription": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。",
+    "ignorePaths": [
+        "bootstrap/argocd/helmchart.yaml",
+        "bootstrap/infisical/helmchart.yaml"
+    ],
     "customManagers": [
-        {
-            "description": "k3s's HelmChart CRD isn't a format Renovate knows, so erpnext's chart version is matched by hand, off the chart/repo/version trio in the order the CRD writes them.",
-            "customType": "regex",
-            "managerFilePatterns": [
-                "**/helmchart.yaml"
-            ],
-            "matchStrings": [
-                "chart:\\s*(?<depName>\\S+)\\s*\\n\\s*repo:\\s*(?<registryUrl>\\S+)\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
-            ],
-            "datasourceTemplate": "helm"
-        },
         {
             "description": "`# renovate: datasource=… depName=… [registryUrl=…]` の次の行にある version を見る。Talos の版も chart の版も、文章やコメントの中に散らばると Renovate が追えないので、`version.yaml` という 1 ファイルに出す約束にしてある。",
             "customType": "regex",
