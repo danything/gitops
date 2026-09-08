@@ -1,0 +1,32 @@
+# **renovate.json を壊さないための見張り。**
+#
+# Renovate は**知らないトップレベルのキーをエラーにする。** `ignorePathsDescription`
+# のような「それっぽい自己文書化のキー」も通らない(2026-09-08 に実際に書いて、
+# レビューで指摘されるまで気づかなかった)。**壊れていても Renovate が黙って
+# 動かなくなるだけ**で、PR も来なくなるので気づきにくい。
+name: renovate validate
+
+on:
+  pull_request:
+    paths:
+      - renovate.json
+      - .github/workflows/renovate-validate.yml
+  push:
+    branches: [main]
+    paths:
+      - renovate.json
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      # 版は固定しない ── **Renovate 本体が受け付けるか**を見たいので、
+      # そのときの最新の判定に合わせるのが正しい。
+      - run: npx --yes --package renovate renovate-config-validator --strict

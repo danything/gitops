@@ -35,7 +35,9 @@ jobs:
         run: |
           set -euo pipefail
           # 除外するもの:
-          #   cilium/values.yaml   Helm の値でマニフェストではない
+          #   values.yaml / version.yaml  **Helm の値と版。マニフェストではない。**
+          #                        名前で外す ── ディレクトリ名で並べていたら
+          #                        cert-manager が増えたときに取りこぼした(2026-09-08)
           #   apiserver/           **ここを当てさせない。** rbac.yaml を当てられると
           #                        ワークフローが自分の権限を書き換えられてしまう。
           #                        authentication-config.yaml はそもそも k8s の
@@ -43,7 +45,8 @@ jobs:
           #   `sops:` を含むもの   SOPS で暗号化済み。復号鍵を GitHub に置かない
           mapfile -d '' FILES < <(
             find bootstrap -name '*.yaml' \
-              ! -path 'bootstrap/cilium/*' \
+              ! -name 'values.yaml' \
+              ! -name 'version.yaml' \
               ! -path 'bootstrap/apiserver/*' -print0 \
               | xargs -0 grep -LZ '^sops:'
           )
