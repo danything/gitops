@@ -53,7 +53,7 @@ spec:
                         optional: true
         ingress:
             # Exposed through the Cilium Gateway instead; the HTTPRoute lives in
-            # apps/gateway-routes/infisical-infisical.yaml.
+            # apps/infisical/httproute.yaml.
             enabled: false
             nginx:
                 # Also the on/off switch for the bundled ingress-nginx subchart.

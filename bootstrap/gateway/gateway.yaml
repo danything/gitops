@@ -53,7 +53,7 @@ spec:
   gatewayClassName: cilium
   listeners:
     # HTTP は全部 HTTPS に飛ばす。
-    # 実際のリダイレクトは apps/gateway-routes/redirect-https.yaml の HTTPRoute フィルタが行う。
+    # 実際のリダイレクトは redirect-https.yaml の HTTPRoute フィルタが行う。
     - name: http
       protocol: HTTP
       port: 80

@@ -247,12 +247,16 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 
 ### Phase 3 — Talos 定常運用
 
-- [ ] k8up の失敗通知。スケジュールと保持(`keep-daily 7 / weekly 4 / monthly 6`、タグは `k8up`)は
-      [apps/k8up/schedules.yaml](apps/k8up/schedules.yaml) の 9 本に既に入っている。
-      **PVC のファイルを k8up 側に寄せるのはここ**(Talos ではホストのスクリプトが使えない)。
+- [x] ~~k8up の失敗通知~~ **入れた(2026-09-08)。** [apps/k8up/notify.yaml](apps/k8up/notify.yaml) の
+      CronJob が日次で Mattermost に投げる。**見るのは restic の中身**で、k8up のオブジェクトは
+      掃除されるので証拠にならない。「失敗した」だけでなく「そもそも走らなかった」も拾う。
+      `restic check` も [schedules.yaml](apps/k8up/schedules.yaml) に 1 本置いた。
+      **PVC のファイルを寄せるほうも済んでいる**(上の Phase 2)。
 - [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
 - [ ] `talosctl upgrade` / `upgrade-k8s` の手順を README に。
+      **`upgrade-k8s` は inlineManifests の reconcile も兼ねる**(2026-09-08 に VM で実測。
+      [docs/talos.md](docs/talos.md))ので、Talos 期の「bootstrap 層を当て直す」操作でもある。
 
 
 ## 積み残し
