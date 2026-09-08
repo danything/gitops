@@ -1,0 +1,22 @@
+machine:
+    registries:
+        config:
+            ghcr.io:
+                auth:
+                    username: ENC[AES256_GCM,data:VjNb,iv:RoPS3oFNYMo4y/MutpTH3jzbZ+QLPQb1jRu7jm2zTuc=,tag:1FDq8DnFfWL3h5sXckAChA==,type:str]
+                    password: ENC[AES256_GCM,data:ggffaxpnnpA3LOkCLAWqA7FcMXdsJdL8fP8W/BUPzz+RuKeoiLNzNw==,iv:exzfs9Og6GCXAyoQ3L0vmClsPHTH0EcyreRh6SaRjjA=,tag:/HjyWUe78xOw6FmGoazhqA==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAxZEJTK0ZNc1RHWklraU1C
+            bU5jQmpkU0x4TllQWXpEb2lXTkFEQjM3ajE0CmhRbkRLbU5LcjRWV1VsQkVWdEha
+            VTF1bXQ2Zm5PWjZKVFVFdzV1NzRZZWcKLS0tIGlUeHRhRzlYdnRCMnBVUnBodytR
+            S3pLVkxoNTZJYW1UZWc4QTRaalcyMzgK8w5htSInX8mqWNi6lbp0/iIK5oE32QoS
+            7fLQ8s4Xgy5W6a2oMsTPbMyayz6trKyQrwhk9jGsa1JLJGUWJVf1OQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    lastmodified: "2026-09-08T07:36:41Z"
+    mac: ENC[AES256_GCM,data:6quIsUyzyycbQK7svl97m22Jwi0iyjK5J/KCDCGI1U612NoFIwhrv4wzXo7mGVo08RI0mth/mFAdQsFLyl4YCajamam8s+YydZUyMUjApn92WQvVBafdly1yUNnYuYnh8csf4rYGG2OmQJzCoi1JRqLpDnoGiDgOfXwrfb/yMx8=,iv:hmzQszqvigBEP1EP2pbr9nC45jrtn3RcHmdWZ8u1ORs=,tag:ZsFKbU7jAdYWU5xCwicVJg==,type:str]
+    unencrypted_suffix: _unencrypted
+    version: 3.13.3
