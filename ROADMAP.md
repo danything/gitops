@@ -364,6 +364,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
   バックアップの資格情報そのものなので公開リポジトリには置けない。値は復元した `/etc/k3s-backup/env` に
   あるので `restore.sh` が作り直すようにした。リハーサルモードでは作らない(VM の k8up が本番の
   リポジトリに書きに行くため)。**Talos ではホストに env ファイルが無くなるので Infisical に移すこと。**
+  受け皿は [apps/k8up/k8up-secrets.yaml](apps/k8up/k8up-secrets.yaml)(2026-09-08)。
+  **Infisical の `/k8up/k8up-global` に 6 つのキーを入れるまで当てない** ── operator は
+  Infisical にあるものだけを書くので、足りないとバックアップが全部落ちる。
 
 ## 未決事項
 
