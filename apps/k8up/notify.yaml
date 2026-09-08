@@ -1,0 +1,228 @@
+# **k8up の失敗を Mattermost に流す。**
+#
+# ホストの `backup/k3s-backup` には最初から通知があるが(`notify()`)、k8up には無い。
+# **バックアップを全部 k8up に移した以上、黙って止まると誰も気づかない**ので足した。
+# ArgoCD の通知は Mattermost に繋がっているが、**あれは Application しか見ない**ので
+# k8up の Backup CR の失敗は拾えない。
+#
+# **見るのは restic の中身。** k8up の Backup オブジェクトは掃除されるので、
+# 「オブジェクトが無い」は「取れていない」の証拠にならない ── スケジュールを書き換えた
+# だけで消えることを実際に確認した(2026-09-08)。唯一の証拠はスナップショットなので、
+# init コンテナで `restic snapshots` を取ってきて、そちらを数える。
+#
+# 秘密は `k8up-global` に相乗りさせている(apps/k8up/README.md の作り方に
+# `mattermostWebhook` が入っている)。**新しい配線は増やさない。**
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8up-notify
+  namespace: k8up
+---
+# 読むだけ。k8up.io の 4 種類だけに絞る。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8up-notify
+rules:
+  - apiGroups: [k8up.io]
+    resources: [schedules, backups, prunes, checks, restores]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8up-notify
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8up-notify
+subjects:
+  - kind: ServiceAccount
+    name: k8up-notify
+    namespace: k8up
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k8up-notify
+  namespace: k8up
+spec:
+  # 最後のバックアップ(portainer 17:30 UTC)の後。
+  schedule: "0 18 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: k8up-notify
+          initContainers:
+            # **リポジトリの中身を取ってくる。** k8up のイメージには restic が入っている
+            # (`/usr/local/bin/restic`)ので、これのためだけに別のものを持ち込まなくてよい。
+            # 読むだけ。`snapshots` はリポジトリを書き換えない。
+            - name: snapshots
+              image: ghcr.io/k8up-io/k8up:v2.16.0
+              command:
+                - sh
+                - -ec
+                - |
+                  export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
+                  restic snapshots --json > /work/snapshots.json
+                  wc -c /work/snapshots.json
+              env:
+                - name: ENDPOINT
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
+                - name: BUCKET
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: bucket}}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: accessKeyId}}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
+                - name: RESTIC_PASSWORD
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+          containers:
+            - name: notify
+              # netbird のサイドカーと同じイメージ。kubectl も jq も要らない。
+              image: oven/bun:1.4.2-slim
+              command: [bun, /script/notify.js]
+              env:
+                - name: WEBHOOK
+                  valueFrom:
+                    secretKeyRef:
+                      name: k8up-global
+                      key: mattermostWebhook
+                # Bun の fetch にクラスタの CA を教える。
+                - name: NODE_EXTRA_CA_CERTS
+                  value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+                - name: work
+                  mountPath: /work
+          volumes:
+            - name: script
+              configMap:
+                name: k8up-notify
+            - name: work
+              emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8up-notify
+  namespace: k8up
+data:
+  notify.js: |
+    // k8up の状態を見て Mattermost に 1 行投げる。CronJob から日次で走る。
+    //
+    // **見るのは restic の中身。** k8up の Backup オブジェクトは
+    // successfulJobsHistoryLimit で掃除されるうえ、スケジュールを書き換えると消える
+    // (2026-09-08 に実際に起きた)。**オブジェクトの有無は「取れたか」の証拠にならない。**
+    // 唯一の証拠はリポジトリに増えたスナップショットなので、そちらを数える。
+    //
+    // **何が取れているべきかは履歴から学ぶ。** 過去 8 日に出てきた (host, path) の組を
+    // 「あるべきもの」とみなし、それぞれの最新が 25 時間以内かを見る。一覧を人が
+    // 書き写す必要がなく、PVC や namespace が増えても勝手に追いつく。
+    const WINDOW_H = 25;
+    const LEARN_H = 24 * 8;
+
+    const snapshots = await Bun.file("/work/snapshots.json").json();
+    const now = Date.now();
+    const hours = (t) => (now - Date.parse(t)) / 3600e3;
+
+    // (host, path) ごとに最新を拾う。ホストのスクリプト(k3s-host)のぶんも一緒に見る。
+    const latest = new Map();
+    for (const s of snapshots) {
+      for (const path of s.paths ?? []) {
+        const h = hours(s.time);
+        if (h > LEARN_H) continue;
+        const key = `${s.hostname}:${path}`;
+        if (!latest.has(key) || h < latest.get(key).h) {
+          latest.set(key, { h, host: s.hostname, path, key: `${s.hostname}${path}` });
+        }
+      }
+    }
+
+    // **やめた経路を失敗と呼ばない。** 取る対象を広げると古い経路が履歴に残る
+    // (`/etc/rancher/k3s/config.yaml` を個別に取るのをやめて `/etc/rancher/k3s` ごと
+    // 取るようにした、など)。**同じホストで、より上の階層が新しく取れているなら
+    // その中身も取れている**ので、そちらは黙って落とす。
+    const fresh = [...latest.values()].filter((x) => x.h <= WINDOW_H);
+    const superseded = (x) =>
+      fresh.some((f) => f.host === x.host && x.path.startsWith(f.path.replace(/\/$/, "") + "/"));
+
+    const stale = [...latest.values()]
+      .filter((x) => x.h > WINDOW_H && !superseded(x))
+      .sort((a, b) => b.h - a.h);
+
+    // k8up 側の失敗も拾う。オブジェクトが残っていれば理由まで書ける。
+    const TOKEN = await Bun.file("/var/run/secrets/kubernetes.io/serviceaccount/token").text();
+    const get = async (kind) => {
+      const r = await fetch(`https://kubernetes.default.svc/apis/k8up.io/v1/${kind}`, {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      if (!r.ok) throw new Error(`${kind}: ${r.status} ${await r.text()}`);
+      return (await r.json()).items ?? [];
+    };
+    const failed = [];
+    for (const kind of ["backups", "prunes", "checks", "restores"]) {
+      for (const o of await get(kind)) {
+        const c = (o.status?.conditions ?? []).find((x) => x.type === "Completed");
+        if (c && c.reason !== "Succeeded") {
+          failed.push(`${o.metadata.namespace}/${o.metadata.name}: ${(c.message ?? "").slice(0, 120)}`);
+        }
+      }
+    }
+
+    // **履歴だけに頼らない。** 上の学習は 8 日で忘れるので、完全に止まったまま 8 日を
+    // 過ぎた経路は追跡対象から落ちて無音に戻る。**クラスタ側から見た「あるべき姿」**も
+    // 突き合わせる ── `backup` を持つ Schedule の namespace には、その namespace 名の
+    // ホストのスナップショットが 25 時間以内にあるはず。こちらは時間で減衰しない。
+    const freshHosts = new Set(fresh.map((x) => x.host));
+    const silent = [...new Set(
+      (await get("schedules")).filter((s) => s.spec?.backup).map((s) => s.metadata.namespace),
+    )].filter((n) => !freshHosts.has(n));
+
+    const lines = [];
+    if (stale.length) {
+      lines.push(`**${stale.length} 件が ${WINDOW_H} 時間以上更新されていない**`);
+      for (const s of stale.slice(0, 15)) lines.push(`- ${s.key} (${s.h.toFixed(0)} 時間前)`);
+      if (stale.length > 15) lines.push(`- ほか ${stale.length - 15} 件`);
+    }
+    if (silent.length) {
+      lines.push(`**${WINDOW_H} 時間以内のスナップショットが 1 つも無い namespace**`);
+      for (const n of silent) lines.push(`- ${n}`);
+    }
+    if (failed.length) {
+      lines.push(`**失敗したジョブ**`);
+      for (const f of failed.slice(0, 10)) lines.push(`- ${f}`);
+    }
+
+    const text = lines.length
+      ? `[k8up] FAILED ❌\n${lines.join("\n")}`
+      : `[k8up] OK ✅ (${latest.size} 系統すべて ${WINDOW_H} 時間以内)`;
+
+    console.log(text);
+    const r = await fetch(process.env.WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!r.ok) {
+      console.error(`Mattermost への投稿に失敗: ${r.status} ${await r.text()}`);
+      process.exit(1);
+    }
+    // 問題があればジョブも落とす。通知が届かなくても kubectl から見えるように。
+    if (lines.length) process.exit(1);

@@ -24,6 +24,7 @@ sudo sh -c '. /etc/k3s-backup/env
     --from-literal=accessKeyId="$AWS_ACCESS_KEY_ID" \
     --from-literal=secretAccessKey="$AWS_SECRET_ACCESS_KEY" \
     --from-literal=repoPassword="$RESTIC_PASSWORD" \
+    --from-literal=mattermostWebhook="$MATTERMOST_WEBHOOK" \
     --dry-run=client -o yaml | k3s kubectl apply -f -'
 ```
 
@@ -31,6 +32,63 @@ sudo sh -c '. /etc/k3s-backup/env
 この Secret も作り直すので手作業は要らない**(2026-09-07 に追加。それまでは作られず、
 operator が `CreateContainerConfigError` で上がらなかった)。
 **Talos に移ったら Infisical に移す**(ホストに env ファイルが無くなるため)。
+
+`mattermostWebhook` は [notify.yaml](notify.yaml) が使う。**新しい秘密を増やさないために
+`k8up-global` に相乗りさせている** ── 値は同じ env ファイルの `MATTERMOST_WEBHOOK` で、
+ホストの `backup/k3s-backup` が使っているものと同じ。
+
+## 失敗したときに気づけるようにする
+
+**k8up には通知が無い。** ホストの `backup/k3s-backup` には最初からあるので
+(`notify()` が Mattermost に投げる)、**バックアップを全部 k8up に移した時点で穴になった。**
+[notify.yaml](notify.yaml) の CronJob が日次(18:00 UTC)でそれを埋める。
+
+**ArgoCD の通知は使えない。** Mattermost に繋がってはいるが(`bootstrap/argocd/helmchart.yaml`)、
+**あれは Application しか見ない**ので k8up の `Backup` CR の失敗は拾えない。
+
+**見るのは restic の中身**であって、k8up のオブジェクトではない。**オブジェクトは掃除される** ──
+`successfulJobsHistoryLimit` で消えるし、**スケジュールを書き換えただけで消えることも確認した**
+(2026-09-08)。「`Backup` が無い」は「取れていない」の証拠にならない。
+
+なので init コンテナで `restic snapshots --json` を取ってきて、それを数える。
+k8up のイメージに restic が入っている(`/usr/local/bin/restic`)ので、余計なものを持ち込まなくてよい。
+
+**何が取れているべきかは履歴から学ぶ。** 過去 8 日に出てきた `(host, path)` の組を「あるべきもの」と
+みなし、それぞれの最新が 25 時間以内かを見る。**一覧を人が書き写す必要がなく**、PVC や namespace が
+増えても勝手に追いつく。ホストのスクリプト(`host=main`)のぶんも同じ物差しで見られる。
+
+**履歴だけには頼らない。** 学習は 8 日で忘れるので、止まったまま 8 日を過ぎた経路は追跡対象から
+落ちて無音に戻る。そこで**クラスタ側から見た「あるべき姿」**も突き合わせる ── `backup` を持つ
+`Schedule` の namespace には、その namespace 名のホストのスナップショットが 25 時間以内にあるはず。
+**こちらは時間で減衰しない。**
+
+| | 何を捕まえる | 減衰 |
+| --- | --- | --- |
+| 履歴(過去 8 日の `(host, path)`) | **経路ごと**の退行(PVC 1 本だけ落ちた、など) | 8 日 |
+| `Schedule`(クラスタの意図) | namespace が**丸ごと**無音になった | しない |
+
+**残る割り切り**: 経路を複数持つ namespace で**そのうち 1 本だけ**が 8 日を超えて止まった場合は、
+履歴からは落ち、namespace 単位では他の経路が新しいので無音に戻る。**その 8 日間は毎日
+FAILED を出している**ので、そこで気づけなかった、という形でしか起きない。
+
+**やめた経路を失敗と呼ばない。** 取る対象を広げると古い経路が履歴に残る
+(`/etc/rancher/k3s/config.yaml` を個別に取るのをやめて `/etc/rancher/k3s` ごと取るようにした、など)。
+**同じホストでより上の階層が新しく取れているなら、その中身も取れている**ので黙って落とす。
+
+あわせて `Backup` / `Prune` / `Check` / `Restore` の `Completed` 条件も見て、
+残っていれば失敗の理由まで書く。
+
+成功時も 1 行投げる。**通知の仕組み自体が生きていることの確認**になる(ホストのスクリプトと同じ考え方)。
+
+本番のリポジトリで実際に流して確かめた(2026-09-08):
+
+```
+追跡 32 系統 / 上位の階層が新しいので無視 2 件
+   無視  29.1h  main/etc/rancher/k3s/config.yaml
+   無視  29.1h  main/etc/rancher/k3s/registries.yaml
+
+[k8up] OK ✅ (32 系統すべて 25 時間以内)
+```
 
 ## 何をどう取っているか
 
