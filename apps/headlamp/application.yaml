@@ -1,0 +1,63 @@
+# Kubernetes の Web UI。Portainer と置き換えられるかを見るための試験導入で、
+# いまは宅内からだけ引ける hd.l.doany.io に出す。Portainer はまだ消していない。
+#
+# 見たいのは Resource Map。Gateway / HTTPRoute / GRPCRoute を最初から知っていて、
+# parentRefs と backendRefs の線も定義済みなので、公開経路が 1 枚で出る。
+#
+# 認証は入れていない。unsafeUseServiceAccountToken は Headlamp を訪ねた人を全員
+# Pod の ServiceAccount として扱う設定で、宅内限定かつ読み取り専用だから許している。
+# 外に出すなら oauth2-proxy を前段に置く(bootstrap/auth/hubble-proxy.yaml と同じ形)か、
+# apiserver 側に OIDC を入れて利用者本人のトークンを通す。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: headlamp
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: headlamp
+  source:
+    repoURL: https://kubernetes-sigs.github.io/headlamp/
+    chart: headlamp
+    targetRevision: 0.45.0
+    helm:
+      releaseName: headlamp
+      valuesObject:
+        serviceAccount:
+          create: true
+          name: headlamp
+        clusterRoleBinding:
+          create: true
+          # 組み込みの view。Secret を含まないのが効いている。足りないぶんは rbac.yaml。
+          clusterRoleName: view
+        config:
+          inCluster: true
+          inClusterContextName: main
+          unsafeUseServiceAccountToken: true
+          oidc:
+            # OIDC を使わないので空の Secret も要らない。既定は create: true。
+            secret:
+              create: false
+        # chart の既定は resources: {} で上限が無い。
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        httpRoute:
+          enabled: true
+          parentRefs:
+            - name: doany
+              namespace: kube-system
+              sectionName: https-lan
+          hostnames:
+            - hd.l.doany.io
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
