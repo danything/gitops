@@ -92,6 +92,7 @@ helm repo update cilium >/dev/null 2>&1 || true
 helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 	-f bootstrap/cilium/values.yaml -f talos/cilium-values.yaml \
 	--kube-version "$K8S" \
+	| awk -v ns=kube-system -f talos/add-namespace.awk \
 	| inline cilium > "$WORK/inline-cilium.yaml"
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
@@ -162,7 +163,7 @@ helmchart_inline() { # $1=name  $2=復号済み CR
 		echo ---
 		helm template "$_name" "$_name/$_chart" --version "$_ver" -n "$_ns" \
 			-f "$WORK/$_name-values.yaml" -f "talos/$_name-values.yaml" \
-			--kube-version "$K8S"
+			--kube-version "$K8S" | awk -v ns="$_ns" -f talos/add-namespace.awk
 	} | inline "$_name" > "$WORK/inline-$_name.yaml"
 	echo "  $_name: chart $_chart $_ver -> $(wc -c < "$WORK/inline-$_name.yaml") バイト"
 }
@@ -217,7 +218,7 @@ helm repo update jetstack >/dev/null 2>&1 || true
 	echo ---
 	helm template cert-manager jetstack/cert-manager --version "$CERTMGR" -n cert-manager \
 		-f bootstrap/cert-manager/values.yaml -f talos/cert-manager-values.yaml \
-		--kube-version "$K8S"
+		--kube-version "$K8S" | awk -v ns=cert-manager -f talos/add-namespace.awk
 } | inline cert-manager > "$WORK/inline-cert-manager.yaml"
 
 # **SOPS 済みの Secret も machine config に入れる。**
@@ -285,6 +286,7 @@ helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >
 helm repo update metrics-server >/dev/null 2>&1 || true
 helm template metrics-server metrics-server/metrics-server --version "$METRICS" \
 	-n kube-system -f talos/metrics-server-values.yaml --kube-version "$K8S" \
+	| awk -v ns=kube-system -f talos/add-namespace.awk \
 	| inline metrics-server > "$WORK/inline-metrics-server.yaml"
 
 # --- 組み立て --------------------------------------------------------------
@@ -331,6 +333,7 @@ if [ -f "$WORK/inline-argocd.yaml" ]; then
 fi
 if [ -f "$WORK/inline-infisical.yaml" ]; then
 	for n in 'name: infisical' 'infisical-standalone' \
+		'metadata:\n  namespace: infisical' \
 		'kind: Namespace\nmetadata:\n  name: infisical'; do
 		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 	done
