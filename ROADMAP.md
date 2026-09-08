@@ -272,8 +272,16 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
             `talosctl upgrade-k8s` を通せば**更新も削除もされる**。だから Talos では
             `helm upgrade` を使わず、`render.sh` → `upgrade-k8s` が更新経路になる
             (docs/talos.md「inlineManifests は『更新できない』ではない」)
-      - [ ] ArgoCD も同じ形で inlineManifests に。**CI 側には置かない** ── 導入に CRD/ClusterRole/Secret が
-            要り、狭く保っている CI の RBAC の意味が消えるため
+      - [x] **ArgoCD と infisical を inlineManifests に(2026-09-08)。**
+            [talos/render.sh](talos/render.sh) が `bootstrap/<name>/helmchart.yaml`(SOPS)を
+            復号して `chart` / `repo` / `version` / `values` を取り出し、`helm template` する。
+            **値をここに写さない**のは Cilium と同じ方針。
+            **ArgoCD の CRD 3 つだけは URL で渡す** ── 1.83 MB あって描き出しの 95% を占め、
+            埋めると machine config が 271 KB → 2 MB になる(`crds.install: false` +
+            `KubeExternalManifestConfig`。版は chart の `appVersion` から引く)。
+            **`version:` が入るまでは警告して飛ばす**(下の項目)。
+            **CI 側には置かない** ── 導入に CRD/ClusterRole/Secret が要り、
+            狭く保っている CI の RBAC の意味が消えるため
       - [ ] SOPS 済みの Secret 4 つを inlineManifests に。**machine config はもともと SOPS 済み**なので
             信頼水準は変わらず、CI に age 鍵を渡さない方針も保てる
       - [x] **`bootstrap/apiserver/rbac.yaml` も inlineManifests に(2026-09-08)。**

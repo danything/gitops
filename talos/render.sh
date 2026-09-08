@@ -106,6 +106,95 @@ inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.y
 # に移してあるので、ここには来ない。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
+# --- k3s の HelmChart CR から描く ------------------------------------------
+# **argocd と infisical は `bootstrap/` の SOPS 済み `HelmChart` CR が正本。**
+# `HelmChart` は k3s 固有で Talos には無いので、同じ chart・同じ値を
+# `helm template` して inlineManifest にする。**値をここに写さない**のは
+# Cilium と同じ方針(../docs/decisions.md)。
+#
+# **infisical はここに来るしかない。** chart が DB と Redis のパスワードを
+# Deployment の平文 env に焼き込むので、ArgoCD の Application には置けない
+# (../docs/decisions.md「infisical だけは ArgoCD に移せない」)。
+# **render.sh は age の鍵を持っている**ので、復号した値をそのまま helm に渡せる。
+# 生成物は machine config の中にしか出ない。
+
+# CR(復号済み)から spec の 1 つのキー、または spec.values の中身を取り出す。
+# `yq` は使わない ── サーバに入っているのが v3 で構文が違う。
+hc() { # $1=file  $2=キー名 または @values
+	awk -v key="$2" '
+		BEGIN { pfx = "    " key ": " }
+		key != "@values" {
+			if (index($0, pfx) == 1) { print substr($0, length(pfx)+1); exit }
+			next
+		}
+		/^    values:$/ { inv = 1; next }
+		inv && /^[^ ]/  { exit }          # sops: など、トップレベルに戻ったら終わり
+		inv             { print substr($0, 9) }
+	' "$1"
+}
+
+# $1=名前(argocd / infisical)。復号は呼び出し側で済ませて $2 に渡す。
+helmchart_inline() { # $1=name  $2=復号済み CR
+	_name=$1
+	_cr=$2
+	_chart=$(hc "$_cr" chart)
+	_repo=$(hc "$_cr" repo)
+	_ver=$(hc "$_cr" version)
+	_ns=$(hc "$_cr" targetNamespace)
+	if [ -z "$_ver" ]; then
+		# **止めない。** 版を固定するのは人の手作業(bootstrap/README.md
+		# 「Helm で入れるもの」)で、それより前でも他は描けるようにしておく。
+		echo "WARNING: bootstrap/$_name/helmchart.yaml に version: が無いので $_name を描かない" >&2
+		echo "         sops edit で chart:/repo:/version: の 3 行を連続させること" >&2
+		return 0
+	fi
+	hc "$_cr" @values > "$WORK/$_name-values.yaml"
+	helm repo add "$_name" "$_repo" >/dev/null 2>&1 || true
+	helm repo update "$_name" >/dev/null 2>&1 || true
+	helm template "$_name" "$_name/$_chart" --version "$_ver" -n "$_ns" \
+		-f "$WORK/$_name-values.yaml" -f "talos/$_name-values.yaml" \
+		--kube-version "$K8S" | inline "$_name" > "$WORK/inline-$_name.yaml"
+	echo "  $_name: chart $_chart $_ver -> $(wc -c < "$WORK/inline-$_name.yaml") バイト"
+}
+
+# 復号は呼び出し側で。CI には age の鍵を渡さないので、`ARGOCD_CHART` /
+# `INFISICAL_CHART` にダミーを入れて経路だけ通す(SECRETS / REGISTRIES と同じ)。
+decrypt_cr() { # $1=name  $2=env で渡された上書き
+	if [ -n "$2" ]; then echo "$2"; return 0; fi
+	if [ ! -f "bootstrap/$1/helmchart.yaml" ]; then
+		echo "WARNING: bootstrap/$1/helmchart.yaml が無いので $1 を描かない" >&2
+		return 0
+	fi
+	sops -d "bootstrap/$1/helmchart.yaml" > "$WORK/$1-chart.yaml"
+	echo "$WORK/$1-chart.yaml"
+}
+
+ARGOCD_CR=$(decrypt_cr argocd "${ARGOCD_CHART:-}")
+INFISICAL_CR=$(decrypt_cr infisical "${INFISICAL_CHART:-}")
+# **`[ … ] && cmd` で書かないこと。** `set -e` の下では、条件が偽のときに
+# その行が 1 を返してスクリプトごと落ちる(cleanup のトラップで実際に踏んだ)。
+if [ -n "$ARGOCD_CR" ]; then helmchart_inline argocd "$ARGOCD_CR"; fi
+if [ -n "$INFISICAL_CR" ]; then helmchart_inline infisical "$INFISICAL_CR"; fi
+
+# **ArgoCD の CRD は URL で渡す。** 3 つで 1.83 MB あり、chart の描き出しの 95% を
+# 占める(talos/argocd-values.yaml で `crds.install: false` にしてある)。
+# **版は chart の appVersion をそのまま使う** ── 版を 2 つ持つと必ずずれる。
+if [ -f "$WORK/inline-argocd.yaml" ]; then
+	ARGOCD_APP=$(helm show chart "argocd/$(hc "$ARGOCD_CR" chart)" \
+		--version "$(hc "$ARGOCD_CR" version)" 2>/dev/null | sed -n 's/^appVersion: //p')
+	[ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
+	echo "  argocd の CRD: $ARGOCD_APP"
+	for c in application applicationset appproject; do
+		cat >> "$WORK/argocd-crds.yaml" <<PATCH
+apiVersion: v1alpha1
+kind: KubeExternalManifestConfig
+name: argocd-$c-crd
+url: https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_APP}/manifests/crds/$c-crd.yaml
+---
+PATCH
+	done
+fi
+
 # **Gateway API の CRD。** これが無いと Gateway も HTTPRoute も適用できず、公開経路が
 # 丸ごと消える(k3s のいまは、消したはずの Traefik の chart が置いていったものが残って
 # いるだけ。versions.yaml のコメント)。
@@ -142,6 +231,7 @@ set -- --with-secrets "$SECRETS" \
 for f in talos/patches/*.yaml; do set -- "$@" --config-patch "@$f"; done
 if [ -n "$REGISTRIES" ]; then set -- "$@" --config-patch "@$REGISTRIES"; fi
 set -- "$@" --config-patch "@$WORK/gateway-api.yaml"
+if [ -f "$WORK/argocd-crds.yaml" ]; then set -- "$@" --config-patch "@$WORK/argocd-crds.yaml"; fi
 for f in "$WORK"/inline-*.yaml; do set -- "$@" --config-patch "@$f"; done
 
 rm -rf "$OUT"
@@ -162,4 +252,22 @@ for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-p
 	# grep がオプションとして解釈して落ちる。
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
+
+# **描けたときだけ見る。** version が入る前は argocd / infisical を飛ばすので
+# (上の WARNING)、無条件の needle にすると作業できなくなる。
+if [ -f "$WORK/inline-argocd.yaml" ]; then
+	for n in 'name: argocd' 'argocd-server' 'name: argocd-application-crd' \
+		'manifests/crds/applicationset-crd.yaml'; do
+		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
+	done
+	# **CRD は URL で渡すので、描き出しに入っていないこと。** 入ると 1.83 MB 増える。
+	# 生成物ではなく包む前のファイルを見る(あちらは 1 行のエスケープ文字列になる)。
+	! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-argocd.yaml" \
+		|| { echo "ERROR: argocd の CRD が inline に入っている(talos/argocd-values.yaml)" >&2; exit 1; }
+fi
+if [ -f "$WORK/inline-infisical.yaml" ]; then
+	for n in 'name: infisical' 'infisical-standalone'; do
+		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
+	done
+fi
 talosctl validate --config "$OUT/controlplane.yaml" --mode metal
