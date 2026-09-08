@@ -15,8 +15,7 @@
 - [ ] 生成物に **inline 9 つ + CRD の URL 5 つ**が入っている
       ([talos/README.md](../talos/README.md)「上げ方 / 当て直し方」)
 - [ ] `talos/versions.yaml` の版が意図どおり(**上げるなら今日ではない日に**)
-- [ ] **作業中に何を見せるか決めておく**(ROADMAP の Phase 2 の 1 つめ。未定なら
-      「見せない」でも決めておく)
+- [ ] **作業中は何も見せない。** 決定済み(ROADMAP の Phase 2)。メンテナンス画面は用意しない
 
 ## 1. 経路の確保
 
@@ -84,10 +83,23 @@ GitHub Actions の **bootstrap apply** を `workflow_dispatch` で回す。
 
 ## 7. アプリが戻るのを待つ
 
+**先に Infisical の DB(`infisical-postgresql.sql`)だけ戻しておく** ── 下の 8 の
+やり方で 1 本だけ。空のままだと `InfisicalSecret` を使うアプリが Secret をもらえず、
+ここが「全部 Healthy」にならない。
+
 ArgoCD が `apps/` と各リポジトリの `deploy/argocd.yaml` を同期する。
 
 - [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy
 - [ ] **PVC が Bound になる**(`local-path` が要る。5 で確認済み)
+
+**`OutOfSync / Missing` のまま止まっているものは 1 回叩く。** `apps/infisical-operator/`
+が CRD を入れる前に同期しにいった Application は `(retried 5 times)` で諦めていて、
+**`refresh=hard` では戻らない**(2026-09-08 のドリル 5 回目)。
+
+```shell
+kubectl -n argocd patch application <名前> --type=merge \
+  -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'
+```
 
 ## 8. PV データを戻す
 

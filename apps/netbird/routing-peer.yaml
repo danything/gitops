@@ -34,7 +34,7 @@ metadata:
   name: netbird-routing-peer
   namespace: netbird
   annotations:
-    argocd.argoproj.io/sync-options: Prune=false
+    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
