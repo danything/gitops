@@ -265,7 +265,8 @@ PATCH
 # **standard-install.yaml は CRD を 10 個とも持っている**(TCPRoute や ListenerSet も)ので、
 # いまクラスタにあるものの上位集合になる。experimental の bundle は要らない。
 #
-# **中身は埋めずに URL で渡す**(1.1 MB。理由は talos/versions.yaml)。
+# **中身は埋めずに URL で渡す**(1.1 MB。なぜ URL かは
+# ../docs/decisions.md「層の分け方」。この CRD が要る理由は talos/versions.yaml)。
 # `KubeExternalManifestConfig` は v1alpha1 の `cluster.extraManifests` の後継で、
 # **1 ドキュメントに 1 URL**。ノードが起動時に GitHub に出られる必要はあるが、
 # どのみちイメージを引く。
