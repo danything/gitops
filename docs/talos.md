@@ -275,6 +275,36 @@ etcd もコンテナイメージも PV データも同じ 1 枚。**local-path �
 - `UserVolumeConfig` は `metadata.name` ではなく**トップレベルの `name`**。名前は
   1〜34 文字の英数字とハイフンで、ディスク上のラベルは `u-<name>` になる
 
+### 通しで確かめたこと
+
+**Cilium のデータパスは k3s 期と同じ形で上がる。**
+
+```
+KubeProxyReplacement:  True   [bond0  10.0.0.2 240f:6d:842b:1::2 (Direct Routing), enp0s4  10.10.0.4]
+Cilium:                Ok     1.20.1
+Routing:               Network: Tunnel [vxlan]   Host: BPF
+Masquerading:          BPF    [bond0, enp0s4]   10.42.0.0/24 fd42::/64 [IPv4: Enabled, IPv6: Enabled]
+```
+
+`cgroup.hostRoot` と KubePrism(`localhost:7445`)の上書き([`talos/cilium-values.yaml`](../talos/cilium-values.yaml))が
+効いていることの裏付けでもある。
+
+**`service-node-port-range: 80-32767` は実際に効く。** 生成物を見るだけでなく、
+クラスタで nodePort 80 の Service を作れることを確かめた
+(Gateway の公開経路がここに乗っている。[`talos/patches/apiserver.yaml`](../talos/patches/apiserver.yaml))。
+
+```
+$ kubectl create svc nodeport np --tcp=80:80 --node-port=80
+np   NodePort   10.43.251.48   <none>   80:80/TCP
+```
+
+**dual-stack も出る。** `fd43::/108` に変えた影響を確かめた:
+
+```
+$ kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIPs}'
+["10.43.0.10","fd43::a"]      ipFamilyPolicy: RequireDualStack
+```
+
 ### VM の組み方(3 回目の追記)
 
 - **`NETDEV WATCHDOG: transmit queue 0 timed out` は QEMU 側のミス。** bond の 2 本目を
