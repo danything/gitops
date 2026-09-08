@@ -37,11 +37,17 @@ infisical-standalone 1.10.0)。それまでは `HelmChart` CR に `version:` が
 1 行足すだけで `sops -d` が壊れる。位置を選びたいので `sops set` ではなくこの順でやった:
 
 ```shell
-sops decrypt --in-place bootstrap/argocd/helmchart.yaml
+f=bootstrap/argocd/helmchart.yaml
+sops -d "$f" > /tmp/before.yaml            # ← 先に「編集前の中身」を取っておく
+sops decrypt --in-place "$f"
 # repo: の次の行に version: を足す
-sops encrypt --in-place bootstrap/argocd/helmchart.yaml
-sops -d bootstrap/argocd/helmchart.yaml | diff - <復号したもの>   # 差分が 1 行だけか見る
+sops encrypt --in-place "$f"
+sops -d "$f" | diff /tmp/before.yaml -     # 足した 1 行だけが出ること
+rm -f /tmp/before.yaml
 ```
+
+**`git diff` では代用できない** ── `mac` と `lastmodified` は中身が変わらなくても
+毎回書き換わるので、暗号文の差分を見ても何も分からない。**復号した中身どうしを比べる。**
 
 ## git と live がずれていないか(2026-09-08 に確認)
 
