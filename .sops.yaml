@@ -1,6 +1,16 @@
-# bootstrap/ にある平文の秘密だけを暗号化する。鍵は recovery/sops-age.key.age
-# (env.age と同じパスフレーズ)。復号は `age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age` のあと sops -d。
+# **平文の秘密を SOPS(age)で暗号化する規則。** 鍵は recovery/sops-age.key.age
+# (env.age と同じパスフレーズ)。復号は
+#   age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age
+# のあと `sops -d`。
 creation_rules:
+  # bootstrap/ は「そのキーだけ」を暗号化する。マニフェストの構造は git で読めたほうが
+  # レビューできるため。
   - path_regex: ^bootstrap/.*\.yaml$
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+  # **talos/secrets.yaml は丸ごと暗号化する。** `talosctl gen secrets` の出力は
+  # 全部が秘密(Talos の CA、Kubernetes の CA、etcd の CA、bootstrap token)で、
+  # 選り分ける意味が無い。**この規則が無いと talos/README.md の `sops -e -i secrets.yaml`
+  # が「一致する creation rule が無い」で落ちる。**
+  - path_regex: ^talos/secrets\.yaml$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r

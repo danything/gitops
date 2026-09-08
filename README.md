@@ -15,14 +15,14 @@ k3s クラスタ上のセルフホストアプリを [Argo CD](https://argo-cd.r
 | | |
 | --- | --- |
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト |
-| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある)。手で `kubectl apply` する |
+| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある)。**main へのマージで GitHub Actions が当てる**(SOPS 済みの 4 ファイルと `cilium/` だけ手で) |
 | [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
-| `talos/` | Talos への移行用 machine config(検証中。1.14 の形に書き直しが要る) |
-| [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos のインストールメディアと machine config](docs/talos.md)、[Entra ID のトークンを小さくする](docs/entra.md) |
+| [`talos/`](talos/) | Talos への移行用 machine config(**v1.14 の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する) |
+| [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos の実機検証](docs/talos.md)、[Entra ID の認可](docs/entra.md) |
 | [`ROADMAP.md`](ROADMAP.md) | 暫定構成から Talos までの道筋と、決定の記録 |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
-| `.sops.yaml` | `bootstrap/` にある平文の秘密を SOPS(age)で暗号化する規則 |
+| [`.sops.yaml`](.sops.yaml) | 平文の秘密を SOPS(age)で暗号化する規則(`bootstrap/` と `talos/secrets.yaml`) |
 
 ## 秘密の扱い
 
@@ -69,4 +69,10 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`portainer/`](apps/portainer/) | Portainer |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
+| [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。**Talos でホストのスクリプトが使えなくなる**ぶんの受け皿 |
+| [`infisical/`](apps/infisical/) [`infisical-operator/`](apps/infisical-operator/) [`infisical-push-bridge/`](apps/infisical-push-bridge/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジ |
+
+**アプリの多くはこのリポジトリに無い。** 各アプリのリポジトリの `deploy/` に置いてあり、
+`bootstrap/argocd/repos.yaml` の ApplicationSet が拾う(上の「仕組み」)。
+`kubectl -n argocd get applications` が実際の一覧。
 

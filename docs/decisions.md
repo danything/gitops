@@ -13,7 +13,7 @@
 | `bootstrap/` の中身(Argo CD・Infisical・Traefik・auth の定義)。Talos では machine config の `cluster.inlineManifests` に載せる(下記) | |
 | 公開の復元手順(秘密を含まない、`curl \| sh` できる)という**性質** | setup-network.sh / k3s-server-config.yaml / init.sh / **restore.sh**(k3s 期専用。Talos 期は machine config + etcd + k8up の Job に置き換わる) |
 | Infisical のデータ(Postgres PVC)と `ENCRYPTION_KEY` | HelmChart CRD(helm.cattle.io)、k3s 同梱の Traefik / ServiceLB |
-| ArgoCD + ApplicationSet(repos.yaml)+ 各 repo の `argocd.yaml`(ディレクトリ名は改名予定、下記) | firewalld 無効化などホストの手作業 |
+| ArgoCD + ApplicationSet(repos.yaml)+ 各 repo の `deploy/argocd.yaml` | firewalld 無効化などホストの手作業 |
 | | **Traefik**(k3s 同梱だから使っていただけ。IngressRoute / Middleware(forward-auth)/ mydnschallenge ACME は Talos では持ち込まない) |
 
 Talos ではホストに触れないので、「k8s オブジェクト」は etcd スナップショット、「ホスト設定」は machine config(git 管理)、
@@ -103,10 +103,11 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 
 ## DB の整合性の取り方
 
-- **k3s 期**: 今の backup.sh どおり、対象 namespace の Deployment/StatefulSet を scale down してからコピー。
-  停止時間を縮めたければ scale down → LVM/btrfs スナップショット → scale up → スナップショットから restic、にする(FS を要確認)。
-- **Talos 期**: scale down せず、k8up の `k8up.io/backupcommand` 注釈で `pg_dump` / `mariadb-dump` を取るアプリ整合方式に切り替える。
-  対象: infisical(Postgres)、mattermost(Postgres)、erpnext(MariaDB)。ファイルだけの PV(メディア、adguard)はそのまま。netbird は sqlite なので、いずれ論理バックアップ側に寄せる。
+- **k3s 期**: ホストの `backup/k3s-backup` が、対象 namespace を scale down してからコピーする。
+- **Talos 期**: **scale down しない。** k8up の `k8up.io/backupcommand` で論理バックアップを取る。
+  **2026-09-08 に全 11 namespace で完了**(RDBMS 3 つは `pg_dump` / `mariadb-dump`、SQLite 6 つは
+  `bun:sqlite` の `serialize()`、ファイルの PVC は注釈)。**どれが何で取れているかの一覧は
+  [../apps/k8up/README.md](../apps/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
 
 
 ## Talos では `bootstrap/` をどう適用するか
@@ -117,8 +118,9 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 - **ただし当初「手で apply する層が消える」と書いたのは外れた。** 実際には二段階になり、
   適用は GitHub Actions に移った([bootstrap/README.md](../bootstrap/README.md))。
   machine config が持つのは「そこへ辿り着くまで」だけ
-- **inlineManifests は「追加専用」どころか create-once。** 既にあるものは更新もしない
-  (`manifest_apply.go` が inventory を見てスキップする)。**継続的な reconcile ではない**
+- **inlineManifests は Talos 自身は更新しない**が、**`talosctl upgrade-k8s` を通せば
+  更新も削除もされる**(2026-09-08 に VM で実測。[talos.md](talos.md))。
+  当初「create-once で reconcile ではない」と書いたのは**半分誤り**だった
 
 ## ルーティングの選定(2026-09-06)
 
@@ -633,13 +635,28 @@ mariadb は `mariadb:10.6` のままなので DB のメジャーは動かない�
 
 ## バックアップに何を含めるか
 
-R2 の無料枠は 10 GB。実サイズは 2026-09-06 時点で 3.3 GiB だったが、**2026-09-07 に 13.92 GiB まで育って超えていた**
-(原因は下の `denpa-recorded`)。容量を削るために外した / 外さなかったもの:
+R2 の無料枠は 10 GB。**もう超えている。**
+
+| 日付 | リポジトリの実サイズ | できごと |
+| --- | --- | --- |
+| 2026-09-06 | 3.3 GiB | |
+| 2026-09-07 | 13.92 GiB | `denpa-recorded` が 14 GB まで育っていた → 除外した |
+| **2026-09-08** | **23.2 GiB** | **`denpa-library` が 972 MB → 7.9 GB に育った**(圧縮後 10.1 GiB) |
+
+**除外では解決しない。** `denpa-recorded` を外した効果は保持世代が回れば出るが、
+今度は「取ると決めた」`denpa-library` そのものが伸びている。
+
+**決定(2026-09-08): 有料でも取る。** 無料枠に収めることを目的にすると録画を捨てることになり、
+本末転倒。超過分は従量課金で、23 GiB なら **月 $0.2 前後**。R2 は下り(egress)が無料なので、
+復元のたびに費用が跳ねる心配も無い。**無料枠は制約ではなく目安**として扱う。
+容量そのものが問題になるのは、桁が変わったとき(数百 GB)。
+
+容量を削るために外した / 外さなかったもの:
 
 | 対象 | 判断 |
 | --- | --- |
 | AdGuard のクエリログ(`querylog.json`) | **保持を 90d → 7d に短縮**(2026-09-06)。単体で 2.0 GB あった。純粋な計測データで、復元時に無くても困らない。いま 8.8 MB |
-| 録画データ | **エンコード済みの `denpa-library`(972 MB)は含める。** 放送は取り直せないので容量より価値を優先する(2026-09-06 本人判断) |
+| 録画データ | **エンコード済みの `denpa-library` は含める。** 放送は取り直せないので容量より価値を優先する(2026-09-06 本人判断)。**育っている**ので要監視 ── 2026-09-06 に 972 MB、2026-09-08 の実測で 7.9 GB(restic 上は 10.1 GiB) |
 | `denpa-recorded`(生 TS の作業領域) | **除外した(2026-09-07)。** 1.6 GB だったものが **14 GB** まで育ち、リポジトリ実サイズが 13.92 GiB と **R2 の無料枠 10 GB を超えていた**。エンコードが終われば消える置き場で、中身は数時間で入れ替わるので日次のスナップショットに残す意味も薄い |
 | 保持世代 | 17 → **13**(`--keep-daily 7 --keep-weekly 4 --keep-monthly 2`)。遡れる範囲は約 2 か月 |
 | 消した namespace の PV(epg / vpn / opengist、541 MiB) | 退避のうえ削除済み。バックアップ対象外 |
@@ -716,6 +733,53 @@ ArgoCD は「git から消えた + 自分が追跡している」ものを prune
 - **`bootstrap/` へ移すもの** — 引き取り手が居ないのでこの手が使えない。先に
   `argocd.argoproj.io/sync-options: Prune=false` を live に効かせておき、そのあと移す。
   移し終えたら live の tracking-id 注釈を剥がして、`Prune=false` も外す
+
+## machine config と Cilium の chart をどう連動させるか(2026-09-08 決定)
+
+Talos では Cilium を `inlineManifests` に載せる。**では `bootstrap/cilium/values.yaml` と
+machine config の中の Cilium を、人が手で合わせるのか。** 合わせない。**machine config を
+「派生物」にする。**
+
+### `gen config` のときに描く
+
+`helm template` の出力を `KubeInlineManifestConfig` に包んで、ただの `--config-patch` として渡す。
+**Cilium の値がリポジトリに二度書かれることが無くなる。**
+
+```shell
+{
+  echo "apiVersion: v1alpha1"; echo "kind: KubeInlineManifestConfig"; echo "name: cilium"
+  echo "manifest: |-"
+  helm template cilium cilium/cilium --version "$(yq -r .version bootstrap/cilium/version.yaml)" \
+    -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$K8S" | sed 's/^/    /'
+} > /tmp/cilium-inline.yaml
+```
+
+実際に作って確かめた(2026-09-08): 2329 行の manifest が埋まり、`talosctl validate --mode metal` を通る。
+生成物では 1 行のエスケープ文字列になるので、machine config 自体は 450 行のまま読める。
+
+**Renovate は `bootstrap/cilium/version.yaml` を見ている**ので、版が上がれば PR が来る。
+machine config は毎回そこから描き直されるだけで、追従の作業は無い。
+
+### **罠: `upgrade-k8s` は Cilium も巻き戻す**
+
+`inlineManifests` は **`talosctl upgrade-k8s` を通すと reconcile される**(talos.md)。
+`upgrade-k8s` は Kubernetes を上げるときの通常の操作でもあるので、
+**machine config の中の Cilium が古いまま流すと、走っている Cilium が巻き戻る。**
+
+したがって **`upgrade-k8s` の前には必ず machine config を描き直す**。手順の一部として書くこと。
+
+### 帰結: Talos 期は `helm upgrade` を使わなくなる
+
+Cilium の更新経路は「`values.yaml` を直す → machine config を描き直す → `upgrade-k8s`」になる。
+**`bootstrap/cilium/values.yaml` が正本なのは変わらない**が、当てる道具が替わる。
+[cilium-drift.yml](../.github/workflows/cilium-drift.yml) のズレ検出は k3s 期のもので、
+Talos では `upgrade-k8s` 自身が差分を出す(`< configured ...` と diff)ので役目を終える。
+
+### 採らなかった案
+
+**Cilium を machine config に載せず、bootstrap のあとに `helm install` する。** 罠は消えるが、
+再構築のたびに手作業が 1 つ増える(しかも「CNI が無いので何も動かない」状態での作業)。
+Sidero は inline manifest を production 推奨、CLI での install を "least declarative" としている。
 
 ## Talos の起動順序をどう組むか(2026-09-07)
 

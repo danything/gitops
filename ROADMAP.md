@@ -218,7 +218,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 - [ ] **起動順序を組み直す。** k3s の `HelmChart` CRD は Talos に無いので、argocd と infisical は
       置き換えが要る。**inlineManifests は Helm を実行できない**ので、そのままでは移せない。
       層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
-      - [ ] Cilium を `helm template` で書き出して inlineManifests に。CNI なので他に置きようがない。
+      - [ ] Cilium を `helm template` で書き出して inlineManifests に。**`gen config` のときに
+            `bootstrap/cilium/` から描く**(machine config に値を二度書かない。作れることは
+            2026-09-08 に確認済み)。**`upgrade-k8s` の前には必ず描き直す** ── 古いまま流すと
+            走っている Cilium が巻き戻る(docs/decisions.md「machine config と Cilium の chart」)。
             **inlineManifests は「作りっぱなし」ではない**(2026-09-08 に VM で実測) ──
             `talosctl upgrade-k8s` を通せば**更新も削除もされる**ので、machine config だけで
             回す道も実在する。いまは値を追える `bootstrap/cilium/values.yaml` + `helm upgrade` を
@@ -247,12 +250,16 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 
 ### Phase 3 — Talos 定常運用
 
-- [ ] k8up の失敗通知。スケジュールと保持(`keep-daily 7 / weekly 4 / monthly 6`、タグは `k8up`)は
-      [apps/k8up/schedules.yaml](apps/k8up/schedules.yaml) の 9 本に既に入っている。
-      **PVC のファイルを k8up 側に寄せるのはここ**(Talos ではホストのスクリプトが使えない)。
+- [x] ~~k8up の失敗通知~~ **入れた(2026-09-08)。** [apps/k8up/notify.yaml](apps/k8up/notify.yaml) の
+      CronJob が日次で Mattermost に投げる。**見るのは restic の中身**で、k8up のオブジェクトは
+      掃除されるので証拠にならない。「失敗した」だけでなく「そもそも走らなかった」も拾う。
+      `restic check` も [schedules.yaml](apps/k8up/schedules.yaml) に 1 本置いた。
+      **PVC のファイルを寄せるほうも済んでいる**(上の Phase 2)。
 - [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
 - [ ] `talosctl upgrade` / `upgrade-k8s` の手順を README に。
+      **`upgrade-k8s` は inlineManifests の reconcile も兼ねる**(2026-09-08 に VM で実測。
+      [docs/talos.md](docs/talos.md))ので、Talos 期の「bootstrap 層を当て直す」操作でもある。
 
 
 ## 積み残し

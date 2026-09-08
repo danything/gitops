@@ -18,7 +18,7 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
 `secrets.infisical.com/auto-reload` 注釈のある Deployment は Secret 更新時に自動で入れ替わる。
 認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
 
-- `infisical/` … Infisical 本体(HelmChart + Postgres/Redis)。公開は `apps/gateway-routes/` の HTTPRoute。
+- `infisical/` … Infisical 本体(HelmChart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
   `secrets.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は `local-path-retain` で、バックアップ対象に入っている。
 - **operator と push-bridge はここには無い。** ArgoCD の Application に移した(`apps/infisical-operator/`、
@@ -27,14 +27,6 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
   Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を
   付けてある)。SA と RBAC は `apps/infisical-operator/rbac.yaml`。
   operator 側に長期の資格情報は無い(`identityId` は秘密ではない)。
-
-このディレクトリは手で apply する(復元時はバックアップから丸ごと戻るので通常は不要):
-
-```shell
-kubectl apply -f infisical/
-sops -d infisical/secrets.yaml | kubectl apply -f -   # 暗号化してあるものはこの形で
-kubectl apply -f gateway/ -f argocd/httproute.yaml -f auth/     # 公開経路もこの層
-```
 
 ### 適用は GitHub Actions がやる(2026-09-07)
 
