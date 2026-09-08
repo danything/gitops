@@ -99,3 +99,30 @@ nameservers:
     - address: 2606:4700:4700::1001
     - address: 1.1.1.1
     - address: 1.0.0.1
+---
+# **単一ノードなので control-plane に taint を付けない。**
+#
+# `KubeNodeConfig` は既定で `node-role.kubernetes.io/control-plane: NoSchedule` を入れる。
+# ノードが 1 台しかないこのクラスタでは、**toleration を持たない Pod が全部 Pending になる**
+# (k3s は単一ノードを control-plane 兼 worker として扱うので、この問題が無かった)。
+#
+# 2026-09-08 の VM ドリルで実際に踏んだ。cilium と CoreDNS は toleration を持っているので上がり、
+# **ノードは `Ready` に見える**まま、metrics-server・hubble・local-path-provisioner が
+# `no nodes available to schedule pods` で止まっていた。**移行当日にアプリが 1 つも上がらない。**
+#
+# ## taints だけを消す方法が無い
+#
+# `taints` はマップなので、`taints: {}` では消えない(マージなので何も起きない)。
+# 中に `$patch: replace` を書くと**キーとして残ってしまい** `name "$patch" is invalid` で
+# validate が落ちる(実測)。KubeletConfig / HostnameConfig と同じく、
+# **ドキュメントごと消して labels だけ書き戻す**のが唯一の手。
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+$patch: delete
+---
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+# **labels は書き戻すこと。** 消したままだと `kubectl get nodes` の ROLES が `<none>` になる。
+labels:
+    node-role.kubernetes.io/control-plane: ""
+    node.kubernetes.io/exclude-from-external-load-balancers: ""
