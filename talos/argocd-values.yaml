@@ -3,7 +3,7 @@
 #
 # **CRD を chart から描かせない。** 3 つの CRD だけで 1.83 MB あり、
 # **描き出しの 95%** を占める(残りは 100 KB)。machine config に埋めると
-# 131 KB → 2 MB になるので、**CRD は URL で渡す**
+# 271 KB → 2 MB になるので、**CRD は URL で渡す**
 # (`KubeExternalManifestConfig`。Gateway API と同じ手。../talos/render.sh)。
 #
 #   applications.argoproj.io       406 KB

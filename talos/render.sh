@@ -151,9 +151,18 @@ helmchart_inline() { # $1=name  $2=復号済み CR
 	hc "$_cr" @values > "$WORK/$_name-values.yaml"
 	helm repo add "$_name" "$_repo" >/dev/null 2>&1 || true
 	helm repo update "$_name" >/dev/null 2>&1 || true
-	helm template "$_name" "$_name/$_chart" --version "$_ver" -n "$_ns" \
-		-f "$WORK/$_name-values.yaml" -f "talos/$_name-values.yaml" \
-		--kube-version "$K8S" | inline "$_name" > "$WORK/inline-$_name.yaml"
+	# **namespace を先頭に付ける。** chart は Namespace を描かないし、
+	# `bootstrap/<name>/namespace.yaml` を当てているのは **GitHub Actions**
+	# (bootstrap-apply.yml)で、**クラスタが立っていないと走れない。**
+	# machine config が最初に流れる時点では誰も作っていないので、ここで一緒に入れる
+	# (local-path が自分の namespace を同梱しているのと同じ)。
+	{
+		cat "bootstrap/$_name/namespace.yaml"
+		echo ---
+		helm template "$_name" "$_name/$_chart" --version "$_ver" -n "$_ns" \
+			-f "$WORK/$_name-values.yaml" -f "talos/$_name-values.yaml" \
+			--kube-version "$K8S"
+	} | inline "$_name" > "$WORK/inline-$_name.yaml"
 	echo "  $_name: chart $_chart $_ver -> $(wc -c < "$WORK/inline-$_name.yaml") バイト"
 }
 
@@ -181,7 +190,8 @@ if [ -n "$INFISICAL_CR" ]; then helmchart_inline infisical "$INFISICAL_CR"; fi
 # **版は chart の appVersion をそのまま使う** ── 版を 2 つ持つと必ずずれる。
 if [ -f "$WORK/inline-argocd.yaml" ]; then
 	ARGOCD_APP=$(helm show chart "argocd/$(hc "$ARGOCD_CR" chart)" \
-		--version "$(hc "$ARGOCD_CR" version)" 2>/dev/null | sed -n 's/^appVersion: //p')
+		--version "$(hc "$ARGOCD_CR" version)" 2>/dev/null \
+		| sed -n 's/^appVersion: *//p' | tr -d "\"'")
 	[ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
 	echo "  argocd の CRD: $ARGOCD_APP"
 	for c in application applicationset appproject; do
@@ -257,7 +267,8 @@ done
 # (上の WARNING)、無条件の needle にすると作業できなくなる。
 if [ -f "$WORK/inline-argocd.yaml" ]; then
 	for n in 'name: argocd' 'argocd-server' 'name: argocd-application-crd' \
-		'manifests/crds/applicationset-crd.yaml'; do
+		'manifests/crds/applicationset-crd.yaml' \
+		'kind: Namespace\nmetadata:\n  name: argocd'; do
 		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 	done
 	# **CRD は URL で渡すので、描き出しに入っていないこと。** 入ると 1.83 MB 増える。
@@ -266,7 +277,8 @@ if [ -f "$WORK/inline-argocd.yaml" ]; then
 		|| { echo "ERROR: argocd の CRD が inline に入っている(talos/argocd-values.yaml)" >&2; exit 1; }
 fi
 if [ -f "$WORK/inline-infisical.yaml" ]; then
-	for n in 'name: infisical' 'infisical-standalone'; do
+	for n in 'name: infisical' 'infisical-standalone' \
+		'kind: Namespace\nmetadata:\n  name: infisical'; do
 		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 	done
 fi

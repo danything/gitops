@@ -149,6 +149,8 @@ jobs:
             'manifests/crds/applicationset-crd.yaml' \
             'name: infisical' \
             'infisical-standalone' \
+            'kind: Namespace\nmetadata:\n  name: argocd' \
+            'kind: Namespace\nmetadata:\n  name: infisical' \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
