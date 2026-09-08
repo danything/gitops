@@ -106,10 +106,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
         Deployment の平文 env に焼き込むため([docs/decisions.md](docs/decisions.md)
         「infisical だけは ArgoCD に移せない」)
 - [x] **ファイルの PVC バックアップを k8up 側に寄せた(2026-09-08)。** ホストの `k3s-backup` は
-      **Talos にはシェルが無い**ので持っていけない。**全 11 namespace で成功を確認済み** ──
+      **Talos にはシェルが無い**ので持っていけない。**全 namespace で成功を確認済み** ──
       SQLite 6 本は `backupcommand`、ファイルは PVC の注釈。`denpa-data` は DB とファイルが
       同居しているので `k8up.io/backup-restic-args` で `denpa.db*` を除外している。
-      portainer(boltdb・シェル無し)だけは整合を保証できないファイルコピーで割り切った。
       対象の切り分けは [apps/k8up/README.md](apps/k8up/README.md)。
       **残るのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。**
 - [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を

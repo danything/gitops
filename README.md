@@ -51,7 +51,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
-`l`(lgtm)・`p`(portainer)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。
+`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。
 新しく足すときは上の規則で 2 文字にする(1 文字はもう埋まっているものが多い)。
 
 `doany.io` そのものはブログ。`*.s.doany.io` は SSO を通して LAN のホストへ中継する口で、
@@ -67,7 +67,6 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | [`erpnext/`](apps/erpnext/) | ERPNext (Helm chart + OIDC セットアップ) |
 | [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
-| [`portainer/`](apps/portainer/) | Portainer |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
 | [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。**Talos でホストのスクリプトが使えなくなる**ぶんの受け皿 |
 | [`infisical/`](apps/infisical/) [`infisical-operator/`](apps/infisical-operator/) [`infisical-push-bridge/`](apps/infisical-push-bridge/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジ |

@@ -363,7 +363,7 @@ CRD が引けないと**その Application が丸ごと落ちる** ── そし
   CRD infisical 系            0 → 7
   Pod のある namespace        5 → 18
   erpnext 15 / netbird 5 / cloudflare-ddns 4 / mattermost 2 / adguardhome 2 /
-  infisical-operator / infisical-push-bridge / k8up / portainer / 3proxy …
+  infisical-operator / infisical-push-bridge / k8up / headlamp / 3proxy …
 ```
 
 ### **5 回失敗した Application は自動では戻らない**

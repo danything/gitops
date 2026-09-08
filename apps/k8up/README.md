@@ -130,7 +130,7 @@ FAILED を出している**ので、そこで気づけなかった、という�
 | infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
 | lgtm / xool / worklog / denpa / blog | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
 | netbird | `store.db` / `idp.db` / `events.db` を tar 1 本に | [../netbird/deployment.yaml](../netbird/deployment.yaml) |
-| adguardhome / portainer | ファイルだけ(下記) | ─ |
+| adguardhome | ファイルだけ(下記) | ─ |
 
 PVC のファイルは `k8up.io/backup: "true"` を付けたものだけ取る。operator が
 `BACKUP_SKIP_WITHOUT_ANNOTATION=true` なので、**注釈がその宣言そのもの**。
@@ -398,11 +398,10 @@ SQLite は上で片付いたので、残りは注釈を足すだけ。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `adguardhome-*` `erpnext-sites` `mattermost-data` `portainer-data` `netbird-routing-peer-data` | ファイル | gitops にあるのでここで `"true"` |
+| `adguardhome-*` `erpnext-sites` `mattermost-data` `netbird-routing-peer-data` | ファイル | gitops にあるのでここで `"true"` |
 | `denpa-library` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
 | `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`。DB は `backupcommand` で取っているので**ファイルとしては除外**し、`logos/` だけを取る。**この注釈は JSON でパースされる**(`backupcommand` の `qsplit` とは別の経路。`operator/backupcontroller/executor.go`)。**パースに失敗すると `continue` でその PVC が黙って飛ばされる**ので、変えたら実物を見ること |
 | `netbird-data` | SQLite + 再取得できるファイル | `"false"`。DB はサイドカーの `backupcommand` で取る。同居している GeoLite2-City(65 MB)と geonames(7 MB)は起動時に落とし直せる |
 | `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | もう論理バックアップがある。mattermost の 2 本には `k8up.io/backup: "false"` を明示してある(注釈が無ければ既に対象外だが、意図して外していると分かるように) |
-| `portainer-data` | boltdb | **ファイルとして取る。** シェルが無く(`exec: "sh": executable file not found`)SQLite でもないので `backupcommand` が使えない。動いたままのコピーなので**整合は保証されない**。中身は OIDC 設定とエンドポイント 1 本だけで画面から数分で作り直せるため、これで割り切る(厳密にやるなら backup API `POST /api/backup` を叩くサイドカー) |
 | `denpa-recorded` | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |

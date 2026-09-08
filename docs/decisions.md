@@ -844,7 +844,7 @@ ArgoCD は `sourcePath` 配下を `recurse` で拾い、追跡は `argocd.argopr
 
 | 行き先 | 対象 |
 | --- | --- |
-| このリポジトリの `apps/<name>/httproute.yaml` | adguardhome / erpnext / infisical / mattermost / netbird / portainer |
+| このリポジトリの `apps/<name>/httproute.yaml` | adguardhome / erpnext / headlamp / infisical / mattermost / netbird |
 | 各アプリのリポジトリの `deploy/httproute.yaml` | blog / yosegaki / lgtm / tamasagashi / worklog / xool / yuzuriha |
 | `bootstrap/` | argocd / auth ×3 / redirect-https |
 
