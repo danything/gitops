@@ -644,9 +644,12 @@ R2 の無料枠は 10 GB。**もう超えている。**
 | **2026-09-08** | **23.2 GiB** | **`denpa-library` が 972 MB → 7.9 GB に育った**(圧縮後 10.1 GiB) |
 
 **除外では解決しない。** `denpa-recorded` を外した効果は保持世代が回れば出るが、
-今度は「取ると決めた」`denpa-library` そのものが伸びている。**超過分は R2 の従量課金
-(1 GB 月あたり $0.015 程度)**なので、いまの規模なら月 $0.2 前後。**無料枠に収めることを
-目的にすると録画を捨てることになる**ので、「有料でも取る」か「保持世代を削る」かの判断になる。
+今度は「取ると決めた」`denpa-library` そのものが伸びている。
+
+**決定(2026-09-08): 有料でも取る。** 無料枠に収めることを目的にすると録画を捨てることになり、
+本末転倒。超過分は従量課金で、23 GiB なら **月 $0.2 前後**。R2 は下り(egress)が無料なので、
+復元のたびに費用が跳ねる心配も無い。**無料枠は制約ではなく目安**として扱う。
+容量そのものが問題になるのは、桁が変わったとき(数百 GB)。
 
 容量を削るために外した / 外さなかったもの:
 
@@ -730,6 +733,53 @@ ArgoCD は「git から消えた + 自分が追跡している」ものを prune
 - **`bootstrap/` へ移すもの** — 引き取り手が居ないのでこの手が使えない。先に
   `argocd.argoproj.io/sync-options: Prune=false` を live に効かせておき、そのあと移す。
   移し終えたら live の tracking-id 注釈を剥がして、`Prune=false` も外す
+
+## machine config と Cilium の chart をどう連動させるか(2026-09-08 決定)
+
+Talos では Cilium を `inlineManifests` に載せる。**では `bootstrap/cilium/values.yaml` と
+machine config の中の Cilium を、人が手で合わせるのか。** 合わせない。**machine config を
+「派生物」にする。**
+
+### `gen config` のときに描く
+
+`helm template` の出力を `KubeInlineManifestConfig` に包んで、ただの `--config-patch` として渡す。
+**Cilium の値がリポジトリに二度書かれることが無くなる。**
+
+```shell
+{
+  echo "apiVersion: v1alpha1"; echo "kind: KubeInlineManifestConfig"; echo "name: cilium"
+  echo "manifest: |-"
+  helm template cilium cilium/cilium --version "$(yq -r .version bootstrap/cilium/version.yaml)" \
+    -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$K8S" | sed 's/^/    /'
+} > /tmp/cilium-inline.yaml
+```
+
+実際に作って確かめた(2026-09-08): 2329 行の manifest が埋まり、`talosctl validate --mode metal` を通る。
+生成物では 1 行のエスケープ文字列になるので、machine config 自体は 450 行のまま読める。
+
+**Renovate は `bootstrap/cilium/version.yaml` を見ている**ので、版が上がれば PR が来る。
+machine config は毎回そこから描き直されるだけで、追従の作業は無い。
+
+### **罠: `upgrade-k8s` は Cilium も巻き戻す**
+
+`inlineManifests` は **`talosctl upgrade-k8s` を通すと reconcile される**(talos.md)。
+`upgrade-k8s` は Kubernetes を上げるときの通常の操作でもあるので、
+**machine config の中の Cilium が古いまま流すと、走っている Cilium が巻き戻る。**
+
+したがって **`upgrade-k8s` の前には必ず machine config を描き直す**。手順の一部として書くこと。
+
+### 帰結: Talos 期は `helm upgrade` を使わなくなる
+
+Cilium の更新経路は「`values.yaml` を直す → machine config を描き直す → `upgrade-k8s`」になる。
+**`bootstrap/cilium/values.yaml` が正本なのは変わらない**が、当てる道具が替わる。
+[cilium-drift.yml](../.github/workflows/cilium-drift.yml) のズレ検出は k3s 期のもので、
+Talos では `upgrade-k8s` 自身が差分を出す(`< configured ...` と diff)ので役目を終える。
+
+### 採らなかった案
+
+**Cilium を machine config に載せず、bootstrap のあとに `helm install` する。** 罠は消えるが、
+再構築のたびに手作業が 1 つ増える(しかも「CNI が無いので何も動かない」状態での作業)。
+Sidero は inline manifest を production 推奨、CLI での install を "least declarative" としている。
 
 ## Talos の起動順序をどう組むか(2026-09-07)
 

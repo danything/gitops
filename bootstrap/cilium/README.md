@@ -49,6 +49,11 @@ diff -u /tmp/before.yaml /tmp/after.yaml | grep -E '^[+-][^+-]' | grep -vE 'ca\.
 `values.yaml` から ConfigMap を描いて live と突き合わせるだけで、**読むだけ**(権限は
 `cilium-config` の `get` 1 つ)。`bootstrap/cilium/**` を触ったときと毎週月曜に走る。
 
+**Talos では `helm upgrade` を使わなくなる。** Cilium は machine config の `inlineManifests` に
+`bootstrap/cilium/` から描いて載せ、`talosctl upgrade-k8s` で当てる形になる
+(../../docs/decisions.md「machine config と Cilium の chart をどう連動させるか」)。
+**このファイルが正本なのは変わらない。** 当てる道具が替わるだけ。
+
 **Talos に移っても `helm upgrade` は使える。** 初回は machine config の `inlineManifests` で
 入れることになるが、あれは「作りっぱなし」ではなく **`talosctl upgrade-k8s` を通せば更新も
 削除もされる**(2026-09-08 に VM で実測。../../docs/talos.md)。つまり machine config だけで

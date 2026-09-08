@@ -218,7 +218,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 - [ ] **起動順序を組み直す。** k3s の `HelmChart` CRD は Talos に無いので、argocd と infisical は
       置き換えが要る。**inlineManifests は Helm を実行できない**ので、そのままでは移せない。
       層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
-      - [ ] Cilium を `helm template` で書き出して inlineManifests に。CNI なので他に置きようがない。
+      - [ ] Cilium を `helm template` で書き出して inlineManifests に。**`gen config` のときに
+            `bootstrap/cilium/` から描く**(machine config に値を二度書かない。作れることは
+            2026-09-08 に確認済み)。**`upgrade-k8s` の前には必ず描き直す** ── 古いまま流すと
+            走っている Cilium が巻き戻る(docs/decisions.md「machine config と Cilium の chart」)。
             **inlineManifests は「作りっぱなし」ではない**(2026-09-08 に VM で実測) ──
             `talosctl upgrade-k8s` を通せば**更新も削除もされる**ので、machine config だけで
             回す道も実在する。いまは値を追える `bootstrap/cilium/values.yaml` + `helm upgrade` を
