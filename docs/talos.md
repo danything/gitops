@@ -199,6 +199,59 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
 
+## inlineManifests は「更新できない」ではない(2026-09-08、VM で実測)
+
+**`talosctl upgrade-k8s` を通せば更新も削除もされる。** Sidero のドキュメントには
+
+> Talos only creates missing resources from inline manifests — it never deletes or updates them.
+
+とある一方で「更新するには machine config を直して `talosctl upgrade-k8s`」とも書いてあり、
+どちらが効くのか読んでも分からなかったので、QEMU で確かめた。**前者は Talos 自身の
+起動時の適用の話で、`upgrade-k8s` は別の経路**だった。
+
+プローブ用の `ConfigMap` を `inlineManifests` に載せ、値を `BEFORE` → `AFTER` に書き換えて試した。
+
+| 操作 | 値の更新 | config から消したとき |
+| --- | --- | --- |
+| `talosctl apply-config` | **されない**(`BEFORE` のまま) | 消えない |
+| `talosctl upgrade-k8s --to <いまと同じ版>` | **される**(`AFTER` になる) | **オブジェクトも消える** |
+
+`upgrade-k8s` の出力は差分つきで、SSA とインベントリで**完全な reconcile** をしている。
+
+```
+ < configured ConfigMap/default/drill-probe
+-  value: BEFORE
++  value: AFTER
+
+ < deleted ConfigMap/default/drill-probe     # config から消したあと
+```
+
+フラグにも表れている ── `--manifests-inventory-policy`(既定 `AdoptIfNoInventory`)、
+`--manifests-no-prune`、`--manifests-force`。**prune は既定で有効**。
+
+### 何が言えるか
+
+**`inlineManifests` + `upgrade-k8s` は、Cilium を machine config だけで回せる本物の経路。**
+「初回だけ入れて以後は触れない」ではない。ただし採るかどうかは別の話で、
+
+- 値が SOPS 済みの machine config の中に入るので、**Renovate が追えずレビューもしにくい**
+- `helm template` の出力を丸ごと埋めることになる(数千行)
+
+いまは `bootstrap/cilium/values.yaml` + `helm upgrade` + ズレ検出(cilium-drift.yml)を採っている。
+**選択肢として存在することが確かめられた**、というのがこの記録の意味。
+
+### VM の組み方で詰まった点(前回の記録への追記)
+
+- **ISO ではなく `metal-amd64.raw.zst` を焼く。** ISO 経由だと
+  「ISO で起動 → `apply-config` → 再起動 → **ISO 側がインストール** → 再起動 → ディスク」
+  という段取りになり、ISO を外す時機を間違えると PXE ブートに落ちる(実際に踏んだ)。
+  raw を焼けば最初から maintenance mode で上がる
+- **NIC は 1 本にする。** bond の検証を兼ねて 3 本挿すと、**maintenance mode では
+  全部に DHCP が走る**ので SLIRP 越しの応答が不安定になり、`apply-config` が
+  `authentication handshake failed` で落ち続ける。ネットワークの検証と混ぜない
+- `talosctl upgrade-k8s` は **k8s の API に直接繋ぎに行く**ので、SLIRP のときは
+  `--endpoint https://127.0.0.1:<hostfwd>` を渡す。`kubeconfig` の書き換えだけでは足りない
+
 ## Talos ブートドリル 2 回目(2026-09-07、`apiserver.yaml` を足して実際に bootstrap まで)
 
 1 回目はネットワークだけを見た。2 回目は **API サーバの設定(`patches/apiserver.yaml`)を足して
