@@ -19,10 +19,16 @@ OUT=${1:?usage: render.sh <output-dir>}
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
+WORK=$(mktemp -d)
+# **呼び出し側から渡された SECRETS は消さない。** 自分で作ったものだけ片付ける。
+OWN_SECRETS=
+cleanup() { rm -rf "$WORK"; [ -n "$OWN_SECRETS" ] && rm -f "$OWN_SECRETS"; }
+trap cleanup EXIT INT TERM
+
 SECRETS=${SECRETS:-}
 if [ -z "$SECRETS" ]; then
-	SECRETS=$(mktemp)
-	trap 'rm -f "$SECRETS"' EXIT INT TERM
+	OWN_SECRETS=$WORK/secrets.yaml
+	SECRETS=$OWN_SECRETS
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
@@ -31,9 +37,6 @@ SCHEMATIC=$(sed -n 's/^  schematic: \(.*\)$/\1/p' talos/versions.yaml | head -1)
 K8S=$(sed -n 's/^  version: \(v.*\)$/\1/p' talos/versions.yaml | tail -1)
 CILIUM=$(sed -n 's/^version: \(.*\)$/\1/p' bootstrap/cilium/version.yaml)
 echo "talos=$TALOS k8s=$K8S cilium=$CILIUM"
-
-WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"; [ -n "${SECRETS:-}" ] && rm -f "$SECRETS"' EXIT INT TERM
 
 # --- inlineManifest を描く -------------------------------------------------
 # `helm template` の出力をそのまま KubeInlineManifestConfig に包む。
@@ -44,8 +47,12 @@ inline() { # $1=name  stdin=manifest
 
 helm repo add cilium https://helm.cilium.io >/dev/null 2>&1 || true
 helm repo update cilium >/dev/null 2>&1 || true
+# **値は 2 枚重ね。** 正本は bootstrap/cilium/values.yaml で、Talos で変わるところだけを
+# talos/cilium-values.yaml が上書きする(KubePrism と cgroup)。**これを忘れると
+# k3s 向けの 127.0.0.1:6443 が埋まったまま出てきて、Talos で Cilium が上がらない。**
 helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
-	-f bootstrap/cilium/values.yaml --kube-version "$K8S" \
+	-f bootstrap/cilium/values.yaml -f talos/cilium-values.yaml \
+	--kube-version "$K8S" \
 	| inline cilium > "$WORK/inline-cilium.yaml"
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
@@ -62,7 +69,9 @@ talosctl gen config doany https://10.0.0.2:6443 "$@" --output-dir "$OUT" >/dev/n
 echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 
 # 描いたものが本当に入ったか。gen config は知らないキーを黙って捨てることがある。
-for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path'; do
+# **生成物では manifest が 1 行のエスケープ文字列になる**ので、引用符は \" で探す。
+for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path' \
+	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"'; do
 	grep -qF "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
 talosctl validate --config "$OUT/controlplane.yaml" --mode metal

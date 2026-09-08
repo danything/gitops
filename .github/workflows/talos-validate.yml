@@ -79,7 +79,10 @@ jobs:
             'cilium-operator' \
             'name: local-path' \
             'rancher.io/local-path' \
-            'local-path-retain'
+            'local-path-retain' \
+            'KUBERNETES_SERVICE_PORT' \
+            'value: \"7445\"' \
+            'cgroup-root: \"/sys/fs/cgroup\"'
           do
             grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
             echo "  ある: $needle"
