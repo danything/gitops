@@ -229,6 +229,11 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
         (HPA は 0 個なので停止はしない)。[talos/metrics-server-values.yaml](talos/metrics-server-values.yaml)。
         **`--kubelet-insecure-tls` が要る**(Talos の kubelet は自己署名の証明書)
       - coredns は Talos が自前で入れる(`KubeCoreDNSConfig`)。ccm と rolebindings は k3s 固有
+      - **k3s が置いている RuntimeClass 10 個**(crun / wasm* / nvidia など)は
+        **どの Pod も使っていない**ので、消えて構わない(2026-09-08 に確認)
+      - **クラスタスコープのものを一通り数え直した(2026-09-08)。** APIService は
+        metrics-server の 1 つだけ、PriorityClass は k8s 組み込みのみ、IngressClass は無し、
+        webhook は cert-manager だけ。**残っていたのは Gateway API の CRD で、それが下の項目**
 - [x] **Gateway API の CRD を自分で入れる(2026-09-08)。** いま入っているものは
       **消したはずの Traefik の `traefik-crd` chart が置いていったもの**で
       (`meta.helm.sh/release-name: traefik-crd`)、**Talos には当然無い。**
