@@ -39,11 +39,21 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
-TALOS=$(sed -n 's/^  version: \(v.*\)$/\1/p' talos/versions.yaml | head -1)
-SCHEMATIC=$(sed -n 's/^  schematic: \(.*\)$/\1/p' talos/versions.yaml | head -1)
-K8S=$(sed -n 's/^  version: \(v.*\)$/\1/p' talos/versions.yaml | tail -1)
+# **キーを名前で引く。** 「1 つ目の version」「最後の version」で数えていると、
+# versions.yaml にブロックが増えた瞬間に静かに別の値を掴む。
+# `yq` は使わない ── サーバに入っているのが v3 で構文が違う。
+ver() { # $1=トップレベルのキー  $2=その下のキー
+	awk -v top="$1:" -v key="  $2: " '$0 == top {f=1; next} /^[^ #]/ {f=0} f && index($0, key) == 1 {print substr($0, length(key)+1); exit}' talos/versions.yaml
+}
+TALOS=$(ver talos version)
+SCHEMATIC=$(ver talos schematic)
+K8S=$(ver kubernetes version)
+METRICS=$(ver metricsServer version)
 CILIUM=$(sed -n 's/^version: \(.*\)$/\1/p' bootstrap/cilium/version.yaml)
-echo "talos=$TALOS k8s=$K8S cilium=$CILIUM"
+for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$CILIUM"; do
+	[ -n "$v" ] || { echo "ERROR: versions.yaml から版を読めなかった" >&2; exit 1; }
+done
+echo "talos=$TALOS k8s=$K8S cilium=$CILIUM metrics-server=$METRICS"
 
 # --- inlineManifest を描く -------------------------------------------------
 # `helm template` の出力をそのまま KubeInlineManifestConfig に包む。
@@ -64,6 +74,13 @@ helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
 
+# **metrics-server も Talos には無い。** k3s では組み込みのアドオンだった。
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
+helm repo update metrics-server >/dev/null 2>&1 || true
+helm template metrics-server metrics-server/metrics-server --version "$METRICS" \
+	-n kube-system -f talos/metrics-server-values.yaml --kube-version "$K8S" \
+	| inline metrics-server > "$WORK/inline-metrics-server.yaml"
+
 # --- 組み立て --------------------------------------------------------------
 set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
@@ -78,7 +95,10 @@ echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 # 描いたものが本当に入ったか。gen config は知らないキーを黙って捨てることがある。
 # **生成物では manifest が 1 行のエスケープ文字列になる**ので、引用符は \" で探す。
 for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path' \
-	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"'; do
-	grep -qF "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
+	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
+	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls'; do
+	# **`--` を忘れないこと。** `--kubelet-insecure-tls` のような needle を
+	# grep がオプションとして解釈して落ちる。
+	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
 talosctl validate --config "$OUT/controlplane.yaml" --mode metal

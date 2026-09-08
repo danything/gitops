@@ -1,0 +1,14 @@
+# **metrics-server の値。Talos 用。**
+#
+# k3s では組み込みのアドオン(`/var/lib/rancher/k3s/server/manifests/metrics-server/`)として
+# 動いていて、**Talos には無い**。入れないと `kubectl top` が使えず、ArgoCD・Portainer・
+# Hubble の各 UI から使用量の表示が消える。HPA は今のところ 1 つも無いので停止には至らない。
+#
+# 版は ../talos/versions.yaml の `metricsServer`。
+# 描くのは ./render.sh(inlineManifest として machine config に載る)。
+
+# **kubelet の証明書はクラスタ CA では検証できない。** Talos の kubelet は
+# 自己署名のサービング証明書を使うので、これが無いと metrics-server が
+# `x509: certificate signed by unknown authority` で何も取れない。
+args:
+  - --kubelet-insecure-tls

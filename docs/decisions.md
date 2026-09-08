@@ -749,7 +749,7 @@ machine config の中の Cilium を、人が手で合わせるのか。** 合わ
 {
   echo "apiVersion: v1alpha1"; echo "kind: KubeInlineManifestConfig"; echo "name: cilium"
   echo "manifest: |-"
-  helm template cilium cilium/cilium --version "$(yq -r .version bootstrap/cilium/version.yaml)" \
+  helm template cilium cilium/cilium --version "$(sed -n 's/^version: //p' bootstrap/cilium/version.yaml)" \
     -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$K8S" | sed 's/^/    /'
 } > /tmp/cilium-inline.yaml
 ```
