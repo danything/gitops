@@ -39,6 +39,26 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
+# **ghcr.io の pull 資格情報。** k3s 期はホストの /etc/rancher/k3s/registries.yaml に
+# 置いていたもので、**ノード単位で持つので namespace ごとの imagePullSecrets が要らない。**
+# 無いと danything の private なリポジトリから出ているイメージが引けない。
+# 値は Infisical の /worklog/ghcr-pull と同じ PAT。
+#
+# **平文は書き出さない**ので、talos/registries.yaml(SOPS で丸ごと暗号化)を復号して渡す。
+# CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通す。
+REGISTRIES=${REGISTRIES:-}
+if [ -z "$REGISTRIES" ]; then
+	if [ -f talos/registries.yaml ]; then
+		REGISTRIES=$WORK/registries.yaml
+		sops -d talos/registries.yaml > "$REGISTRIES"
+	else
+		# **止めない。** このファイルが無くても他は描けるので、作る前でも作業は進む。
+		# ただし気づかず焼くと private イメージが全部 ImagePullBackOff になるので、
+		# はっきり言う(talos/README.md「ghcr.io の資格情報」)。
+		echo "WARNING: talos/registries.yaml が無い。ghcr.io の private イメージが引けない構成になる" >&2
+	fi
+fi
+
 # **キーを名前で引く。** 「1 つ目の version」「最後の version」で数えていると、
 # versions.yaml にブロックが増えた瞬間に静かに別の値を掴む。
 # `yq` は使わない ── サーバに入っているのが v3 で構文が違う。
@@ -86,6 +106,7 @@ set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
 	--install-image "factory.talos.dev/installer/${SCHEMATIC}:${TALOS}"
 for f in talos/patches/*.yaml; do set -- "$@" --config-patch "@$f"; done
+if [ -n "$REGISTRIES" ]; then set -- "$@" --config-patch "@$REGISTRIES"; fi
 for f in "$WORK"/inline-*.yaml; do set -- "$@" --config-patch "@$f"; done
 
 rm -rf "$OUT"

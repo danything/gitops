@@ -1,2 +1,5 @@
 talos/clusterconfig/
 talos/secrets.plain.yaml
+# **平文のまま置かないこと。** talos/registries.yaml は SOPS 済みのものをコミットする
+# (talos/README.md「ghcr.io の資格情報」)。書きかけの平文はこの名前に逃がす。
+talos/registries.plain.yaml

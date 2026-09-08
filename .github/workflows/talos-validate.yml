@@ -59,7 +59,19 @@ jobs:
           # **使い捨ての秘密。** 本物(talos/secrets.yaml、SOPS 済み)は使わない。
           # SECRETS を渡すと render.sh は sops を呼ばない。
           talosctl gen secrets -o /tmp/secrets.yaml
-          SECRETS=/tmp/secrets.yaml ./talos/render.sh /tmp/out
+          # **ghcr.io の資格情報もダミーで渡す。** 本物(talos/registries.yaml)は
+          # SOPS 済みで、age の鍵は CI に渡さない約束(README「秘密の扱い」)。
+          # ダミーでも `machine.registries` の経路と生成物の形は確かめられる。
+          cat > /tmp/registries.yaml <<'PATCH'
+          machine:
+            registries:
+              config:
+                ghcr.io:
+                  auth:
+                    username: ci-dummy
+                    password: ci-dummy
+          PATCH
+          SECRETS=/tmp/secrets.yaml REGISTRIES=/tmp/registries.yaml ./talos/render.sh /tmp/out
 
       - name: 生成物に想定の設定が入っているか
         run: |
@@ -90,6 +102,7 @@ jobs:
             'name: EPHEMERAL' \
             'maxSize: 64GiB' \
             'secure: false' \
+            'ghcr.io' \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)

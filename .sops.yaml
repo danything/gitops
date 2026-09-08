@@ -14,3 +14,7 @@ creation_rules:
   # が「一致する creation rule が無い」で落ちる。**
   - path_regex: ^talos/secrets\.yaml$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+  # **talos/registries.yaml も丸ごと。** 中身は ghcr.io の PAT だけなので
+  # 選り分ける意味が無い(k3s 期の /etc/rancher/k3s/registries.yaml の移し先)。
+  - path_regex: ^talos/registries\.yaml$
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
