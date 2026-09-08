@@ -103,6 +103,9 @@ jobs:
             'maxSize: 64GiB' \
             'secure: false' \
             'username: ci-dummy' \
+            'name: apiserver-rbac' \
+            'bootstrap-applier' \
+            'gha:danything/gitops:refs/heads/main' \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)

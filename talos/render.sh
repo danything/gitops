@@ -94,6 +94,17 @@ helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
 
+# **CI は自分の権限を作れない。** bootstrap-apply.yml が使う `bootstrap-applier` の
+# ClusterRole/ClusterRoleBinding は、**当のワークフローに当てさせるわけにいかない**
+# (自分の権限を書き換えられてしまうので、あちらは bootstrap/apiserver/ を除外している)。
+# k3s 期は手で当てていた。Talos では machine config が持つ。
+#
+# **`bootstrap/apiserver/rbac.yaml` が正本。** ここでは写さずに描いてくる
+# ([../bootstrap/apiserver/rbac.yaml](../bootstrap/apiserver/rbac.yaml))。
+# authentication-config.yaml の方は patches/apiserver.yaml の `KubeAuthenticationConfig`
+# に移してあるので、ここには来ない。
+inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
+
 # **metrics-server も Talos には無い。** k3s では組み込みのアドオンだった。
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
 helm repo update metrics-server >/dev/null 2>&1 || true
@@ -119,6 +130,8 @@ for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-p
 	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
 	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
+	'name: apiserver-rbac' 'bootstrap-applier' \
+	'gha:danything/gitops:refs/heads/main' \
 	"ghcr.io/siderolabs/kubelet:$K8S"; do
 	# **`--` を忘れないこと。** `--kubelet-insecure-tls` のような needle を
 	# grep がオプションとして解釈して落ちる。

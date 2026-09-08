@@ -1,5 +1,11 @@
 # GitHub Actions(bootstrap-apply.yml)がこのクラスタで何をしてよいかの定義。
 #
+# **当てるのは人か machine config。ワークフローではない。** bootstrap-apply.yml は
+# `bootstrap/apiserver/` を除外している ── ここを当てられると**ワークフローが自分の
+# 権限を書き換えられてしまう**。k3s 期は手で当てていた。**Talos ではこのファイルを
+# [../../talos/render.sh](../../talos/render.sh) が inlineManifest に描く**ので、
+# machine config を当てた時点で入っている(このファイルが正本で、写しは作らない)。
+#
 # **cluster-admin は渡さない。** bootstrap/ の中で実際に使われている種類だけを列挙してある
 # (SOPS で暗号化した 4 ファイルはワークフロー側で除外しているので、**Secret は入っていない**)。
 # これで、GitHub 側が乗っ取られても Secret を読まれることはない。
