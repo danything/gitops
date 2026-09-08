@@ -85,7 +85,8 @@ jobs:
             'cgroup-root: \"/sys/fs/cgroup\"' \
             'name: metrics-server' \
             'system:metrics-server' \
-            '--kubelet-insecure-tls'
+            '--kubelet-insecure-tls' \
+            "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
             grep -qF -- "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
