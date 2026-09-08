@@ -1,0 +1,19 @@
+# **cert-manager の Helm 値。** 実機の `helm get values cert-manager -n cert-manager` と同じ。
+#
+# **2026-09-08 まで git に無かった。** 素で `helm upgrade` すると
+# `enableGatewayAPI` が既定(false)に戻り、**Gateway の証明書が発行されなくなる**
+# (`bootstrap/gateway/gateway.yaml` の `cert-manager.io/cluster-issuer` 注釈が無視される)。
+#
+#   helm repo add jetstack https://charts.jetstack.io
+#   helm upgrade --install cert-manager jetstack/cert-manager \
+#     --version "$(yq -r .version bootstrap/cert-manager/version.yaml)" \
+#     -n cert-manager --create-namespace -f bootstrap/cert-manager/values.yaml
+
+# **Gateway API を見る。** これが無いと Gateway の `cert-manager.io/cluster-issuer`
+# 注釈から Certificate を作ってくれない。
+config:
+  enableGatewayAPI: true
+
+# CRD も chart に入れさせる(別途 apply しない)。
+crds:
+  enabled: true

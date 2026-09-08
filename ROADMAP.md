@@ -246,6 +246,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
       再構築でストレージを引き直すときに、各アプリのマニフェストから `local-path-retain` の指定ごと外す。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
+- [ ] **argocd と infisical の chart の版を固定する。** `HelmChart` CR に `version:` が無く、
+      **そのときの最新**が入る(作り直すと別の版になり、Renovate も追えない)。
+      **SOPS 済みなので `sops set` で足す** ── 手順は [bootstrap/README.md](bootstrap/README.md)
+      「Helm で入れるもの」。いまは argo-cd 10.8.1 / infisical-standalone 1.10.0。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
 
 ### Phase 3 — Talos 定常運用
