@@ -83,6 +83,10 @@ GitHub Actions の **bootstrap apply** を `workflow_dispatch` で回す。
 
 ## 7. アプリが戻るのを待つ
 
+**先に Infisical の DB(`infisical-postgresql.sql`)だけ戻しておく** ── 下の 8 の
+やり方で 1 本だけ。空のままだと `InfisicalSecret` を使うアプリが Secret をもらえず、
+ここが「全部 Healthy」にならない。
+
 ArgoCD が `apps/` と各リポジトリの `deploy/argocd.yaml` を同期する。
 
 - [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy
@@ -97,13 +101,7 @@ kubectl -n argocd patch application <名前> --type=merge \
   -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'
 ```
 
-**Infisical の DB が空のままだと、`InfisicalSecret` を使うアプリは Secret を
-もらえない。** 先に 8 で `infisical-postgresql.sql` を戻しておくほうが早い。
-
 ## 8. PV データを戻す
-
-**Infisical の DB は 7 より前に戻すと楽。** 空のままだと `InfisicalSecret` を使う
-アプリが Secret をもらえず、7 が「全部 Healthy」にならない。
 
 **順番が決まっている。** 手順は [apps/k8up/README.md](../apps/k8up/README.md)「戻し方」。
 
