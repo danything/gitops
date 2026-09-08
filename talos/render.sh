@@ -131,6 +131,7 @@ for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-p
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
 	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
 	'name: apiserver-rbac' 'bootstrap-applier' \
+	'gha:danything/gitops:refs/heads/main' \
 	"ghcr.io/siderolabs/kubelet:$K8S"; do
 	# **`--` を忘れないこと。** `--kubelet-insecure-tls` のような needle を
 	# grep がオプションとして解釈して落ちる。
