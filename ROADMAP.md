@@ -198,6 +198,9 @@ Traefik の撤去と前後してまとめて片付けたぶん。**どれも Tal
 
 ### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
 
+**当日は [docs/migration-day.md](docs/migration-day.md) を上から順にやる。**
+ここは「何を決めたか」で、あちらが「どの順にやるか」。
+
 OS 交換だけに集中する。Cilium と Gateway API は Phase 1.5 で落ち着いた構成のまま持っていく。
 Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubeProxyConfig` を
 `enabled: false`** にし([talos/patches/cni.yaml](talos/patches/cni.yaml))、Cilium は
@@ -244,6 +247,13 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       [talos/render.sh](talos/render.sh) が `KubeExternalManifestConfig` で URL を渡す
       (1.1 MB あるので inline にはしない)。版は [talos/versions.yaml](talos/versions.yaml)。
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
+      **git に無いものが動いていないことは確認済み(2026-09-08)。** ArgoCD の
+      `tracking-id` も Helm のラベルも k3s の `objectset` も owner も持たない
+      オブジェクトを全 namespace で数えたところ、出てきた 11 個は**全部 `bootstrap/` の
+      ファイル**だった(CI が `kubectl apply` で当てるので追跡の注釈が付かないだけ)。
+      唯一の例外 `infisical/data-postgresql-0` は StatefulSet の
+      `volumeClaimTemplate` が作るもので、chart が作り直す。
+      **手で当てたまま git に入れ忘れたものは無い。**
 - [ ] PV データを restic から復元。**手順は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」**
       (k8up の `Restore` を作るだけ。2026-09-08 に実際に流して中身が開けるところまで確認済み)。
       **順番が決まっている:**

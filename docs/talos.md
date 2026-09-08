@@ -163,6 +163,42 @@ kubectl get pods -A -o json | jq -r '.items[] | . as $p | [$p.metadata.namespace
   (($p.spec.volumes // []) | map(select(.hostPath)) | map("hostPath")) | @tsv' | sort -u
 ```
 
+### 全 Pod で数え直した(2026-09-08)
+
+移行前にもう一度、**走っている Pod を全部見て baseline を破るものを洗い出し**、
+namespace のラベルと突き合わせた。
+
+```
+3proxy           hostPort=3129
+adguardhome      hostPort=53,853
+cloudflare-ddns  hostNetwork
+denpa            hostPath, privileged（denpa / tuner-agent）
+erpnext          caps=CAP_CHOWN（7 Pod）
+mattermost       hostPort=8443
+netbird          caps=NET_ADMIN,SYS_ADMIN,SYS_RESOURCE, hostPath, hostPort=3478,51822
+kube-system      cilium 一式（hostNetwork / hostPath / privileged / caps）
+```
+
+**7 つとも `enforce: privileged` が付いている**(実機で確認)。`denpa` のラベルだけは
+**denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops には無い ── gitops だけを
+grep すると抜けて見えるので注意。
+
+**`kube-system` は Talos の側で例外にしてある**ので cilium は素通りする:
+
+```yaml
+kind: KubeAdmissionControlConfig
+name: PodSecurity
+configuration:
+  defaults: {enforce: baseline, audit: restricted, warn: restricted}
+  exemptions:
+    namespaces: [kube-system]
+```
+
+**argocd / cert-manager / infisical はラベル無しのまま上がった**(ドリル 4 回目)ので、
+baseline に収まっている。**`local-path-storage` は別** ── ヘルパー Pod が hostPath を
+使うので、[`talos/manifests/local-path.yaml`](../talos/manifests/local-path.yaml) が
+namespace に privileged を付けている。
+
 ### 動いたこと
 
 - ISO(Image Factory の schematic `2d61dd07…`)から UEFI で起動、maintenance mode の API はポート 50000
