@@ -212,6 +212,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       無いまま焼くと private なイメージが全部 `ImagePullBackOff` になる。
 - [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
 - [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
+      **設定は入っていて、VM で出ることも確かめた**(2026-09-08 のドリル。
+      `kube-dns` が `["10.43.0.10","fd43::a"]` / `ipFamilyPolicy: RequireDualStack`)。
+      当日やることは「振り直された ClusterIP で困るものが無いか見る」だけ。
 - [x] **k3s の組み込みアドオンのうち、Talos に無いものを用意した(2026-09-08)。**
       `kubectl -n kube-system get addons.k3s.cattle.io` で洗い出した。
       - **local-path-provisioner** … 入れないと **PVC が 1 つも bind しない**。
@@ -227,7 +230,19 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
         **`--kubelet-insecure-tls` が要る**(Talos の kubelet は自己署名の証明書)
       - coredns は Talos が自前で入れる(`KubeCoreDNSConfig`)。ccm と rolebindings は k3s 固有
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
-- [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
+- [ ] PV データを restic から復元。**手順は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」**
+      (k8up の `Restore` を作るだけ。2026-09-08 に実際に流して中身が開けるところまで確認済み)。
+      **順番が決まっている:**
+      1. ArgoCD が上がってアプリが同期され、**PVC が作られる**(`Restore` は書き込む先の
+         PVC が要る。`local-path` の StorageClass はもう machine config が持っている)
+      2. アプリを止める(`Restore` は動いているアプリの足元にファイルを置く)
+      3. `Restore` を流す。**スナップショット ID を明示する** ── 省略すると最新が選ばれ、
+         移行中に取ったものを掴みうる
+      4. **中身を見る。** `Succeeded` は「中身が戻った」の意味ではない ── 空のスナップショットを
+         戻したときも `Succeeded` で、ログだけが `Restored 0 files/dirs (0 B)` と言う
+      5. アプリを戻す
+      **`backupcommand` で取ったもの**(SQLite・pg_dump)は 1 個のファイルとして出るので、
+      アプリのファイル名に置き換えるか、`psql` に流し込む一手間が要る。
 - [x] **ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ(2026-09-08)。**
       [talos/render.sh](talos/render.sh) が `talos/registries.yaml`(SOPS)を復号して足す。
       **中身を書くのは残作業**(上の「`talos/registries.yaml` を作る」)。k3s の registries.yaml は役目を終える。
