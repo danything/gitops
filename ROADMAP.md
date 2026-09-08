@@ -141,10 +141,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       [talos/README.md](talos/README.md)「上げ方 / 当て直し方」。
       **`upgrade-k8s` は inlineManifests の reconcile も兼ねる**(2026-09-08 に VM で実測。
       [docs/talos.md](docs/talos.md))ので、Talos 期の「bootstrap 層を当て直す」操作でもある。
-- [ ] **外部公開の一覧を出す画面。** 内部の通信は **Hubble** を入れて解決した
-  (2026-09-07、`hl.doany.io`。認証は `*.s.doany.io` と同じ oauth2-proxy 前段方式)。
-  残っているのは「何がインターネットに出ているか」の一枚で、いまは
-  `kubectl get httproute,grpcroute -A` が唯一の正確な索引。
+- [x] **通信の可視化は Hubble で足りている(2026-09-07、`hl.doany.io`。認証は `*.s.doany.io` と
+      同じ oauth2-proxy 前段方式)。** 「何がインターネットに出ているか」の一枚は**作らない**
+      (2026-09-09 判断)。`kubectl get httproute,grpcroute -A` が正確で早い。
 
 ## 済んだこと(記録)
 
