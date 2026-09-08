@@ -173,8 +173,12 @@ restic backup --tag "$TAG" --exclude-caches --exclude "$RECORDED_GLOB" $PATHS
 restore_replicas
 rm -f "$SNAP_DIR/state.db"
 
+# --group-by から paths を外す。restic の既定は host,paths でグループを切るので、
+# 取る対象を 1 つ増やすたびに別のグループになり、どのグループも「最新は残す」で
+# 消えなくなる。実際に 2026-09-06 の 4 本が消えずに残っていて、そのうち 3 本が
+# 除外前の denpa-recorded を抱えたまま R2 を 12 GB ほど占めていた。
 # shellcheck disable=SC2086
-restic forget --tag "$TAG" $KEEP --prune
+restic forget --tag "$TAG" --group-by host,tags $KEEP --prune
 restic check --read-data-subset=5%
 
 # R2 の無料枠は 10 GB/月。実際に置かれている量(重複排除・圧縮後)を通知に出して、
