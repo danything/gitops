@@ -4,8 +4,8 @@
 代わりに **main へのマージで GitHub Actions が当てる**(下の「適用は GitHub Actions がやる」)。
 
 **SOPS(age)で暗号化した 4 ファイルだけは手で当てる** ── CI に復号鍵を渡さないため。
-**中を編集するときも `sops set` を使うこと。** MAC は暗号化していない値も含めて計算されるので、
-**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる。**
+**中を編集するときも sops を通すこと**(下の「Helm で入れるもの」に手順)。MAC は暗号化して
+いない値も含めて計算されるので、**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる。**
 `infisical/secrets.yaml`、`infisical/helmchart.yaml`、`argocd/helmchart.yaml`、
 `cert-manager/cloudflare-secret.yaml`。鍵は [`recovery/sops-age.key.age`](../recovery/)。
 
@@ -22,23 +22,26 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
 | --- | --- | --- |
 | cilium | [cilium/version.yaml](cilium/version.yaml) | [cilium/values.yaml](cilium/values.yaml) |
 | **cert-manager** | [cert-manager/version.yaml](cert-manager/version.yaml) | [cert-manager/values.yaml](cert-manager/values.yaml) |
-| argocd / infisical | **HelmChart CR に未固定(下記)** | CR の `spec.values` |
+| argocd / infisical | CR の `spec.version` | CR の `spec.values` |
 
 **cert-manager は版も値も git に無かった**(2026-09-08 に出した)。経緯は
 [cert-manager/values.yaml](cert-manager/values.yaml) の冒頭 ── ここには写さない。
 
-**argocd と infisical の chart は版が固定されていない。** `HelmChart` CR に `version:` が無く、
-コントローラが**そのときの最新**を入れる。作り直すと別の版になるし、Renovate も追えない
-(`renovate.json` の customManager は chart / repo / version の 3 行組で見ている)。
-**あの 2 ファイルは SOPS 済みなので `sops set` で足すこと** ── 平文で書き足すと MAC が壊れる。
+**argocd と infisical の版は 2026-09-08 に固定した**(argo-cd 10.8.1 /
+infisical-standalone 1.10.0)。それまでは `HelmChart` CR に `version:` が無く、
+コントローラが**そのときの最新**を入れていた ── 作り直すと別の版になるし、Renovate も追えない。
+**`chart:` `repo:` `version:` は連続 3 行**にしてある(`renovate.json` の customManager が
+その並びを見る)。
+
+**中を触るときは平文で書き足さないこと** ── MAC は暗号化していない値も含めて計算されるので、
+1 行足すだけで `sops -d` が壊れる。位置を選びたいので `sops set` ではなくこの順でやった:
 
 ```shell
-sops set bootstrap/argocd/helmchart.yaml    '["spec"]["version"]' '"10.8.1"'
-sops set bootstrap/infisical/helmchart.yaml '["spec"]["version"]' '"1.10.0"'
+sops decrypt --in-place bootstrap/argocd/helmchart.yaml
+# repo: の次の行に version: を足す
+sops encrypt --in-place bootstrap/argocd/helmchart.yaml
+sops -d bootstrap/argocd/helmchart.yaml | diff - <復号したもの>   # 差分が 1 行だけか見る
 ```
-
-**`chart:` `repo:` `version:` が連続した 3 行になるように置くこと**(Renovate の正規表現が
-その並びを見ている)。いま動いているのは argo-cd 10.8.1 / infisical-standalone 1.10.0。
 
 ## git と live がずれていないか(2026-09-08 に確認)
 

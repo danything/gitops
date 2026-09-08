@@ -22,25 +22,31 @@ reconcile するので、古い machine config のまま流すと**走ってい�
 CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う。
 **別の作り方をすると「CI は通るが当日は通らない」が起きる**ので、道具は 1 つにしてある。
 
+**秘密は 2 つとも作ってコミット済み**(2026-09-08)── [secrets.yaml](secrets.yaml) は
+クラスタの CA 一式、[registries.yaml](registries.yaml) は ghcr.io の資格情報。
+**`secrets.yaml` を作り直すと別のクラスタになる**ので触らない。作り方は下記。
+
 ```shell
-# 1) 秘密を作る。生成物は SOPS(age)で暗号化してコミットする
-talosctl gen secrets -o secrets.yaml
-sops -e -i secrets.yaml            # → talos/secrets.yaml (暗号化済み)
-
-# 1b) ghcr.io の資格情報。下の「ghcr.io の資格情報」を先に読むこと
-sops -e -i registries.yaml         # → talos/registries.yaml (暗号化済み)
-
-# 2) machine config を作る
+# 1) machine config を作る
 ./talos/render.sh /tmp/talos-config
 
-# 3) maintenance mode のノードに流す(ISO で起動した直後)
+# 2) maintenance mode のノードに流す(実機は iLO の仮想メディアで ISO 起動。
+#    ../docs/talos.md「メディアに載せる」。**VM のドリルだけは raw イメージ**)
 talosctl apply-config --insecure -n <コンソールに出た IP> -f /tmp/talos-config/controlplane.yaml
-# 自動でディスクにインストールして再起動する。ISO を抜いてから:
+# `UnattendedInstallConfig` があるのでディスクに書かれる。落ち着いたら
+# etcd を初期化(単一ノードなので 1 回だけ):
 talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig bootstrap
 talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kubeconfig
 ```
 
 `clusterconfig/` と平文の秘密は `.gitignore` 済み。
+
+**作り直すとき**(まっさらから組む場合だけ):
+
+```shell
+talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
+# registries.yaml は下の「ghcr.io の資格情報」
+```
 
 ## ghcr.io の資格情報
 

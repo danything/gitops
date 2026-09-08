@@ -200,6 +200,71 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
 
+## VM の組み方(QEMU/KVM)
+
+本番サーバの上で回す。**ホストのネットワークには触らない。** ドリル 4 回ぶんの
+つまずきをここにまとめてある(各回で何が分かったかは下の記録)。
+
+### tap/bridge は要らない。QEMU の内部ハブで足りる
+
+「bond は user-mode ネットワークでは試せない」というのは誤りだった。`-netdev hubport` で
+**QEMU の中だけに L2 セグメントを作れる**ので、ホストに tap も bridge も作らずに 2 本の NIC を
+同じセグメントに挿せる。SLIRP(`-netdev user`)は `ipv6=on` で **RA を送ってくる**ので、
+RA 由来のデフォルトルートもここで試せる。
+
+```shell
+# hub 1 = bond のメンバー 2 本 + SLIRP(IPv6 あり)、hub 2 = eno4 相当の別 LAN
+sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
+  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+  -drive if=pflash,format=raw,file=OVMF_VARS.fd \
+  -drive file=disk.raw,if=virtio,format=raw -boot order=c \
+  -netdev 'user,id=n0,ipv4=on,net=10.0.0.0/24,host=10.0.0.1,dhcpstart=10.0.0.15,ipv6=on,ipv6-net=240f:6d:842b:1::/64,ipv6-host=240f:6d:842b:1::1,hostfwd=tcp:127.0.0.1:50201-10.0.0.15:50000,hostfwd=tcp:127.0.0.1:50211-10.0.0.2:50000,hostfwd=tcp:127.0.0.1:50221-10.0.0.2:6443' \
+  -netdev hubport,id=hp0,hubid=1,netdev=n0 \
+  -netdev hubport,id=hp1,hubid=1 -device virtio-net-pci,netdev=hp1,mac=52:54:00:ee:00:01 \
+  -netdev hubport,id=hp2,hubid=1 -device virtio-net-pci,netdev=hp2,mac=52:54:00:ee:00:02 \
+  -netdev 'user,id=n1,ipv4=on,ipv6=off,net=10.10.0.0/24,host=10.10.0.1' \
+  -netdev hubport,id=hp3,hubid=2,netdev=n1 \
+  -netdev hubport,id=hp4,hubid=2 -device virtio-net-pci,netdev=hp4,mac=52:54:00:ee:00:05 \
+  -display none -serial file:serial.log -monitor unix:monitor.sock,server,nowait
+```
+
+**KVM を使うので sudo で起動する。** `patches/*.yaml` からの読み替えは
+**インタフェース名とディスクだけ**(`eno1`/`eno2`/`eno4` → `enp0s2`/`enp0s3`/`enp0s4`、
+`/dev/sda` → `/dev/vda`)。`balance-alb`・`miimon: 100`・静的 IPv6・
+**v6 のデフォルトルートを書かないこと**はそのまま。ボリュームの大きさだけディスクに合わせて縮める。
+
+### つまずいた点
+
+- **ISO ではなく `metal-amd64.raw.zst` を焼く。** ISO 経由だと「ISO で起動 →
+  `apply-config` → 再起動 → **ISO 側がインストール** → 再起動 → ディスク」という段取りに
+  なり、外す時機を間違えると PXE ブートに落ちる。raw なら最初から maintenance mode で上がる。
+  **実機は iLO の仮想メディアで ISO**(上の「メディアに載せる」)── ここだけ実機と違う
+- **`NETDEV WATCHDOG: transmit queue 0 timed out` は QEMU 側のミス。** bond の 2 本目を
+  **何も繋がっていないハブ**に挿していた。QEMU 自身が
+  `warning: hub 3 is not connected to host network` と言うので、**`qemu.log` を必ず読む**。
+  ハブが正しければ **NIC 3 本でも問題ない** ── 2 回目の記録に「NIC は 1 本にする」と
+  書いていたが、原因はハブの挿し間違いのほうだった
+- **インタフェース名は起動ごとに変わる。** maintenance mode で
+  `talosctl get links --insecure` を見てから patch を読み替えること
+- **コンソールが要るときは monitor の `screendump`。** `-display none` でも
+  `screendump /path/foo.ppm` で画面が撮れる。**kubelet の版ズレはこれで見つけた**
+  (シリアルには Talos のダッシュボードが流れてこない)。`socat`/`nc` が無ければ
+  python の `socket.AF_UNIX` で `monitor.sock` に直接書けばよい
+- **前の VM を殺し忘れると `hostfwd` のポートを握ったままで、新しい VM が黙って死ぬ。**
+  `pgrep -af qemu-system-x86_64` で確認する。**`pkill -f` のパターンは
+  `qemu-system-[x]86_64` のように書く** ── そうしないと自分の ssh セッションごと殺す(実際に踏んだ)
+- `ipv6=on` を付けると **`ipv4=on` を明示しないと** `IPv4 disabled but netmask/host/dns provided` で起動しない
+- **v1.14 の `talosctl` は `--nodes` / `--endpoints` がグローバルフラグではない。**
+  `talosctl --insecure -n … get links` は `unknown command` になる。
+  `talosctl get links --insecure -n … -e …` の順で書く
+- maintenance mode は `-e 127.0.0.1:50201 -n 127.0.0.1:50201`。設定投入後は apid 経由なので
+  **`-n` はノードの実アドレス**(`-n 10.0.0.2 -e 127.0.0.1:50211`)。
+  `-n 127.0.0.1:50211` は `invalid target` になる
+- `talosctl apply-config -m reboot` は無い(`auto` / `no-reboot` / `staged` / `try`)
+- `talosctl upgrade-k8s` は **k8s の API に直接繋ぎに行く**ので、SLIRP のときは
+  `--endpoint https://127.0.0.1:<hostfwd>` を渡す。`kubeconfig` の書き換えだけでは足りない
+- ハブの構成は monitor の `info network` で確認できる
+
 ## ブートドリル 4 回目(2026-09-08、**本物の値で bootstrap 層まで**)
 
 3 回目までは Cilium・local-path・metrics-server だけだった。4 回目は
@@ -372,21 +437,6 @@ $ kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIPs}'
 ["10.43.0.10","fd43::a"]      ipFamilyPolicy: RequireDualStack
 ```
 
-### VM の組み方(3 回目の追記)
-
-- **`NETDEV WATCHDOG: transmit queue 0 timed out` は QEMU 側のミス。** bond の 2 本目を
-  **何も繋がっていないハブ**に挿していた。QEMU 自身が
-  `warning: hub 3 is not connected to host network` と言っているので、**`qemu.log` を必ず読む**
-- **インタフェース名は起動ごとに変わる。** 3 回目は `enp0s2`/`enp0s3`(bond)と `enp0s4`。
-  maintenance mode で `talosctl get links --insecure` を見てから patch を読み替えること
-- **コンソールが要るときは monitor の `screendump`。** `-display none` でも
-  `screendump /path/foo.ppm` で画面が撮れる。上の 1 はこれで見つけた
-  (シリアルには Talos のダッシュボードが流れてこない)。`socat`/`nc` が無ければ
-  python の `socket.AF_UNIX` で monitor.sock に直接書けばよい
-- **前の VM を殺し忘れると `hostfwd` のポートを握ったままで、新しい VM が黙って死ぬ。**
-  `pgrep -af qemu-system-x86_64` で確認する。**`pkill -f` のパターンは
-  `qemu-system-[x]86_64` のように書く** ── そうしないと自分の ssh セッションごと殺す(実際に踏んだ)
-
 ## inlineManifests は「更新できない」ではない(2026-09-08、VM で実測)
 
 **`talosctl upgrade-k8s` を通せば更新も削除もされる。** Sidero のドキュメントには
@@ -428,18 +478,6 @@ $ kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIPs}'
 いまは `bootstrap/cilium/values.yaml` + `helm upgrade` + ズレ検出(cilium-drift.yml)を採っている。
 **選択肢として存在することが確かめられた**、というのがこの記録の意味。
 
-### VM の組み方で詰まった点(前回の記録への追記)
-
-- **ISO ではなく `metal-amd64.raw.zst` を焼く。** ISO 経由だと
-  「ISO で起動 → `apply-config` → 再起動 → **ISO 側がインストール** → 再起動 → ディスク」
-  という段取りになり、ISO を外す時機を間違えると PXE ブートに落ちる(実際に踏んだ)。
-  raw を焼けば最初から maintenance mode で上がる
-- **NIC は 1 本にする。** bond の検証を兼ねて 3 本挿すと、**maintenance mode では
-  全部に DHCP が走る**ので SLIRP 越しの応答が不安定になり、`apply-config` が
-  `authentication handshake failed` で落ち続ける。ネットワークの検証と混ぜない
-- `talosctl upgrade-k8s` は **k8s の API に直接繋ぎに行く**ので、SLIRP のときは
-  `--endpoint https://127.0.0.1:<hostfwd>` を渡す。`kubeconfig` の書き換えだけでは足りない
-
 ## Talos ブートドリル 2 回目(2026-09-07、`apiserver.yaml` を足して実際に bootstrap まで)
 
 1 回目はネットワークだけを見た。2 回目は **API サーバの設定(`patches/apiserver.yaml`)を足して
@@ -474,47 +512,6 @@ KVM を使うので **qemu は sudo で起動する**(前回の記録に抜け�
 
 `talosctl validate` が通るだけで一度も起動していなかった `talos/patches/cluster.yaml` /
 `main.yaml` を、**本番サーバ上の QEMU で実際に起動して**確かめた。ホストのネットワークには一切触っていない。
-
-### tap/bridge は要らない。QEMU の内部ハブで足りる
-
-「bond は user-mode ネットワークでは試せない」というのは誤りだった。`-netdev hubport` で
-**QEMU の中だけに L2 セグメントを作れる**ので、ホストに tap も bridge も作らずに 2 本の NIC を
-同じセグメントに挿せる。SLIRP(`-netdev user`)は `ipv6=on` で **RA を送ってくる**ので、
-RA 由来のデフォルトルートもここで試せる。
-
-```shell
-# hub 1 = bond のメンバー 2 本 + SLIRP(IPv6 あり)、hub 2 = eno4 相当の別 LAN
-qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 8192 \
-  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-  -drive if=pflash,format=raw,file=OVMF_VARS.fd \
-  -drive file=disk.qcow2,if=virtio,format=qcow2 \
-  -drive file=metal-amd64.iso,media=cdrom,readonly=on -boot order=dc \
-  -netdev 'user,id=n0,ipv4=on,net=10.0.0.0/24,host=10.0.0.1,dhcpstart=10.0.0.15,ipv6=on,ipv6-net=240f:6d:842b:1::/64,ipv6-host=240f:6d:842b:1::1,hostfwd=tcp:127.0.0.1:50001-10.0.0.15:50000,hostfwd=tcp:127.0.0.1:50011-10.0.0.2:50000,hostfwd=tcp:127.0.0.1:50021-10.0.0.2:6443' \
-  -netdev hubport,id=hp0,hubid=1,netdev=n0 \
-  -netdev hubport,id=hp1,hubid=1 -device virtio-net-pci,netdev=hp1,mac=52:54:00:aa:00:01 \
-  -netdev hubport,id=hp2,hubid=1 -device virtio-net-pci,netdev=hp2,mac=52:54:00:aa:00:02 \
-  -netdev 'user,id=n1,ipv4=on,ipv6=off,net=10.10.0.0/24,host=10.10.0.1' \
-  -netdev hubport,id=hp3,hubid=2,netdev=n1 \
-  -netdev hubport,id=hp4,hubid=2 -device virtio-net-pci,netdev=hp4,mac=52:54:00:bb:00:04 \
-  -display none -serial file:serial.log -monitor unix:monitor.sock,server,nowait
-```
-
-つまずいた点:
-
-- `ipv6=on` を付けると **`ipv4=on` を明示しないと** `IPv4 disabled but netmask/host/dns provided` で起動しない。
-- ISO は kernel コンソールを `console=tty0` にしか出さないので `-serial` にはブートメニューまでしか流れてこない。
-  **診断は全部 `talosctl` 側でやる**(`hostfwd` で 50000 番を借り出す)。
-- **v1.14 の `talosctl` は `--nodes` / `--endpoints` がグローバルフラグではない。**
-  `talosctl --insecure -n … get links` は `unknown command` になる。`talosctl get links --insecure -n … -e …` の順で書く。
-- maintenance mode は `-e 127.0.0.1:50001 -n 127.0.0.1:50001`。設定投入後は apid 経由になるので
-  **`-n` はノードの実アドレス**(`-n 10.0.0.2 -e 127.0.0.1:50011`)。`-n 127.0.0.1:50011` は `invalid target` になる。
-- `talosctl apply-config -m reboot` は無い(`auto` / `no-reboot` / `staged` / `try`)。
-- ハブの構成は monitor の `info network` で確認できる。
-
-`patches/*.yaml` からの読み替えは **インタフェース名とディスクだけ**にした
-(`eno1→enp0s3` `eno2→enp0s4` `eno4→enp0s5` `/dev/sda→/dev/vda`)。
-`mode: balance-alb`、`miimon: 100`、静的 IPv6 `240f:6d:842b:1::2/64`、
-アドレスとゲートウェイ、**v6 のデフォルトルートを書かないこと**はそのまま。
 
 ### 1. bond0 は上がる
 
