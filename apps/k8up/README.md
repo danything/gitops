@@ -32,9 +32,15 @@ sudo sh -c '. /etc/k3s-backup/env
 この Secret も作り直すので手作業は要らない**(2026-09-07 に追加。それまでは作られず、
 operator が `CreateContainerConfigError` で上がらなかった)。
 **Talos に移ったら Infisical に移す**(ホストに env ファイルが無くなるため)。
-受け皿は [k8up-secrets.yaml](k8up-secrets.yaml) に置いてある ── **Infisical の
-`/k8up/k8up-global` に 6 つのキーを入れてから**でないと当ててはいけない
-(operator は Infisical にあるものだけを書くので、足りないと**バックアップが全部落ちる**)。
+受け皿は [k8up-secrets.yaml](k8up-secrets.yaml)。**Infisical の `/k8up/k8up-global` に
+6 つのキーを入れてから**でないと当ててはいけない(operator は Infisical にあるものだけを
+書くので、足りないと**バックアップが全部落ちる**)。**2026-09-08 に入れて、
+別名の Secret に一度出してから本物と 6 つとも突き合わせて確認した。**
+
+**値を変えたら `kubectl -n k8up rollout restart deploy/k8up`。** 他のアプリのような
+`auto-reload` の注釈は使えない ── あれは Deployment 自身の注釈に要るが、
+**k8up の chart は `podAnnotations` しか公開していない**。理由と例外
+(`mattermostWebhook` は再起動不要)は [k8up-secrets.yaml](k8up-secrets.yaml) に書いた。
 
 **災害復旧のときだけ順番が逆になる。** この Secret の中身は R2 の資格情報そのもので、
 Infisical を戻すための `infisical-postgresql.sql` もその R2 にある。まっさらから戻すときは
