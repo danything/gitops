@@ -579,14 +579,14 @@ $ kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIPs}'
 
 ### 何が言えるか
 
-**`inlineManifests` + `upgrade-k8s` は、Cilium を machine config だけで回せる本物の経路。**
-「初回だけ入れて以後は触れない」ではない。ただし採るかどうかは別の話で、
+**`inlineManifests` + `upgrade-k8s` は、machine config だけで回せる本物の経路。**
+「初回だけ入れて以後は触れない」ではない。**この実測を根拠に、Talos 期は
+`bootstrap/` をまるごと inlineManifests に載せることにした**
+([decisions.md](decisions.md)「machine config と Cilium の chart をどう連動させるか」)。
 
-- 値が SOPS 済みの machine config の中に入るので、**Renovate が追えずレビューもしにくい**
-- `helm template` の出力を丸ごと埋めることになる(数千行)
-
-いまは `bootstrap/cilium/values.yaml` + `helm upgrade` + ズレ検出(cilium-drift.yml)を採っている。
-**選択肢として存在することが確かめられた**、というのがこの記録の意味。
+当時の懸念(値が machine config に埋まってレビューできない)は、
+**`render.sh` が `bootstrap/` の値から描く**形にして消えている ── 読むのは
+`bootstrap/cilium/values.yaml` のままで、machine config はその派生物。
 
 ## Talos ブートドリル 2 回目(2026-09-07、`apiserver.yaml` を足して実際に bootstrap まで)
 

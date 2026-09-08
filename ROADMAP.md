@@ -255,19 +255,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       唯一の例外 `infisical/data-postgresql-0` は StatefulSet の
       `volumeClaimTemplate` が作るもので、chart が作り直す。
       **手で当てたまま git に入れ忘れたものは無い。**
-- [ ] PV データを restic から復元。**手順は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」**
-      (k8up の `Restore` を作るだけ。2026-09-08 に実際に流して中身が開けるところまで確認済み)。
-      **順番が決まっている:**
-      1. ArgoCD が上がってアプリが同期され、**PVC が作られる**(`Restore` は書き込む先の
-         PVC が要る。`local-path` の StorageClass はもう machine config が持っている)
-      2. アプリを止める(`Restore` は動いているアプリの足元にファイルを置く)
-      3. `Restore` を流す。**スナップショット ID を明示する** ── 省略すると最新が選ばれ、
-         移行中に取ったものを掴みうる
-      4. **中身を見る。** `Succeeded` は「中身が戻った」の意味ではない ── 空のスナップショットを
-         戻したときも `Succeeded` で、ログだけが `Restored 0 files/dirs (0 B)` と言う
-      5. アプリを戻す
-      **`backupcommand` で取ったもの**(SQLite・pg_dump)は 1 個のファイルとして出るので、
-      アプリのファイル名に置き換えるか、`psql` に流し込む一手間が要る。
+- [ ] PV データを restic から復元。**手順は [docs/migration-day.md](docs/migration-day.md) の 8**
+      (中身は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」。**順番と、`Succeeded` が
+      「戻った」の意味ではないこと**が要点。2026-09-08 に実際に流して確認済み)。
 - [x] **ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ(2026-09-08)。**
       [talos/render.sh](talos/render.sh) が `talos/registries.yaml`(SOPS)を復号して足す。
       **中身を書くのは残作業**(上の「`talos/registries.yaml` を作る」)。k3s の registries.yaml は役目を終える。
@@ -277,50 +267,27 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       **本物の値で焼いたドリルで、`apply-config` 1 回で bootstrap 層が全部立ち上がることを
       確認済み**([docs/talos.md](docs/talos.md)「ブートドリル 4 回目」)。
       層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
-      - [x] ~~Cilium を inlineManifests に~~ **[talos/render.sh](talos/render.sh) が描く(2026-09-08)。**
-            `bootstrap/cilium/` から `helm template` して `KubeInlineManifestConfig` に包む
-            (machine config に値を二度書かない)。**Talos 固有の上書き**
-            ([talos/cilium-values.yaml](talos/cilium-values.yaml)、KubePrism と cgroup)も
-            ここで重ねる。local-path と metrics-server も同じ仕組み。CI も同じスクリプトを
-            使うので「CI は通るが当日は通らない」が起きない。**`upgrade-k8s` の前には必ず描き直す** ── 古いまま流すと
-            走っている Cilium が巻き戻る(docs/decisions.md「machine config と Cilium の chart」)。
-            **inlineManifests は「作りっぱなし」ではない**(2026-09-08 に VM で実測) ──
-            `talosctl upgrade-k8s` を通せば**更新も削除もされる**。だから Talos では
-            `helm upgrade` を使わず、`render.sh` → `upgrade-k8s` が更新経路になる
-            (docs/talos.md「inlineManifests は『更新できない』ではない」)
-      - [x] **ArgoCD と infisical を inlineManifests に(2026-09-08)。**
-            [talos/render.sh](talos/render.sh) が `bootstrap/<name>/helmchart.yaml`(SOPS)を
-            復号して `chart` / `repo` / `version` / `values` を取り出し、`helm template` する。
-            **値をここに写さない**のは Cilium と同じ方針。
-            **ArgoCD の CRD 3 つだけは URL で渡す** ── 1.83 MB あって描き出しの 95% を占め、
-            埋めると machine config が 271 KB → 2 MB になる(`crds.install: false` +
-            `KubeExternalManifestConfig`。版は chart の `appVersion` から引く)。
-            **`version:` が入るまでは警告して飛ばす**(下の項目)。
-            **CI 側には置かない** ── 導入に CRD/ClusterRole/Secret が要り、
-            狭く保っている CI の RBAC の意味が消えるため
-      - [x] **SOPS 済みの Secret を inlineManifests に(2026-09-08)。**
-            `infisical/secrets.yaml`(**infisical はこれが無いと起動しない**)と
-            `cert-manager/cloudflare-secret.yaml`。残る 2 つ
-            (`argocd/helmchart.yaml` / `infisical/helmchart.yaml`)は Secret ではなく
-            chart なので、上の項目で描いている。**machine config はもともと SOPS 済み**なので
-            信頼水準は変わらず、CI に age 鍵を渡さない方針も保てる
-      - [x] **cert-manager も inlineManifests に(2026-09-08)。** k3s 期は
-            `helm upgrade --install` で入れていた。**無いと証明書が 1 枚も発行されず、
-            Gateway の HTTPS リスナーに載せる Secret ができない。**
-            CRD 6 つ(1.30 MB、描き出しの 97%)は URL で渡す
-      - [x] **`bootstrap/apiserver/rbac.yaml` も inlineManifests に(2026-09-08)。**
-            [talos/render.sh](talos/render.sh) が `bootstrap/apiserver/rbac.yaml` から描く
-            (写さない)。CI が自分の権限を作れない ── bootstrap-apply.yml は
-            `bootstrap/apiserver/` を除外している(自分の権限を書き換えられるため)ので、
-            k3s 期は手で当てていた
-      - [x] ~~infisical を `apps/` の ArgoCD Application に移す~~ **移さないと決めた(2026-09-08)。**
-            鶏卵は確かに無かった(ArgoCD は Secret が無くても起動し、SSO だけが効かない)が、
-            **chart が DB と Redis のパスワードを Deployment の平文 env に焼き込む**ので、
-            ArgoCD の Application には値を置けない。`existingSecret` は subchart には効くが
-            **本体の接続文字列には効かず、chart の既定値で自分の DB に繋げなくなる**
-            (`helm template` で確認)。Redis 側には逃げ道すら無い。
-            **ArgoCD 本体と同じく inlineManifests に載せる。**
-            経緯は [docs/decisions.md](docs/decisions.md)「infisical だけは ArgoCD に移せない」
+      **[talos/render.sh](talos/render.sh) が全部描く(2026-09-08)。値はどこにも写さない。**
+
+      | 何を | どこから描くか |
+      | --- | --- |
+      | cilium | `bootstrap/cilium/values.yaml` + [talos/cilium-values.yaml](talos/cilium-values.yaml)(KubePrism・cgroup) |
+      | cert-manager | `bootstrap/cert-manager/` + [talos/cert-manager-values.yaml](talos/cert-manager-values.yaml) |
+      | argocd / infisical | `bootstrap/<name>/helmchart.yaml`(SOPS)から chart・repo・version・values を取り出す |
+      | local-path / metrics-server | `talos/manifests/` と `talos/metrics-server-values.yaml` |
+      | `bootstrap-applier` の RBAC | `bootstrap/apiserver/rbac.yaml`。**CI は自分の権限を作れない** |
+      | SOPS の Secret 2 つ | `infisical/secrets.yaml`(**無いと infisical が起動しない**)と `cert-manager/cloudflare-secret.yaml` |
+      | CRD(gateway-api / argocd / cert-manager) | **URL で渡す。** 大きすぎて埋められない |
+
+      - **`upgrade-k8s` の前には必ず描き直す** ── 古い machine config のまま流すと
+        走っているものが巻き戻る。**inlineManifests は「作りっぱなし」ではない**
+        (VM で実測。docs/talos.md)
+      - **CI も同じ `render.sh` を使う**ので「CI は通るが当日は通らない」が起きない
+      - **ArgoCD を CI 側に置かない** ── 導入に CRD/ClusterRole/Secret が要り、
+        狭く保っている CI の RBAC の意味が消える
+      - **infisical は ArgoCD に移せない** ── chart が DB と Redis のパスワードを
+        Deployment の平文 env に焼き込むため([docs/decisions.md](docs/decisions.md)
+        「infisical だけは ArgoCD に移せない」)
 - [x] **ファイルの PVC バックアップを k8up 側に寄せた(2026-09-08)。** ホストの `k3s-backup` は
       **Talos にはシェルが無い**ので持っていけない。**全 11 namespace で成功を確認済み** ──
       SQLite 6 本は `backupcommand`、ファイルは PVC の注釈。`denpa-data` は DB とファイルが

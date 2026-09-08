@@ -185,6 +185,11 @@ Application が先に通る。
 **「git がバックアップより進んでいる」状態は復元では普通に起きる**ので、
 スナップショットが古かったから、では済まない。
 
+**これは k8up だけの話ではない。** 同じ穴が `InfisicalSecret` にも開いていて、
+2026-09-08 のドリルで踏んだ ── **CRD を Application が入れる種類のリソースは、
+全部これが要る**([bootstrap/README.md](../../bootstrap/README.md)
+「`InfisicalSecret` には sync-options を 2 つ付けること」)。
+
 ## SQLite を整合したまま取る(2026-09-07 実施)
 
 ホストのスクリプトは **scale down してから** PVC を写している。k8up は**動いたまま**取るので、
