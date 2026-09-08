@@ -102,7 +102,7 @@ jobs:
             'name: EPHEMERAL' \
             'maxSize: 64GiB' \
             'secure: false' \
-            'ghcr.io' \
+            'username: ci-dummy' \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
