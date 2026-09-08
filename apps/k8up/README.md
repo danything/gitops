@@ -24,6 +24,7 @@ sudo sh -c '. /etc/k3s-backup/env
     --from-literal=accessKeyId="$AWS_ACCESS_KEY_ID" \
     --from-literal=secretAccessKey="$AWS_SECRET_ACCESS_KEY" \
     --from-literal=repoPassword="$RESTIC_PASSWORD" \
+    --from-literal=mattermostWebhook="$MATTERMOST_WEBHOOK" \
     --dry-run=client -o yaml | k3s kubectl apply -f -'
 ```
 
@@ -31,6 +32,27 @@ sudo sh -c '. /etc/k3s-backup/env
 この Secret も作り直すので手作業は要らない**(2026-09-07 に追加。それまでは作られず、
 operator が `CreateContainerConfigError` で上がらなかった)。
 **Talos に移ったら Infisical に移す**(ホストに env ファイルが無くなるため)。
+
+`mattermostWebhook` は [notify.yaml](notify.yaml) が使う。**新しい秘密を増やさないために
+`k8up-global` に相乗りさせている** ── 値は同じ env ファイルの `MATTERMOST_WEBHOOK` で、
+ホストの `backup/k3s-backup` が使っているものと同じ。
+
+## 失敗したときに気づけるようにする
+
+**k8up には通知が無い。** ホストの `backup/k3s-backup` には最初からあるので
+(`notify()` が Mattermost に投げる)、**バックアップを全部 k8up に移した時点で穴になった。**
+[notify.yaml](notify.yaml) の CronJob が日次(18:00 UTC)でそれを埋める。
+
+**ArgoCD の通知は使えない。** Mattermost に繋がってはいるが(`bootstrap/argocd/helmchart.yaml`)、
+**あれは Application しか見ない**ので k8up の `Backup` CR の失敗は拾えない。
+
+見ているのは 2 つ。
+
+1. **失敗したか** ── `Backup` / `Prune` / `Check` の `Completed` 条件の `reason` が `Succeeded` 以外
+2. **そもそも走ったか** ── `backup` を持つ `Schedule` の namespace すべてに、**25 時間以内の成功**があるか。
+   ジョブが作られなければ失敗オブジェクトも残らないので、条件だけ見ていると**無音の停止を見逃す**
+
+成功時も 1 行投げる。**通知の仕組み自体が生きていることの確認**になる(ホストのスクリプトと同じ考え方)。
 
 ## 何をどう取っているか
 

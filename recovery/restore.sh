@@ -184,6 +184,7 @@ if [ "${RESTORE_DRILL:-0}" != 1 ] && [ -f /etc/k3s-backup/env ]; then
 			--from-literal=accessKeyId="$AWS_ACCESS_KEY_ID" \
 			--from-literal=secretAccessKey="$AWS_SECRET_ACCESS_KEY" \
 			--from-literal=repoPassword="$RESTIC_PASSWORD" \
+			--from-literal=mattermostWebhook="${MATTERMOST_WEBHOOK:-}" \
 			--dry-run=client -o yaml | k3s kubectl apply -f - || true
 	else
 		echo "WARNING: namespace k8up did not appear; create the k8up-global secret by hand (apps/k8up/README.md)" >&2

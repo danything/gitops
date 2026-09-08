@@ -1,0 +1,166 @@
+# **k8up の失敗を Mattermost に流す。**
+#
+# ホストの `backup/k3s-backup` には最初から通知があるが(`notify()`)、k8up には無い。
+# **バックアップを全部 k8up に移した以上、黙って止まると誰も気づかない**ので足した。
+# ArgoCD の通知は Mattermost に繋がっているが、**あれは Application しか見ない**ので
+# k8up の Backup CR の失敗は拾えない。
+#
+# 見るのは「失敗した」だけではない。**そもそも走らなかった**ほうが怖いので、
+# `Schedule` を数えて「backup を持つ namespace すべてに 25 時間以内の成功があるか」を見る。
+#
+# 秘密は `k8up-global` に相乗りさせている(apps/k8up/README.md の作り方に
+# `mattermostWebhook` が入っている)。**新しい配線は増やさない。**
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8up-notify
+  namespace: k8up
+---
+# 読むだけ。k8up.io の 4 種類だけに絞る。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8up-notify
+rules:
+  - apiGroups: [k8up.io]
+    resources: [schedules, backups, prunes, checks]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8up-notify
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8up-notify
+subjects:
+  - kind: ServiceAccount
+    name: k8up-notify
+    namespace: k8up
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k8up-notify
+  namespace: k8up
+spec:
+  # 最後のバックアップ(portainer 17:30 UTC)の後。
+  schedule: "0 18 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: k8up-notify
+          containers:
+            - name: notify
+              # netbird のサイドカーと同じイメージ。kubectl も jq も要らない。
+              image: oven/bun:1.4.2-slim
+              command: [bun, /script/notify.js]
+              env:
+                - name: WEBHOOK
+                  valueFrom:
+                    secretKeyRef:
+                      name: k8up-global
+                      key: mattermostWebhook
+                # Bun の fetch にクラスタの CA を教える。
+                - name: NODE_EXTRA_CA_CERTS
+                  value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+          volumes:
+            - name: script
+              configMap:
+                name: k8up-notify
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8up-notify
+  namespace: k8up
+data:
+  notify.js: |
+    // k8up の状態を見て Mattermost に 1 行投げる。CronJob から日次で走る。
+    //
+    // **「失敗した」だけでなく「そもそも走らなかった」を見る。** 前者は Backup の
+    // Completed 条件、後者は「backup を持つ Schedule の namespace に 25 時間以内の
+    // 成功があるか」で判定する。ジョブが作られなければ失敗オブジェクトも残らないので、
+    // 条件だけ見ていると無音の停止を見逃す。
+    const API = "https://kubernetes.default.svc";
+    const TOKEN = await Bun.file("/var/run/secrets/kubernetes.io/serviceaccount/token").text();
+
+    const get = async (kind) => {
+      const r = await fetch(`${API}/apis/k8up.io/v1/${kind}`, {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      if (!r.ok) throw new Error(`${kind}: ${r.status} ${await r.text()}`);
+      return (await r.json()).items ?? [];
+    };
+
+    // Completed 条件の reason が Succeeded 以外なら失敗扱い。
+    // 条件が無いもの(まだ走っている)は判定しない。
+    const verdict = (o) => {
+      const c = (o.status?.conditions ?? []).find((x) => x.type === "Completed");
+      if (!c) return null;
+      return { ok: c.reason === "Succeeded", message: c.message ?? "" };
+    };
+    const ns = (o) => o.metadata.namespace;
+    const age = (o) => (Date.now() - Date.parse(o.metadata.creationTimestamp)) / 3600e3;
+
+    const [schedules, backups, prunes, checks] = await Promise.all(
+      ["schedules", "backups", "prunes", "checks"].map(get),
+    );
+
+    const problems = [];
+
+    // 1) backup を持つ namespace に、25 時間以内の成功があるか
+    const expected = schedules.filter((s) => s.spec?.backup).map(ns);
+    for (const n of expected) {
+      const recent = backups
+        .filter((b) => ns(b) === n)
+        .sort((a, b) => Date.parse(b.metadata.creationTimestamp) - Date.parse(a.metadata.creationTimestamp))[0];
+      if (!recent) {
+        problems.push(`${n}: バックアップのオブジェクトが無い`);
+        continue;
+      }
+      const v = verdict(recent);
+      if (v && !v.ok) problems.push(`${n}: ${v.message.slice(0, 120)}`);
+      else if (v && age(recent) > 25) problems.push(`${n}: 直近の成功が ${age(recent).toFixed(0)} 時間前`);
+    }
+
+    // 2) prune と check は週次。8 日見て失敗があれば拾う
+    for (const o of [...prunes, ...checks]) {
+      const v = verdict(o);
+      if (v && !v.ok && age(o) < 24 * 8) {
+        problems.push(`${ns(o)}/${o.metadata.name}: ${v.message.slice(0, 120)}`);
+      }
+    }
+
+    const text = problems.length
+      ? `[k8up] FAILED ❌\n${problems.map((p) => `- ${p}`).join("\n")}`
+      : `[k8up] OK ✅ (${expected.length} namespace すべてに 25 時間以内の成功)`;
+
+    console.log(text);
+    const r = await fetch(process.env.WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!r.ok) {
+      console.error(`Mattermost への投稿に失敗: ${r.status} ${await r.text()}`);
+      process.exit(1);
+    }
+    // 問題があったときはジョブも失敗させる。通知が届かなくても kubectl から見えるように。
+    if (problems.length) process.exit(1);
