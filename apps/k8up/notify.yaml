@@ -25,7 +25,7 @@ metadata:
   name: k8up-notify
 rules:
   - apiGroups: [k8up.io]
-    resources: [schedules, backups, prunes, checks]
+    resources: [schedules, backups, prunes, checks, restores]
     verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -186,11 +186,24 @@ data:
       }
     }
 
+    // **履歴だけに頼らない。** 上の学習は 8 日で忘れるので、完全に止まったまま 8 日を
+    // 過ぎた経路は追跡対象から落ちて無音に戻る。**クラスタ側から見た「あるべき姿」**も
+    // 突き合わせる ── `backup` を持つ Schedule の namespace には、その namespace 名の
+    // ホストのスナップショットが 25 時間以内にあるはず。こちらは時間で減衰しない。
+    const freshHosts = new Set(fresh.map((x) => x.host));
+    const silent = [...new Set(
+      (await get("schedules")).filter((s) => s.spec?.backup).map((s) => s.metadata.namespace),
+    )].filter((n) => !freshHosts.has(n));
+
     const lines = [];
     if (stale.length) {
       lines.push(`**${stale.length} 件が ${WINDOW_H} 時間以上更新されていない**`);
       for (const s of stale.slice(0, 15)) lines.push(`- ${s.key} (${s.h.toFixed(0)} 時間前)`);
       if (stale.length > 15) lines.push(`- ほか ${stale.length - 15} 件`);
+    }
+    if (silent.length) {
+      lines.push(`**${WINDOW_H} 時間以内のスナップショットが 1 つも無い namespace**`);
+      for (const n of silent) lines.push(`- ${n}`);
     }
     if (failed.length) {
       lines.push(`**失敗したジョブ**`);
