@@ -1,10 +1,10 @@
 # DoH(/dns-query)を平文で受けて AdGuard の HTTPS(443)へ渡すだけのサイドカー設定。
 #
-# **なぜ要るのか。** AdGuard は DoH を HTTPS の口(443)でしか出さない。平文の 80 では 404 になる。
+# なぜ要るのか。AdGuard は DoH を HTTPS の口(443)でしか出さない。平文の 80 では 404 になる。
 # Gateway が backend へ平文で繋ぐ構成だと DoH が死に、これを「セキュア DNS」に入れている
 # ブラウザや端末は名前解決が全部できなくなる(2026-09-07 に実際に起きた)。
 #
-# **なぜ BackendTLSPolicy ではないのか。** Cilium 1.20.1 は BackendTLSPolicy を Accepted にするが
+# なぜ BackendTLSPolicy ではないのか。Cilium 1.20.1 は BackendTLSPolicy を Accepted にするが
 # 実際には Envoy の cluster に transport_socket を付けない。backend に平文で繋いだままなので
 # AdGuard が 400(Client sent an HTTP request to an HTTPS server)を返す。
 # Cilium が実装したらこのサイドカーは消せる。

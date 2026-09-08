@@ -1,18 +1,18 @@
-# **Talos と Kubernetes の版の出どころ。**
+# Talos と Kubernetes の版の出どころ。
 #
 # ここは Renovate が書き換える。手で触るのは schematic を変えたときだけ
 # (拡張やカーネル引数を足したら Image Factory で新しい ID が出る)。
 #
-# **上げること自体は自動化しない。** このクラスタはノードが 1 台なので、Talos の
+# 上げること自体は自動化しない。このクラスタはノードが 1 台なので、Talos の
 # アップグレードは「唯一のノードの再起動 = 全停止」になる。無人で走らせる種類の作業ではない。
-# Renovate の PR は**新しい版が出たという通知**として使い、適用は自分の都合のいい時間に
+# Renovate の PR は新しい版が出たという通知として使い、適用は自分の都合のいい時間に
 #
 #   talosctl upgrade --image factory.talos.dev/installer/<schematic>:<version>
 #
 # で行う。Talos のアップグレードは A/B なので、失敗すれば前のイメージに戻る。
 # Kubernetes は再起動を伴わない(`talosctl upgrade-k8s --to <version>`)。
 #
-# **ノードが増えたら**コントローラに任せる道が開く(tuppr / system-upgrade-controller)。
+# ノードが増えたらコントローラに任せる道が開く(tuppr / system-upgrade-controller)。
 # どちらも「自分が乗っているノードは自分で上げない」設計なので、1 台では成立しない。
 # 手順は ../docs/talos.md。
 
@@ -26,16 +26,16 @@ talos:
   schematic: 32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
 
 kubernetes:
-  # **`gen config` に `--kubernetes-version` で渡すこと。** 渡さないと Talos の既定
+  # `gen config` に `--kubernetes-version` で渡すこと。渡さないと Talos の既定
   # (v1.14.0 なら v1.37.0)になり、ここに書いた値は無視される。2026-09-07 の Talos ブート
-  # ドリルで、生成物が v1.37.0 になっているのを見つけた ── 移行当日に意図せず
+  # ドリルで、生成物が v1.37.0 になっているのを見つけた。移行当日に意図せず
   # 1.36 → 1.37 の飛び級をするところだった。
   # いまの k3s は v1.36.2+k3s1。
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   version: v1.36.2
 
 metricsServer:
-  # **Talos には metrics-server が無い。** k3s では組み込みのアドオンとして動いていて、
+  # Talos には metrics-server が無い。k3s では組み込みのアドオンとして動いていて、
   # 移行するとそのまま消える(`kubectl top` と、各 UI の使用量表示が死ぬ)。
   # inlineManifest として載せる(../talos/render.sh)。
   # いま k3s に入っているのは rancher/mirrored-metrics-server:v0.8.1。
@@ -43,18 +43,18 @@ metricsServer:
   version: 3.13.0
 
 gatewayAPI:
-  # **Gateway API の CRD は誰も入れていなかった。** k3s のいまは、消したはずの
-  # **Traefik の `traefik-crd` chart が置いていったもの**が残っているだけ
+  # Gateway API の CRD は誰も入れていなかった。k3s のいまは、消したはずの
+  # Traefik の `traefik-crd` chart が置いていったものが残っているだけ
   # (`meta.helm.sh/release-name: traefik-crd`。2026-09-08 に気づいた)。
-  # **Talos には当然無い。** 無いと `Gateway` も 12 本の `HTTPRoute` も `GRPCRoute` も
-  # 適用できず、**公開経路が丸ごと消える。** Cilium の chart は CRD を同梱しないので
+  # Talos には当然無い。無いと `Gateway` も 12 本の `HTTPRoute` も `GRPCRoute` も
+  # 適用できず、公開経路が丸ごと消える。Cilium の chart は CRD を同梱しないので
   # (`gatewayAPI.enabled: true` は「CRD は自分で入れてある前提」)、こちらで入れる。
   #
-  # **standard チャンネルで足りる。** 使っているのは Gateway / HTTPRoute /
+  # standard チャンネルで足りる。使っているのは Gateway / HTTPRoute /
   # GRPCRoute / ReferenceGrant の 4 つ(GRPCRoute は v1.1 から standard)。
-  # **v1.6.1 の standard-install.yaml は CRD を 10 個とも持っている**
-  # ── TCPRoute / UDPRoute / TLSRoute / ListenerSet / BackendTLSPolicy も入っていて、
-  # **いまクラスタにあるものの上位集合**なので、これで失うものは無い(2026-09-08 に中身を確認)。
+  # v1.6.1 の standard-install.yaml は CRD を 10 個とも持っている
+  #。TCPRoute / UDPRoute / TLSRoute / ListenerSet / BackendTLSPolicy も入っていて、
+  # いまクラスタにあるものの上位集合なので、これで失うものは無い(2026-09-08 に中身を確認)。
   #
   # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
   version: v1.6.1

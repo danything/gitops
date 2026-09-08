@@ -6,7 +6,7 @@ metadata:
   name: netbird-data
   namespace: netbird
   annotations:
-    # **ファイルとしては取らない。** 下の backup サイドカーが store.db / idp.db /
+    # ファイルとしては取らない。下の backup サイドカーが store.db / idp.db /
     # events.db を整合したコピーで取っている。ここに同居している GeoLite2-City(65 MB)と
     # geonames(7 MB)は起動時に落とし直せるので、取る意味が無い。
     k8up.io/backup: "false"
@@ -41,12 +41,12 @@ spec:
       labels:
         app: netbird-server
       annotations:
-        # **バックアップは下の backup コンテナで取る。** netbird-server のイメージには
+        # バックアップは下の backup コンテナで取る。netbird-server のイメージには
         # sqlite3 が無く(あるのは perl だけ)、上流のイメージなのでこちらでは足せない。
         k8up.io/backupcommand-container: backup
         # store.db(ピアと設定)・idp.db(内蔵 IdP のユーザ)・events.db を、それぞれ
         # SQLite の pager 越しに読んで tar 1 本にまとめる。同じ PVC に居る
-        # GeoLite2-City(65 MB)と geonames(7 MB)は入れない ── 起動時に落とし直せる。
+        # GeoLite2-City(65 MB)と geonames(7 MB)は入れない。起動時に落とし直せる。
         #
         # 3 つとも rollback journal モード(ヘッダの 18/19 バイト目が 1)。書き込み中の
         # ファイルをそのままコピーすると本体と -journal がずれるが、serialize() は
@@ -99,7 +99,7 @@ spec:
           ports:
             - name: http
               containerPort: 80
-            # **STUN は UDP なのでゲートウェイを通せない。** ノードの IP に直接出す。
+            # STUN は UDP なのでゲートウェイを通せない。ノードの IP に直接出す。
             # インターネットから届かせるにはルータで UDP 3478 を 10.0.0.2 に転送する必要がある
             # (無くても relay 経由で通信自体は成立する。直接 P2P にならないだけ)。
             - name: stun
@@ -113,7 +113,7 @@ spec:
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
-          # **livenessProbe は付けない。** healthcheckAddress(:9000)は
+          # livenessProbe は付けない。healthcheckAddress(:9000)は
           # `http://localhost:9000/health` に bind されるので(起動ログで確認)、
           # kubelet が Pod IP:9000 を叩いても接続を拒否される。tcpSocket でも httpGet でも
           # 必ず落ちて 90 秒で再起動ループになる。readinessProbe の /oauth2/... は
@@ -123,10 +123,10 @@ spec:
               mountPath: /var/lib/netbird
             - name: config
               mountPath: /etc/netbird
-        # **バックアップのためだけのサイドカー。** 上の k8up.io/backupcommand は
+        # バックアップのためだけのサイドカー。上の k8up.io/backupcommand は
         # ここで走る。bun には bun:sqlite が入っているので、sqlite3 を持つイメージを
         # 自前で焼かずに済む(アプリ側の 5 つと同じ手)。
-        # 読み取り専用でマウントする ── このコンテナが DB を書き換えることは無い。
+        # 読み取り専用でマウントする。このコンテナが DB を書き換えることは無い。
         - name: backup
           image: oven/bun:1.4.2-slim
           command: ["sleep", "infinity"]
@@ -165,11 +165,11 @@ spec:
       port: 80
       targetPort: http
 ---
-# **gRPC 専用の Service。中身は上と同じ Pod・同じポート。**
+# gRPC 専用の Service。中身は上と同じ Pod・同じポート。
 # Cilium は Envoy のクラスタを `<ns>:<service>:<port>` で作るので、GRPCRoute と HTTPRoute が
-# 同じ Service を指すと **1 つのクラスタが h2c になり、HTTP 側も巻き込まれる**。
+# 同じ Service を指すと 1 つのクラスタが h2c になり、HTTP 側も巻き込まれる。
 # netbird-server は h2c でも REST を返せるので `/api` などは通ってしまうが、
-# **WebSocket(`/relay`)が HTTP/2 上では拡張 CONNECT を要求されて壊れる**
+# WebSocket(`/relay`)が HTTP/2 上では拡張 CONNECT を要求されて壊れる
 # (Envoy が `upstream connect error ... reset reason: protocol error` で 502)。
 # Service を分ければクラスタが分かれ、h2c になるのは gRPC 側だけになる。
 # 公式の Traefik 例が netbird-server と netbird-server-h2c の 2 つを定義しているのと同じ理由。

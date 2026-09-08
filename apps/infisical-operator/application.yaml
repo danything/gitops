@@ -3,10 +3,10 @@
 # Secret 更新時に自動でローリング再起動される。
 # https://infisical.com/docs/integrations/platforms/kubernetes/overview
 #
-# **k3s の HelmChart CRD から移した(2026-09-07)。** HelmChart は k3s 固有で Talos には無い。
+# k3s の HelmChart CRD から移した(2026-09-07)。HelmChart は k3s 固有で Talos には無い。
 # ArgoCD 自身は operator に依存しないので、bootstrap ではなくここで面倒を見られる。
 #
-# **リリース名は変えられない。** chart は名前を 15 文字で切って
+# リリース名は変えられない。chart は名前を 15 文字で切って
 # `infisical-secre-controller-manager` を作るので、変えると別物として作り直しになる。
 apiVersion: argoproj.io/v1alpha1
 kind: Application

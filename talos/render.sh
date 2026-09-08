@@ -1,17 +1,17 @@
 #!/bin/sh
-# **machine config を作る。** 手で書く部分(patches/)と、他から描いてくる部分
+# machine config を作る。手で書く部分(patches/)と、他から描いてくる部分
 # (Cilium・local-path-provisioner)を 1 か所で組む。
 #
-# **値を二度書かないための道具。** Cilium の設定は bootstrap/cilium/values.yaml が
+# 値を二度書かないための道具。Cilium の設定は bootstrap/cilium/values.yaml が
 # 正本で、machine config はそこから描いた派生物にする。手で合わせない
 # (../docs/decisions.md「machine config と Cilium の chart をどう連動させるか」)。
 #
 #   ./talos/render.sh /tmp/talos-config
 #
-# 秘密は talos/secrets.yaml(SOPS)。復号は呼び出し側でやる ── このスクリプトは
+# 秘密は talos/secrets.yaml(SOPS)。復号は呼び出し側でやる。このスクリプトは
 # 平文を書き出さない。
 #
-# **`talosctl upgrade-k8s` の前にも実行すること。** upgrade-k8s は inlineManifests を
+# `talosctl upgrade-k8s` の前にも実行すること。upgrade-k8s は inlineManifests を
 # reconcile するので、古い machine config のまま流すと Cilium が巻き戻る。
 set -eu
 
@@ -20,9 +20,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
 WORK=$(mktemp -d)
-# **呼び出し側から渡された SECRETS は消さない。** 自分で作ったものだけ片付ける。
+# 呼び出し側から渡された SECRETS は消さない。自分で作ったものだけ片付ける。
 OWN_SECRETS=
-# **最後を `[ -n ... ] &&` で終えないこと。** EXIT トラップの戻り値がスクリプトの
+# 最後を `[ -n ... ] &&` で終えないこと。EXIT トラップの戻り値がスクリプトの
 # 終了コードになるので、`OWN_SECRETS` が空だとテストが偽になって 1 で落ちる
 # (CI が `SECRETS` を渡す場合がまさにそれ。実際に踏んだ)。
 cleanup() {
@@ -39,12 +39,12 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
-# **ghcr.io の pull 資格情報。** k3s 期はホストの /etc/rancher/k3s/registries.yaml に
-# 置いていたもので、**ノード単位で持つので namespace ごとの imagePullSecrets が要らない。**
+# ghcr.io の pull 資格情報。k3s 期はホストの /etc/rancher/k3s/registries.yaml に
+# 置いていたもので、ノード単位で持つので namespace ごとの imagePullSecrets が要らない。
 # 無いと danything の private なリポジトリから出ているイメージが引けない。
 # 値は Infisical の /worklog/ghcr-pull と同じ PAT。
 #
-# **平文は書き出さない**ので、talos/registries.yaml(SOPS で丸ごと暗号化)を復号して渡す。
+# 平文は書き出さないので、talos/registries.yaml(SOPS で丸ごと暗号化)を復号して渡す。
 # CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通す。
 REGISTRIES=${REGISTRIES:-}
 if [ -z "$REGISTRIES" ]; then
@@ -52,16 +52,16 @@ if [ -z "$REGISTRIES" ]; then
 		REGISTRIES=$WORK/registries.yaml
 		sops -d talos/registries.yaml > "$REGISTRIES"
 	else
-		# **止めない。** このファイルが無くても他は描けるので、作る前でも作業は進む。
+		# 止めない。このファイルが無くても他は描けるので、作る前でも作業は進む。
 		# ただし気づかず焼くと private イメージが全部 ImagePullBackOff になるので、
 		# はっきり言う(talos/README.md「ghcr.io の資格情報」)。
 		echo "WARNING: talos/registries.yaml が無い。ghcr.io の private イメージが引けない構成になる" >&2
 	fi
 fi
 
-# **キーを名前で引く。** 「1 つ目の version」「最後の version」で数えていると、
+# キーを名前で引く。「1 つ目の version」「最後の version」で数えていると、
 # versions.yaml にブロックが増えた瞬間に静かに別の値を掴む。
-# `yq` は使わない ── サーバに入っているのが v3 で構文が違う。
+# `yq` は使わない。サーバに入っているのが v3 で構文が違う。
 ver() { # $1=トップレベルのキー  $2=その下のキー
 	awk -v top="$1:" -v key="  $2: " '$0 == top {f=1; next} /^[^ #]/ {f=0} f && index($0, key) == 1 {print substr($0, length(key)+1); exit}' talos/versions.yaml
 }
@@ -86,9 +86,9 @@ inline() { # $1=name  stdin=manifest
 
 helm repo add cilium https://helm.cilium.io >/dev/null 2>&1 || true
 helm repo update cilium >/dev/null 2>&1 || true
-# **値は 2 枚重ね。** 正本は bootstrap/cilium/values.yaml で、Talos で変わるところだけを
-# talos/cilium-values.yaml が上書きする(KubePrism と cgroup)。**これを忘れると
-# k3s 向けの 127.0.0.1:6443 が埋まったまま出てきて、Talos で Cilium が上がらない。**
+# 値は 2 枚重ね。正本は bootstrap/cilium/values.yaml で、Talos で変わるところだけを
+# talos/cilium-values.yaml が上書きする(KubePrism と cgroup)。これを忘れると
+# k3s 向けの 127.0.0.1:6443 が埋まったまま出てきて、Talos で Cilium が上がらない。
 helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 	-f bootstrap/cilium/values.yaml -f talos/cilium-values.yaml \
 	--kube-version "$K8S" \
@@ -97,31 +97,26 @@ helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
 
-# **CI は自分の権限を作れない。** bootstrap-apply.yml が使う `bootstrap-applier` の
-# ClusterRole/ClusterRoleBinding は、**当のワークフローに当てさせるわけにいかない**
-# (自分の権限を書き換えられてしまうので、あちらは bootstrap/apiserver/ を除外している)。
-# k3s 期は手で当てていた。Talos では machine config が持つ。
-#
-# **`bootstrap/apiserver/rbac.yaml` が正本。** ここでは写さずに描いてくる
-# ([../bootstrap/apiserver/rbac.yaml](../bootstrap/apiserver/rbac.yaml))。
-# authentication-config.yaml の方は patches/apiserver.yaml の `KubeAuthenticationConfig`
-# に移してあるので、ここには来ない。
+# bootstrap-applier の RBAC。当のワークフローに当てさせるわけにいかない (自分の権限を
+# 書き換えられる) ので bootstrap-apply.yml は bootstrap/apiserver/ を除外していて、
+# k3s 期は手で当てていた。authentication-config.yaml の方は patches/apiserver.yaml の
+# KubeAuthenticationConfig に移してある。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
 # --- k3s の HelmChart CR から描く ------------------------------------------
-# **argocd と infisical は `bootstrap/` の SOPS 済み `HelmChart` CR が正本。**
+# argocd と infisical は `bootstrap/` の SOPS 済み `HelmChart` CR が正本。
 # `HelmChart` は k3s 固有で Talos には無いので、同じ chart・同じ値を
-# `helm template` して inlineManifest にする。**値をここに写さない**のは
+# `helm template` して inlineManifest にする。値をここに写さないのは
 # Cilium と同じ方針(../docs/decisions.md)。
 #
-# **infisical はここに来るしかない。** chart が DB と Redis のパスワードを
+# infisical はここに来るしかない。chart が DB と Redis のパスワードを
 # Deployment の平文 env に焼き込むので、ArgoCD の Application には置けない
 # (../docs/decisions.md「infisical だけは ArgoCD に移せない」)。
-# **render.sh は age の鍵を持っている**ので、復号した値をそのまま helm に渡せる。
+# render.sh は age の鍵を持っているので、復号した値をそのまま helm に渡せる。
 # 生成物は machine config の中にしか出ない。
 
 # CR(復号済み)から spec の 1 つのキー、または spec.values の中身を取り出す。
-# `yq` は使わない ── サーバに入っているのが v3 で構文が違う。
+# `yq` は使わない。サーバに入っているのが v3 で構文が違う。
 hc() { # $1=file  $2=キー名 または @values
 	awk -v key="$2" '
 		BEGIN { pfx = "    " key ": " }
@@ -144,7 +139,7 @@ helmchart_inline() { # $1=name  $2=復号済み CR
 	_ver=$(hc "$_cr" version)
 	_ns=$(hc "$_cr" targetNamespace)
 	if [ -z "$_ver" ]; then
-		# **止めない。** 版を固定するのは人の手作業(bootstrap/README.md
+		# 止めない。版を固定するのは人の手作業(bootstrap/README.md
 		# 「Helm で入れるもの」)で、それより前でも他は描けるようにしておく。
 		echo "WARNING: bootstrap/$_name/helmchart.yaml に version: が無いので $_name を描かない" >&2
 		echo "         sops edit で chart:/repo:/version: の 3 行を連続させること" >&2
@@ -153,9 +148,9 @@ helmchart_inline() { # $1=name  $2=復号済み CR
 	hc "$_cr" @values > "$WORK/$_name-values.yaml"
 	helm repo add "$_name" "$_repo" >/dev/null 2>&1 || true
 	helm repo update "$_name" >/dev/null 2>&1 || true
-	# **namespace を先頭に付ける。** chart は Namespace を描かないし、
-	# `bootstrap/<name>/namespace.yaml` を当てているのは **GitHub Actions**
-	# (bootstrap-apply.yml)で、**クラスタが立っていないと走れない。**
+	# namespace を先頭に付ける。chart は Namespace を描かないし、
+	# `bootstrap/<name>/namespace.yaml` を当てているのは GitHub Actions
+	# (bootstrap-apply.yml)で、クラスタが立っていないと走れない。
 	# machine config が最初に流れる時点では誰も作っていないので、ここで一緒に入れる
 	# (local-path が自分の namespace を同梱しているのと同じ)。
 	{
@@ -182,13 +177,13 @@ decrypt_cr() { # $1=name  $2=env で渡された上書き
 
 ARGOCD_CR=$(decrypt_cr argocd "${ARGOCD_CHART:-}")
 INFISICAL_CR=$(decrypt_cr infisical "${INFISICAL_CHART:-}")
-# **`[ … ] && cmd` で書かないこと。** `set -e` の下では、条件が偽のときに
+# `[ … ] && cmd` で書かないこと。`set -e` の下では、条件が偽のときに
 # その行が 1 を返してスクリプトごと落ちる(cleanup のトラップで実際に踏んだ)。
 if [ -n "$ARGOCD_CR" ]; then helmchart_inline argocd "$ARGOCD_CR"; fi
 if [ -n "$INFISICAL_CR" ]; then helmchart_inline infisical "$INFISICAL_CR"; fi
 
-# **ArgoCD の CRD は URL で渡す**(理由は talos/argocd-values.yaml)。
-# **版は chart の appVersion をそのまま使う** ── 版を 2 つ持つと必ずずれる。
+# ArgoCD の CRD は URL で渡す(理由は talos/argocd-values.yaml)。
+# 版は chart の appVersion をそのまま使う。版を 2 つ持つと必ずずれる。
 if [ -f "$WORK/inline-argocd.yaml" ]; then
 	ARGOCD_APP=$(helm show chart "argocd/$(hc "$ARGOCD_CR" chart)" \
 		--version "$(hc "$ARGOCD_CR" version)" 2>/dev/null \
@@ -206,10 +201,10 @@ PATCH
 	done
 fi
 
-# **cert-manager も bootstrap/ にいる。** k3s 期は `helm upgrade --install` で
-# 入れていた(bootstrap/cert-manager/values.yaml の冒頭)。**Talos ではこの層が
-# machine config に載る**ので、ここで描く。**無いと証明書が 1 枚も発行されず、
-# Gateway の HTTPS リスナーに載せる Secret ができない。**
+# cert-manager も bootstrap/ にいる。k3s 期は `helm upgrade --install` で
+# 入れていた(bootstrap/cert-manager/values.yaml の冒頭)。Talos ではこの層が
+# machine config に載るので、ここで描く。無いと証明書が 1 枚も発行されず、
+# Gateway の HTTPS リスナーに載せる Secret ができない。
 helm repo add jetstack https://charts.jetstack.io >/dev/null 2>&1 || true
 helm repo update jetstack >/dev/null 2>&1 || true
 {
@@ -220,18 +215,12 @@ helm repo update jetstack >/dev/null 2>&1 || true
 		--kube-version "$K8S" | awk -v ns=cert-manager -f talos/add-namespace.awk
 } | inline cert-manager > "$WORK/inline-cert-manager.yaml"
 
-# **SOPS 済みの Secret も machine config に入れる。**
-#
-# - `infisical/secrets.yaml` は **infisical が起動に必要**(`kubeSecretRef`)。
-#   GitHub Actions で当てるのは**クラスタが立ってから**なので間に合わない
-# - `cert-manager/cloudflare-secret.yaml` は DNS-01 の資格情報。ClusterIssuer が
-#   これを参照する
-#
-# **信頼水準は変わらない** ── machine config はもともと秘密の塊で、生成物は
-# git に入らない。CI に age の鍵を渡さない方針もそのまま(ダミーを渡して経路だけ通す)。
-# **`sops -d … | inline` と繋がないこと。** `#!/bin/sh` には `pipefail` が無いので、
-# **復号に失敗しても `set -e` が拾わず、中身が空の KubeInlineManifestConfig が
-# 黙って出る。** そして下の needle は `inline` が付ける `name:` しか見ないので通ってしまう
+# SOPS 済みの Secret も入れる。infisical/secrets.yaml は infisical の起動に要る
+# (kubeSecretRef)ので、CI が当てるのでは間に合わない。cloudflare-secret.yaml は
+# DNS-01 の資格情報。machine config はもともと秘密の塊なので信頼水準は変わらない。
+# `sops -d … | inline` と繋がないこと。`#!/bin/sh` には `pipefail` が無いので、
+# 復号に失敗しても `set -e` が拾わず、中身が空の KubeInlineManifestConfig が
+# 黙って出る。そして下の needle は `inline` が付ける `name:` しか見ないので通ってしまう
 # (chart の方は `cilium-operator` のような中身を見ているので気づける)。
 # いったんファイルに落とす。
 inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書き
@@ -249,7 +238,7 @@ inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書�
 inline_secret infisical-secrets bootstrap/infisical/secrets.yaml "${INFISICAL_SECRET:-}"
 inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.yaml "${CLOUDFLARE_SECRET:-}"
 
-# **cert-manager の CRD も URL で渡す**(理由は talos/cert-manager-values.yaml)。
+# cert-manager の CRD も URL で渡す(理由は talos/cert-manager-values.yaml)。
 cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig
@@ -258,21 +247,10 @@ url: https://github.com/cert-manager/cert-manager/releases/download/${CERTMGR}/c
 ---
 PATCH
 
-# **Gateway API の CRD。** これが無いと Gateway も HTTPRoute も適用できず、公開経路が
-# 丸ごと消える(k3s のいまは、消したはずの Traefik の chart が置いていったものが残って
-# いるだけ。versions.yaml のコメント)。
-#
-# **standard-install.yaml は CRD を 10 個とも持っている**(TCPRoute や ListenerSet も)ので、
-# いまクラスタにあるものの上位集合になる。experimental の bundle は要らない。
-#
-# **中身は埋めずに URL で渡す**(1.1 MB。なぜ URL かは
-# ../docs/decisions.md「層の分け方」。この CRD が要る理由は talos/versions.yaml)。
-# `KubeExternalManifestConfig` は v1alpha1 の `cluster.extraManifests` の後継で、
-# **1 ドキュメントに 1 URL**。ノードが起動時に GitHub に出られる必要はあるが、
-# どのみちイメージを引く。
-#
-# **Cilium より先に要る。** Cilium の chart は CRD を同梱せず、`gatewayAPI.enabled: true` は
-# 「CRD は入れてある前提」の設定。
+# Gateway API の CRD。無いと Gateway も HTTPRoute も適用できず公開経路が消える。
+# Cilium の chart は CRD を同梱しない (gatewayAPI.enabled は「入れてある前提」)。
+# standard-install.yaml は 10 個とも持っているので experimental の bundle は要らない。
+# 埋めずに URL で渡す理由は ../docs/decisions.md「層の分け方」。
 cat > "$WORK/gateway-api.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig
@@ -280,7 +258,7 @@ name: gateway-api
 url: https://github.com/kubernetes-sigs/gateway-api/releases/download/${GWAPI}/standard-install.yaml
 PATCH
 
-# **metrics-server も Talos には無い。** k3s では組み込みのアドオンだった。
+# metrics-server も Talos には無い。k3s では組み込みのアドオンだった。
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
 helm repo update metrics-server >/dev/null 2>&1 || true
 helm template metrics-server metrics-server/metrics-server --version "$METRICS" \
@@ -303,7 +281,7 @@ talosctl gen config doany https://10.0.0.2:6443 "$@" --output-dir "$OUT" >/dev/n
 echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 
 # 描いたものが本当に入ったか。gen config は知らないキーを黙って捨てることがある。
-# **生成物では manifest が 1 行のエスケープ文字列になる**ので、引用符は \" で探す。
+# 生成物では manifest が 1 行のエスケープ文字列になるので、引用符は \" で探す。
 for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path' \
 	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
@@ -312,12 +290,12 @@ for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-p
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'gha:danything/gitops:refs/heads/main' \
 	"ghcr.io/siderolabs/kubelet:$K8S"; do
-	# **`--` を忘れないこと。** `--kubelet-insecure-tls` のような needle を
+	# `--` を忘れないこと。`--kubelet-insecure-tls` のような needle を
 	# grep がオプションとして解釈して落ちる。
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
 
-# **描けたときだけ見る。** version が入る前は argocd / infisical を飛ばすので
+# 描けたときだけ見る。version が入る前は argocd / infisical を飛ばすので
 # (上の WARNING)、無条件の needle にすると作業できなくなる。
 if [ -f "$WORK/inline-argocd.yaml" ]; then
 	for n in 'name: argocd' 'argocd-server' 'name: argocd-application-crd' \
@@ -325,7 +303,7 @@ if [ -f "$WORK/inline-argocd.yaml" ]; then
 		'kind: Namespace\nmetadata:\n  name: argocd'; do
 		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 	done
-	# **CRD は URL で渡すので、描き出しに入っていないこと。** 入ると 1.83 MB 増える。
+	# CRD は URL で渡すので、描き出しに入っていないこと。入ると 1.83 MB 増える。
 	# 生成物ではなく包む前のファイルを見る(あちらは 1 行のエスケープ文字列になる)。
 	! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-argocd.yaml" \
 		|| { echo "ERROR: argocd の CRD が inline に入っている(talos/argocd-values.yaml)" >&2; exit 1; }
@@ -342,7 +320,7 @@ for n in 'name: cert-manager' 'cert-manager-webhook' 'name: cert-manager-crds' \
 	'kind: Namespace\nmetadata:\n  name: cert-manager'; do
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
-# **CRD は URL 側。** 入ると 1.30 MB 増える(talos/cert-manager-values.yaml)。
+# CRD は URL 側。入ると 1.30 MB 増える(talos/cert-manager-values.yaml)。
 ! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-cert-manager.yaml" \
 	|| { echo "ERROR: cert-manager の CRD が inline に入っている" >&2; exit 1; }
 if [ -f "$WORK/inline-infisical-secrets.yaml" ]; then

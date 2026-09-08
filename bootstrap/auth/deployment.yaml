@@ -63,7 +63,7 @@ spec:
             # still complete OIDC login but gets rejected here before reaching
             # *.s.doany.io. Shared with ArgoCD's RBAC (see argocd/helmchart.yaml).
             #
-            # **Moved off the group claim on 2026-09-07** (docs/entra.md): the
+            # Moved off the group claim on 2026-09-07 (docs/entra.md): the
             # group Object IDs made the ID token big enough that the session
             # did not fit in a cookie, which is the only reason redis is here.
             # --oidc-groups-claim takes a single claim name, so unlike ArgoCD
@@ -80,18 +80,18 @@ spec:
               value: "true"
             - name: OAUTH2_PROXY_UPSTREAMS
               value: static://202
-            # **セッションは Cookie に置く。redis は要らない。**
+            # セッションは Cookie に置く。redis は要らない。
             #
             # 元は「Entra の ID トークンにグループの GUID が並ぶので Cookie に
-            # 収まらない」という理解で redis を置いていたが、**それは誤りだった**
+            # 収まらない」という理解で redis を置いていたが、それは誤りだった
             # (2026-09-07)。このテナントで所属グループは 2 つしかなく、
             # groups クレームはせいぜい 100 バイト強。4293 バイトあったセッションの
             # 中身は ID トークン・アクセストークン・リフレッシュトークンそのもの。
             #
             # session-cookie-minimal がその 3 つを Cookie セッションから落とす。
             # 残るのは Email と User だけなので、X-Auth-Request-* を出すには十分。
-            # **pass-authorization-header / set-authorization-header /
-            # pass-access-token / cookie-refresh とは併用できない**(どれも
+            # pass-authorization-header / set-authorization-header /
+            # pass-access-token / cookie-refresh とは併用できない(どれも
             # 落とすトークンを必要とする)。ここではどれも使っていない。
             - name: OAUTH2_PROXY_SESSION_STORE_TYPE
               value: cookie

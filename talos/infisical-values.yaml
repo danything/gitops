@@ -1,7 +1,7 @@
-# **Talos でだけ変わるところ。** 正本は bootstrap/infisical/helmchart.yaml の
+# Talos でだけ変わるところ。正本は bootstrap/infisical/helmchart.yaml の
 # `spec.values` で、ここはその上に重ねる差分だけ。
 #
-# **いまは何も変えていない。** ファイルを置いてあるのは、
+# いまは何も変えていない。ファイルを置いてあるのは、
 # argocd と同じ形で render.sh から `-f` で重ねられるようにしておくため
 # (Talos で何か変える必要が出たときに、正本を触らずに済む)。
 {}

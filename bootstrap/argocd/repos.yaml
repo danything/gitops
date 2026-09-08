@@ -67,9 +67,9 @@ spec:
           # gitops keeps its manifests at the repo root (sourcePath: .,
           # recurse: true), so its deploy/argocd.yaml ends up inside the synced
           # path one level down; without this the sync fails on a document
-          # with no apiVersion/kind. ** matches it there and at top level for
+          # with no apiVersion/kind.  matches it there and at top level for
           # any repo whose sourcePath is the same directory argocd.yaml lives in.
-          # bootstrap/** も外す。gitops repo は同期対象を apps/ に絞っているので通常は当たらないが、
+          # bootstrap/ も外す。gitops repo は同期対象を apps/ に絞っているので通常は当たらないが、
           # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
           # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
           exclude: '{**/argocd.yaml,bootstrap/**}'

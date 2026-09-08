@@ -1,36 +1,36 @@
-# **k8up の Schedule を 1 か所にまとめてある。** 中身は名前と namespace と時刻しか
+# k8up の Schedule を 1 か所にまとめてある。中身は名前と namespace と時刻しか
 # 違わないので、アプリごとにファイルを分けると同じ注意書きが 9 回並ぶ。
-# **何をバックアップするか**(どの Pod・どの PVC の注釈が効くか)は apps/k8up/README.md の表。
-# **注釈だけでは動かない。** その namespace に Schedule が無いとジョブ自体が作られないので、
-# PVC や Pod に注釈を足したら**ここに namespace があるかを必ず確かめる**。
+# 何をバックアップするか(どの Pod・どの PVC の注釈が効くか)は apps/k8up/README.md の表。
+# 注釈だけでは動かない。その namespace に Schedule が無いとジョブ自体が作られないので、
+# PVC や Pod に注釈を足したらここに namespace があるかを必ず確かめる。
 #
-# ## 決まりごと
+# 決まりごと
 #
-# - **`SkipDryRunOnMissingResource` は必須。** k8up の CRD がまだ無いクラスタだと、
+# - `SkipDryRunOnMissingResource` は必須。k8up の CRD がまだ無いクラスタだと、
 #   これが無いと `apps/` の同期が丸ごと落ちる(README「CRD がまだ無いクラスタで〜」)
-# - **`tags: [k8up]` を付ける。** prune は `--host=<namespace>` で自分の namespace の
+# - `tags: [k8up]` を付ける。prune は `--host=<namespace>` で自分の namespace の
 #   スナップショットしか消さない(`restic/cli/prune.go`)ので、ホストのスクリプトの
 #   ぶん(`host=main` / `tag=k3s-host`)には元から届かない。タグは二重の歯止め
-# - **prune は namespace ごとに要る。** 上と同じ理由で、1 本にまとめても他の
+# - prune は namespace ごとに要る。上と同じ理由で、1 本にまとめても他の
 #   namespace には効かない
-# - **時刻はホストのスクリプト(19:00 UTC = 04:00 JST)を避ける。** restic は
+# - 時刻はホストのスクリプト(19:00 UTC = 04:00 JST)を避ける。restic は
 #   リポジトリをロックするので、重なると片方が待たされる。
 #   バックアップは 15:00〜17:45 UTC、prune は日曜の 20:00〜22:45 UTC に置いてある。
-#   **後ろは詰まっている** ── 18:00 UTC に notify.yaml の CronJob が走るので、
+#   後ろは詰まっている。18:00 UTC に notify.yaml の CronJob が走るので、
 #   これ以上うしろに足すなら向こうもずらすこと
 # - 保持は全部 `keepDaily 7 / keepWeekly 4 / keepMonthly 6`
-# - **`check` だけは 1 本でよい。** `restic check` はリポジトリ全体を見るもので、
+# - `check` だけは 1 本でよい。`restic check` はリポジトリ全体を見るもので、
 #   prune と違って namespace には縛られない(`restic/cli/check.go` は `--host` を渡さない)
-# - **バックエンドは書かない。** 書くと R2 のエンドポイント(Cloudflare の
+# - バックエンドは書かない。書くと R2 のエンドポイント(Cloudflare の
 #   アカウント ID を含む)が git に載る。operator のグローバル設定に寄せてある
-# - **`podSecurityContext: {runAsUser: 0}` を全部に付ける。** k8up の既定は
-#   nonroot(65532)で、**`0600 root:root` のファイルが読めない。** そのとき restic は
-#   `errors: 7` を出しながら**中身が 0 バイトのスナップショットを作り、k8up はそれを
-#   `Succeeded` にする** ── 気づけない。2026-09-08 に実測で見つけた
+# - `podSecurityContext: {runAsUser: 0}` を全部に付ける。k8up の既定は
+#   nonroot(65532)で、`0600 root:root` のファイルが読めない。そのとき restic は
+#   `errors: 7` を出しながら中身が 0 バイトのスナップショットを作り、k8up はそれを
+#   `Succeeded` にする。気づけない。2026-09-08 に実測で見つけた
 #   (adguardhome-conf / adguardhome-work / portainer-data の 3 本が空だった)。
 #   詳しくは README「空のスナップショット」。
-#   **Talos の PSA `baseline` でも通る**(root を禁じるのは `restricted` だけ)。
-#   **将来 `restricted` に寄せるならここが引っかかる** ── そのときは
+#   Talos の PSA `baseline` でも通る(root を禁じるのは `restricted` だけ)。
+#   将来 `restricted` に寄せるならここが引っかかる。そのときは
 #   AdGuardHome / portainer 側がファイルを `0640` で作るようにするしかない
 ---
 apiVersion: k8up.io/v1
@@ -297,15 +297,15 @@ spec:
       keepMonthly: 6
       tags: [k8up]
 ---
-# **リポジトリの健全性チェック。これだけ 1 本。**
+# リポジトリの健全性チェック。これだけ 1 本。
 # ホストの `backup/k3s-backup` が `restic check --read-data-subset=5%` を回していたぶんで、
-# **Talos に移るとあれが無くなる**ので k8up 側に置いておく。
+# Talos に移るとあれが無くなるので k8up 側に置いておく。
 # k8up の `check` は素の `restic check`(データの読み直しはせず、構造とインデックスを見る)。
 #
-# 日曜の prune(20:00〜22:30 UTC)がすべて終わったあとに置く。**重なっても壊れない。**
+# 日曜の prune(20:00〜22:30 UTC)がすべて終わったあとに置く。重なっても壊れない。
 # k8up の check と prune はどちらも `Exclusive()` で、locker が
 # 「排他ジョブが走っている間は始めない」を見ている(`operator/locker/locker.go` の
-# `isExclusiveJobRunning`)。始められなかった側は失敗せず、**30 秒ごとに待って再試行する**
+# `isExclusiveJobRunning`)。始められなかった側は失敗せず、30 秒ごとに待って再試行する
 # (`controller.go` の `RequeueAfter: 30 * time.Second`)。restic のロック競合にはならない。
 apiVersion: k8up.io/v1
 kind: Schedule

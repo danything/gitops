@@ -1,16 +1,16 @@
 # GitHub Actions(bootstrap-apply.yml)がこのクラスタで何をしてよいかの定義。
 #
-# **当てるのは人か machine config。ワークフローではない。** bootstrap-apply.yml は
-# `bootstrap/apiserver/` を除外している ── ここを当てられると**ワークフローが自分の
-# 権限を書き換えられてしまう**。k3s 期は手で当てていた。**Talos ではこのファイルを
-# [../../talos/render.sh](../../talos/render.sh) が inlineManifest に描く**ので、
+# 当てるのは人か machine config。ワークフローではない。bootstrap-apply.yml は
+# `bootstrap/apiserver/` を除外している。ここを当てられるとワークフローが自分の
+# 権限を書き換えられてしまう。k3s 期は手で当てていた。Talos ではこのファイルを
+# [../../talos/render.sh](../../talos/render.sh) が inlineManifest に描くので、
 # machine config を当てた時点で入っている(このファイルが正本で、写しは作らない)。
 #
-# **cluster-admin は渡さない。** bootstrap/ の中で実際に使われている種類だけを列挙してある
-# (SOPS で暗号化した 4 ファイルはワークフロー側で除外しているので、**Secret は入っていない**)。
+# cluster-admin は渡さない。bootstrap/ の中で実際に使われている種類だけを列挙してある
+# (SOPS で暗号化した 4 ファイルはワークフロー側で除外しているので、Secret は入っていない)。
 # これで、GitHub 側が乗っ取られても Secret を読まれることはない。
 #
-# **delete も渡していない。** ワークフローは apply しかせず、prune もしない。
+# delete も渡していない。ワークフローは apply しかせず、prune もしない。
 # 消すのは人の手で、というのは apps/ の方針(git から消えたら消える)とは逆だが、
 # ここはクラスタの土台で、事故の範囲が違う。
 apiVersion: rbac.authorization.k8s.io/v1
@@ -22,7 +22,7 @@ rules:
     resources: [namespaces, services]
     verbs: [get, list, create, update, patch]
   # cilium-drift.yml が git の値とクラスタを見比べるためだけの読み取り。
-  # **`resourceNames` でこの 1 つに絞ってある**ので、他の ConfigMap は読めない
+  # `resourceNames` でこの 1 つに絞ってあるので、他の ConfigMap は読めない
   # (`list` は名前で絞れないので付けない。`get` だけで足りる)。
   - apiGroups: [""]
     resources: [configmaps]

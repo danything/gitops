@@ -1,32 +1,32 @@
-# **API サーバに GitHub Actions の OIDC を受けさせる設定。**
-# これは Kubernetes のマニフェストではなく、**API サーバに渡すファイル**。
+# API サーバに GitHub Actions の OIDC を受けさせる設定。
+# これは Kubernetes のマニフェストではなく、API サーバに渡すファイル。
 #
 #   k3s  : /etc/rancher/k3s/authentication-config.yaml に置き、config.yaml の
 #          kube-apiserver-arg に `authentication-config=...` を足す
 #   Talos: machine config の cluster.apiServer に載せる(../../talos/patches/)
 #
-# **置き換えても API サーバの再起動は要らない。** 中身が変わると自動で読み直す
+# 置き換えても API サーバの再起動は要らない。中身が変わると自動で読み直す
 # (2026-09-08 に実測。`apiserver_authentication_config_controller_automatic_reloads_total`
 # の `status="success"` が増え、`..._last_timestamp_seconds` が進む)。
-# **壊れた内容を置いても前の設定のまま動き続ける**ので、置いたあとはこの 2 つを見ること:
+# 壊れた内容を置いても前の設定のまま動き続けるので、置いたあとはこの 2 つを見ること:
 #
 #   k3s kubectl get --raw /metrics | grep automatic_reload
 #
-# ## なぜこれが要るか
+# なぜこれが要るか
 #
-# 「サーバに何も置かず git だけで回す」ためには、**クラスタの外から apply する経路**が要る。
+# 「サーバに何も置かず git だけで回す」ためには、クラスタの外から apply する経路が要る。
 # ArgoCD に bootstrap/ を持たせると「ArgoCD が自分の公開経路を握る」循環になるので、
 # 外側(GitHub Actions)から当てる。そこで問題になるのが資格情報で、
-# **kubeconfig を GitHub に置くとアカウントが落ちた時点でクラスタ全部が落ちる。**
+# kubeconfig を GitHub に置くとアカウントが落ちた時点でクラスタ全部が落ちる。
 #
-# GitHub Actions の OIDC を直接受ければ、**保存する秘密がゼロ**になる。
+# GitHub Actions の OIDC を直接受ければ、保存する秘密がゼロになる。
 # トークンは実行のたびに発行され、数分で切れ、`sub` に「どのリポジトリのどのブランチの
 # どのワークフローか」が入っている。それを下の CEL で縛る。
 #
-# ## 気をつける点
+# 気をつける点
 #
-# **issuer は誰でもトークンを取れる公開の IdP。** `token.actions.githubusercontent.com` は
-# 世界中の GitHub Actions が使うので、**issuer を信じるだけでは誰でも入れる。**
+# issuer は誰でもトークンを取れる公開の IdP。`token.actions.githubusercontent.com` は
+# 世界中の GitHub Actions が使うので、issuer を信じるだけでは誰でも入れる。
 # 効いているのは claimValidationRules のほうで、ここを緩めると即座に穴になる。
 apiVersion: apiserver.config.k8s.io/v1
 kind: AuthenticationConfiguration
@@ -38,9 +38,9 @@ jwt:
       audiences:
         - https://ks.doany.io
     claimMappings:
-      # **`sub` をそのまま使わない。** GitHub の `sub` は
+      # `sub` をそのまま使わない。GitHub の `sub` は
       #   repo:danything@143234231/gitops@1311609465:ref:refs/heads/main
-      # のように**組織 ID とリポジトリ ID が埋め込まれる形**に変わっており、
+      # のように組織 ID とリポジトリ ID が埋め込まれる形に変わっており、
       # 見た目で読めないうえ、形式が変わると RBAC が黙って効かなくなる。
       # 必要な情報(どのリポジトリのどのブランチか)から自分で組み立てる。
       # 例: gha:danything/gitops:refs/heads/main
@@ -54,14 +54,14 @@ jwt:
       # ワークフローのファイルまで固定する。リポジトリに別のワークフローが増えても、
       # それが勝手にクラスタを触れるようにはならない。
       #
-      # **2 つを許している。** どちらも main の push か workflow_dispatch でしか動かない:
+      # 2 つを許している。どちらも main の push か workflow_dispatch でしか動かない:
       #   bootstrap-apply.yml … bootstrap/ を当てる(書き込み)
       #   cilium-drift.yml   … cilium の値のズレを見る(読むだけ)
       #
-      # **この 2 つは同じ利用者名になる**ので RBAC も共通で、drift 側は使わない
+      # この 2 つは同じ利用者名になるので RBAC も共通で、drift 側は使わない
       # 書き込み権限まで持つ。分けるには username の式にワークフロー名を混ぜて
-      # ClusterRoleBinding を 2 本にすればよいが、**ここを間違えると bootstrap の
-      # 経路ごと死ぬ**(復旧はホストか talosctl から手作業)。いまの ClusterRole は
+      # ClusterRoleBinding を 2 本にすればよいが、ここを間違えると bootstrap の
+      # 経路ごと死ぬ(復旧はホストか talosctl から手作業)。いまの ClusterRole は
       # もともと Secret 無し・delete 無しまで絞ってあるので、割に合わないと判断した。
       - expression: >-
           ["bootstrap-apply.yml", "cilium-drift.yml"].exists(w,

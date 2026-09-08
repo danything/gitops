@@ -1,7 +1,7 @@
-# **k3s の HelmChart CRD(helm.cattle.io)をやめて ArgoCD の Application にする。**
+# k3s の HelmChart CRD(helm.cattle.io)をやめて ArgoCD の Application にする。
 # HelmChart は k3s 固有で Talos には無いので、いまのうちに移して OS 交換時の変数を減らす。
 #
-# **CR を消すと helm がアンインストールされる。** helm-controller は
+# CR を消すと helm がアンインストールされる。helm-controller は
 # `wrangler.cattle.io/on-helm-chart-remove` finalizer で削除ジョブを走らせるので、
 # 移すときは先に finalizer を外してから CR を消す(手順は docs/decisions.md)。
 apiVersion: argoproj.io/v1alpha1

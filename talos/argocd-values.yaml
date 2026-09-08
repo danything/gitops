@@ -1,7 +1,7 @@
-# **Talos でだけ変わるところ。** 正本は bootstrap/argocd/helmchart.yaml の `spec.values` で、
+# Talos でだけ変わるところ。正本は bootstrap/argocd/helmchart.yaml の `spec.values` で、
 # ここはその上に重ねる差分だけ(Cilium と talos/cilium-values.yaml の関係と同じ)。
 #
-# **CRD を chart から描かせない。** 3 つで 1.83 MB あり、**描き出しの 95%**。
+# CRD を chart から描かせない。3 つで 1.83 MB あり、描き出しの 95%。
 # `KubeExternalManifestConfig` で URL を渡す([../talos/render.sh](../talos/render.sh))。
 # なぜ URL なのかは [../docs/decisions.md](../docs/decisions.md)「層の分け方」。
 crds:

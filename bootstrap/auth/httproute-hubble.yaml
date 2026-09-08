@@ -1,7 +1,7 @@
 # 公開経路。証明書は Gateway([../gateway/](../gateway/))のリスナーに付いているので指定しない。
-# **この層は ArgoCD が同期しない**(理由と手順は ../README.md「公開経路(HTTPRoute)もここにある」)。
+# この層は ArgoCD が同期しない(理由と手順は ../README.md「公開経路(HTTPRoute)もここにある」)。
 #
-# **backend は Hubble UI ではなく oauth2-proxy。** UI 自身は認証を持たないので
+# backend は Hubble UI ではなく oauth2-proxy。UI 自身は認証を持たないので
 # 直接繋いではいけない(bootstrap/auth/hubble-proxy.yaml)。
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

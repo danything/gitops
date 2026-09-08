@@ -21,7 +21,7 @@ metadata:
   name: data-erpnext-mariadb-sts-0
   namespace: erpnext
   annotations:
-    # **DB はファイルとして取らない。** gunicorn の Pod から mariadb-dump を打っている
+    # DB はファイルとして取らない。gunicorn の Pod から mariadb-dump を打っている
     # (apps/k8up/README.md)。注釈が無ければどのみち対象外だが、意図して外していると
     # 分かるように明示する。
     k8up.io/backup: "false"

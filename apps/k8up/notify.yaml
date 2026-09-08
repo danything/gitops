@@ -1,17 +1,17 @@
-# **k8up の失敗を Mattermost に流す。**
+# k8up の失敗を Mattermost に流す。
 #
 # ホストの `backup/k3s-backup` には最初から通知があるが(`notify()`)、k8up には無い。
-# **バックアップを全部 k8up に移した以上、黙って止まると誰も気づかない**ので足した。
-# ArgoCD の通知は Mattermost に繋がっているが、**あれは Application しか見ない**ので
+# バックアップを全部 k8up に移した以上、黙って止まると誰も気づかないので足した。
+# ArgoCD の通知は Mattermost に繋がっているが、あれは Application しか見ないので
 # k8up の Backup CR の失敗は拾えない。
 #
-# **見るのは restic の中身。** k8up の Backup オブジェクトは掃除されるので、
-# 「オブジェクトが無い」は「取れていない」の証拠にならない ── スケジュールを書き換えた
+# 見るのは restic の中身。k8up の Backup オブジェクトは掃除されるので、
+# 「オブジェクトが無い」は「取れていない」の証拠にならない。スケジュールを書き換えた
 # だけで消えることを実際に確認した(2026-09-08)。唯一の証拠はスナップショットなので、
 # init コンテナで `restic snapshots` を取ってきて、そちらを数える。
 #
 # 秘密は `k8up-global` に相乗りさせている(apps/k8up/README.md の作り方に
-# `mattermostWebhook` が入っている)。**新しい配線は増やさない。**
+# `mattermostWebhook` が入っている)。新しい配線は増やさない。
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -27,7 +27,7 @@ rules:
   - apiGroups: [k8up.io]
     resources: [schedules, backups, prunes, checks, restores]
     verbs: [get, list]
-  # **注釈の付け忘れではなく、Schedule の付け忘れを捕まえるために要る。**
+  # 注釈の付け忘れではなく、Schedule の付け忘れを捕まえるために要る。
   # PVC に `k8up.io/backup: "true"` を付けても、Pod に `k8up.io/backupcommand` を
   # 付けても、その namespace に Schedule が無ければジョブは作られない
   # (2026-09-08 に yuzuriha で実際に起きていた)。
@@ -55,9 +55,9 @@ metadata:
   name: k8up-notify
   namespace: k8up
 spec:
-  # 最後のバックアップ(yuzuriha 17:45 UTC)の後。**余裕は 15 分しかない。**
-  # yuzuriha-data は 12 MB / 7 ファイルなので数秒で終わるが、**ここから先に
-  # Schedule を足すならこの時刻もずらすこと**(schedules.yaml の冒頭にも書いた)。
+  # 最後のバックアップ(yuzuriha 17:45 UTC)の後。余裕は 15 分しかない。
+  # yuzuriha-data は 12 MB / 7 ファイルなので数秒で終わるが、ここから先に
+  # Schedule を足すならこの時刻もずらすこと(schedules.yaml の冒頭にも書いた)。
   schedule: "0 18 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
@@ -70,7 +70,7 @@ spec:
           restartPolicy: Never
           serviceAccountName: k8up-notify
           initContainers:
-            # **リポジトリの中身を取ってくる。** k8up のイメージには restic が入っている
+            # リポジトリの中身を取ってくる。k8up のイメージには restic が入っている
             # (`/usr/local/bin/restic`)ので、これのためだけに別のものを持ち込まなくてよい。
             # 読むだけ。`snapshots` はリポジトリを書き換えない。
             - name: snapshots
