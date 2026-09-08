@@ -210,17 +210,29 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 - [ ] 最終バックアップを取り、`restic check` を通す。
 - [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
 - [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
-- [ ] PSA のラベルは manifest 側に入れてある。`local-path-storage` だけは Talos 側で作る namespace なので、
-      local-path-provisioner を入れるときに一緒に付ける。
+- [x] **k3s の組み込みアドオンのうち、Talos に無いものを用意した(2026-09-08)。**
+      `kubectl -n kube-system get addons.k3s.cattle.io` で洗い出した。
+      - **local-path-provisioner** … 入れないと **PVC が 1 つも bind しない**。
+        [talos/manifests/local-path.yaml](talos/manifests/local-path.yaml)。
+        `local-path-storage` の PSA ラベル(privileged)もここで付く。
+        **`local-path-retain` も同じ名前で出す** ── 21 本の PVC が参照していて、
+        バインド済みでは変更できないため
+      - **metrics-server** … 入れないと `kubectl top` と各 UI の使用量表示が消える
+        (HPA は 0 個なので停止はしない)。[talos/metrics-server-values.yaml](talos/metrics-server-values.yaml)。
+        **`--kubelet-insecure-tls` が要る**(Talos の kubelet は自己署名の証明書)
+      - coredns は Talos が自前で入れる(`KubeCoreDNSConfig`)。ccm と rolebindings は k3s 固有
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
 - [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
 - [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
 - [ ] **起動順序を組み直す。** k3s の `HelmChart` CRD は Talos に無いので、argocd と infisical は
       置き換えが要る。**inlineManifests は Helm を実行できない**ので、そのままでは移せない。
       層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
-      - [ ] Cilium を `helm template` で書き出して inlineManifests に。**`gen config` のときに
-            `bootstrap/cilium/` から描く**(machine config に値を二度書かない。作れることは
-            2026-09-08 に確認済み)。**`upgrade-k8s` の前には必ず描き直す** ── 古いまま流すと
+      - [x] ~~Cilium を inlineManifests に~~ **[talos/render.sh](talos/render.sh) が描く(2026-09-08)。**
+            `bootstrap/cilium/` から `helm template` して `KubeInlineManifestConfig` に包む
+            (machine config に値を二度書かない)。**Talos 固有の上書き**
+            ([talos/cilium-values.yaml](talos/cilium-values.yaml)、KubePrism と cgroup)も
+            ここで重ねる。local-path と metrics-server も同じ仕組み。CI も同じスクリプトを
+            使うので「CI は通るが当日は通らない」が起きない。**`upgrade-k8s` の前には必ず描き直す** ── 古いまま流すと
             走っている Cilium が巻き戻る(docs/decisions.md「machine config と Cilium の chart」)。
             **inlineManifests は「作りっぱなし」ではない**(2026-09-08 に VM で実測) ──
             `talosctl upgrade-k8s` を通せば**更新も削除もされる**ので、machine config だけで
