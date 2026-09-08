@@ -10,9 +10,17 @@
 
 talhelper は使わない。`talosctl gen config` にこのディレクトリのパッチを渡すだけで足りる。
 
-**パッチはファイル名を数え上げずにまとめて渡す。** 個別に列挙していたせいで、
-`cni.yaml` を足したときに CI 側だけ更新し忘れる、という事故が起きうる形だった
-(実際、CNI の設定そのものが長い間 patches に入っていなかった)。
+**組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分(`patches/`)と、
+他から描いてくる部分(Cilium は `bootstrap/cilium/values.yaml` から、
+local-path-provisioner は `manifests/` から)を 1 か所で組む。**値をどこにも二度書かない**
+のが目的で、版も `versions.yaml` と `bootstrap/cilium/version.yaml` から読む。
+
+**`talosctl upgrade-k8s` の前にも走らせること。** `upgrade-k8s` は inlineManifests を
+reconcile するので、古い machine config のまま流すと**走っている Cilium が巻き戻る**
+(../docs/decisions.md「machine config と Cilium の chart をどう連動させるか」)。
+
+CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う。
+**別の作り方をすると「CI は通るが当日は通らない」が起きる**ので、道具は 1 つにしてある。
 
 ```shell
 # 1) 秘密を作る。生成物は SOPS(age)で暗号化してコミットする
@@ -20,14 +28,7 @@ talosctl gen secrets -o secrets.yaml
 sops -e -i secrets.yaml            # → talos/secrets.yaml (暗号化済み)
 
 # 2) machine config を作る
-sops -d secrets.yaml > /tmp/secrets.plain.yaml
-talosctl gen config doany https://10.0.0.2:6443 \
-  --with-secrets /tmp/secrets.plain.yaml \
-  --kubernetes-version v1.36.2 \
-  --install-image factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.0 \
-  $(for f in patches/*.yaml; do printf -- '--config-patch @%s ' "$f"; done) \
-  --output-dir /tmp/talos-config
-shred -u /tmp/secrets.plain.yaml
+./talos/render.sh /tmp/talos-config
 
 # 3) maintenance mode のノードに流す(ISO で起動した直後)
 talosctl apply-config --insecure -n <コンソールに出た IP> -f /tmp/talos-config/controlplane.yaml

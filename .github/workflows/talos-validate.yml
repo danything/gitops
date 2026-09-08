@@ -1,4 +1,4 @@
-# talos/patches/ が machine config として成立するかを PR ごとに検証する。
+# talos/render.sh が machine config を作れるか、中身が想定どおりかを PR ごとに検証する。
 #
 # **クラスタにも実機にも触らない。** 秘密は使い捨てのものをその場で作る
 # (検証したいのはパッチの構文とスキーマであって、鍵の中身ではない)。
@@ -52,20 +52,14 @@ jobs:
       - name: machine config を生成する
         run: |
           set -euo pipefail
-          # **使い捨ての秘密。** 本物(talos/secrets.yaml、SOPS 済み)は使わない
+          # **本番と同じ道具で作る。** talos/render.sh は Cilium と
+          # local-path-provisioner を inlineManifest として描いてから組む。
+          # ここで別の作り方をすると、CI が通っても当日は通らない、が起こる。
+          #
+          # **使い捨ての秘密。** 本物(talos/secrets.yaml、SOPS 済み)は使わない。
+          # SECRETS を渡すと render.sh は sops を呼ばない。
           talosctl gen secrets -o /tmp/secrets.yaml
-          talosctl gen config doany https://10.0.0.2:6443 \
-            --with-secrets /tmp/secrets.yaml \
-            --kubernetes-version "${{ steps.v.outputs.k8s }}" \
-            --install-image "factory.talos.dev/installer/${{ steps.v.outputs.schematic }}:${{ steps.v.outputs.version }}" \
-            $(for f in talos/patches/*.yaml; do printf -- '--config-patch @%s ' "$f"; done) \
-            --output-dir /tmp/out
-
-      - name: validate
-        run: |
-          set -euo pipefail
-          talosctl validate --config /tmp/out/controlplane.yaml --mode metal
-          echo "  controlplane.yaml OK"
+          SECRETS=/tmp/secrets.yaml ./talos/render.sh /tmp/out
 
       - name: 生成物に想定の設定が入っているか
         run: |
@@ -80,7 +74,12 @@ jobs:
             'service-node-port-range: 80-32767' \
             'cilium-drift.yml' \
             'enabled: false # Enable or disable kube-proxy' \
-            'balance-alb'
+            'balance-alb' \
+            'name: cilium' \
+            'cilium-operator' \
+            'name: local-path' \
+            'rancher.io/local-path' \
+            'local-path-retain'
           do
             grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
             echo "  ある: $needle"

@@ -1,0 +1,144 @@
+# **local-path-provisioner。Talos に持っていくために要る。**
+#
+# k3s ではこれが**組み込みのアドオン**として動いている(`objectset.rio.cattle.io/owner-name:
+# local-storage`)。**Talos には無い**ので、入れないと PVC が 1 つも bind せず、
+# ストレージを持つアプリが全部 Pending で止まる。CNI と同じ「移行当日まで気づかない」類い。
+#
+# ## k3s の設定との違い
+#
+# | | k3s | ここ |
+# | --- | --- | --- |
+# | データの置き場 | `/var/lib/rancher/k3s/storage` | `/var/local-path-provisioner`(`talos/patches/cluster.yaml` の `extraMounts` と対) |
+# | namespace | `kube-system` | `local-path-storage`(**PSA は privileged**。ヘルパー Pod が hostPath を使う) |
+#
+# ## StorageClass を 2 つ出す
+#
+# **`local-path-retain` も残す。** いま 21 本の PVC がその名前を参照していて、
+# **バインド済み PVC の `storageClassName` は API が変更を拒否する**。移行当日に
+# アプリ 6 リポジトリの PVC を書き換えるのは事故のもとなので、**同じ名前を提供して
+# そのまま持っていく**。整理は移行後に落ち着いてからでよい(ROADMAP の積み残し)。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: local-path-storage
+  labels:
+    # ヘルパー Pod が hostPath を使うので baseline では通らない。
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: local-path-provisioner-service-account
+  namespace: local-path-storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: local-path-provisioner-role
+rules:
+  - apiGroups: [""]
+    resources: [nodes, persistentvolumeclaims, configmaps, pods, pods/log]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [persistentvolumes]
+    verbs: [get, list, watch, create, patch, update, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: local-path-provisioner-bind
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: local-path-provisioner-role
+subjects:
+  - kind: ServiceAccount
+    name: local-path-provisioner-service-account
+    namespace: local-path-storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-path-provisioner
+  namespace: local-path-storage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: local-path-provisioner
+  template:
+    metadata:
+      labels:
+        app: local-path-provisioner
+    spec:
+      serviceAccountName: local-path-provisioner-service-account
+      containers:
+        - name: local-path-provisioner
+          image: rancher/local-path-provisioner:v0.0.36
+          command: [local-path-provisioner, start, --config, /etc/config/config.json]
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config/
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      volumes:
+        - name: config-volume
+          configMap:
+            name: local-path-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-path-config
+  namespace: local-path-storage
+data:
+  config.json: |-
+    {
+      "nodePathMap":[
+      {
+        "node":"DEFAULT_PATH_FOR_NON_LISTED_NODES",
+        "paths":["/var/local-path-provisioner"]
+      }
+      ]
+    }
+  helperPod.yaml: |-
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: helper-pod
+    spec:
+      containers:
+        - name: helper-pod
+          image: busybox:1.38.0
+          imagePullPolicy: IfNotPresent
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+# **k3s から持ち越す名前。** 消せるようになるのは、全 PVC がこの名前を参照しなくなってから。
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path-retain
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
