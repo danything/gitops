@@ -301,6 +301,80 @@ sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
   `--endpoint https://127.0.0.1:<hostfwd>` を渡す。`kubeconfig` の書き換えだけでは足りない
 - ハブの構成は monitor の `info network` で確認できる
 
+## ブートドリル 5 回目(2026-09-08、**app-of-apps まで通した**)
+
+4 回目は ArgoCD の `extraObjects` を空にして app-of-apps を外していた。5 回目は
+**外さずに、本物のリポジトリ群を同期させた。** 見たかったのは
+「**まっさらなクラスタで ArgoCD が `apps/` を再構築しきるか**」の一点。
+
+**移行当日に何も上がらない不具合が出た。** 詳細は下。
+
+### 副作用の遮断: QEMU を専用ユーザーで走らせる
+
+復元リハーサル(Ubuntu の VM)では**中で** iptables を叩いていたが、
+**Talos の VM には入れない。** ホスト側で落とすと本番の通信まで巻き込む。
+
+**QEMU を専用ユーザーで動かして `-m owner --uid-owner` で落とす。**
+
+```shell
+sudo useradd -r -M -s /usr/sbin/nologin -G kvm qemudrill
+for ip in <api.cloudflare.com 6 つ> <acme> <本番の公開 IP> <R2 2 つ>; do
+  sudo iptables -I OUTPUT 1 -m owner --uid-owner qemudrill -d $ip -j REJECT
+done
+for p in 587 465 25; do   # SMTP は REJECT。DROP だと Infisical が起動しない
+  sudo iptables -I OUTPUT 1 -m owner --uid-owner qemudrill -p tcp --dport $p -j REJECT --reject-with tcp-reset
+done
+sudo ip6tables -I OUTPUT 1 -m owner --uid-owner qemudrill -d 2000::/3 -j REJECT
+```
+
+止めたのは **cloudflare-ddns(本番の DNS を書き換える)**・**netbird(本番に繋ぐ)**・
+**k8up(本番の restic リポジトリに書く)**・ACME・SMTP。
+イメージの取得(ghcr.io / docker.io など)は通るので同期は進む。
+
+- **`sudo -u qemudrill` は通らない**(sudoers が root 宛てだけ NOPASSWD)。
+  `sudo runuser -u qemudrill -- <script>` を使う
+- **起動は script にする。** `nohup … > log` のリダイレクトは**呼び出し側の権限**で
+  開かれるので、qemudrill が所有するディレクトリには書けない
+- `/var/tmp/drill` を qemudrill 所有にすると **`kubeconfig` を書き出せない。**
+  出力先は別の場所にする
+
+### 見つけた問題: **`apps/` の同期が丸ごと止まる**
+
+```
+gitops   OutOfSync  Missing
+  one or more synchronization tasks are not valid: failed to discover server
+  resources for group version secrets.infisical.com/v1alpha1: the server could
+  not find the requested resource (retried 5 times)
+```
+
+**`InfisicalSecret` の CRD がまだ無い。** ArgoCD は同期の前に dry-run するので、
+CRD が引けないと**その Application が丸ごと落ちる** ── そして
+**CRD を入れる当の Application(`apps/infisical-operator/`)が同じ同期の中にいる**ので
+抜けられない。
+
+**k8up の `Schedule` で 2026-09-07 に踏んだのと同じ形**なのに、
+`InfisicalSecret` には `SkipDryRunOnMissingResource=true` が付いていなかった。
+**復元リハーサルでは出ない** ── あちらは etcd から戻すので CRD が最初からある。
+**まっさらから組む Talos の移行でだけ出る。**
+
+直したら通った(同じドリルの中で確認):
+
+```
+  CRD infisical 系            0 → 7
+  Pod のある namespace        5 → 18
+  erpnext 15 / netbird 5 / cloudflare-ddns 4 / mattermost 2 / adguardhome 2 /
+  infisical-operator / infisical-push-bridge / k8up / portainer / 3proxy …
+```
+
+### **5 回失敗した Application は自動では戻らない**
+
+CRD が入っても、**先に 5 回失敗していた Application は
+`(retried 5 times)` のまま止まったまま**だった。`refresh=hard` の注釈では動かず、
+**明示的に sync を投げたら `Synced / Healthy` になった。**
+
+移行当日は、**gitops の同期が通ったあとに、止まっているアプリを 1 回ずつ叩く**。
+[migration-day.md](migration-day.md) の 7 に入れた。
+
 ## ブートドリル 4 回目(2026-09-08、**本物の値で bootstrap 層まで**)
 
 3 回目までは Cilium・local-path・metrics-server だけだった。4 回目は

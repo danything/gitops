@@ -88,7 +88,22 @@ ArgoCD が `apps/` と各リポジトリの `deploy/argocd.yaml` を同期する
 - [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy
 - [ ] **PVC が Bound になる**(`local-path` が要る。5 で確認済み)
 
+**`OutOfSync / Missing` のまま止まっているものは 1 回叩く。** `apps/infisical-operator/`
+が CRD を入れる前に同期しにいった Application は `(retried 5 times)` で諦めていて、
+**`refresh=hard` では戻らない**(2026-09-08 のドリル 5 回目)。
+
+```shell
+kubectl -n argocd patch application <名前> --type=merge \
+  -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'
+```
+
+**Infisical の DB が空のままだと、`InfisicalSecret` を使うアプリは Secret を
+もらえない。** 先に 8 で `infisical-postgresql.sql` を戻しておくほうが早い。
+
 ## 8. PV データを戻す
+
+**Infisical の DB は 7 より前に戻すと楽。** 空のままだと `InfisicalSecret` を使う
+アプリが Secret をもらえず、7 が「全部 Healthy」にならない。
 
 **順番が決まっている。** 手順は [apps/k8up/README.md](../apps/k8up/README.md)「戻し方」。
 
