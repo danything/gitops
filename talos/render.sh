@@ -286,7 +286,8 @@ for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-p
 	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
 	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
-	'name: apiserver-rbac' 'bootstrap-applier' \
+	'name: apiserver-rbac' 'bootstrap-applier' 'entra:admin' 'entra:viewer' \
+	login.microsoftonline.com \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'gha:danything/gitops:refs/heads/main' \
 	"ghcr.io/siderolabs/kubelet:$K8S"; do
