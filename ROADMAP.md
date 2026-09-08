@@ -5,7 +5,148 @@
 Talos のインストールメディアは [`docs/talos.md`](docs/talos.md)、
 復元リハーサルは [`docs/restore-drill.md`](docs/restore-drill.md)。
 
+## いまここ
+
+**Phase 2(k3s → Talos)の直前。** 当日やることは
+[docs/migration-day.md](docs/migration-day.md) を上から順に。
+下の「済んだこと」は記録で、読まなくても当日は進む。
+
 ## ロードマップ
+
+### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
+
+**当日は [docs/migration-day.md](docs/migration-day.md) を上から順にやる。**
+ここは「何を決めたか」で、あちらが「どの順にやるか」。
+
+OS 交換だけに集中する。Cilium と Gateway API は Phase 1.5 で落ち着いた構成のまま持っていく。
+Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubeProxyConfig` を
+`enabled: false`** にし([talos/patches/cni.yaml](talos/patches/cni.yaml))、Cilium は
+`k8sServicePort: 7445`(KubePrism)、`cgroup.autoMount.enabled: false` + `hostRoot: /sys/fs/cgroup` を足すだけ。
+**v1alpha1 の `cni.name: none` はもう書けない**(型付きドキュメントと衝突する)。
+
+- [ ] 作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から。cloudflared 経由の ssh は使えない。
+      **作業中は何も見せない(2026-09-08 に決めた)。** Cloudflare のワイルドカードを proxied にして
+      Worker か Pages でメンテナンス画面、という案はあったが、**止まっている数時間のために
+      新しい配線を 1 つ増やす**ことになる。落ちたままでよい ── 見に来るのは自分だけ。
+- [ ] 最終バックアップを取り、`restic check` を通す。
+- [x] **`talos/registries.yaml` を作った(2026-09-08)。** ghcr.io の PAT。
+      無いまま焼くと private なイメージが全部 `ImagePullBackOff` になる。
+      **`talos/secrets.yaml`(クラスタの CA 一式)も同日に作った** ── そちらも
+      未作成で、`render.sh` が動かなかった。
+- [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
+- [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
+      **設定は入っていて、VM で出ることも確かめた**(2026-09-08 のドリル。
+      `kube-dns` が `["10.43.0.10","fd43::a"]` / `ipFamilyPolicy: RequireDualStack`)。
+      当日やることは「振り直された ClusterIP で困るものが無いか見る」だけ。
+- [x] **k3s の組み込みアドオンのうち、Talos に無いものを用意した(2026-09-08)。**
+      `kubectl -n kube-system get addons.k3s.cattle.io` で洗い出した。
+      - **local-path-provisioner** … 入れないと **PVC が 1 つも bind しない**。
+        [talos/manifests/local-path.yaml](talos/manifests/local-path.yaml)。
+        `local-path-storage` の PSA ラベル(privileged)もここで付く。
+        **`local-path-retain` も同じ名前で出す** ── 21 本の PVC が参照していて、
+        バインド済みでは変更できないため。
+        データの置き場は **`/var/mnt/local-path`(専用パーティション)**
+        ([talos/patches/volumes.yaml](talos/patches/volumes.yaml))。
+        **ディスクの割り方は入れ直さないと変えられない**ので、当日の焼き込み前に確定させること
+      - **metrics-server** … 入れないと `kubectl top` と各 UI の使用量表示が消える
+        (HPA は 0 個なので停止はしない)。[talos/metrics-server-values.yaml](talos/metrics-server-values.yaml)。
+        **`--kubelet-insecure-tls` が要る**(Talos の kubelet は自己署名の証明書)
+      - coredns は Talos が自前で入れる(`KubeCoreDNSConfig`)。ccm と rolebindings は k3s 固有
+      - **k3s が置いている RuntimeClass 10 個**(crun / wasm* / nvidia など)は
+        **どの Pod も使っていない**ので、消えて構わない(2026-09-08 に確認)
+      - **クラスタスコープのものを一通り数え直した(2026-09-08)。** APIService は
+        metrics-server の 1 つだけ、PriorityClass は k8s 組み込みのみ、IngressClass は無し、
+        webhook は cert-manager だけ。**残っていたのは Gateway API の CRD で、それが下の項目**
+- [x] **Gateway API の CRD を自分で入れる(2026-09-08)。** いま入っているものは
+      **消したはずの Traefik の `traefik-crd` chart が置いていったもの**で
+      (`meta.helm.sh/release-name: traefik-crd`)、**Talos には当然無い。**
+      無いと `Gateway` も 12 本の `HTTPRoute` も `GRPCRoute` も適用できず、
+      **公開経路が丸ごと消える。** Cilium の chart は CRD を同梱しない。
+      [talos/render.sh](talos/render.sh) が `KubeExternalManifestConfig` で URL を渡す
+      (1.1 MB あるので inline にはしない)。版は [talos/versions.yaml](talos/versions.yaml)。
+- [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
+      **git に無いものが動いていないことは確認済み(2026-09-08)。** ArgoCD の
+      `tracking-id` も Helm のラベルも k3s の `objectset` も owner も持たない
+      オブジェクトを全 namespace で数えたところ、出てきた 11 個は**全部 `bootstrap/` の
+      ファイル**だった(CI が `kubectl apply` で当てるので追跡の注釈が付かないだけ)。
+      唯一の例外 `infisical/data-postgresql-0` は StatefulSet の
+      `volumeClaimTemplate` が作るもので、chart が作り直す。
+      **手で当てたまま git に入れ忘れたものは無い。**
+- [ ] PV データを restic から復元。**手順は [docs/migration-day.md](docs/migration-day.md) の 8**
+      (中身は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」。**順番と、`Succeeded` が
+      「戻った」の意味ではないこと**が要点。2026-09-08 に実際に流して確認済み)。
+- [x] **ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ(2026-09-08)。**
+      [talos/render.sh](talos/render.sh) が `talos/registries.yaml`(SOPS)を復号して足す。
+      **中身を書くのは残作業**(上の「`talos/registries.yaml` を作る」)。k3s の registries.yaml は役目を終える。
+- [x] **起動順序を組み直した(2026-09-08)。** k3s の `HelmChart` CRD は Talos に無いので、
+      **[talos/render.sh](talos/render.sh) が `helm template` して inlineManifest にする**
+      (inlineManifests 自体は Helm を実行できないので、描くのは手元)。
+      **本物の値で焼いたドリルで、`apply-config` 1 回で bootstrap 層が全部立ち上がることを
+      確認済み**([docs/talos.md](docs/talos.md)「ブートドリル 4 回目」)。
+      層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
+      **[talos/render.sh](talos/render.sh) が全部描く(2026-09-08)。値はどこにも写さない。**
+
+      | 何を | どこから描くか |
+      | --- | --- |
+      | cilium | `bootstrap/cilium/values.yaml` + [talos/cilium-values.yaml](talos/cilium-values.yaml)(KubePrism・cgroup) |
+      | cert-manager | `bootstrap/cert-manager/` + [talos/cert-manager-values.yaml](talos/cert-manager-values.yaml) |
+      | argocd / infisical | `bootstrap/<name>/helmchart.yaml`(SOPS)から chart・repo・version・values を取り出す |
+      | local-path / metrics-server | `talos/manifests/` と `talos/metrics-server-values.yaml` |
+      | `bootstrap-applier` の RBAC | `bootstrap/apiserver/rbac.yaml`。**CI は自分の権限を作れない** |
+      | SOPS の Secret 2 つ | `infisical/secrets.yaml`(**無いと infisical が起動しない**)と `cert-manager/cloudflare-secret.yaml` |
+      | CRD(gateway-api / argocd / cert-manager) | **URL で渡す。** 大きすぎて埋められない |
+
+      - **`upgrade-k8s` の前には必ず描き直す** ── 古い machine config のまま流すと
+        走っているものが巻き戻る。**inlineManifests は「作りっぱなし」ではない**
+        (VM で実測。docs/talos.md)
+      - **CI も同じ `render.sh` を使う**ので「CI は通るが当日は通らない」が起きない
+      - **ArgoCD を CI 側に置かない** ── 導入に CRD/ClusterRole/Secret が要り、
+        狭く保っている CI の RBAC の意味が消える
+      - **infisical は ArgoCD に移せない** ── chart が DB と Redis のパスワードを
+        Deployment の平文 env に焼き込むため([docs/decisions.md](docs/decisions.md)
+        「infisical だけは ArgoCD に移せない」)
+- [x] **ファイルの PVC バックアップを k8up 側に寄せた(2026-09-08)。** ホストの `k3s-backup` は
+      **Talos にはシェルが無い**ので持っていけない。**全 11 namespace で成功を確認済み** ──
+      SQLite 6 本は `backupcommand`、ファイルは PVC の注釈。`denpa-data` は DB とファイルが
+      同居しているので `k8up.io/backup-restic-args` で `denpa.db*` を除外している。
+      portainer(boltdb・シェル無し)だけは整合を保証できないファイルコピーで割り切った。
+      対象の切り分けは [apps/k8up/README.md](apps/k8up/README.md)。
+      **残るのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。**
+- [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を
+      参照していて、**バインド済み PVC の `storageClassName` は API が変更を拒否する**ので今は消せない。
+      PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
+      再構築でストレージを引き直すときに、各アプリのマニフェストから `local-path-retain` の指定ごと外す。
+- [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
+- [x] **git と実機の helm 値がずれていないことを確認した(2026-09-08)。**
+      cert-manager / argocd / infisical の 3 つとも一致。**machine config は git の値で
+      描く**ので、ずれていると移行した瞬間に別物が入る。
+      **CI では自動化できない**(helm の値はリリースの Secret の中で、`bootstrap-applier` に
+      Secret の権限は意図的に無い)。手順と注意は [bootstrap/README.md](bootstrap/README.md)。
+- [x] **argocd と infisical の chart の版を固定した(2026-09-08)。**
+      argo-cd 10.8.1 / infisical-standalone 1.10.0。それまでは `HelmChart` CR に
+      `version:` が無く、**そのときの最新**が入っていた。手順は
+      [bootstrap/README.md](bootstrap/README.md)「Helm で入れるもの」。
+- [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
+
+### Phase 3 — Talos 定常運用
+
+- [x] ~~k8up の失敗通知~~ **入れた(2026-09-08)。** [apps/k8up/notify.yaml](apps/k8up/notify.yaml) の
+      CronJob が日次で Mattermost に投げる。**見るのは restic の中身**で、k8up のオブジェクトは
+      掃除されるので証拠にならない。「失敗した」だけでなく「そもそも走らなかった」も拾う。
+      `restic check` も [schedules.yaml](apps/k8up/schedules.yaml) に 1 本置いた。
+      **PVC のファイルを寄せるほうも済んでいる**(上の Phase 2)。
+- [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
+- [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
+- [x] **`talosctl upgrade` / `upgrade-k8s` の手順を README に(2026-09-08)。**
+      [talos/README.md](talos/README.md)「上げ方 / 当て直し方」。
+      **`upgrade-k8s` は inlineManifests の reconcile も兼ねる**(2026-09-08 に VM で実測。
+      [docs/talos.md](docs/talos.md))ので、Talos 期の「bootstrap 層を当て直す」操作でもある。
+- [ ] **外部公開の一覧を出す画面。** 内部の通信は **Hubble** を入れて解決した
+  (2026-09-07、`hl.doany.io`。認証は `*.s.doany.io` と同じ oauth2-proxy 前段方式)。
+  残っているのは「何がインターネットに出ているか」の一枚で、いまは
+  `kubectl get httproute,grpcroute -A` が唯一の正確な索引。
+
+## 済んだこと(記録)
 
 ### Phase 0 — k3s のまま restic 化(完了、2026-09-06)
 
@@ -196,137 +337,7 @@ Traefik の撤去と前後してまとめて片付けたぶん。**どれも Tal
       原因は生 TS の作業領域(`denpa-recorded`)が 14 GB に育ったこと。除外した。
       保持世代が回れば実サイズも戻る。
 
-### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
-
-**当日は [docs/migration-day.md](docs/migration-day.md) を上から順にやる。**
-ここは「何を決めたか」で、あちらが「どの順にやるか」。
-
-OS 交換だけに集中する。Cilium と Gateway API は Phase 1.5 で落ち着いた構成のまま持っていく。
-Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubeProxyConfig` を
-`enabled: false`** にし([talos/patches/cni.yaml](talos/patches/cni.yaml))、Cilium は
-`k8sServicePort: 7445`(KubePrism)、`cgroup.autoMount.enabled: false` + `hostRoot: /sys/fs/cgroup` を足すだけ。
-**v1alpha1 の `cni.name: none` はもう書けない**(型付きドキュメントと衝突する)。
-
-- [ ] 作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から。cloudflared 経由の ssh は使えない。
-      **作業中は何も見せない(2026-09-08 に決めた)。** Cloudflare のワイルドカードを proxied にして
-      Worker か Pages でメンテナンス画面、という案はあったが、**止まっている数時間のために
-      新しい配線を 1 つ増やす**ことになる。落ちたままでよい ── 見に来るのは自分だけ。
-- [ ] 最終バックアップを取り、`restic check` を通す。
-- [x] **`talos/registries.yaml` を作った(2026-09-08)。** ghcr.io の PAT。
-      無いまま焼くと private なイメージが全部 `ImagePullBackOff` になる。
-      **`talos/secrets.yaml`(クラスタの CA 一式)も同日に作った** ── そちらも
-      未作成で、`render.sh` が動かなかった。
-- [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
-- [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
-      **設定は入っていて、VM で出ることも確かめた**(2026-09-08 のドリル。
-      `kube-dns` が `["10.43.0.10","fd43::a"]` / `ipFamilyPolicy: RequireDualStack`)。
-      当日やることは「振り直された ClusterIP で困るものが無いか見る」だけ。
-- [x] **k3s の組み込みアドオンのうち、Talos に無いものを用意した(2026-09-08)。**
-      `kubectl -n kube-system get addons.k3s.cattle.io` で洗い出した。
-      - **local-path-provisioner** … 入れないと **PVC が 1 つも bind しない**。
-        [talos/manifests/local-path.yaml](talos/manifests/local-path.yaml)。
-        `local-path-storage` の PSA ラベル(privileged)もここで付く。
-        **`local-path-retain` も同じ名前で出す** ── 21 本の PVC が参照していて、
-        バインド済みでは変更できないため。
-        データの置き場は **`/var/mnt/local-path`(専用パーティション)**
-        ([talos/patches/volumes.yaml](talos/patches/volumes.yaml))。
-        **ディスクの割り方は入れ直さないと変えられない**ので、当日の焼き込み前に確定させること
-      - **metrics-server** … 入れないと `kubectl top` と各 UI の使用量表示が消える
-        (HPA は 0 個なので停止はしない)。[talos/metrics-server-values.yaml](talos/metrics-server-values.yaml)。
-        **`--kubelet-insecure-tls` が要る**(Talos の kubelet は自己署名の証明書)
-      - coredns は Talos が自前で入れる(`KubeCoreDNSConfig`)。ccm と rolebindings は k3s 固有
-      - **k3s が置いている RuntimeClass 10 個**(crun / wasm* / nvidia など)は
-        **どの Pod も使っていない**ので、消えて構わない(2026-09-08 に確認)
-      - **クラスタスコープのものを一通り数え直した(2026-09-08)。** APIService は
-        metrics-server の 1 つだけ、PriorityClass は k8s 組み込みのみ、IngressClass は無し、
-        webhook は cert-manager だけ。**残っていたのは Gateway API の CRD で、それが下の項目**
-- [x] **Gateway API の CRD を自分で入れる(2026-09-08)。** いま入っているものは
-      **消したはずの Traefik の `traefik-crd` chart が置いていったもの**で
-      (`meta.helm.sh/release-name: traefik-crd`)、**Talos には当然無い。**
-      無いと `Gateway` も 12 本の `HTTPRoute` も `GRPCRoute` も適用できず、
-      **公開経路が丸ごと消える。** Cilium の chart は CRD を同梱しない。
-      [talos/render.sh](talos/render.sh) が `KubeExternalManifestConfig` で URL を渡す
-      (1.1 MB あるので inline にはしない)。版は [talos/versions.yaml](talos/versions.yaml)。
-- [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
-      **git に無いものが動いていないことは確認済み(2026-09-08)。** ArgoCD の
-      `tracking-id` も Helm のラベルも k3s の `objectset` も owner も持たない
-      オブジェクトを全 namespace で数えたところ、出てきた 11 個は**全部 `bootstrap/` の
-      ファイル**だった(CI が `kubectl apply` で当てるので追跡の注釈が付かないだけ)。
-      唯一の例外 `infisical/data-postgresql-0` は StatefulSet の
-      `volumeClaimTemplate` が作るもので、chart が作り直す。
-      **手で当てたまま git に入れ忘れたものは無い。**
-- [ ] PV データを restic から復元。**手順は [docs/migration-day.md](docs/migration-day.md) の 8**
-      (中身は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」。**順番と、`Succeeded` が
-      「戻った」の意味ではないこと**が要点。2026-09-08 に実際に流して確認済み)。
-- [x] **ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ(2026-09-08)。**
-      [talos/render.sh](talos/render.sh) が `talos/registries.yaml`(SOPS)を復号して足す。
-      **中身を書くのは残作業**(上の「`talos/registries.yaml` を作る」)。k3s の registries.yaml は役目を終える。
-- [x] **起動順序を組み直した(2026-09-08)。** k3s の `HelmChart` CRD は Talos に無いので、
-      **[talos/render.sh](talos/render.sh) が `helm template` して inlineManifest にする**
-      (inlineManifests 自体は Helm を実行できないので、描くのは手元)。
-      **本物の値で焼いたドリルで、`apply-config` 1 回で bootstrap 層が全部立ち上がることを
-      確認済み**([docs/talos.md](docs/talos.md)「ブートドリル 4 回目」)。
-      層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
-      **[talos/render.sh](talos/render.sh) が全部描く(2026-09-08)。値はどこにも写さない。**
-
-      | 何を | どこから描くか |
-      | --- | --- |
-      | cilium | `bootstrap/cilium/values.yaml` + [talos/cilium-values.yaml](talos/cilium-values.yaml)(KubePrism・cgroup) |
-      | cert-manager | `bootstrap/cert-manager/` + [talos/cert-manager-values.yaml](talos/cert-manager-values.yaml) |
-      | argocd / infisical | `bootstrap/<name>/helmchart.yaml`(SOPS)から chart・repo・version・values を取り出す |
-      | local-path / metrics-server | `talos/manifests/` と `talos/metrics-server-values.yaml` |
-      | `bootstrap-applier` の RBAC | `bootstrap/apiserver/rbac.yaml`。**CI は自分の権限を作れない** |
-      | SOPS の Secret 2 つ | `infisical/secrets.yaml`(**無いと infisical が起動しない**)と `cert-manager/cloudflare-secret.yaml` |
-      | CRD(gateway-api / argocd / cert-manager) | **URL で渡す。** 大きすぎて埋められない |
-
-      - **`upgrade-k8s` の前には必ず描き直す** ── 古い machine config のまま流すと
-        走っているものが巻き戻る。**inlineManifests は「作りっぱなし」ではない**
-        (VM で実測。docs/talos.md)
-      - **CI も同じ `render.sh` を使う**ので「CI は通るが当日は通らない」が起きない
-      - **ArgoCD を CI 側に置かない** ── 導入に CRD/ClusterRole/Secret が要り、
-        狭く保っている CI の RBAC の意味が消える
-      - **infisical は ArgoCD に移せない** ── chart が DB と Redis のパスワードを
-        Deployment の平文 env に焼き込むため([docs/decisions.md](docs/decisions.md)
-        「infisical だけは ArgoCD に移せない」)
-- [x] **ファイルの PVC バックアップを k8up 側に寄せた(2026-09-08)。** ホストの `k3s-backup` は
-      **Talos にはシェルが無い**ので持っていけない。**全 11 namespace で成功を確認済み** ──
-      SQLite 6 本は `backupcommand`、ファイルは PVC の注釈。`denpa-data` は DB とファイルが
-      同居しているので `k8up.io/backup-restic-args` で `denpa.db*` を除外している。
-      portainer(boltdb・シェル無し)だけは整合を保証できないファイルコピーで割り切った。
-      対象の切り分けは [apps/k8up/README.md](apps/k8up/README.md)。
-      **残るのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。**
-- [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を
-      参照していて、**バインド済み PVC の `storageClassName` は API が変更を拒否する**ので今は消せない。
-      PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
-      再構築でストレージを引き直すときに、各アプリのマニフェストから `local-path-retain` の指定ごと外す。
-- [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
-- [x] **git と実機の helm 値がずれていないことを確認した(2026-09-08)。**
-      cert-manager / argocd / infisical の 3 つとも一致。**machine config は git の値で
-      描く**ので、ずれていると移行した瞬間に別物が入る。
-      **CI では自動化できない**(helm の値はリリースの Secret の中で、`bootstrap-applier` に
-      Secret の権限は意図的に無い)。手順と注意は [bootstrap/README.md](bootstrap/README.md)。
-- [x] **argocd と infisical の chart の版を固定した(2026-09-08)。**
-      argo-cd 10.8.1 / infisical-standalone 1.10.0。それまでは `HelmChart` CR に
-      `version:` が無く、**そのときの最新**が入っていた。手順は
-      [bootstrap/README.md](bootstrap/README.md)「Helm で入れるもの」。
-- [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
-
-### Phase 3 — Talos 定常運用
-
-- [x] ~~k8up の失敗通知~~ **入れた(2026-09-08)。** [apps/k8up/notify.yaml](apps/k8up/notify.yaml) の
-      CronJob が日次で Mattermost に投げる。**見るのは restic の中身**で、k8up のオブジェクトは
-      掃除されるので証拠にならない。「失敗した」だけでなく「そもそも走らなかった」も拾う。
-      `restic check` も [schedules.yaml](apps/k8up/schedules.yaml) に 1 本置いた。
-      **PVC のファイルを寄せるほうも済んでいる**(上の Phase 2)。
-- [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
-- [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
-- [x] **`talosctl upgrade` / `upgrade-k8s` の手順を README に(2026-09-08)。**
-      [talos/README.md](talos/README.md)「上げ方 / 当て直し方」。
-      **`upgrade-k8s` は inlineManifests の reconcile も兼ねる**(2026-09-08 に VM で実測。
-      [docs/talos.md](docs/talos.md))ので、Talos 期の「bootstrap 層を当て直す」操作でもある。
-
-
-## 積み残し
+### 復元リハーサルで出た宿題(全部片付いた)
 
 - ~~**復元リハーサルを Cilium 構成でやり直す。**~~ **2026-09-07 に実施、3 問とも Yes**
   ([docs/restore-drill.md](docs/restore-drill.md))。Cilium は k3s 起動の 40 秒後に自分で CNI 設定を書いて上がり、
@@ -342,17 +353,12 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
   バックアップの資格情報そのものなので公開リポジトリには置けない。値は復元した `/etc/k3s-backup/env` に
   あるので `restore.sh` が作り直すようにした。リハーサルモードでは作らない(VM の k8up が本番の
   リポジトリに書きに行くため)。**Talos ではホストに env ファイルが無くなるので Infisical に移すこと。**
-  受け皿は [apps/k8up/k8up-secrets.yaml](apps/k8up/k8up-secrets.yaml)(2026-09-08)。
-  **Infisical の `/k8up/k8up-global` に 6 つのキーを入れるまで当てない** ── operator は
-  Infisical にあるものだけを書くので、足りないとバックアップが全部落ちる。
+  **Talos 用の移行も済んだ(2026-09-08)** ── Infisical の `/k8up/k8up-global` に
+  6 キーを入れて [apps/k8up/k8up-secrets.yaml](apps/k8up/k8up-secrets.yaml) を当てた。
 
-## 未決事項
+### 決めて片付いたこと
 
 - ~~**`local-path-retain` をやめて「git で消したものは消える」に寄せる。**~~ **実施した(2026-09-07)。**
   `Prune=false,Delete=false` は全 PVC から外し、既存 PV の reclaim policy も `Delete` にパッチ済み。
   **残るのは `storageClassName` の指定を消すことだけ**で、バインド済み PVC では API が拒否するため
   Talos の再構築時(Phase 2)。誤削除の後ろ盾は日次の restic 1 本になった。
-- **外部公開の一覧を出す画面(未着手)。** 内部の通信は **Hubble** を入れて解決した
-  (2026-09-07、`hl.doany.io`。認証は `*.s.doany.io` と同じ oauth2-proxy 前段方式)。
-  残っているのは「何がインターネットに出ているか」の一枚で、いまは
-  `kubectl get httproute,grpcroute -A` が唯一の正確な索引。
