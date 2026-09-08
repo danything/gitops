@@ -71,10 +71,11 @@ K8S=$(ver kubernetes version)
 METRICS=$(ver metricsServer version)
 GWAPI=$(ver gatewayAPI version)
 CILIUM=$(sed -n 's/^version: \(.*\)$/\1/p' bootstrap/cilium/version.yaml)
-for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$CILIUM" "$GWAPI"; do
+CERTMGR=$(sed -n 's/^version: \(.*\)$/\1/p' bootstrap/cert-manager/version.yaml)
+for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$CILIUM" "$GWAPI" "$CERTMGR"; do
 	[ -n "$v" ] || { echo "ERROR: versions.yaml から版を読めなかった" >&2; exit 1; }
 done
-echo "talos=$TALOS k8s=$K8S cilium=$CILIUM metrics-server=$METRICS gateway-api=$GWAPI"
+echo "talos=$TALOS k8s=$K8S cilium=$CILIUM metrics-server=$METRICS gateway-api=$GWAPI cert-manager=$CERTMGR"
 
 # --- inlineManifest を描く -------------------------------------------------
 # `helm template` の出力をそのまま KubeInlineManifestConfig に包む。
@@ -195,7 +196,7 @@ if [ -f "$WORK/inline-argocd.yaml" ]; then
 	[ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
 	echo "  argocd の CRD: $ARGOCD_APP"
 	for c in application applicationset appproject; do
-		cat >> "$WORK/argocd-crds.yaml" <<PATCH
+		cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig
 name: argocd-$c-crd
@@ -204,6 +205,58 @@ url: https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_APP}/manifests/
 PATCH
 	done
 fi
+
+# **cert-manager も bootstrap/ にいる。** k3s 期は `helm upgrade --install` で
+# 入れていた(bootstrap/cert-manager/values.yaml の冒頭)。**Talos ではこの層が
+# machine config に載る**ので、ここで描く。**無いと証明書が 1 枚も発行されず、
+# Gateway の HTTPS リスナーに載せる Secret ができない。**
+helm repo add jetstack https://charts.jetstack.io >/dev/null 2>&1 || true
+helm repo update jetstack >/dev/null 2>&1 || true
+{
+	cat bootstrap/cert-manager/namespace.yaml
+	echo ---
+	helm template cert-manager jetstack/cert-manager --version "$CERTMGR" -n cert-manager \
+		-f bootstrap/cert-manager/values.yaml -f talos/cert-manager-values.yaml \
+		--kube-version "$K8S"
+} | inline cert-manager > "$WORK/inline-cert-manager.yaml"
+
+# **SOPS 済みの Secret も machine config に入れる。**
+#
+# - `infisical/secrets.yaml` は **infisical が起動に必要**(`kubeSecretRef`)。
+#   GitHub Actions で当てるのは**クラスタが立ってから**なので間に合わない
+# - `cert-manager/cloudflare-secret.yaml` は DNS-01 の資格情報。ClusterIssuer が
+#   これを参照する
+#
+# **信頼水準は変わらない** ── machine config はもともと秘密の塊で、生成物は
+# git に入らない。CI に age の鍵を渡さない方針もそのまま(ダミーを渡して経路だけ通す)。
+# **`sops -d … | inline` と繋がないこと。** `#!/bin/sh` には `pipefail` が無いので、
+# **復号に失敗しても `set -e` が拾わず、中身が空の KubeInlineManifestConfig が
+# 黙って出る。** そして下の needle は `inline` が付ける `name:` しか見ないので通ってしまう
+# (chart の方は `cilium-operator` のような中身を見ているので気づける)。
+# いったんファイルに落とす。
+inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書き
+	if [ -n "$3" ]; then
+		inline "$1" < "$3" > "$WORK/inline-$1.yaml"
+		return 0
+	fi
+	if [ ! -f "$2" ]; then
+		echo "WARNING: $2 が無いので $1 を描かない" >&2
+		return 0
+	fi
+	sops -d "$2" > "$WORK/plain-$1.yaml"
+	inline "$1" < "$WORK/plain-$1.yaml" > "$WORK/inline-$1.yaml"
+}
+inline_secret infisical-secrets bootstrap/infisical/secrets.yaml "${INFISICAL_SECRET:-}"
+inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.yaml "${CLOUDFLARE_SECRET:-}"
+
+# **cert-manager の CRD も URL で渡す。** 6 つで 1.30 MB、描き出しの 97%。
+cat >> "$WORK/external-crds.yaml" <<PATCH
+apiVersion: v1alpha1
+kind: KubeExternalManifestConfig
+name: cert-manager-crds
+url: https://github.com/cert-manager/cert-manager/releases/download/${CERTMGR}/cert-manager.crds.yaml
+---
+PATCH
 
 # **Gateway API の CRD。** これが無いと Gateway も HTTPRoute も適用できず、公開経路が
 # 丸ごと消える(k3s のいまは、消したはずの Traefik の chart が置いていったものが残って
@@ -241,7 +294,7 @@ set -- --with-secrets "$SECRETS" \
 for f in talos/patches/*.yaml; do set -- "$@" --config-patch "@$f"; done
 if [ -n "$REGISTRIES" ]; then set -- "$@" --config-patch "@$REGISTRIES"; fi
 set -- "$@" --config-patch "@$WORK/gateway-api.yaml"
-if [ -f "$WORK/argocd-crds.yaml" ]; then set -- "$@" --config-patch "@$WORK/argocd-crds.yaml"; fi
+if [ -f "$WORK/external-crds.yaml" ]; then set -- "$@" --config-patch "@$WORK/external-crds.yaml"; fi
 for f in "$WORK"/inline-*.yaml; do set -- "$@" --config-patch "@$f"; done
 
 rm -rf "$OUT"
@@ -281,5 +334,21 @@ if [ -f "$WORK/inline-infisical.yaml" ]; then
 		'kind: Namespace\nmetadata:\n  name: infisical'; do
 		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 	done
+fi
+for n in 'name: cert-manager' 'cert-manager-webhook' 'name: cert-manager-crds' \
+	"cert-manager/releases/download/$CERTMGR/cert-manager.crds.yaml" \
+	'kind: Namespace\nmetadata:\n  name: cert-manager'; do
+	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
+done
+# **CRD は URL 側。** 入ると 1.30 MB 増える(talos/cert-manager-values.yaml)。
+! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-cert-manager.yaml" \
+	|| { echo "ERROR: cert-manager の CRD が inline に入っている" >&2; exit 1; }
+if [ -f "$WORK/inline-infisical-secrets.yaml" ]; then
+	grep -qF -- 'name: infisical-secrets' "$OUT/controlplane.yaml" \
+		|| { echo "ERROR: 'name: infisical-secrets' が生成物に無い" >&2; exit 1; }
+fi
+if [ -f "$WORK/inline-cloudflare-secret.yaml" ]; then
+	grep -qF -- 'name: cloudflare-secret' "$OUT/controlplane.yaml" \
+		|| { echo "ERROR: 'name: cloudflare-secret' が生成物に無い" >&2; exit 1; }
 fi
 talosctl validate --config "$OUT/controlplane.yaml" --mode metal

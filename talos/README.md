@@ -85,12 +85,12 @@ machine:
 | --- | --- | --- |
 | `versions.yaml` の `talos:`(または schematic) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>` | **再起動** |
 | `versions.yaml` の `kubernetes:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
-| `patches/` / `bootstrap/cilium/values.yaml` / `manifests/` / `bootstrap/apiserver/rbac.yaml` / `bootstrap/{argocd,infisical}/helmchart.yaml` | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
+| `patches/` / `manifests/` / `bootstrap/` のほぼ全部(cilium・cert-manager・apiserver/rbac.yaml・{argocd,infisical}/helmchart.yaml・SOPS の Secret 2 つ) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
 
 ### inlineManifests を直したとき
 
-**Cilium・local-path・metrics-server・bootstrap-applier の RBAC・ArgoCD・infisical は
-machine config の中にいる。**
+**Cilium・local-path・metrics-server・bootstrap-applier の RBAC・ArgoCD・infisical・
+cert-manager と、SOPS 済みの Secret 2 つは machine config の中にいる。**
 だから**マニフェストを直しただけでは何も起きない。** 描き直して当てる:
 
 ```shell

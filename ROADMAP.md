@@ -282,8 +282,16 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
             **`version:` が入るまでは警告して飛ばす**(下の項目)。
             **CI 側には置かない** ── 導入に CRD/ClusterRole/Secret が要り、
             狭く保っている CI の RBAC の意味が消えるため
-      - [ ] SOPS 済みの Secret 4 つを inlineManifests に。**machine config はもともと SOPS 済み**なので
+      - [x] **SOPS 済みの Secret を inlineManifests に(2026-09-08)。**
+            `infisical/secrets.yaml`(**infisical はこれが無いと起動しない**)と
+            `cert-manager/cloudflare-secret.yaml`。残る 2 つ
+            (`argocd/helmchart.yaml` / `infisical/helmchart.yaml`)は Secret ではなく
+            chart なので、上の項目で描いている。**machine config はもともと SOPS 済み**なので
             信頼水準は変わらず、CI に age 鍵を渡さない方針も保てる
+      - [x] **cert-manager も inlineManifests に(2026-09-08)。** k3s 期は
+            `helm upgrade --install` で入れていた。**無いと証明書が 1 枚も発行されず、
+            Gateway の HTTPS リスナーに載せる Secret ができない。**
+            CRD 6 つ(1.30 MB、描き出しの 97%)は URL で渡す
       - [x] **`bootstrap/apiserver/rbac.yaml` も inlineManifests に(2026-09-08)。**
             [talos/render.sh](talos/render.sh) が `bootstrap/apiserver/rbac.yaml` から描く
             (写さない)。CI が自分の権限を作れない ── bootstrap-apply.yml は

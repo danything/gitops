@@ -37,11 +37,13 @@ jobs:
           SCH=$(yq -r '.talos.schematic' talos/versions.yaml)
           K8S=$(yq -r '.kubernetes.version' talos/versions.yaml)
           GW=$(yq -r '.gatewayAPI.version' talos/versions.yaml)
+          CM=$(sed -n 's/^version: //p' bootstrap/cert-manager/version.yaml)
           echo "  talos=$VER schematic=$SCH k8s=$K8S gateway-api=$GW"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "schematic=$SCH" >> "$GITHUB_OUTPUT"
           echo "k8s=$K8S" >> "$GITHUB_OUTPUT"
           echo "gw=$GW" >> "$GITHUB_OUTPUT"
+          echo "certmgr=$CM" >> "$GITHUB_OUTPUT"
 
       - name: talosctl を入れる
         run: |
@@ -105,8 +107,30 @@ jobs:
                   infisical:
                       fullnameOverride: infisical
           PATCH
+          # **SOPS 済みの Secret もダミーで。** 中身は見ないので、名前と形だけ合わせる。
+          cat > /tmp/infisical-secret.yaml <<'PATCH'
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: infisical-secrets
+            namespace: infisical
+          type: Opaque
+          stringData:
+            ENCRYPTION_KEY: ci-dummy
+          PATCH
+          cat > /tmp/cloudflare-secret.yaml <<'PATCH'
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: cloudflare-secret
+            namespace: cert-manager
+          type: Opaque
+          stringData:
+            CF_DNS_API_TOKEN: ci-dummy
+          PATCH
           SECRETS=/tmp/secrets.yaml REGISTRIES=/tmp/registries.yaml \
             ARGOCD_CHART=/tmp/argocd-chart.yaml INFISICAL_CHART=/tmp/infisical-chart.yaml \
+            INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
             ./talos/render.sh /tmp/out
 
       - name: 生成物に想定の設定が入っているか
@@ -151,6 +175,13 @@ jobs:
             'infisical-standalone' \
             'kind: Namespace\nmetadata:\n  name: argocd' \
             'kind: Namespace\nmetadata:\n  name: infisical' \
+            'name: cert-manager' \
+            'cert-manager-webhook' \
+            'name: cert-manager-crds' \
+            "cert-manager/releases/download/${{ steps.v.outputs.certmgr }}/cert-manager.crds.yaml" \
+            'kind: Namespace\nmetadata:\n  name: cert-manager' \
+            'name: infisical-secrets' \
+            'name: cloudflare-secret' \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
