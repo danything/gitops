@@ -235,9 +235,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
             使うので「CI は通るが当日は通らない」が起きない。**`upgrade-k8s` の前には必ず描き直す** ── 古いまま流すと
             走っている Cilium が巻き戻る(docs/decisions.md「machine config と Cilium の chart」)。
             **inlineManifests は「作りっぱなし」ではない**(2026-09-08 に VM で実測) ──
-            `talosctl upgrade-k8s` を通せば**更新も削除もされる**ので、machine config だけで
-            回す道も実在する。いまは値を追える `bootstrap/cilium/values.yaml` + `helm upgrade` を
-            採っている(docs/talos.md「inlineManifests は『更新できない』ではない」)
+            `talosctl upgrade-k8s` を通せば**更新も削除もされる**。だから Talos では
+            `helm upgrade` を使わず、`render.sh` → `upgrade-k8s` が更新経路になる
+            (docs/talos.md「inlineManifests は『更新できない』ではない」)
       - [ ] ArgoCD も同じ形で inlineManifests に。**CI 側には置かない** ── 導入に CRD/ClusterRole/Secret が
             要り、狭く保っている CI の RBAC の意味が消えるため
       - [ ] SOPS 済みの Secret 4 つを inlineManifests に。**machine config はもともと SOPS 済み**なので
