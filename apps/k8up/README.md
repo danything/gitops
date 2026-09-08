@@ -46,13 +46,35 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 **ArgoCD の通知は使えない。** Mattermost に繋がってはいるが(`bootstrap/argocd/helmchart.yaml`)、
 **あれは Application しか見ない**ので k8up の `Backup` CR の失敗は拾えない。
 
-見ているのは 2 つ。
+**見るのは restic の中身**であって、k8up のオブジェクトではない。**オブジェクトは掃除される** ──
+`successfulJobsHistoryLimit` で消えるし、**スケジュールを書き換えただけで消えることも確認した**
+(2026-09-08)。「`Backup` が無い」は「取れていない」の証拠にならない。
 
-1. **失敗したか** ── `Backup` / `Prune` / `Check` の `Completed` 条件の `reason` が `Succeeded` 以外
-2. **そもそも走ったか** ── `backup` を持つ `Schedule` の namespace すべてに、**25 時間以内の成功**があるか。
-   ジョブが作られなければ失敗オブジェクトも残らないので、条件だけ見ていると**無音の停止を見逃す**
+なので init コンテナで `restic snapshots --json` を取ってきて、それを数える。
+k8up のイメージに restic が入っている(`/usr/local/bin/restic`)ので、余計なものを持ち込まなくてよい。
+
+**何が取れているべきかは履歴から学ぶ。** 過去 8 日に出てきた `(host, path)` の組を「あるべきもの」と
+みなし、それぞれの最新が 25 時間以内かを見る。**一覧を人が書き写す必要がなく**、PVC や namespace が
+増えても勝手に追いつく。ホストのスクリプト(`host=main`)のぶんも同じ物差しで見られる。
+
+**やめた経路を失敗と呼ばない。** 取る対象を広げると古い経路が履歴に残る
+(`/etc/rancher/k3s/config.yaml` を個別に取るのをやめて `/etc/rancher/k3s` ごと取るようにした、など)。
+**同じホストでより上の階層が新しく取れているなら、その中身も取れている**ので黙って落とす。
+
+あわせて `Backup` / `Prune` / `Check` / `Restore` の `Completed` 条件も見て、
+残っていれば失敗の理由まで書く。
 
 成功時も 1 行投げる。**通知の仕組み自体が生きていることの確認**になる(ホストのスクリプトと同じ考え方)。
+
+本番のリポジトリで実際に流して確かめた(2026-09-08):
+
+```
+追跡 32 系統 / 上位の階層が新しいので無視 2 件
+   無視  29.1h  main/etc/rancher/k3s/config.yaml
+   無視  29.1h  main/etc/rancher/k3s/registries.yaml
+
+[k8up] OK ✅ (32 系統すべて 25 時間以内)
+```
 
 ## 何をどう取っているか
 

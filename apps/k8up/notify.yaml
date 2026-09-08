@@ -5,8 +5,10 @@
 # ArgoCD の通知は Mattermost に繋がっているが、**あれは Application しか見ない**ので
 # k8up の Backup CR の失敗は拾えない。
 #
-# 見るのは「失敗した」だけではない。**そもそも走らなかった**ほうが怖いので、
-# `Schedule` を数えて「backup を持つ namespace すべてに 25 時間以内の成功があるか」を見る。
+# **見るのは restic の中身。** k8up の Backup オブジェクトは掃除されるので、
+# 「オブジェクトが無い」は「取れていない」の証拠にならない ── スケジュールを書き換えた
+# だけで消えることを実際に確認した(2026-09-08)。唯一の証拠はスナップショットなので、
+# init コンテナで `restic snapshots` を取ってきて、そちらを数える。
 #
 # 秘密は `k8up-global` に相乗りさせている(apps/k8up/README.md の作り方に
 # `mattermostWebhook` が入っている)。**新しい配線は増やさない。**
@@ -57,6 +59,33 @@ spec:
         spec:
           restartPolicy: Never
           serviceAccountName: k8up-notify
+          initContainers:
+            # **リポジトリの中身を取ってくる。** k8up のイメージには restic が入っている
+            # (`/usr/local/bin/restic`)ので、これのためだけに別のものを持ち込まなくてよい。
+            # 読むだけ。`snapshots` はリポジトリを書き換えない。
+            - name: snapshots
+              image: ghcr.io/k8up-io/k8up:v2.16.0
+              command:
+                - sh
+                - -ec
+                - |
+                  export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
+                  restic snapshots --json > /work/snapshots.json
+                  wc -c /work/snapshots.json
+              env:
+                - name: ENDPOINT
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
+                - name: BUCKET
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: bucket}}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: accessKeyId}}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
+                - name: RESTIC_PASSWORD
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+              volumeMounts:
+                - name: work
+                  mountPath: /work
           containers:
             - name: notify
               # netbird のサイドカーと同じイメージ。kubectl も jq も要らない。
@@ -80,10 +109,14 @@ spec:
               volumeMounts:
                 - name: script
                   mountPath: /script
+                - name: work
+                  mountPath: /work
           volumes:
             - name: script
               configMap:
                 name: k8up-notify
+            - name: work
+              emptyDir: {}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -94,63 +127,79 @@ data:
   notify.js: |
     // k8up の状態を見て Mattermost に 1 行投げる。CronJob から日次で走る。
     //
-    // **「失敗した」だけでなく「そもそも走らなかった」を見る。** 前者は Backup の
-    // Completed 条件、後者は「backup を持つ Schedule の namespace に 25 時間以内の
-    // 成功があるか」で判定する。ジョブが作られなければ失敗オブジェクトも残らないので、
-    // 条件だけ見ていると無音の停止を見逃す。
-    const API = "https://kubernetes.default.svc";
-    const TOKEN = await Bun.file("/var/run/secrets/kubernetes.io/serviceaccount/token").text();
+    // **見るのは restic の中身。** k8up の Backup オブジェクトは
+    // successfulJobsHistoryLimit で掃除されるうえ、スケジュールを書き換えると消える
+    // (2026-09-08 に実際に起きた)。**オブジェクトの有無は「取れたか」の証拠にならない。**
+    // 唯一の証拠はリポジトリに増えたスナップショットなので、そちらを数える。
+    //
+    // **何が取れているべきかは履歴から学ぶ。** 過去 8 日に出てきた (host, path) の組を
+    // 「あるべきもの」とみなし、それぞれの最新が 25 時間以内かを見る。一覧を人が
+    // 書き写す必要がなく、PVC や namespace が増えても勝手に追いつく。
+    const WINDOW_H = 25;
+    const LEARN_H = 24 * 8;
 
+    const snapshots = await Bun.file("/work/snapshots.json").json();
+    const now = Date.now();
+    const hours = (t) => (now - Date.parse(t)) / 3600e3;
+
+    // (host, path) ごとに最新を拾う。ホストのスクリプト(k3s-host)のぶんも一緒に見る。
+    const latest = new Map();
+    for (const s of snapshots) {
+      for (const path of s.paths ?? []) {
+        const h = hours(s.time);
+        if (h > LEARN_H) continue;
+        const key = `${s.hostname}:${path}`;
+        if (!latest.has(key) || h < latest.get(key).h) {
+          latest.set(key, { h, host: s.hostname, path, key: `${s.hostname}${path}` });
+        }
+      }
+    }
+
+    // **やめた経路を失敗と呼ばない。** 取る対象を広げると古い経路が履歴に残る
+    // (`/etc/rancher/k3s/config.yaml` を個別に取るのをやめて `/etc/rancher/k3s` ごと
+    // 取るようにした、など)。**同じホストで、より上の階層が新しく取れているなら
+    // その中身も取れている**ので、そちらは黙って落とす。
+    const fresh = [...latest.values()].filter((x) => x.h <= WINDOW_H);
+    const superseded = (x) =>
+      fresh.some((f) => f.host === x.host && x.path.startsWith(f.path.replace(/\/$/, "") + "/"));
+
+    const stale = [...latest.values()]
+      .filter((x) => x.h > WINDOW_H && !superseded(x))
+      .sort((a, b) => b.h - a.h);
+
+    // k8up 側の失敗も拾う。オブジェクトが残っていれば理由まで書ける。
+    const TOKEN = await Bun.file("/var/run/secrets/kubernetes.io/serviceaccount/token").text();
     const get = async (kind) => {
-      const r = await fetch(`${API}/apis/k8up.io/v1/${kind}`, {
+      const r = await fetch(`https://kubernetes.default.svc/apis/k8up.io/v1/${kind}`, {
         headers: { Authorization: `Bearer ${TOKEN}` },
       });
       if (!r.ok) throw new Error(`${kind}: ${r.status} ${await r.text()}`);
       return (await r.json()).items ?? [];
     };
-
-    // Completed 条件の reason が Succeeded 以外なら失敗扱い。
-    // 条件が無いもの(まだ走っている)は判定しない。
-    const verdict = (o) => {
-      const c = (o.status?.conditions ?? []).find((x) => x.type === "Completed");
-      if (!c) return null;
-      return { ok: c.reason === "Succeeded", message: c.message ?? "" };
-    };
-    const ns = (o) => o.metadata.namespace;
-    const age = (o) => (Date.now() - Date.parse(o.metadata.creationTimestamp)) / 3600e3;
-
-    const [schedules, backups, prunes, checks] = await Promise.all(
-      ["schedules", "backups", "prunes", "checks"].map(get),
-    );
-
-    const problems = [];
-
-    // 1) backup を持つ namespace に、25 時間以内の成功があるか
-    const expected = schedules.filter((s) => s.spec?.backup).map(ns);
-    for (const n of expected) {
-      const recent = backups
-        .filter((b) => ns(b) === n)
-        .sort((a, b) => Date.parse(b.metadata.creationTimestamp) - Date.parse(a.metadata.creationTimestamp))[0];
-      if (!recent) {
-        problems.push(`${n}: バックアップのオブジェクトが無い`);
-        continue;
-      }
-      const v = verdict(recent);
-      if (v && !v.ok) problems.push(`${n}: ${v.message.slice(0, 120)}`);
-      else if (v && age(recent) > 25) problems.push(`${n}: 直近の成功が ${age(recent).toFixed(0)} 時間前`);
-    }
-
-    // 2) prune と check は週次。8 日見て失敗があれば拾う
-    for (const o of [...prunes, ...checks]) {
-      const v = verdict(o);
-      if (v && !v.ok && age(o) < 24 * 8) {
-        problems.push(`${ns(o)}/${o.metadata.name}: ${v.message.slice(0, 120)}`);
+    const failed = [];
+    for (const kind of ["backups", "prunes", "checks", "restores"]) {
+      for (const o of await get(kind)) {
+        const c = (o.status?.conditions ?? []).find((x) => x.type === "Completed");
+        if (c && c.reason !== "Succeeded") {
+          failed.push(`${o.metadata.namespace}/${o.metadata.name}: ${(c.message ?? "").slice(0, 120)}`);
+        }
       }
     }
 
-    const text = problems.length
-      ? `[k8up] FAILED ❌\n${problems.map((p) => `- ${p}`).join("\n")}`
-      : `[k8up] OK ✅ (${expected.length} namespace すべてに 25 時間以内の成功)`;
+    const lines = [];
+    if (stale.length) {
+      lines.push(`**${stale.length} 件が ${WINDOW_H} 時間以上更新されていない**`);
+      for (const s of stale.slice(0, 15)) lines.push(`- ${s.key} (${s.h.toFixed(0)} 時間前)`);
+      if (stale.length > 15) lines.push(`- ほか ${stale.length - 15} 件`);
+    }
+    if (failed.length) {
+      lines.push(`**失敗したジョブ**`);
+      for (const f of failed.slice(0, 10)) lines.push(`- ${f}`);
+    }
+
+    const text = lines.length
+      ? `[k8up] FAILED ❌\n${lines.join("\n")}`
+      : `[k8up] OK ✅ (${latest.size} 系統すべて ${WINDOW_H} 時間以内)`;
 
     console.log(text);
     const r = await fetch(process.env.WEBHOOK, {
@@ -162,5 +211,5 @@ data:
       console.error(`Mattermost への投稿に失敗: ${r.status} ${await r.text()}`);
       process.exit(1);
     }
-    // 問題があったときはジョブも失敗させる。通知が届かなくても kubectl から見えるように。
-    if (problems.length) process.exit(1);
+    // 問題があればジョブも落とす。通知が届かなくても kubectl から見えるように。
+    if (lines.length) process.exit(1);
