@@ -229,14 +229,22 @@ helm repo update jetstack >/dev/null 2>&1 || true
 #
 # **信頼水準は変わらない** ── machine config はもともと秘密の塊で、生成物は
 # git に入らない。CI に age の鍵を渡さない方針もそのまま(ダミーを渡して経路だけ通す)。
+# **`sops -d … | inline` と繋がないこと。** `#!/bin/sh` には `pipefail` が無いので、
+# **復号に失敗しても `set -e` が拾わず、中身が空の KubeInlineManifestConfig が
+# 黙って出る。** そして下の needle は `inline` が付ける `name:` しか見ないので通ってしまう
+# (chart の方は `cilium-operator` のような中身を見ているので気づける)。
+# いったんファイルに落とす。
 inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書き
 	if [ -n "$3" ]; then
 		inline "$1" < "$3" > "$WORK/inline-$1.yaml"
-	elif [ -f "$2" ]; then
-		sops -d "$2" | inline "$1" > "$WORK/inline-$1.yaml"
-	else
-		echo "WARNING: $2 が無いので $1 を描かない" >&2
+		return 0
 	fi
+	if [ ! -f "$2" ]; then
+		echo "WARNING: $2 が無いので $1 を描かない" >&2
+		return 0
+	fi
+	sops -d "$2" > "$WORK/plain-$1.yaml"
+	inline "$1" < "$WORK/plain-$1.yaml" > "$WORK/inline-$1.yaml"
 }
 inline_secret infisical-secrets bootstrap/infisical/secrets.yaml "${INFISICAL_SECRET:-}"
 inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.yaml "${CLOUDFLARE_SECRET:-}"
