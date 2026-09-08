@@ -63,7 +63,7 @@ serviceSubnets:
 ---
 # **HostnameConfig は消して v1alpha1 側に書く。** gen config が既定で入れる
 # `auto: stable` と `hostname` は併記できず、パッチからは `auto` を消せない
-# (`auto: null` も `$patch: replace` も効かない)。KubeletConfig と同じ手で
+# (`auto: null` も `$patch: replace` も効かない)。下の KubeNodeConfig と同じ手で
 # ドキュメントごと落としてから、下の machine.network.hostname を効かせる。
 apiVersion: v1alpha1
 kind: HostnameConfig
@@ -93,7 +93,7 @@ nameservers:
 #
 # `taints` はマップなので、`taints: {}` では消えない(マージなので何も起きない)。
 # 中に `$patch: replace` を書くと**キーとして残ってしまい** `name "$patch" is invalid` で
-# validate が落ちる(実測)。KubeletConfig / HostnameConfig と同じく、
+# validate が落ちる(実測)。上の HostnameConfig と同じく、
 # **ドキュメントごと消して labels だけ書き戻す**のが唯一の手。
 apiVersion: v1alpha1
 kind: KubeNodeConfig
