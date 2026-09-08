@@ -97,7 +97,7 @@ echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path' \
 	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
-	'/var/mnt/local-path' 'name: EPHEMERAL' 'name: local-path' \
+	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
 	"ghcr.io/siderolabs/kubelet:$K8S"; do
 	# **`--` を忘れないこと。** `--kubelet-insecure-tls` のような needle を
 	# grep がオプションとして解釈して落ちる。
