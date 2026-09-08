@@ -45,15 +45,16 @@
             "allowedVersions": "<18"
         },
         {
-            "description": "Talos と Kubernetes は自動マージしない。ノードが 1 台なので、Talos を上げることは唯一のノードの再起動、つまり全停止を意味する。PR は「新しい版が出た」という通知として使い、適用は talosctl upgrade で人がやる (talos/versions.yaml)。 needs-review ラベルを付けて Claude のレビューに乗せる (.github/workflows/claude-code-review.yml)。",
-            "matchFileNames": [
-                "talos/versions.yaml"
-            ],
+            "description": "Talos と Kubernetes は自動マージしない。ノードが 1 台なので、Talos を上げることは 唯一のノードの再起動、つまり全停止を意味する。PR は「新しい版が出た」という通知として使い、適用は talosctl upgrade で人がやる (talos/versions.yaml)。 needs-review ラベルを付けて Claude のレビューに乗せる (.github/workflows/claude-code-review.yml)。**depName で絞る。** 同じファイルには metrics-server の chart 版も入っていて、あちらはノードの再起動を伴わないので、この扱いに巻き込まない。",
             "groupName": "talos",
             "groupSlug": "talos",
             "automerge": false,
             "addLabels": [
                 "needs-review"
+            ],
+            "matchDepNames": [
+                "factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302",
+                "kubernetes/kubernetes"
             ]
         },
         {
