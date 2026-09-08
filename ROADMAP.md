@@ -229,6 +229,13 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
         (HPA は 0 個なので停止はしない)。[talos/metrics-server-values.yaml](talos/metrics-server-values.yaml)。
         **`--kubelet-insecure-tls` が要る**(Talos の kubelet は自己署名の証明書)
       - coredns は Talos が自前で入れる(`KubeCoreDNSConfig`)。ccm と rolebindings は k3s 固有
+- [x] **Gateway API の CRD を自分で入れる(2026-09-08)。** いま入っているものは
+      **消したはずの Traefik の `traefik-crd` chart が置いていったもの**で
+      (`meta.helm.sh/release-name: traefik-crd`)、**Talos には当然無い。**
+      無いと `Gateway` も 12 本の `HTTPRoute` も `GRPCRoute` も適用できず、
+      **公開経路が丸ごと消える。** Cilium の chart は CRD を同梱しない。
+      [talos/render.sh](talos/render.sh) が `KubeExternalManifestConfig` で URL を渡す
+      (1.1 MB あるので inline にはしない)。版は [talos/versions.yaml](talos/versions.yaml)。
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
 - [ ] PV データを restic から復元。**手順は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」**
       (k8up の `Restore` を作るだけ。2026-09-08 に実際に流して中身が開けるところまで確認済み)。

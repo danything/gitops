@@ -36,10 +36,12 @@ jobs:
           VER=$(yq -r '.talos.version' talos/versions.yaml)
           SCH=$(yq -r '.talos.schematic' talos/versions.yaml)
           K8S=$(yq -r '.kubernetes.version' talos/versions.yaml)
-          echo "  talos=$VER schematic=$SCH k8s=$K8S"
+          GW=$(yq -r '.gatewayAPI.version' talos/versions.yaml)
+          echo "  talos=$VER schematic=$SCH k8s=$K8S gateway-api=$GW"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "schematic=$SCH" >> "$GITHUB_OUTPUT"
           echo "k8s=$K8S" >> "$GITHUB_OUTPUT"
+          echo "gw=$GW" >> "$GITHUB_OUTPUT"
 
       - name: talosctl を入れる
         run: |
@@ -106,6 +108,7 @@ jobs:
             'name: apiserver-rbac' \
             'bootstrap-applier' \
             'gha:danything/gitops:refs/heads/main' \
+            "gateway-api/releases/download/${{ steps.v.outputs.gw }}/standard-install.yaml" \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
