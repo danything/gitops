@@ -194,10 +194,10 @@ configuration:
     namespaces: [kube-system]
 ```
 
-argocd / cert-manager / infisical / local-path-storage はドリル 4 回目で
-**ラベル無しのまま上がった**ので、baseline に収まっている(local-path だけは
-ヘルパー Pod が hostPath を使うので `talos/manifests/local-path.yaml` で
-privileged を付けている)。
+**argocd / cert-manager / infisical はラベル無しのまま上がった**(ドリル 4 回目)ので、
+baseline に収まっている。**`local-path-storage` は別** ── ヘルパー Pod が hostPath を
+使うので、[`talos/manifests/local-path.yaml`](../talos/manifests/local-path.yaml) が
+namespace に privileged を付けている。
 
 ### 動いたこと
 
