@@ -249,7 +249,11 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
             要り、狭く保っている CI の RBAC の意味が消えるため
       - [ ] SOPS 済みの Secret 4 つを inlineManifests に。**machine config はもともと SOPS 済み**なので
             信頼水準は変わらず、CI に age 鍵を渡さない方針も保てる
-      - [ ] `bootstrap/apiserver/rbac.yaml` も inlineManifests に(CI が自分の権限を作れないため)
+      - [x] **`bootstrap/apiserver/rbac.yaml` も inlineManifests に(2026-09-08)。**
+            [talos/render.sh](talos/render.sh) が `bootstrap/apiserver/rbac.yaml` から描く
+            (写さない)。CI が自分の権限を作れない ── bootstrap-apply.yml は
+            `bootstrap/apiserver/` を除外している(自分の権限を書き換えられるため)ので、
+            k3s 期は手で当てていた
       - [ ] **infisical を `apps/` の ArgoCD Application に移す。** 鶏卵は実際には無かった
             (ArgoCD は Secret が無くても起動し、SSO だけが効かない)。ただし
             **`admin.enabled: false` なのでその窓の間は UI に誰も入れない**。`kubectl` で見る
