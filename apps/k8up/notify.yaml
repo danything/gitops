@@ -27,6 +27,13 @@ rules:
   - apiGroups: [k8up.io]
     resources: [schedules, backups, prunes, checks, restores]
     verbs: [get, list]
+  # **注釈の付け忘れではなく、Schedule の付け忘れを捕まえるために要る。**
+  # PVC に `k8up.io/backup: "true"` を付けても、その namespace に Schedule が
+  # 無ければジョブは作られない(2026-09-08 に yuzuriha で実際に起きていた)。
+  # 名前と注釈しか読まない。中身(spec.volumeName など)には興味が無い。
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -189,13 +196,14 @@ data:
 
     // k8up 側の失敗も拾う。オブジェクトが残っていれば理由まで書ける。
     const TOKEN = await Bun.file("/var/run/secrets/kubernetes.io/serviceaccount/token").text();
-    const get = async (kind) => {
-      const r = await fetch(`https://kubernetes.default.svc/apis/k8up.io/v1/${kind}`, {
-        headers: { Authorization: `Bearer ${TOKEN}` },
-      });
-      if (!r.ok) throw new Error(`${kind}: ${r.status} ${await r.text()}`);
+    const fetchAll = async (url, what) => {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } });
+      if (!r.ok) throw new Error(`${what}: ${r.status} ${await r.text()}`);
       return (await r.json()).items ?? [];
     };
+    const get = (kind) => fetchAll(`https://kubernetes.default.svc/apis/k8up.io/v1/${kind}`, kind);
+    // コアの API は `/api/v1`(`/apis` ではない)。
+    const getCore = (kind) => fetchAll(`https://kubernetes.default.svc/api/v1/${kind}`, kind);
     const failed = [];
     for (const kind of ["backups", "prunes", "checks", "restores"]) {
       for (const o of await get(kind)) {
@@ -211,9 +219,20 @@ data:
     // 突き合わせる ── `backup` を持つ Schedule の namespace には、その namespace 名の
     // ホストのスナップショットが 25 時間以内にあるはず。こちらは時間で減衰しない。
     const freshHosts = new Set(fresh.map((x) => x.host));
-    const silent = [...new Set(
+    const backupNs = new Set(
       (await get("schedules")).filter((s) => s.spec?.backup).map((s) => s.metadata.namespace),
-    )].filter((n) => !freshHosts.has(n));
+    );
+    const silent = [...backupNs].filter((n) => !freshHosts.has(n));
+
+    // **注釈の付け忘れではなく、Schedule の付け忘れ。** PVC に
+    // `k8up.io/backup: "true"` を付けても、その namespace に Schedule が無ければ
+    // **ジョブ自体が作られず、何のエラーも出ない。** 上の 3 つの見張りは
+    // 「あるはずのものが来ない」を見るので、**最初から一度も来ていないものには
+    // 何も言わない。** 2026-09-08 に yuzuriha-data がこの穴に落ちていた。
+    const orphans = (await getCore("persistentvolumeclaims"))
+      .filter((p) => p.metadata.annotations?.["k8up.io/backup"] === "true")
+      .filter((p) => !backupNs.has(p.metadata.namespace))
+      .map((p) => `${p.metadata.namespace}/${p.metadata.name}`);
 
     const lines = [];
     if (stale.length) {
@@ -228,6 +247,10 @@ data:
     if (silent.length) {
       lines.push(`**${WINDOW_H} 時間以内のスナップショットが 1 つも無い namespace**`);
       for (const n of silent) lines.push(`- ${n}`);
+    }
+    if (orphans.length) {
+      lines.push(`**注釈はあるが namespace に Schedule が無い PVC**`);
+      for (const o of orphans) lines.push(`- ${o}`);
     }
     if (failed.length) {
       lines.push(`**失敗したジョブ**`);
