@@ -1,0 +1,13 @@
+# **Talos でだけ変わるところ。** 正本は bootstrap/argocd/helmchart.yaml の `spec.values` で、
+# ここはその上に重ねる差分だけ(Cilium と talos/cilium-values.yaml の関係と同じ)。
+#
+# **CRD を chart から描かせない。** 3 つの CRD だけで 1.83 MB あり、
+# **描き出しの 95%** を占める(残りは 100 KB)。machine config に埋めると
+# 271 KB → 2 MB になるので、**CRD は URL で渡す**
+# (`KubeExternalManifestConfig`。Gateway API と同じ手。../talos/render.sh)。
+#
+#   applications.argoproj.io       406 KB
+#   applicationsets.argoproj.io   1.39 MB
+#   appprojects.argoproj.io        19 KB
+crds:
+  install: false

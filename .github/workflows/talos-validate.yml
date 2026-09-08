@@ -73,7 +73,41 @@ jobs:
                     username: ci-dummy
                     password: ci-dummy
           PATCH
-          SECRETS=/tmp/secrets.yaml REGISTRIES=/tmp/registries.yaml ./talos/render.sh /tmp/out
+          # **argocd / infisical の HelmChart CR もダミーで渡す。** 本物は SOPS 済みで、
+          # age の鍵は CI に渡さない。値は既定のままでよく、**確かめたいのは
+          # 「CR から chart/repo/version/values を取り出して helm template まで通るか」**と、
+          # **CRD が URL 側に出て inline に入らないこと**。
+          cat > /tmp/argocd-chart.yaml <<'PATCH'
+          apiVersion: helm.cattle.io/v1
+          kind: HelmChart
+          metadata:
+              name: argocd
+          spec:
+              chart: argo-cd
+              repo: https://argoproj.github.io/argo-helm
+              version: 10.8.1
+              targetNamespace: argocd
+              values:
+                  dex:
+                      enabled: false
+          PATCH
+          cat > /tmp/infisical-chart.yaml <<'PATCH'
+          apiVersion: helm.cattle.io/v1
+          kind: HelmChart
+          metadata:
+              name: infisical
+          spec:
+              chart: infisical-standalone
+              repo: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+              version: 1.10.0
+              targetNamespace: infisical
+              values:
+                  infisical:
+                      fullnameOverride: infisical
+          PATCH
+          SECRETS=/tmp/secrets.yaml REGISTRIES=/tmp/registries.yaml \
+            ARGOCD_CHART=/tmp/argocd-chart.yaml INFISICAL_CHART=/tmp/infisical-chart.yaml \
+            ./talos/render.sh /tmp/out
 
       - name: 生成物に想定の設定が入っているか
         run: |
@@ -109,6 +143,14 @@ jobs:
             'bootstrap-applier' \
             'gha:danything/gitops:refs/heads/main' \
             "gateway-api/releases/download/${{ steps.v.outputs.gw }}/standard-install.yaml" \
+            'name: argocd' \
+            'argocd-server' \
+            'name: argocd-application-crd' \
+            'manifests/crds/applicationset-crd.yaml' \
+            'name: infisical' \
+            'infisical-standalone' \
+            'kind: Namespace\nmetadata:\n  name: argocd' \
+            'kind: Namespace\nmetadata:\n  name: infisical' \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
