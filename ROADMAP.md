@@ -198,6 +198,9 @@ Traefik の撤去と前後してまとめて片付けたぶん。**どれも Tal
 
 ### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
 
+**当日は [docs/migration-day.md](docs/migration-day.md) を上から順にやる。**
+ここは「何を決めたか」で、あちらが「どの順にやるか」。
+
 OS 交換だけに集中する。Cilium と Gateway API は Phase 1.5 で落ち着いた構成のまま持っていく。
 Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubeProxyConfig` を
 `enabled: false`** にし([talos/patches/cni.yaml](talos/patches/cni.yaml))、Cilium は
