@@ -1,27 +1,27 @@
-# **local-path-provisioner。Talos に持っていくために要る。**
+# local-path-provisioner。Talos に持っていくために要る。
 #
-# k3s ではこれが**組み込みのアドオン**として動いている(`objectset.rio.cattle.io/owner-name:
-# local-storage`)。**Talos には無い**ので、入れないと PVC が 1 つも bind せず、
+# k3s ではこれが組み込みのアドオンとして動いている(`objectset.rio.cattle.io/owner-name:
+# local-storage`)。Talos には無いので、入れないと PVC が 1 つも bind せず、
 # ストレージを持つアプリが全部 Pending で止まる。CNI と同じ「移行当日まで気づかない」類い。
 #
-# ## k3s の設定との違い
+# k3s の設定との違い
 #
 # | | k3s | ここ |
 # | --- | --- | --- |
-# | データの置き場 | `/var/lib/rancher/k3s/storage` | `/var/mnt/local-path`([`talos/patches/volumes.yaml`](../patches/volumes.yaml) の `UserVolumeConfig` が切る**別パーティション**) |
-# | namespace | `kube-system` | `local-path-storage`(**PSA は privileged**。ヘルパー Pod が hostPath を使う) |
+# | データの置き場 | `/var/lib/rancher/k3s/storage` | `/var/mnt/local-path`([`talos/patches/volumes.yaml`](../patches/volumes.yaml) の `UserVolumeConfig` が切る別パーティション) |
+# | namespace | `kube-system` | `local-path-storage`(PSA は privileged。ヘルパー Pod が hostPath を使う) |
 #
-# ## StorageClass を 2 つ出す
+# StorageClass を 2 つ出す
 #
-# **`allowVolumeExpansion` は写さない。** k3s の `local-path-retain` には `true` が
-# 付いているが、**local-path は拡張に対応していない**ので、あれは実現しない能力を
+# `allowVolumeExpansion` は写さない。k3s の `local-path-retain` には `true` が
+# 付いているが、local-path は拡張に対応していないので、あれは実現しない能力を
 # 名乗っているだけ。バインド済みの PVC には何の影響も無いので、揃えずに落とす
 # (2026-09-08 に差分を確認したうえでの判断)。
 #
-# **`local-path-retain` も残す。** いま 21 本の PVC がその名前を参照していて、
-# **バインド済み PVC の `storageClassName` は API が変更を拒否する**。移行当日に
-# アプリ 6 リポジトリの PVC を書き換えるのは事故のもとなので、**同じ名前を提供して
-# そのまま持っていく**。整理は移行後に落ち着いてからでよい(ROADMAP の積み残し)。
+# `local-path-retain` も残す。いま 21 本の PVC がその名前を参照していて、
+# バインド済み PVC の `storageClassName` は API が変更を拒否する。移行当日に
+# アプリ 6 リポジトリの PVC を書き換えるのは事故のもとなので、同じ名前を提供して
+# そのまま持っていく。整理は移行後に落ち着いてからでよい(ROADMAP の積み残し)。
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -118,10 +118,10 @@ data:
       }
       ]
     }
-  # **`setup` と `teardown` は必須。** ヘルパー Pod はこの ConfigMap を
-  # `subPath` で 1 キーずつマウントするので、**キーが無いとヘルパー Pod が
+  # `setup` と `teardown` は必須。ヘルパー Pod はこの ConfigMap を
+  # `subPath` で 1 キーずつマウントするので、キーが無いとヘルパー Pod が
   # `configmap references non-existent config key: setup` で ContainerCreating のまま止まり、
-  # PVC が永遠に Pending になる**(2026-09-08 の VM ドリルで踏んだ。上流の
+  # PVC が永遠に Pending になる(2026-09-08 の VM ドリルで踏んだ。上流の
   # deploy/local-path-storage.yaml には入っている)。
   setup: |-
     #!/bin/sh
@@ -152,7 +152,7 @@ provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 ---
-# **k3s から持ち越す名前。** 消せるようになるのは、全 PVC がこの名前を参照しなくなってから。
+# k3s から持ち越す名前。消せるようになるのは、全 PVC がこの名前を参照しなくなってから。
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

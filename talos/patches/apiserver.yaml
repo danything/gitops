@@ -1,11 +1,11 @@
-# API サーバの公開まわり。**k3s 期の /etc/rancher/k3s/config.yaml と
-# bootstrap/apiserver/authentication-config.yaml をここへ持ってきたもの。**
+# API サーバの公開まわり。k3s 期の /etc/rancher/k3s/config.yaml と
+# bootstrap/apiserver/authentication-config.yaml をここへ持ってきたもの。
 #
-# Talos には**専用の設定ドキュメントがある**ので、ホストにファイルを置いたり
+# Talos には専用の設定ドキュメントがあるので、ホストにファイルを置いたり
 # extraVolumes でマウントしたりする必要はない(`machine.files` は非推奨でもある)。
 #
 # なぜこれが要るかは [../../bootstrap/apiserver/authentication-config.yaml](../../bootstrap/apiserver/authentication-config.yaml)
-# に書いてある。要点だけ言うと、**bootstrap 層を GitHub Actions から当てるため**で、
+# に書いてある。要点だけ言うと、bootstrap 層を GitHub Actions から当てるためで、
 # kubeconfig を GitHub に置かずに済ませる唯一の方法。
 ---
 apiVersion: v1alpha1
@@ -15,19 +15,19 @@ kind: KubeAPIServerConfig
 certExtraSANs:
   - ks.doany.io
 extraArgs:
-  # **k3s の `service-node-port-range=80-32767` をここへ持ってきたもの。**
-  # Gateway の Service は nodePort 80/443 を持っていて、**そこが公開経路そのもの**
+  # k3s の `service-node-port-range=80-32767` をここへ持ってきたもの。
+  # Gateway の Service は nodePort 80/443 を持っていて、そこが公開経路そのもの
   # (Cilium の L7LB リダイレクト。bootstrap/cilium/values.yaml の `nodePort` に実測あり)。
-  # 既定の 30000-32767 のままだと **80/443 を Service に入れられず、復元後の
-  # 当て直しが `provided port is not in the valid range` で弾かれる。**
+  # 既定の 30000-32767 のままだと 80/443 を Service に入れられず、復元後の
+  # 当て直しが `provided port is not in the valid range` で弾かれる。
   service-node-port-range: 80-32767
 ---
 apiVersion: v1alpha1
 kind: KubeAuthenticationConfig
-# `configuration` の中身は **Kubernetes の AuthenticationConfiguration そのもの**
+# `configuration` の中身は Kubernetes の AuthenticationConfiguration そのもの
 # (apiVersion / kind は Talos が付けるので書かない)。
 #
-# **`anonymous` を消さないこと。** ここを与えると既定を置き換えるので、
+# `anonymous` を消さないこと。ここを与えると既定を置き換えるので、
 # 書き忘れると kubelet や LB のヘルスチェック(/livez /readyz /healthz)が
 # 匿名で叩けなくなり、コントロールプレーンが上がらなくなる。
 configuration:
@@ -47,13 +47,13 @@ configuration:
         # 経緯は bootstrap/apiserver/authentication-config.yaml
         username:
           expression: '"gha:" + claims.repository + ":" + claims.ref'
-      # **issuer は誰でもトークンを取れる公開の IdP。** 効いているのはここ
+      # issuer は誰でもトークンを取れる公開の IdP。効いているのはここ
       claimValidationRules:
         - expression: 'claims.repository == "danything/gitops"'
           message: "danything/gitops 以外は受け付けない"
         - expression: 'claims.ref == "refs/heads/main"'
           message: "main 以外のブランチからは受け付けない"
-        # **bootstrap/apiserver/authentication-config.yaml と同じ内容にすること。**
+        # bootstrap/apiserver/authentication-config.yaml と同じ内容にすること。
         # 2 つのワークフローを許している(bootstrap-apply は書き込み、cilium-drift は読むだけ)。
         - expression: >-
             ["bootstrap-apply.yml", "cilium-drift.yml"].exists(w,

@@ -1,17 +1,17 @@
-# **cert-manager の Helm 値。**
+# cert-manager の Helm 値。
 #
-# ## **2026-09-08 まで、版も値も git に無かった**
+# 2026-09-08 まで、版も値も git に無かった
 #
 # `helm install` した一度きりで入っていて、git にあったのは `ClusterIssuer` と
-# Cloudflare の Secret だけだった。**作り直すと cert-manager が入らない。**
+# Cloudflare の Secret だけだった。作り直すと cert-manager が入らない。
 # そして素で `helm upgrade` すると下の `enableGatewayAPI` が既定(false)に戻り、
-# **Gateway の `cert-manager.io/cluster-issuer` 注釈が無視されて証明書が発行されなくなる。**
+# Gateway の `cert-manager.io/cluster-issuer` 注釈が無視されて証明書が発行されなくなる。
 # cilium で 2026-09-07 に直したのと同じ形の穴で、同じ形(version.yaml + values.yaml)で出した。
 #
 # 中身は実機の `helm get values cert-manager -n cert-manager` と同じ。
 # 版は [version.yaml](version.yaml)(実機は `cert-manager-v1.21.1`)。
 #
-# **これは k3s 期の当て方。** Talos では [../../talos/render.sh](../../talos/render.sh) が
+# これは k3s 期の当て方。Talos では [../../talos/render.sh](../../talos/render.sh) が
 # この値で `helm template` して machine config の inlineManifest にする
 # (CRD だけは大きすぎるので URL 渡し。../../talos/cert-manager-values.yaml)。
 #
@@ -20,7 +20,7 @@
 #     --version "$(sed -n 's/^version: //p' bootstrap/cert-manager/version.yaml)" \
 #     -n cert-manager --create-namespace -f bootstrap/cert-manager/values.yaml
 
-# **Gateway API を見る。** これが無いと Gateway の `cert-manager.io/cluster-issuer`
+# Gateway API を見る。これが無いと Gateway の `cert-manager.io/cluster-issuer`
 # 注釈から Certificate を作ってくれない。
 config:
   enableGatewayAPI: true

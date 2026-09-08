@@ -8,7 +8,7 @@ metadata:
   name: postgres-data
   namespace: mattermost
   annotations:
-    # **DB はファイルとして取らない。** postgres.yaml の k8up.io/backupcommand が
+    # DB はファイルとして取らない。postgres.yaml の k8up.io/backupcommand が
     # pg_dump を出しているので、そちらだけで足りる。
     k8up.io/backup: "false"
 spec:
@@ -25,7 +25,7 @@ metadata:
   name: mattermost-data
   namespace: mattermost
   annotations:
-    # **こちらはファイルとして取る。** 添付とプラグインだけで DB ではないので、
+    # こちらはファイルとして取る。添付とプラグインだけで DB ではないので、
     # 動いたままコピーしても部分的に古くなるだけ。
     k8up.io/backup: "true"
 spec:

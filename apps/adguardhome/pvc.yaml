@@ -1,7 +1,7 @@
-# 3 本とも**ファイルとして k8up に取らせる**(`k8up.io/backup: "true"`)。
+# 3 本ともファイルとして k8up に取らせる(`k8up.io/backup: "true"`)。
 # 設定・フィルタ・クエリログで、書き換わっても部分的に古いだけで壊れない類い。
 # operator は `BACKUP_SKIP_WITHOUT_ANNOTATION=true` なので、注釈が無い PVC は素通りする
-# ── つまりこの 3 行が「取る」という宣言そのもの(apps/k8up/README.md)。
+#。つまりこの 3 行が「取る」という宣言そのもの(apps/k8up/README.md)。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

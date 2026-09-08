@@ -1,11 +1,11 @@
-# **Talos でだけ変わるところ。** 正本は bootstrap/cert-manager/values.yaml で、
+# Talos でだけ変わるところ。正本は bootstrap/cert-manager/values.yaml で、
 # ここはその上に重ねる差分だけ(Cilium と talos/cilium-values.yaml の関係と同じ)。
 #
-# **CRD を chart から描かせない。** 6 つで 1.30 MB あり、**描き出しの 97%**。
+# CRD を chart から描かせない。6 つで 1.30 MB あり、描き出しの 97%。
 # `KubeExternalManifestConfig` で URL を渡す(argocd・gateway-api と同じ手)。
 # なぜ URL なのかは [../docs/decisions.md](../docs/decisions.md)「層の分け方」。
 #
-# **k3s 期は `crds.enabled: true` のまま**(bootstrap/cert-manager/values.yaml)。
+# k3s 期は `crds.enabled: true` のまま(bootstrap/cert-manager/values.yaml)。
 # あちらは `helm upgrade` で入れるので chart に持たせるのが正しい。
 crds:
   enabled: false

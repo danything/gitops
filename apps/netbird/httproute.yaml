@@ -1,4 +1,4 @@
-# NetBird(nb.doany.io)。**1 つのホスト名に HTTP と gRPC が混在する**のが厄介なところで、
+# NetBird(nb.doany.io)。1 つのホスト名に HTTP と gRPC が混在するのが厄介なところで、
 # combined コンテナは同じ 80 番で
 #   - REST/WebSocket(/api、/oauth2、/relay、/ws-proxy/)
 #   - gRPC h2c(management.ManagementService、signalexchange.SignalExchange)
@@ -31,7 +31,7 @@ spec:
             type: Exact
             service: signalexchange.SignalExchange
       backendRefs:
-        # **HTTPRoute 側とは別の Service。** 同じ Service を指すと Envoy のクラスタが
+        # HTTPRoute 側とは別の Service。同じ Service を指すと Envoy のクラスタが
         # 1 つになり、h2c が HTTP/WebSocket 側にも及んで `/relay` が壊れる(deployment.yaml)
         - name: netbird-server-grpc
           port: 80

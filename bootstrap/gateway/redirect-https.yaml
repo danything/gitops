@@ -1,5 +1,5 @@
 # 公開経路。証明書は Gateway([../gateway/](../gateway/))のリスナーに付いているので指定しない。
-# **この層は ArgoCD が同期しない**(理由と手順は ../README.md「公開経路(HTTPRoute)もここにある」)。
+# この層は ArgoCD が同期しない(理由と手順は ../README.md「公開経路(HTTPRoute)もここにある」)。
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

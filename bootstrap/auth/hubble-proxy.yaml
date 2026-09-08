@@ -1,8 +1,8 @@
 # hl.doany.io を SSO 付きで Hubble UI へ中継する oauth2-proxy。
-# **Hubble UI 自身は認証を持たない**ので、直接 HTTPRoute に繋いではいけない。
+# Hubble UI 自身は認証を持たないので、直接 HTTPRoute に繋いではいけない。
 # Cilium の Gateway には ext auth が無いので、*.s.doany.io と同じ「oauth2-proxy 自身を
 # 前段のプロキシにする」方式(--upstream で中継先を持つ)。
-# **コールバックは自分で受ける。** a.doany.io 側に投げると、あちらは元のホストを
+# コールバックは自分で受ける。a.doany.io 側に投げると、あちらは元のホストを
 # 知らないので認証後に a.doany.io に着地してしまう(`*.s.doany.io` は名前が
 # ワイルドカードで Entra に個別の redirect URI を登録できないため共有しているが、
 # こちらは固定の 1 ホストなので自前で持てる)。

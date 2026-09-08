@@ -1,4 +1,4 @@
-# **PSA は privileged。** STUN(UDP 3478)を hostPort でノードの IP に直接出すため。
+# PSA は privileged。STUN(UDP 3478)を hostPort でノードの IP に直接出すため。
 # Pod Security Standards の baseline は `hostPort` を許さない(許容値は未定義か 0 だけ)ので、
 # baseline のままだと Talos で Pod が作れなくなる。k3s では PSA を有効にしていないので
 # いまは効かないが、Talos に持っていくために書いておく(apps/wireguard と同じ理由)。

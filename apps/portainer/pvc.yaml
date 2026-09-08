@@ -4,7 +4,7 @@ metadata:
   name: portainer-data
   namespace: portainer
   annotations:
-    # **boltdb だがファイルとして取る。** イメージにシェルが無く
+    # boltdb だがファイルとして取る。イメージにシェルが無く
     # (`exec: "sh": executable file not found`)、SQLite でもないので
     # backupcommand が使えない。動いたままのコピーなので整合は保証されない。
     # 中身は OIDC の設定とエンドポイント 1 本だけで、画面から数分で作り直せる

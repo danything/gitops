@@ -32,7 +32,7 @@ spec:
       labels:
         app: postgres
       annotations:
-        # **k8up に論理バックアップを取らせる。** ホストの backup/k3s-backup は
+        # k8up に論理バックアップを取らせる。ホストの backup/k3s-backup は
         # PVC のディレクトリを丸ごと写すだけなので、動いている DB のファイルは
         # よくてクラッシュ一貫性しかない。pg_dump なら中身の整合が取れる。
         # ローカルの unix socket 経由なのでパスワードは要らない(trust)。

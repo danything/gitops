@@ -1,8 +1,8 @@
-# クラスタ共通。**v1.14 では型付きドキュメントと v1alpha1 を併記できない**ので、
+# クラスタ共通。v1.14 では型付きドキュメントと v1alpha1 を併記できないので、
 # 項目ごとに書く場所が決まっている(../docs/talos-install-media.md 参照)。
 machine:
   sysctls:
-    # **これが無いと IPv6 の既定経路が消える。** Kubernetes が上がると
+    # これが無いと IPv6 の既定経路が消える。Kubernetes が上がると
     # `net.ipv6.conf.{all,bond0}.forwarding` が 1 になり、既定の `accept_ra=1` は
     # 「forwarding が有効なら RA を無視する」なのでカーネルが RA 由来の default route を落とす。
     # 2 = forwarding でも RA を受ける。Ubuntu 期は NetworkManager が userspace で RA を
@@ -10,11 +10,11 @@ machine:
     # この問題が出なかった。QEMU で再現・修正を確認済み(../docs/talos.md「VM ブートドリル」)。
     net.ipv6.conf.bond0.accept_ra: "2"
     # bond0 の SLAAC の IID を MAC 由来(EUI-64)にしない。
-    # **値は 3(random)。** stable-privacy(2)は `stable_secret` が要り、未設定のまま 2 を書くと
+    # 値は 3(random)。stable-privacy(2)は `stable_secret` が要り、未設定のまま 2 を書くと
     # `write /proc/sys/net/ipv6/conf/bond0/addr_gen_mode: invalid argument` で
     # KernelParamSpecController が数秒おきに失敗し続ける(実測)。
     # 3 は再起動ごとに IID が変わる。ブート間で固定したくなったら `stable_secret` を足して 2 に戻す。
-    # **公開する AAAA は下の静的アドレス(::2)。** SLAAC のぶんは並んで付くだけ。
+    # 公開する AAAA は下の静的アドレス(::2)。SLAAC のぶんは並んで付くだけ。
     # 実機の NetworkManager も ipv6.token は使っておらず、静的アドレスを直接書いている
     # (`ip token show` はどのインタフェースも `token ::`)。
     net.ipv6.conf.bond0.addr_gen_mode: "3"
@@ -32,13 +32,13 @@ machine:
         dhcp: false
         addresses:
           - 10.0.0.2/24
-          # **実機と同じ静的アドレス。** プレフィックスは ISP 由来なので変わりうるが、
+          # 実機と同じ静的アドレス。プレフィックスは ISP 由来なので変わりうるが、
           # それは NetworkManager で運用しているいまも同じリスク。変わったときは
           # cloudflare-ddns(local.iface.stable:bond0)が実際のアドレスを公開する。
           - 240f:6d:842b:1::2/64
         routes:
           # IPv6 の既定経路は RA 由来(`default via fe80::… proto ra`)なので書かない。
-          # 上の `accept_ra: "2"` とセット。**Kubernetes が上がったあと**に
+          # 上の `accept_ra: "2"` とセット。Kubernetes が上がったあとに
           # `talosctl get routes -o yaml` で `protocol: ra` の `dst: ""` が残っていることを確かめること
           # (クラスタ起動前だけ見ても意味が無い。forwarding が 1 になるのはそのあと)。
           - network: 0.0.0.0/0
@@ -58,10 +58,10 @@ podSubnets:
     - fd42::/64
 serviceSubnets:
     - 10.43.0.0/16
-    # **/64 は Talos に弾かれる(/108 以下が必須)。k3s の fd43::/64 から変わるので ClusterIP は振り直しになる。
+    # /64 は Talos に弾かれる(/108 以下が必須)。k3s の fd43::/64 から変わるので ClusterIP は振り直しになる。
     - fd43::/108
 ---
-# **HostnameConfig は消して v1alpha1 側に書く。** gen config が既定で入れる
+# HostnameConfig は消して v1alpha1 側に書く。gen config が既定で入れる
 # `auto: stable` と `hostname` は併記できず、パッチからは `auto` を消せない
 # (`auto: null` も `$patch: replace` も効かない)。下の KubeNodeConfig と同じ手で
 # ドキュメントごと落としてから、下の machine.network.hostname を効かせる。
@@ -79,29 +79,29 @@ nameservers:
     - address: 1.1.1.1
     - address: 1.0.0.1
 ---
-# **単一ノードなので control-plane に taint を付けない。**
+# 単一ノードなので control-plane に taint を付けない。
 #
 # `KubeNodeConfig` は既定で `node-role.kubernetes.io/control-plane: NoSchedule` を入れる。
-# ノードが 1 台しかないこのクラスタでは、**toleration を持たない Pod が全部 Pending になる**
+# ノードが 1 台しかないこのクラスタでは、toleration を持たない Pod が全部 Pending になる
 # (k3s は単一ノードを control-plane 兼 worker として扱うので、この問題が無かった)。
 #
 # 2026-09-08 の VM ドリルで実際に踏んだ。cilium と CoreDNS は toleration を持っているので上がり、
-# **ノードは `Ready` に見える**まま、metrics-server・hubble・local-path-provisioner が
-# `no nodes available to schedule pods` で止まっていた。**移行当日にアプリが 1 つも上がらない。**
+# ノードは `Ready` に見えるまま、metrics-server・hubble・local-path-provisioner が
+# `no nodes available to schedule pods` で止まっていた。移行当日にアプリが 1 つも上がらない。
 #
-# ## taints だけを消す方法が無い
+# taints だけを消す方法が無い
 #
 # `taints` はマップなので、`taints: {}` では消えない(マージなので何も起きない)。
-# 中に `$patch: replace` を書くと**キーとして残ってしまい** `name "$patch" is invalid` で
+# 中に `$patch: replace` を書くとキーとして残ってしまい `name "$patch" is invalid` で
 # validate が落ちる(実測)。上の HostnameConfig と同じく、
-# **ドキュメントごと消して labels だけ書き戻す**のが唯一の手。
+# ドキュメントごと消して labels だけ書き戻すのが唯一の手。
 apiVersion: v1alpha1
 kind: KubeNodeConfig
 $patch: delete
 ---
 apiVersion: v1alpha1
 kind: KubeNodeConfig
-# **labels は書き戻すこと。** 消したままだと `kubectl get nodes` の ROLES が `<none>` になる。
+# labels は書き戻すこと。消したままだと `kubectl get nodes` の ROLES が `<none>` になる。
 labels:
     node-role.kubernetes.io/control-plane: ""
     node.kubernetes.io/exclude-from-external-load-balancers: ""

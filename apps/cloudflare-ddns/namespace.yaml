@@ -1,4 +1,4 @@
-# **PSA は privileged。** 理由: hostNetwork が baseline に通らない。
+# PSA は privileged。理由: hostNetwork が baseline に通らない。
 # 一覧と背景は docs/talos.md「PSA のラベル」(k3s では効かない。Talos のために書いておく)。
 apiVersion: v1
 kind: Namespace

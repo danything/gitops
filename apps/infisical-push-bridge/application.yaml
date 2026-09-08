@@ -6,10 +6,10 @@
 # セットアップ: Infisical のフォルダ /infisical-push-bridge/infisical-push-bridge に
 # `webhook-secret` を置き、プロジェクトの Project Settings → Webhooks で
 # URL http://infisical-push-bridge.infisical-push-bridge.svc.cluster.local、
-# Secret Path は必ず `/**`(既定の `/` はルートにしかマッチしない)、
+# Secret Path は必ず `/`(既定の `/` はルートにしかマッチしない)、
 # 同じ secret key の Webhook を作る(README 参照)。
 #
-# **k3s の HelmChart CRD から移した(2026-09-07)。**
+# k3s の HelmChart CRD から移した(2026-09-07)。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

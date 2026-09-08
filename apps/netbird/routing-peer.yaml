@@ -1,13 +1,13 @@
-# NetBird の routing peer(サブネットルータ)。**自宅 LAN 10.0.0.0/24 への入口**で、
+# NetBird の routing peer(サブネットルータ)。自宅 LAN 10.0.0.0/24 への入口で、
 # iLO(10.0.0.3)や AdGuard(10.0.0.2:53)にここ経由で届く。
 #
-# **Headscale を落として NetBird にした理由がここ。** headscale は FAQ で
+# Headscale を落として NetBird にした理由がここ。headscale は FAQ で
 # 「headscale 自身を動かすマシンをサブネットルータにするな」と明記していて、
 # ノード 1 台のこの構成では回避できなかった。NetBird は routing peer が独立した
 # 概念で、コンテナで動かす前提のドキュメントがある(docs/decisions.md)。
 #
 # 上流の kubernetes-operator にも NetworkRouter があるが、あれは
-# **Kubernetes の Service を公開する**ためのもので、物理 LAN のサブネットルータではない。
+# Kubernetes の Service を公開するためのもので、物理 LAN のサブネットルータではない。
 # ここが必要としているのは後者なので、素の Deployment で組む(hostNetwork は
 # 2026-09-08 に外した。理由は下の spec のコメント)。
 apiVersion: v1
@@ -74,15 +74,15 @@ spec:
       labels:
         app: netbird-routing-peer
     spec:
-      # **hostNetwork にしない(2026-09-08 に外した)。**
+      # hostNetwork にしない(2026-09-08 に外した)。
       #
-      # 元は「LAN へ素で出るため」に hostNetwork にしていたが、**Pod のネットワークからでも
-      # LAN には届く**(Cilium が masquerade する)。実測:
+      # 元は「LAN へ素で出るため」に hostNetwork にしていたが、Pod のネットワークからでも
+      # LAN には届く(Cilium が masquerade する)。実測:
       #
       #   Pod から 10.10.0.2:3389 / 10.10.0.1:80 / 10.10.0.4:853 / 10.0.0.1:80  … 全部 OK
       #
-      # 逆に **hostNetwork だと管理サーバに繋げなくなった。** Gateway を hostNetwork に
-      # した(#91)結果、**ホスト自身からノードの 443 に繋ぐと応答が返らない**
+      # 逆に hostNetwork だと管理サーバに繋げなくなった。Gateway を hostNetwork に
+      # した(#91)結果、ホスト自身からノードの 443 に繋ぐと応答が返らない
       # (bootstrap/cilium/values.yaml の `nodePort`)。このピアは `nb.doany.io:443` に
       # 繋ぎに行くので、そこに巻き込まれて `Management: Disconnected` で止まっていた。
       #
@@ -103,13 +103,13 @@ spec:
               value: https://nb.doany.io
             - name: NB_LOG_LEVEL
               value: info
-            # 51820 ではなく 51822。**元は wg-easy と併走していたときの回避**で、
+            # 51820 ではなく 51822。元は wg-easy と併走していたときの回避で、
             # あちらは撤去済み(2026-09-07)。戻す必然性が無いのでそのまま
             # (STUN が外から通っているのでホールパンチは成立する)。
             - name: NB_WIREGUARD_PORT
               value: "51822"
           ports:
-            # **hostNetwork をやめたので、WireGuard の口は hostPort で出す。**
+            # hostNetwork をやめたので、WireGuard の口は hostPort で出す。
             # 無くても relay 経由で通信は成立するが、直接 P2P にならない。
             - name: wireguard
               containerPort: 51822

@@ -1,6 +1,6 @@
 # 実機(main)だけの設定。
 #
-# **カーネル引数(intel_iommu=on / iommu=pt)は machine config ではなく Image Factory の schematic に入れている。**
+# カーネル引数(intel_iommu=on / iommu=pt)は machine config ではなく Image Factory の schematic に入れている。
 # v1.14 では `machine.install` が UnattendedInstallConfig と衝突して書けないため。
 # schematic: 32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
 #   customization.extraKernelArgs: [intel_iommu=on, iommu=pt]

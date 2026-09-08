@@ -1,20 +1,20 @@
-# **Talos 固有の上書き。** `bootstrap/cilium/values.yaml` の上に重ねる
-# (render.sh が `-f` を 2 つ渡す)。**k3s と Talos で違うところだけ**をここに書く ──
+# Talos 固有の上書き。`bootstrap/cilium/values.yaml` の上に重ねる
+# (render.sh が `-f` を 2 つ渡す)。k3s と Talos で違うところだけをここに書く 
 # 残り全部をコピーすると、片方を直したときにもう片方が腐る。
 #
 # 中身の根拠は ../docs/talos.md と、`bootstrap/cilium/values.yaml` 冒頭の
-# 「Talos に移るときに変わるところ」。**この 2 つが食い違ったらあちらが正。**
+# 「Talos に移るときに変わるところ」。この 2 つが食い違ったらあちらが正。
 #
-# **これが抜けていると Cilium が上がらない。** k3s 向けの `127.0.0.1:6443` を
+# これが抜けていると Cilium が上がらない。k3s 向けの `127.0.0.1:6443` を
 # 埋めたまま Talos に持っていくと、API サーバに繋げず起動しない。
 # CI(talos-validate)が生成物に `7445` があるかを見ている。
 
-# **KubePrism。** Talos が全ノードの localhost:7445 でコントロールプレーンを負荷分散する。
+# KubePrism。Talos が全ノードの localhost:7445 でコントロールプレーンを負荷分散する。
 # k3s のときは API サーバがノード上に居たので loopback の 6443 で足りていた。
 k8sServiceHost: localhost
 k8sServicePort: 7445
 
-# **Talos は cgroup を自分で用意する。** Cilium に自動マウントさせると衝突する。
+# Talos は cgroup を自分で用意する。Cilium に自動マウントさせると衝突する。
 cgroup:
   autoMount:
     enabled: false

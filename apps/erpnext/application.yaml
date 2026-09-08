@@ -1,17 +1,17 @@
-# **ERPNext。k3s の HelmChart CRD ではなく ArgoCD の Application で入れる。**
+# ERPNext。k3s の HelmChart CRD ではなく ArgoCD の Application で入れる。
 # HelmChart(helm.cattle.io)は k3s 固有で Talos には無い。
 #
-# **サイト作成と conf-bench の Job は止めてある**(`jobs.createSite` と `jobs.configure`)。
+# サイト作成と conf-bench の Job は止めてある(`jobs.createSite` と `jobs.configure`)。
 # chart が Job の名前に描き出した時刻を入れる(`erpnext-new-site-20260907103337`)ので、
 # 有効なままだと ArgoCD が同期のたびに名前の違う Job を作っては前のを prune する。
 # サイトはもう出来ているので走らせる必要も無い。
 #
-# **まっさらから入れ直すときは 1 回だけ有効にする。** `jobs.configure` は
+# まっさらから入れ直すときは 1 回だけ有効にする。`jobs.configure` は
 # `common_site_config.json`(DB と Redis の宛先)を書くので、chart を大きく上げて
 # その宛先が変わるときも 1 回有効にして戻すこと。実際 8.0.78 で Dragonfly が
 # Valkey に変わったときは conf-bench が書き直している。
 #
-# **finalizer は付けない。** 付けると Application を消したときに ERPNext ごと消える。
+# finalizer は付けない。付けると Application を消したときに ERPNext ごと消える。
 # 本番の ERP なので、消すときは中身を意識して消す。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -55,12 +55,12 @@ spec:
         # chart has no mariadb-sts branch for DB_ROOT_USER, falls back to this
         dbRootUser: root
 
-        # **キャッシュとキューは Valkey。** chart 8.0.78 で Dragonfly から入れ替わった
+        # キャッシュとキューは Valkey。chart 8.0.78 で Dragonfly から入れ替わった
         # (それ以前は dragonfly-cache / dragonfly-queue で、io_uring の ring が
         # RLIMIT_MEMLOCK を食い潰して片方が SIGSEGV する事故があり proactor_threads を
         # 4 に絞っていた。Valkey は Redis 系なのでその問題自体が無い)。
         #
-        # **上限は自分で入れる。** subchart の既定は resources も maxmemory も空で、
+        # 上限は自分で入れる。subchart の既定は resources も maxmemory も空で、
         # 何も書かないとノードの空きメモリまで伸びうる。実使用は cache が数 MiB、
         # queue も数 MiB なので 1gb で十分に余裕がある。コンテナの上限を maxmemory の
         # 上に置いてあるのは Valkey 自身のオーバーヘッドぶん。CPU の上限は付けない。
@@ -89,11 +89,11 @@ spec:
             limits:
               memory: 1536Mi
 
-        # **k8up に論理バックアップを取らせる。** ホストの backup/k3s-backup は
+        # k8up に論理バックアップを取らせる。ホストの backup/k3s-backup は
         # PVC のディレクトリを丸ごと写すだけなので、動いている DB のファイルは
         # よくてクラッシュ一貫性しかない。
         #
-        # **MariaDB の Pod には注釈を付けられない。** chart の mariadb-sts の
+        # MariaDB の Pod には注釈を付けられない。chart の mariadb-sts の
         # StatefulSet テンプレートに podAnnotations が無い。代わりに gunicorn の Pod から
         # mariadb-dump を打つ。あちらには site_config.json(db_host / db_name /
         # db_password)と mariadb-dump が入っていて、root のパスワードも要らない。
@@ -107,7 +107,7 @@ spec:
                 python3 -c 'import json,os,subprocess,sys;c=json.load(open("sites/en.doany.io/site_config.json"));os.environ["MYSQL_PWD"]=c["db_password"];sys.exit(subprocess.call(["mariadb-dump","-h",c["db_host"],"-P",str(c.get("db_port",3306)),"-u",c["db_name"],"--single-transaction","--routines","--events",c["db_name"]]))'
               k8up.io/file-extension: .sql
 
-        # **どちらも false。理由はファイル冒頭。** chart が Job の名前に時刻を入れるので、
+        # どちらも false。理由はファイル冒頭。chart が Job の名前に時刻を入れるので、
         # 有効なままだと同期のたびに作り直される。まっさらから入れ直すときだけ
         # 1 回 true にして、走り終えたら戻す。
         jobs:

@@ -1,11 +1,11 @@
 # ah.doany.io の管理画面を SSO で守る oauth2-proxy。
 #
-# **AdGuard Home には SSO が無い。** 認証は設定ファイルに書いた bcrypt の basic 認証だけで、
+# AdGuard Home には SSO が無い。認証は設定ファイルに書いた bcrypt の basic 認証だけで、
 # 利用者の管理機能も無い。上流の認証プロキシ対応の要望(AdguardTeam/AdGuardHome#1737)は
 # 2020 年から open のまま。公式の答えも「前段で認証しろ」なので、Hubble と同じ形にする。
 #
-# **`/dns-query` はここを通さない。** AdGuard は Web の口で管理画面と DoH の両方を出しているので、
-# 全部を後ろに置くと **DoH にも認証がかかって名前解決が止まる**(2026-09-07 朝に一度やった)。
+# `/dns-query` はここを通さない。AdGuard は Web の口で管理画面と DoH の両方を出しているので、
+# 全部を後ろに置くと DoH にも認証がかかって名前解決が止まる(2026-09-07 朝に一度やった)。
 # HTTPRoute でパスを分けてあり、`/dns-query` は DoH サイドカーへ直接行く。
 #
 # 通すのは Entra のアプリロール `admin` を持つ人だけ。

@@ -1,7 +1,7 @@
 # helm の描き出しに namespace を補う。
-# **chart によっては metadata.namespace を書かない**(infisical の Deployment と
-# Service が実際にそうだった)。helm / kubectl なら `-n` で決まるが、**Talos の
-# マニフェスト適用には既定の namespace が無い**ので default に落ちる。
+# chart によっては metadata.namespace を書かない(infisical の Deployment と
+# Service が実際にそうだった)。helm / kubectl なら `-n` で決まるが、Talos の
+# マニフェスト適用には既定の namespace が無いので default に落ちる。
 #
 #   awk -v ns=infisical -f ns.awk < helm-output.yaml
 BEGIN {
