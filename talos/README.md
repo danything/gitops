@@ -27,6 +27,9 @@ CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.s
 talosctl gen secrets -o secrets.yaml
 sops -e -i secrets.yaml            # → talos/secrets.yaml (暗号化済み)
 
+# 1b) ghcr.io の資格情報。下の「ghcr.io の資格情報」を先に読むこと
+sops -e -i registries.yaml         # → talos/registries.yaml (暗号化済み)
+
 # 2) machine config を作る
 ./talos/render.sh /tmp/talos-config
 
@@ -38,6 +41,31 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kub
 ```
 
 `clusterconfig/` と平文の秘密は `.gitignore` 済み。
+
+## ghcr.io の資格情報
+
+**k3s 期はホストの `/etc/rancher/k3s/registries.yaml` にあった。** ノード単位で持つので
+**namespace ごとの `imagePullSecrets` が要らない**という作りで、Talos でも同じにする
+(`machine.registries`)。無いと danything の private なリポジトリから出ているイメージが
+`ImagePullBackOff` になる。
+
+値は Infisical の `/worklog/ghcr-pull` と同じ PAT。**平文は git に入れない**ので、
+`talos/registries.yaml` を作って SOPS で丸ごと暗号化する([`../.sops.yaml`](../.sops.yaml) に規則がある)。
+
+```yaml
+# talos/registries.yaml (暗号化前)
+machine:
+  registries:
+    config:
+      ghcr.io:
+        auth:
+          username: 5ym
+          password: ghp_…
+```
+
+`render.sh` はこのファイルがあれば復号して `--config-patch` に足し、**無ければ警告して続ける**
+(作る前でも他の作業は進められる)。CI には age の鍵を渡さないので、
+`REGISTRIES` にダミーを入れて経路だけ通している。
 
 **パッチは PR ごとに CI が検証する**([../.github/workflows/talos-validate.yml](../.github/workflows/talos-validate.yml))。
 使い捨ての秘密で `gen config` して `talosctl validate --mode metal` を通し、生成物に

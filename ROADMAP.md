@@ -208,6 +208,8 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       作業中の見せ方は未定(Cloudflare のワイルドカード CNAME を proxied にすれば全サブドメインを Cloudflare 受けにできるが、
       読めるページを出すには Worker か Pages が要る。詳細は decisions.md)。
 - [ ] 最終バックアップを取り、`restic check` を通す。
+- [ ] **`talos/registries.yaml` を作る**(ghcr.io の PAT。`talos/README.md`「ghcr.io の資格情報」)。
+      無いまま焼くと private なイメージが全部 `ImagePullBackOff` になる。
 - [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
 - [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
 - [x] **k3s の組み込みアドオンのうち、Talos に無いものを用意した(2026-09-08)。**
@@ -226,7 +228,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       - coredns は Talos が自前で入れる(`KubeCoreDNSConfig`)。ccm と rolebindings は k3s 固有
 - [ ] k8s オブジェクトは etcd 復元ではなく **git から ArgoCD で再構築**(k3s 固有の HelmChart 等が etcd に混ざっているため)。
 - [ ] PV データを restic から Job で復元(PVC 名 / namespace を合わせる)。
-- [ ] ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ。k3s の registries.yaml は役目を終える。
+- [x] **ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ(2026-09-08)。**
+      [talos/render.sh](talos/render.sh) が `talos/registries.yaml`(SOPS)を復号して足す。
+      **中身を書くのは残作業**(上の「`talos/registries.yaml` を作る」)。k3s の registries.yaml は役目を終える。
 - [ ] **起動順序を組み直す。** k3s の `HelmChart` CRD は Talos に無いので、argocd と infisical は
       置き換えが要る。**inlineManifests は Helm を実行できない**ので、そのままでは移せない。
       層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
