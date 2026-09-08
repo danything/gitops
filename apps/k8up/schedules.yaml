@@ -15,7 +15,9 @@
 #   namespace には効かない
 # - **時刻はホストのスクリプト(19:00 UTC = 04:00 JST)を避ける。** restic は
 #   リポジトリをロックするので、重なると片方が待たされる。
-#   バックアップは 15:00〜17:30 UTC、prune は日曜の 20:00〜22:30 UTC に置いてある
+#   バックアップは 15:00〜17:45 UTC、prune は日曜の 20:00〜22:45 UTC に置いてある。
+#   **後ろは詰まっている** ── 18:00 UTC に notify.yaml の CronJob が走るので、
+#   これ以上うしろに足すなら向こうもずらすこと
 # - 保持は全部 `keepDaily 7 / keepWeekly 4 / keepMonthly 6`
 # - **`check` だけは 1 本でよい。** `restic check` はリポジトリ全体を見るもので、
 #   prune と違って namespace には縛られない(`restic/cli/check.go` は `--host` を渡さない)

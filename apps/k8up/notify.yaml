@@ -54,7 +54,9 @@ metadata:
   name: k8up-notify
   namespace: k8up
 spec:
-  # 最後のバックアップ(portainer 17:30 UTC)の後。
+  # 最後のバックアップ(yuzuriha 17:45 UTC)の後。**余裕は 15 分しかない。**
+  # yuzuriha-data は 12 MB / 7 ファイルなので数秒で終わるが、**ここから先に
+  # Schedule を足すならこの時刻もずらすこと**(schedules.yaml の冒頭にも書いた)。
   schedule: "0 18 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
