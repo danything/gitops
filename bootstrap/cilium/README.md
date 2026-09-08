@@ -9,11 +9,13 @@ Argo CD は同期しない(`bootstrap/` は対象外)。手で当てる。
 
 ```shell
 helm repo add cilium https://helm.cilium.io
-helm upgrade --install cilium cilium/cilium --version "$(yq -r .version version.yaml)" \
+helm upgrade --install cilium cilium/cilium --version "$(sed -n 's/^version: //p' version.yaml)" \
   --namespace kube-system -f values.yaml
 ```
 
 版は [version.yaml](version.yaml) が唯一の出どころ(Renovate がここを追う)。
+**`yq` を使わないのは、サーバに入っているのが v3(構文が違う)だから。**
+手元とサーバのどちらで打っても同じように動くよう `sed` にしてある。
 
 ## **`helm upgrade` の前に必ず [values.yaml](values.yaml) を読むこと**
 

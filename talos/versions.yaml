@@ -33,3 +33,11 @@ kubernetes:
   # いまの k3s は v1.36.2+k3s1。
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   version: v1.36.2
+
+metricsServer:
+  # **Talos には metrics-server が無い。** k3s では組み込みのアドオンとして動いていて、
+  # 移行するとそのまま消える(`kubectl top` と、各 UI の使用量表示が死ぬ)。
+  # inlineManifest として載せる(../talos/render.sh)。
+  # いま k3s に入っているのは rancher/mirrored-metrics-server:v0.8.1。
+  # renovate: datasource=helm depName=metrics-server registryUrl=https://kubernetes-sigs.github.io/metrics-server/
+  version: 3.13.0

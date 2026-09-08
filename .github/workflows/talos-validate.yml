@@ -82,9 +82,13 @@ jobs:
             'local-path-retain' \
             'KUBERNETES_SERVICE_PORT' \
             'value: \"7445\"' \
-            'cgroup-root: \"/sys/fs/cgroup\"'
+            'cgroup-root: \"/sys/fs/cgroup\"' \
+            'name: metrics-server' \
+            'system:metrics-server' \
+            '--kubelet-insecure-tls'
           do
-            grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
+            # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
+            grep -qF -- "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
             echo "  ある: $needle"
           done
 
@@ -93,6 +97,6 @@ jobs:
           for needle in \
             'KubeFlannelCNIConfig'
           do
-            ! grep -qF "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が残っている"; exit 1; }
+            ! grep -qF -- "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が残っている"; exit 1; }
             echo "  無い: $needle"
           done

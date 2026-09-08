@@ -13,7 +13,7 @@
 #
 #   helm repo add jetstack https://charts.jetstack.io
 #   helm upgrade --install cert-manager jetstack/cert-manager \
-#     --version "$(yq -r .version bootstrap/cert-manager/version.yaml)" \
+#     --version "$(sed -n 's/^version: //p' bootstrap/cert-manager/version.yaml)" \
 #     -n cert-manager --create-namespace -f bootstrap/cert-manager/values.yaml
 
 # **Gateway API を見る。** これが無いと Gateway の `cert-manager.io/cluster-issuer`

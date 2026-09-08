@@ -10,7 +10,7 @@
 #
 # **このファイルが「あるべき値」。** 以後の変更はここを直してから
 #
-#   helm upgrade cilium cilium/cilium --version "$(yq -r .version bootstrap/cilium/version.yaml)" \
+#   helm upgrade cilium cilium/cilium --version "$(sed -n 's/^version: //p' bootstrap/cilium/version.yaml)" \
 #     -n kube-system -f bootstrap/cilium/values.yaml
 #
 # で当てる。ConfigMap は直接いじらない。
