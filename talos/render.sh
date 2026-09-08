@@ -74,18 +74,6 @@ helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
 
-# **kubelet のイメージを戻す。** patches/cluster.yaml が `KubeletConfig` ドキュメントごと
-# 消している(あちらに `extraMounts` が無いため)ので、**`--kubernetes-version` が入れた
-# kubelet の版まで一緒に消える。** 放っておくと Talos の既定(v1.14.0 なら v1.37.0)で動き、
-# コントロールプレーンだけ v1.36.2 という**逆向きのバージョンスキュー**になる
-# (kubelet が API サーバより新しいのは Kubernetes のサポート外)。
-# 2026-09-08 の VM ドリルで、コンソールに `KUBERNETES v1.37.0` と出ているのを見つけた。
-cat > "$WORK/kubelet-image.yaml" <<PATCH
-machine:
-  kubelet:
-    image: ghcr.io/siderolabs/kubelet:${K8S}
-PATCH
-
 # **metrics-server も Talos には無い。** k3s では組み込みのアドオンだった。
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
 helm repo update metrics-server >/dev/null 2>&1 || true
@@ -98,9 +86,6 @@ set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
 	--install-image "factory.talos.dev/installer/${SCHEMATIC}:${TALOS}"
 for f in talos/patches/*.yaml; do set -- "$@" --config-patch "@$f"; done
-# **patches のあとに当てること。** cluster.yaml が KubeletConfig を消したあとで
-# v1alpha1 側に image を書き戻す、という順序に意味がある。
-set -- "$@" --config-patch "@$WORK/kubelet-image.yaml"
 for f in "$WORK"/inline-*.yaml; do set -- "$@" --config-patch "@$f"; done
 
 rm -rf "$OUT"
@@ -112,6 +97,7 @@ echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path' \
 	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
+	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
 	"ghcr.io/siderolabs/kubelet:$K8S"; do
 	# **`--` を忘れないこと。** `--kubelet-insecure-tls` のような needle を
 	# grep がオプションとして解釈して落ちる。

@@ -134,7 +134,8 @@ kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged
 
 実際に local-path-provisioner はこれで詰まった(ヘルパー Pod が `hostPath` を使うため PVC が Pending のまま)。
 ラベルを付けたら PVC が Bound になり、Pod から書いた内容がディスク上の
-`/var/local-path-provisioner/pvc-…_<ns>_<pvc>` に残ることまで確認した。
+`/var/local-path-provisioner/pvc-…_<ns>_<pvc>` に残ることまで確認した
+(**当時のパス。いまは user volume の `/var/mnt/local-path`**。下の「ブートドリル 3 回目」)。
 
 **baseline は hostPort も弾く。** ここを見落としやすい。実際に走っている Pod を数えると、
 ラベルが要る namespace は次のとおり(2026-09-07 時点。`namespace.yaml` に書き込み済み):
@@ -191,13 +192,133 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 
 - Node が**同じ名前・同じ作成時刻**で Ready に戻り、Namespace・Deployment・PVC/PV の紐付け・
   PSA のラベルまでスナップショット時点の状態が復元された
-- **PV の中身は戻らない。** `/var/local-path-provisioner` は空のままだった。
+- **PV の中身は戻らない。** `/var/local-path-provisioner`(**当時のパス。いまは `/var/mnt/local-path`**)は空のままだった。
   etcd は「PVC がこの PV に紐づいている」という事実しか持っていない
 - したがって Talos 期の復元は **etcd スナップショット → PV データを restic(k8up)から戻す** の 2 段になる。
   順序は etcd が先(PV オブジェクトが無いと戻す先が決まらない)
 
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
+
+## ブートドリル 3 回目(2026-09-08、`render.sh` の出力をそのまま焼いた)
+
+1・2 回目は `talos/patches/` だけを起動した。3 回目は **[`talos/render.sh`](../talos/render.sh) が
+描いた machine config を丸ごと**焼いて、Cilium・local-path・metrics-server まで上がるところを見た。
+
+**移行当日に踏むはずだった穴が 3 つ出た。**
+
+### 1. kubelet だけ v1.37.0 で動いていた
+
+コンソールに出ていたのはこれ:
+
+```
+KUBERNETES  v1.37.0        KUBELET  x Unhealthy
+```
+
+`patches/cluster.yaml` が `KubeletConfig` をドキュメントごと消していて、
+**`--kubernetes-version` が入れていた kubelet のイメージも一緒に消えていた。**
+生成物には kubelet のイメージが 1 行も無く、Talos の既定で上がる。
+
+```
+== --kubernetes-version v1.36.2 あり:  kubelet:v1.36.2 / kube-apiserver:v1.36.2
+== 無し(既定):                        kubelet:v1.37.0 / kube-apiserver:v1.37.0
+```
+
+**kubelet が API サーバより新しいのは Kubernetes のサポート外。** CI は
+`kube-apiserver:<版>` しか見ておらず、「kubelet が無い」ことに気づけなかったので、
+needle を足した(#114)。**その後 user volume を入れて `KubeletConfig` を消す必要が
+なくなった**ので、いまはこの穴自体が塞がっている。needle は再発の見張りとして残してある。
+
+### 2. control-plane の taint で、アプリが 1 つも上がらない
+
+`KubeNodeConfig` は既定で `node-role.kubernetes.io/control-plane: NoSchedule` を入れる。
+**ノードが 1 台のこのクラスタでは、toleration を持たない Pod が全部 Pending になる**
+(k3s は単一ノードを control-plane 兼 worker として扱うので、この問題が無かった)。
+
+**質が悪いのは、ノードが `Ready` に見えること。** cilium と CoreDNS は toleration を
+持っているので上がる:
+
+```
+kube-system          cilium-l4xvm                              1/1     Running
+kube-system          coredns-6cb54fb45c-9k5sl                  1/1     Running
+kube-system          metrics-server-5ffb6b8554-drtss           0/1     Pending
+local-path-storage   local-path-provisioner-75f8fcb898-j9hqb   0/1     Pending
+
+Warning  FailedScheduling  default-scheduler  no nodes available to schedule pods
+```
+
+`taints` はマップなので `taints: {}` では消えない。中に `$patch: replace` を書くと
+**キーとして残ってしまい** `name "$patch" is invalid` で validate が落ちる。
+`KubeletConfig` / `HostnameConfig` と同じく**ドキュメントごと消して `labels` だけ
+書き戻す**のが唯一の手(#115)。
+
+### 3. EPHEMERAL がディスク全部を取る
+
+```
+EPHEMERAL   partition   ready   /dev/vda5   24 GB     ← 26 GB のディスクほぼ全部
+ETCD        directory   ready                          ← その中
+CRI         directory   ready                          ← その中
+```
+
+etcd もコンテナイメージも PV データも同じ 1 枚。**local-path は PVC の容量を強制しない**ので、
+1 個の PVC が暴走すると etcd ごと道連れになる。**ボリュームの設定は「まだ確保されていない
+ときにしか効かない」ので、直せるのは入れ直すときだけ。**
+
+`VolumeConfig`(EPHEMERAL に `maxSize`)と `UserVolumeConfig` を足して割り直した。
+**システムボリュームはユーザーボリュームより先に確保される**ので、EPHEMERAL に上限を
+書き忘れると取り分が残らない(siderolabs/talos#12713)。
+
+### ついでに分かったこと
+
+- **user volume のマウント先は kubelet コンテナに自動で通る。** `extraMounts` のハックが
+  要らなくなり、上の 1 の原因ごと消えた
+- `UserVolumeConfig` は `metadata.name` ではなく**トップレベルの `name`**。名前は
+  1〜34 文字の英数字とハイフンで、ディスク上のラベルは `u-<name>` になる
+
+### 通しで確かめたこと
+
+**Cilium のデータパスは k3s 期と同じ形で上がる。**
+
+```
+KubeProxyReplacement:  True   [bond0  10.0.0.2 240f:6d:842b:1::2 (Direct Routing), enp0s4  10.10.0.4]
+Cilium:                Ok     1.20.1
+Routing:               Network: Tunnel [vxlan]   Host: BPF
+Masquerading:          BPF    [bond0, enp0s4]   10.42.0.0/24 fd42::/64 [IPv4: Enabled, IPv6: Enabled]
+```
+
+`cgroup.hostRoot` と KubePrism(`localhost:7445`)の上書き([`talos/cilium-values.yaml`](../talos/cilium-values.yaml))が
+効いていることの裏付けでもある。
+
+**`service-node-port-range: 80-32767` は実際に効く。** 生成物を見るだけでなく、
+クラスタで nodePort 80 の Service を作れることを確かめた
+(Gateway の公開経路がここに乗っている。[`talos/patches/apiserver.yaml`](../talos/patches/apiserver.yaml))。
+
+```
+$ kubectl create svc nodeport np --tcp=80:80 --node-port=80
+np   NodePort   10.43.251.48   <none>   80:80/TCP
+```
+
+**dual-stack も出る。** `fd43::/108` に変えた影響を確かめた:
+
+```
+$ kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIPs}'
+["10.43.0.10","fd43::a"]      ipFamilyPolicy: RequireDualStack
+```
+
+### VM の組み方(3 回目の追記)
+
+- **`NETDEV WATCHDOG: transmit queue 0 timed out` は QEMU 側のミス。** bond の 2 本目を
+  **何も繋がっていないハブ**に挿していた。QEMU 自身が
+  `warning: hub 3 is not connected to host network` と言っているので、**`qemu.log` を必ず読む**
+- **インタフェース名は起動ごとに変わる。** 3 回目は `enp0s2`/`enp0s3`(bond)と `enp0s4`。
+  maintenance mode で `talosctl get links --insecure` を見てから patch を読み替えること
+- **コンソールが要るときは monitor の `screendump`。** `-display none` でも
+  `screendump /path/foo.ppm` で画面が撮れる。上の 1 はこれで見つけた
+  (シリアルには Talos のダッシュボードが流れてこない)。`socat`/`nc` が無ければ
+  python の `socket.AF_UNIX` で monitor.sock に直接書けばよい
+- **前の VM を殺し忘れると `hostfwd` のポートを握ったままで、新しい VM が黙って死ぬ。**
+  `pgrep -af qemu-system-x86_64` で確認する。**`pkill -f` のパターンは
+  `qemu-system-[x]86_64` のように書く** ── そうしないと自分の ssh セッションごと殺す(実際に踏んだ)
 
 ## inlineManifests は「更新できない」ではない(2026-09-08、VM で実測)
 

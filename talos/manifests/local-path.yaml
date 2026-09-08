@@ -8,7 +8,7 @@
 #
 # | | k3s | ここ |
 # | --- | --- | --- |
-# | データの置き場 | `/var/lib/rancher/k3s/storage` | `/var/local-path-provisioner`(`talos/patches/cluster.yaml` の `extraMounts` と対) |
+# | データの置き場 | `/var/lib/rancher/k3s/storage` | `/var/mnt/local-path`([`talos/patches/volumes.yaml`](../patches/volumes.yaml) の `UserVolumeConfig` が切る**別パーティション**) |
 # | namespace | `kube-system` | `local-path-storage`(**PSA は privileged**。ヘルパー Pod が hostPath を使う) |
 #
 # ## StorageClass を 2 つ出す
@@ -109,10 +109,23 @@ data:
       "nodePathMap":[
       {
         "node":"DEFAULT_PATH_FOR_NON_LISTED_NODES",
-        "paths":["/var/local-path-provisioner"]
+        "paths":["/var/mnt/local-path"]
       }
       ]
     }
+  # **`setup` と `teardown` は必須。** ヘルパー Pod はこの ConfigMap を
+  # `subPath` で 1 キーずつマウントするので、**キーが無いとヘルパー Pod が
+  # `configmap references non-existent config key: setup` で ContainerCreating のまま止まり、
+  # PVC が永遠に Pending になる**(2026-09-08 の VM ドリルで踏んだ。上流の
+  # deploy/local-path-storage.yaml には入っている)。
+  setup: |-
+    #!/bin/sh
+    set -eu
+    mkdir -m 0777 -p "$VOL_DIR"
+  teardown: |-
+    #!/bin/sh
+    set -eu
+    rm -rf "$VOL_DIR"
   helperPod.yaml: |-
     apiVersion: v1
     kind: Pod

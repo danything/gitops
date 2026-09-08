@@ -216,7 +216,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
         [talos/manifests/local-path.yaml](talos/manifests/local-path.yaml)。
         `local-path-storage` の PSA ラベル(privileged)もここで付く。
         **`local-path-retain` も同じ名前で出す** ── 21 本の PVC が参照していて、
-        バインド済みでは変更できないため
+        バインド済みでは変更できないため。
+        データの置き場は **`/var/mnt/local-path`(専用パーティション)**
+        ([talos/patches/volumes.yaml](talos/patches/volumes.yaml))。
+        **ディスクの割り方は入れ直さないと変えられない**ので、当日の焼き込み前に確定させること
       - **metrics-server** … 入れないと `kubectl top` と各 UI の使用量表示が消える
         (HPA は 0 個なので停止はしない)。[talos/metrics-server-values.yaml](talos/metrics-server-values.yaml)。
         **`--kubelet-insecure-tls` が要る**(Talos の kubelet は自己署名の証明書)
