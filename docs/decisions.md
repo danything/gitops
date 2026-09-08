@@ -9,8 +9,8 @@
 | 不変(移行をまたいで同じ) | 捨てる(k3s 期限定) |
 | --- | --- |
 | restic リポジトリ形式・パスフレーズ・バケット | ホスト側 backup スクリプト + systemd timer |
-| local-path provisioner の PV ディレクトリ構造(`pvc-<uid>_<ns>_<name>`) | state.db の sqlite `.backup` スナップショット |
-| `bootstrap/` の中身(Argo CD・Infisical・Traefik・auth の定義)。Talos では machine config の `cluster.inlineManifests` に載せる(下記) | |
+| local-path provisioner の PV ディレクトリ構造(`pvc-<uid>_<ns>_<name>`。**親のパスは変わる** ── k3s は `/var/lib/rancher/k3s/storage`、Talos は user volume の `/var/mnt/local-path`) | state.db の sqlite `.backup` スナップショット |
+| `bootstrap/` の中身(Argo CD・Infisical・Cilium・cert-manager・auth の定義)。Talos では machine config の `cluster.inlineManifests` に載せる(下記) | |
 | 公開の復元手順(秘密を含まない、`curl \| sh` できる)という**性質** | setup-network.sh / k3s-server-config.yaml / init.sh / **restore.sh**(k3s 期専用。Talos 期は machine config + etcd + k8up の Job に置き換わる) |
 | Infisical のデータ(Postgres PVC)と `ENCRYPTION_KEY` | HelmChart CRD(helm.cattle.io)、k3s 同梱の Traefik / ServiceLB |
 | ArgoCD + ApplicationSet(repos.yaml)+ 各 repo の `deploy/argocd.yaml` | firewalld 無効化などホストの手作業 |
@@ -110,17 +110,115 @@ Object Read & Write をこのバケットだけに絞った Account API token。
   [../apps/k8up/README.md](../apps/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
 
 
-## Talos では `bootstrap/` をどう適用するか
+## Talos の起動順序をどう組むか(2026-09-07)
 
-**下の「Talos の起動順序をどう組むか(2026-09-07)」に書き直した。** ここには当初の見立てだけ残す:
+k3s の `HelmChart` CRD(`helm.cattle.io/v1`)は **Talos に無い**。いま `bootstrap/` に残っている
+argocd と infisical はどちらもそれで入れているので、移行時に置き換えが要る。
+「inlineManifests に載せる」と一言で書いていたが、**inlineManifests は Helm を実行できない**ので
+そのままでは移せない。
 
-- `machine config` の inlineManifests が「Argo CD より下の層」を引き受ける、という筋は変わっていない
-- **ただし当初「手で apply する層が消える」と書いたのは外れた。** 実際には二段階になり、
-  適用は GitHub Actions に移った([bootstrap/README.md](../bootstrap/README.md))。
-  machine config が持つのは「そこへ辿り着くまで」だけ
-- **inlineManifests は Talos 自身は更新しない**が、**`talosctl upgrade-k8s` を通せば
-  更新も削除もされる**(2026-09-08 に VM で実測。[talos.md](talos.md))。
-  当初「create-once で reconcile ではない」と書いたのは**半分誤り**だった
+### 前提の確認: ArgoCD は Infisical 無しで起動する
+
+「ArgoCD に infisical を預けると鶏卵になる」としていたが、**実際には循環していない**。
+ArgoCD の設定にある `$argocd-oidc:client-secret` のような参照は、
+[`util/settings/settings.go`](https://github.com/argoproj/argo-cd/blob/master/util/settings/settings.go) で
+こう扱われる:
+
+```go
+secretVal, ok := secretValues[secretKey]
+if !ok {
+    log.Warn("secret key does not exist in secret")   // 警告するだけ
+    return val                                         // 文字列をそのまま返す
+}
+```
+
+**Secret が無くても落ちない。** OIDC が未解決のまま起動し、**SSO ログインだけが効かない**。
+そして **同期の動作自体に誰のログインも要らない**。つまり順序は素直に解ける:
+
+**Cilium → ArgoCD 起動 → ArgoCD が Infisical を入れる → operator が Secret を作る → SSO が効くようになる**
+
+**承知しておくこと**: `admin.enabled: false` にしてあるので、**この窓の間は UI に誰も入れない**
+(SSO 未解決 + ローカル admin 無効)。困ることがあれば `kubectl` で見る。移行当日に UI が要るなら、
+一時的に `admin.enabled` を戻す。
+
+### 層の分け方
+
+| 層 | 中身 | 資格情報 |
+| --- | --- | --- |
+| **machine config** | **`bootstrap/` のほぼ全部。** inline が 9 つ(cilium / local-path / metrics-server / `bootstrap-applier` の RBAC / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | machine config 自体が SOPS 済みなので同じ信頼水準 |
+| **GitHub Actions** | `bootstrap/` の残り(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、平文のもの) | OIDC。**Secret 権限なし・delete なし**の狭い RBAC |
+| **ArgoCD** | `apps/`(**infisical は来ない**。下の「infisical だけは ArgoCD に移せない」) | — |
+
+**CRD だけ URL で渡すのは大きさの都合。** argocd 1.83 MB・cert-manager 1.30 MB・
+gateway-api 1.1 MB で、埋めると machine config が 341 KB → 4 MB を超える。
+`KubeExternalManifestConfig` は Talos がそのために用意している入口
+([talos/render.sh](../talos/render.sh))。
+
+**なぜ ArgoCD を CI 側に置かないか。** ArgoCD の導入には CRD・ClusterRole・Secret が要る ──
+つまり実質 cluster-admin。CI の RBAC を狭く保っている意味が消える
+([bootstrap/apiserver/rbac.yaml](../bootstrap/apiserver/rbac.yaml))。**入れるものと当てるものを層で分ける。**
+
+**なぜ SOPS の Secret を machine config に入れるか。** CI には age 鍵を渡さない方針なので、
+CI からは当てられない。一方 machine config は**もともと SOPS で暗号化して git に置いている**
+(クラスタ CA の秘密鍵を含むので当然)。**同じ場所に置いても信頼水準は変わらない**うえ、
+起動時点で存在するので順序の問題も消える。復号は手元の `talosctl gen config` のときだけ起きる。
+
+**Helm の出力をコミットすることについて。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
+`helm template` の出力を持つのは避けられない(Talos 公式も同じ形)。ArgoCD も同じ扱いにすれば、
+**Helm を実行する場所がクラスタの外(手元の生成時)だけ**になり、クラスタ内に Helm コントローラを
+持たなくて済む。版の追従は `talos/versions.yaml` と同じく Renovate に見せる。
+
+**当初の見立てとのずれ。** 最初は「machine config が inlineManifests を持てば手で apply する層は消える」
+と見ていたが、外れた。実際は上の二段になり、平文のぶんは GitHub Actions が当てる。
+「inlineManifests は create-once で reconcile されない」と書いたのも半分誤りで、
+`talosctl upgrade-k8s` を通せば更新も削除もされる(2026-09-08 に VM で実測。[talos.md](talos.md))。
+
+## machine config と Cilium の chart をどう連動させるか(2026-09-08 決定)
+
+Talos では Cilium を `inlineManifests` に載せる。**では `bootstrap/cilium/values.yaml` と
+machine config の中の Cilium を、人が手で合わせるのか。** 合わせない。**machine config を
+「派生物」にする。**
+
+### `gen config` のときに描く
+
+`helm template` の出力を `KubeInlineManifestConfig` に包んで、ただの `--config-patch` として渡す。
+**Cilium の値がリポジトリに二度書かれることが無くなる。**
+
+```shell
+{
+  echo "apiVersion: v1alpha1"; echo "kind: KubeInlineManifestConfig"; echo "name: cilium"
+  echo "manifest: |-"
+  helm template cilium cilium/cilium --version "$(sed -n 's/^version: //p' bootstrap/cilium/version.yaml)" \
+    -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$K8S" | sed 's/^/    /'
+} > /tmp/cilium-inline.yaml
+```
+
+実際に作って確かめた(2026-09-08): 2329 行の manifest が埋まり、`talosctl validate --mode metal` を通る。
+生成物では 1 行のエスケープ文字列になるので、machine config 自体は 450 行のまま読める。
+
+**Renovate は `bootstrap/cilium/version.yaml` を見ている**ので、版が上がれば PR が来る。
+machine config は毎回そこから描き直されるだけで、追従の作業は無い。
+
+### **罠: `upgrade-k8s` は Cilium も巻き戻す**
+
+`inlineManifests` は **`talosctl upgrade-k8s` を通すと reconcile される**(talos.md)。
+`upgrade-k8s` は Kubernetes を上げるときの通常の操作でもあるので、
+**machine config の中の Cilium が古いまま流すと、走っている Cilium が巻き戻る。**
+
+したがって **`upgrade-k8s` の前には必ず machine config を描き直す**。手順の一部として書くこと。
+
+### 帰結: Talos 期は `helm upgrade` を使わなくなる
+
+Cilium の更新経路は「`values.yaml` を直す → machine config を描き直す → `upgrade-k8s`」になる。
+**`bootstrap/cilium/values.yaml` が正本なのは変わらない**が、当てる道具が替わる。
+[cilium-drift.yml](../.github/workflows/cilium-drift.yml) のズレ検出は k3s 期のもので、
+Talos では `upgrade-k8s` 自身が差分を出す(`< configured ...` と diff)ので役目を終える。
+
+### 採らなかった案
+
+**Cilium を machine config に載せず、bootstrap のあとに `helm install` する。** 罠は消えるが、
+再構築のたびに手作業が 1 つ増える(しかも「CNI が無いので何も動かない」状態での作業)。
+Sidero は inline manifest を production 推奨、CLI での install を "least declarative" としている。
 
 ## ルーティングの選定(2026-09-06)
 
@@ -560,17 +658,19 @@ ArgoCD の Application にした。描き出しを突き合わせると**消え�
 
 ## ghcr の pull 認証
 
-いまは repo が private なのでパッケージも private で、名前空間ごとに `ghcr-pull`(PAT の dockerconfigjson)を
-Infisical から作って `imagePullSecrets` で参照している(tamasagashi、worklog)。アプリを足すたびに同じものが増える。
+repo が private なのでパッケージも private。もとは名前空間ごとに `ghcr-pull`(PAT の dockerconfigjson)を
+Infisical から作って `imagePullSecrets` で参照していた(tamasagashi、worklog)。アプリを足すたびに同じものが増える。
 
 | 案 | 中身 | 評価 |
 | --- | --- | --- |
 | **node 単位の資格情報**(推奨) | k3s なら `/etc/rancher/k3s/registries.yaml`、Talos なら machine config の `machine.registries.config."ghcr.io".auth`。全 namespace に効く | `imagePullSecrets` と `ghcr-pull` の CR が全部消える。Talos では SOPS 暗号化した machine config に載るので、秘密の置き場も統一される。**Talos 移行と同時にやるのが自然** |
 | パッケージだけ public にする | GHCR のパッケージ可視性は repo の可視性と独立。public にすれば資格情報ゼロ | いちばん簡単。ただしイメージの中身(ビルド済みのアプリ)が誰でも pull できる |
 | GitHub App の短命トークン | CronJob で 1 時間ごとにトークンを発行して Secret を書き換える | いちばん安全だが、動く部品が増える。単一ノードの自宅クラスタには過剰 |
-| いまのまま(PAT を Infisical に) | 現状 | 動いてはいる。ローテーションは Infisical 側 1 回で済む |
+| そのまま(PAT を Infisical に) | 当時の形 | 動いてはいる。ローテーションは Infisical 側 1 回で済む |
 
-**結論: node 単位へ寄せた(2026-09-06、Talos を待たず k3s 側で実施)。** アプリを足すたびに Secret を用意する必要が無くなった。
+**結論: node 単位へ寄せた(2026-09-06、Talos を待たず k3s 側で実施)。** アプリを足すたびに Secret を
+用意する必要が無くなった。Talos では同じ値が `talos/registries.yaml`(SOPS 済み)に入る
+([talos/README.md](../talos/README.md))。
 
 
 ## PT3 チューナー(Talos で動かすための算段)
@@ -767,108 +867,3 @@ ArgoCD は「git から消えた + 自分が追跡している」ものを prune
 - **`bootstrap/` へ移すもの** — 引き取り手が居ないのでこの手が使えない。先に
   `argocd.argoproj.io/sync-options: Prune=false` を live に効かせておき、そのあと移す。
   移し終えたら live の tracking-id 注釈を剥がして、`Prune=false` も外す
-
-## machine config と Cilium の chart をどう連動させるか(2026-09-08 決定)
-
-Talos では Cilium を `inlineManifests` に載せる。**では `bootstrap/cilium/values.yaml` と
-machine config の中の Cilium を、人が手で合わせるのか。** 合わせない。**machine config を
-「派生物」にする。**
-
-### `gen config` のときに描く
-
-`helm template` の出力を `KubeInlineManifestConfig` に包んで、ただの `--config-patch` として渡す。
-**Cilium の値がリポジトリに二度書かれることが無くなる。**
-
-```shell
-{
-  echo "apiVersion: v1alpha1"; echo "kind: KubeInlineManifestConfig"; echo "name: cilium"
-  echo "manifest: |-"
-  helm template cilium cilium/cilium --version "$(sed -n 's/^version: //p' bootstrap/cilium/version.yaml)" \
-    -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$K8S" | sed 's/^/    /'
-} > /tmp/cilium-inline.yaml
-```
-
-実際に作って確かめた(2026-09-08): 2329 行の manifest が埋まり、`talosctl validate --mode metal` を通る。
-生成物では 1 行のエスケープ文字列になるので、machine config 自体は 450 行のまま読める。
-
-**Renovate は `bootstrap/cilium/version.yaml` を見ている**ので、版が上がれば PR が来る。
-machine config は毎回そこから描き直されるだけで、追従の作業は無い。
-
-### **罠: `upgrade-k8s` は Cilium も巻き戻す**
-
-`inlineManifests` は **`talosctl upgrade-k8s` を通すと reconcile される**(talos.md)。
-`upgrade-k8s` は Kubernetes を上げるときの通常の操作でもあるので、
-**machine config の中の Cilium が古いまま流すと、走っている Cilium が巻き戻る。**
-
-したがって **`upgrade-k8s` の前には必ず machine config を描き直す**。手順の一部として書くこと。
-
-### 帰結: Talos 期は `helm upgrade` を使わなくなる
-
-Cilium の更新経路は「`values.yaml` を直す → machine config を描き直す → `upgrade-k8s`」になる。
-**`bootstrap/cilium/values.yaml` が正本なのは変わらない**が、当てる道具が替わる。
-[cilium-drift.yml](../.github/workflows/cilium-drift.yml) のズレ検出は k3s 期のもので、
-Talos では `upgrade-k8s` 自身が差分を出す(`< configured ...` と diff)ので役目を終える。
-
-### 採らなかった案
-
-**Cilium を machine config に載せず、bootstrap のあとに `helm install` する。** 罠は消えるが、
-再構築のたびに手作業が 1 つ増える(しかも「CNI が無いので何も動かない」状態での作業)。
-Sidero は inline manifest を production 推奨、CLI での install を "least declarative" としている。
-
-## Talos の起動順序をどう組むか(2026-09-07)
-
-k3s の `HelmChart` CRD(`helm.cattle.io/v1`)は **Talos に無い**。いま `bootstrap/` に残っている
-argocd と infisical はどちらもそれで入れているので、移行時に置き換えが要る。
-「inlineManifests に載せる」と一言で書いていたが、**inlineManifests は Helm を実行できない**ので
-そのままでは移せない。
-
-### 前提の確認: ArgoCD は Infisical 無しで起動する
-
-「ArgoCD に infisical を預けると鶏卵になる」としていたが、**実際には循環していない**。
-ArgoCD の設定にある `$argocd-oidc:client-secret` のような参照は、
-[`util/settings/settings.go`](https://github.com/argoproj/argo-cd/blob/master/util/settings/settings.go) で
-こう扱われる:
-
-```go
-secretVal, ok := secretValues[secretKey]
-if !ok {
-    log.Warn("secret key does not exist in secret")   // 警告するだけ
-    return val                                         // 文字列をそのまま返す
-}
-```
-
-**Secret が無くても落ちない。** OIDC が未解決のまま起動し、**SSO ログインだけが効かない**。
-そして **同期の動作自体に誰のログインも要らない**。つまり順序は素直に解ける:
-
-**Cilium → ArgoCD 起動 → ArgoCD が Infisical を入れる → operator が Secret を作る → SSO が効くようになる**
-
-**承知しておくこと**: `admin.enabled: false` にしてあるので、**この窓の間は UI に誰も入れない**
-(SSO 未解決 + ローカル admin 無効)。困ることがあれば `kubectl` で見る。移行当日に UI が要るなら、
-一時的に `admin.enabled` を戻す。
-
-### 層の分け方
-
-| 層 | 中身 | 資格情報 |
-| --- | --- | --- |
-| **machine config** | **`bootstrap/` のほぼ全部。** inline が 9 つ(cilium / local-path / metrics-server / `bootstrap-applier` の RBAC / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | machine config 自体が SOPS 済みなので同じ信頼水準 |
-| **GitHub Actions** | `bootstrap/` の残り(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、平文のもの) | OIDC。**Secret 権限なし・delete なし**の狭い RBAC |
-| **ArgoCD** | `apps/`(**infisical は来ない**。上の「infisical だけは ArgoCD に移せない」) | — |
-
-**CRD だけ URL で渡すのは大きさの都合。** argocd 1.83 MB・cert-manager 1.30 MB・
-gateway-api 1.1 MB で、埋めると machine config が 341 KB → 4 MB を超える。
-`KubeExternalManifestConfig` は Talos がそのために用意している入口
-([talos/render.sh](../talos/render.sh))。
-
-**なぜ ArgoCD を CI 側に置かないか。** ArgoCD の導入には CRD・ClusterRole・Secret が要る ──
-つまり実質 cluster-admin。CI の RBAC を狭く保っている意味が消える
-([bootstrap/apiserver/rbac.yaml](../bootstrap/apiserver/rbac.yaml))。**入れるものと当てるものを層で分ける。**
-
-**なぜ SOPS の Secret を machine config に入れるか。** CI には age 鍵を渡さない方針なので、
-CI からは当てられない。一方 machine config は**もともと SOPS で暗号化して git に置いている**
-(クラスタ CA の秘密鍵を含むので当然)。**同じ場所に置いても信頼水準は変わらない**うえ、
-起動時点で存在するので順序の問題も消える。復号は手元の `talosctl gen config` のときだけ起きる。
-
-**Helm の出力をコミットすることについて。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
-`helm template` の出力を持つのは避けられない(Talos 公式も同じ形)。ArgoCD も同じ扱いにすれば、
-**Helm を実行する場所がクラスタの外(手元の生成時)だけ**になり、クラスタ内に Helm コントローラを
-持たなくて済む。版の追従は `talos/versions.yaml` と同じく Renovate に見せる。
