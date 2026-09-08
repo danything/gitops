@@ -101,7 +101,7 @@ talosctl -n 10.0.0.2 upgrade-k8s          # ← これが inlineManifests を re
 - **`apply-config` だけでは inlineManifests は動かない。** 起動時にしか読まれない
 - **`upgrade-k8s` は版を上げなくても reconcile する。** 同じ版を指しても走る。SSA と
   インベントリで**更新も削除も**する(2026-09-08 に VM で実測。
-  [../docs/talos.md](../docs/talos.md)「inlineManifests は『更新できない』ではない」)
+  [../docs/talos.md](../docs/talos.md)「inlineManifests は「更新できない」ではない」)
 - **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。**
   古い machine config のまま流すと**走っている Cilium が巻き戻る**
 
