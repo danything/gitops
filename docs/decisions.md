@@ -498,8 +498,42 @@ kubectl -n kube-system delete helmchart <name>
 | infisical-push-bridge | 移行済み | `apps/infisical-push-bridge/` |
 | yosegaki | 移行済み | blog リポジトリの `deploy/yosegaki-application.yaml`。PVC 持ちなので上の手順で移した |
 | erpnext | 移行済み | `apps/erpnext/application.yaml`。**サイト作成と conf-bench の Job は止めてある**(下記) |
-| infisical | 未 | Postgres の PVC を持つ。**Infisical より下の層**なので ArgoCD に預けると鶏卵になる |
+| infisical | **移さない**(2026-09-08 に確定) | chart が DB と Redis のパスワードを **Deployment の平文 env に焼き込む**ので、値を git に置けない。理由は下記 |
 | argocd | 移さない | 自分自身。Talos では machine config の `inlineManifests` に載せる |
+
+### infisical だけは ArgoCD に移せない(2026-09-08、chart を読んで確定)
+
+**理由は鶏卵ではない。** ArgoCD は Infisical が無くても起動する(Secret が無いと SSO が
+効かないだけ)ので、そこは問題にならなかった。**駄目なのは chart の作り。**
+
+`infisical-standalone` 1.10.0 は接続文字列を **Deployment の平文 env に焼き込む**:
+
+```
+DB_CONNECTION_URI  postgresql://infisical:<パスワード>@postgresql:5432/infisicalDB
+REDIS_URL          redis://default:<パスワード>@redis-master:6379
+```
+
+`templates/_helpers.tpl` が `.Values.postgresql.auth.password` と
+`.Values.redis.auth.password` をそのまま `printf` している。**ArgoCD の Application は
+平文なので、ここに値を書くことはできない。**
+
+**逃げ道は片方にしか無い。** `postgresql.useExistingPostgresSecret` はあるが、
+
+- `postgresql.enabled: true` と併用すると `DB_CONNECTION_URI` が **2 回描き出される**
+  (kubelet は後ろ勝ちなので平文の方が勝つ)。使うなら同梱の Postgres を切って
+  自前で建てることになる
+- **Redis には逃げ道が無い。** `redisConnectionString` は `.Values.redis.auth.password` を
+  直接埋めるだけで、Secret を指す分岐が無い
+
+`postgresql.auth.existingSecret` / `redis.auth.existingSecret` は **subchart(bitnami)には
+効くが、infisical 本体の env には効かない** ── 指定すると本体側は chart の既定値
+(`root` / `mysecretpassword`)で URI を組み立て、**自分のデータベースに繋げなくなる。**
+実際に `helm template` して確認した。
+
+**なので `bootstrap/` に残す。** Talos では ArgoCD 本体と同じく machine config の
+`inlineManifests` に載せる ── [talos/render.sh](../talos/render.sh) は age の鍵を持っている
+ので、SOPS 済みの値を復号して `helm template` に渡せる。**生成物は machine config の中に
+しか出ないので、git には平文が残らない。**
 
 ### erpnext だけは素直に移せない
 

@@ -281,9 +281,14 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
             (写さない)。CI が自分の権限を作れない ── bootstrap-apply.yml は
             `bootstrap/apiserver/` を除外している(自分の権限を書き換えられるため)ので、
             k3s 期は手で当てていた
-      - [ ] **infisical を `apps/` の ArgoCD Application に移す。** 鶏卵は実際には無かった
-            (ArgoCD は Secret が無くても起動し、SSO だけが効かない)。ただし
-            **`admin.enabled: false` なのでその窓の間は UI に誰も入れない**。`kubectl` で見る
+      - [x] ~~infisical を `apps/` の ArgoCD Application に移す~~ **移さないと決めた(2026-09-08)。**
+            鶏卵は確かに無かった(ArgoCD は Secret が無くても起動し、SSO だけが効かない)が、
+            **chart が DB と Redis のパスワードを Deployment の平文 env に焼き込む**ので、
+            ArgoCD の Application には値を置けない。`existingSecret` は subchart には効くが
+            **本体の接続文字列には効かず、chart の既定値で自分の DB に繋げなくなる**
+            (`helm template` で確認)。Redis 側には逃げ道すら無い。
+            **ArgoCD 本体と同じく inlineManifests に載せる。**
+            経緯は [docs/decisions.md](docs/decisions.md)「infisical だけは ArgoCD に移せない」
 - [x] **ファイルの PVC バックアップを k8up 側に寄せた(2026-09-08)。** ホストの `k3s-backup` は
       **Talos にはシェルが無い**ので持っていけない。**全 11 namespace で成功を確認済み** ──
       SQLite 6 本は `backupcommand`、ファイルは PVC の注釈。`denpa-data` は DB とファイルが
