@@ -62,7 +62,7 @@ metadata:
     secrets.infisical.com/auto-reload: "true"
 spec:
   replicas: 1
-  # hostNetwork で WireGuard のポートを掴むので、新旧 Pod が並ぶと衝突する
+  # hostPort で WireGuard のポートを掴むので、新旧 Pod が並ぶと衝突する
   strategy:
     type: Recreate
   selector:
@@ -73,11 +73,22 @@ spec:
       labels:
         app: netbird-routing-peer
     spec:
-      # **hostNetwork。** LAN(10.0.0.0/24)へ素で出る必要があり、
-      # ルートと NAT もホスト側で成立させないと転送にならない。
-      # Pod の hostname がノード名(main)になるので、ダッシュボードにも `main` で出る。
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
+      # **hostNetwork にしない(2026-09-08 に外した)。**
+      #
+      # 元は「LAN へ素で出るため」に hostNetwork にしていたが、**Pod のネットワークからでも
+      # LAN には届く**(Cilium が masquerade する)。実測:
+      #
+      #   Pod から 10.10.0.2:3389 / 10.10.0.1:80 / 10.10.0.4:853 / 10.0.0.1:80  … 全部 OK
+      #
+      # 逆に **hostNetwork だと管理サーバに繋げなくなった。** Gateway を hostNetwork に
+      # した(#91)結果、**ホスト自身からノードの 443 に繋ぐと応答が返らない**
+      # (bootstrap/cilium/values.yaml の `nodePort`)。このピアは `nb.doany.io:443` に
+      # 繋ぎに行くので、そこに巻き込まれて `Management: Disconnected` で止まっていた。
+      #
+      #   ホストから nb.doany.io:443     … connection refused / timeout
+      #   Pod から   nb.doany.io:443     … 200
+      #
+      # ダッシュボードに出る名前がノード名(`main`)から Pod 名に変わる。
       containers:
         - name: netbird
           image: netbirdio/netbird:0.78.1
@@ -91,12 +102,18 @@ spec:
               value: https://nb.doany.io
             - name: NB_LOG_LEVEL
               value: info
-            # **既定の 51820 は wg-easy が hostNetwork で掴んでいる。**
-            # 併走のあいだは衝突するのでずらす。wg-easy を撤去したら 51820 に戻してよいが、
-            # 戻す必然性は無い(STUN が外から通っているのでホールパンチは成立する。
-            # ルータでこのポートを転送する必要は無い)。
+            # 51820 ではなく 51822。**元は wg-easy と併走していたときの回避**で、
+            # あちらは撤去済み(2026-09-07)。戻す必然性が無いのでそのまま
+            # (STUN が外から通っているのでホールパンチは成立する)。
             - name: NB_WIREGUARD_PORT
               value: "51822"
+          ports:
+            # **hostNetwork をやめたので、WireGuard の口は hostPort で出す。**
+            # 無くても relay 経由で通信は成立するが、直接 P2P にならない。
+            - name: wireguard
+              containerPort: 51822
+              hostPort: 51822
+              protocol: UDP
           securityContext:
             capabilities:
               add:
