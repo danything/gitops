@@ -69,11 +69,12 @@ TALOS=$(ver talos version)
 SCHEMATIC=$(ver talos schematic)
 K8S=$(ver kubernetes version)
 METRICS=$(ver metricsServer version)
+GWAPI=$(ver gatewayAPI version)
 CILIUM=$(sed -n 's/^version: \(.*\)$/\1/p' bootstrap/cilium/version.yaml)
-for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$CILIUM"; do
+for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$CILIUM" "$GWAPI"; do
 	[ -n "$v" ] || { echo "ERROR: versions.yaml から版を読めなかった" >&2; exit 1; }
 done
-echo "talos=$TALOS k8s=$K8S cilium=$CILIUM metrics-server=$METRICS"
+echo "talos=$TALOS k8s=$K8S cilium=$CILIUM metrics-server=$METRICS gateway-api=$GWAPI"
 
 # --- inlineManifest を描く -------------------------------------------------
 # `helm template` の出力をそのまま KubeInlineManifestConfig に包む。
@@ -105,6 +106,28 @@ inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.y
 # に移してあるので、ここには来ない。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
+# **Gateway API の CRD。** これが無いと Gateway も HTTPRoute も適用できず、公開経路が
+# 丸ごと消える(k3s のいまは、消したはずの Traefik の chart が置いていったものが残って
+# いるだけ。versions.yaml のコメント)。
+#
+# **standard-install.yaml は CRD を 10 個とも持っている**(TCPRoute や ListenerSet も)ので、
+# いまクラスタにあるものの上位集合になる。experimental の bundle は要らない。
+#
+# **中身は埋めずに URL で渡す。** standard-install.yaml は 1.1 MB あり、inline にすると
+# machine config がそれだけで膨らむ。Talos には `KubeExternalManifestConfig` という
+# **まさにこのための入口**があるので、そちらを使う(v1alpha1 の `cluster.extraManifests`
+# の後継。1 ドキュメントに 1 URL)。**ノードが起動時に GitHub に出られる必要がある**が、
+# どのみちイメージを引くのでネットワークは要る。
+#
+# **Cilium より先に要る。** Cilium の chart は CRD を同梱せず、`gatewayAPI.enabled: true` は
+# 「CRD は入れてある前提」の設定。
+cat > "$WORK/gateway-api.yaml" <<PATCH
+apiVersion: v1alpha1
+kind: KubeExternalManifestConfig
+name: gateway-api
+url: https://github.com/kubernetes-sigs/gateway-api/releases/download/${GWAPI}/standard-install.yaml
+PATCH
+
 # **metrics-server も Talos には無い。** k3s では組み込みのアドオンだった。
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
 helm repo update metrics-server >/dev/null 2>&1 || true
@@ -118,6 +141,7 @@ set -- --with-secrets "$SECRETS" \
 	--install-image "factory.talos.dev/installer/${SCHEMATIC}:${TALOS}"
 for f in talos/patches/*.yaml; do set -- "$@" --config-patch "@$f"; done
 if [ -n "$REGISTRIES" ]; then set -- "$@" --config-patch "@$REGISTRIES"; fi
+set -- "$@" --config-patch "@$WORK/gateway-api.yaml"
 for f in "$WORK"/inline-*.yaml; do set -- "$@" --config-patch "@$f"; done
 
 rm -rf "$OUT"
@@ -131,6 +155,7 @@ for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-p
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
 	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
 	'name: apiserver-rbac' 'bootstrap-applier' \
+	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'gha:danything/gitops:refs/heads/main' \
 	"ghcr.io/siderolabs/kubelet:$K8S"; do
 	# **`--` を忘れないこと。** `--kubelet-insecure-tls` のような needle を

@@ -41,3 +41,20 @@ metricsServer:
   # いま k3s に入っているのは rancher/mirrored-metrics-server:v0.8.1。
   # renovate: datasource=helm depName=metrics-server registryUrl=https://kubernetes-sigs.github.io/metrics-server/
   version: 3.13.0
+
+gatewayAPI:
+  # **Gateway API の CRD は誰も入れていなかった。** k3s のいまは、消したはずの
+  # **Traefik の `traefik-crd` chart が置いていったもの**が残っているだけ
+  # (`meta.helm.sh/release-name: traefik-crd`。2026-09-08 に気づいた)。
+  # **Talos には当然無い。** 無いと `Gateway` も 12 本の `HTTPRoute` も `GRPCRoute` も
+  # 適用できず、**公開経路が丸ごと消える。** Cilium の chart は CRD を同梱しないので
+  # (`gatewayAPI.enabled: true` は「CRD は自分で入れてある前提」)、こちらで入れる。
+  #
+  # **standard チャンネルで足りる。** 使っているのは Gateway / HTTPRoute /
+  # GRPCRoute / ReferenceGrant の 4 つ(GRPCRoute は v1.1 から standard)。
+  # **v1.6.1 の standard-install.yaml は CRD を 10 個とも持っている**
+  # ── TCPRoute / UDPRoute / TLSRoute / ListenerSet / BackendTLSPolicy も入っていて、
+  # **いまクラスタにあるものの上位集合**なので、これで失うものは無い(2026-09-08 に中身を確認)。
+  #
+  # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
+  version: v1.6.1
