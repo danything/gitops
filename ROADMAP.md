@@ -208,8 +208,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       作業中の見せ方は未定(Cloudflare のワイルドカード CNAME を proxied にすれば全サブドメインを Cloudflare 受けにできるが、
       読めるページを出すには Worker か Pages が要る。詳細は decisions.md)。
 - [ ] 最終バックアップを取り、`restic check` を通す。
-- [ ] **`talos/registries.yaml` を作る**(ghcr.io の PAT。`talos/README.md`「ghcr.io の資格情報」)。
+- [x] **`talos/registries.yaml` を作った(2026-09-08)。** ghcr.io の PAT。
       無いまま焼くと private なイメージが全部 `ImagePullBackOff` になる。
+      **`talos/secrets.yaml`(クラスタの CA 一式)も同日に作った** ── そちらも
+      未作成で、`render.sh` が動かなかった。
 - [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
 - [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
       **設定は入っていて、VM で出ることも確かめた**(2026-09-08 のドリル。
@@ -258,8 +260,11 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 - [x] **ghcr の資格情報を machine config(`machine.registries.config."ghcr.io".auth`)へ(2026-09-08)。**
       [talos/render.sh](talos/render.sh) が `talos/registries.yaml`(SOPS)を復号して足す。
       **中身を書くのは残作業**(上の「`talos/registries.yaml` を作る」)。k3s の registries.yaml は役目を終える。
-- [ ] **起動順序を組み直す。** k3s の `HelmChart` CRD は Talos に無いので、argocd と infisical は
-      置き換えが要る。**inlineManifests は Helm を実行できない**ので、そのままでは移せない。
+- [x] **起動順序を組み直した(2026-09-08)。** k3s の `HelmChart` CRD は Talos に無いので、
+      **[talos/render.sh](talos/render.sh) が `helm template` して inlineManifest にする**
+      (inlineManifests 自体は Helm を実行できないので、描くのは手元)。
+      **本物の値で焼いたドリルで、`apply-config` 1 回で bootstrap 層が全部立ち上がることを
+      確認済み**([docs/talos.md](docs/talos.md)「ブートドリル 4 回目」)。
       層の分け方と根拠は [docs/decisions.md](docs/decisions.md)「Talos の起動順序をどう組むか」。
       - [x] ~~Cilium を inlineManifests に~~ **[talos/render.sh](talos/render.sh) が描く(2026-09-08)。**
             `bootstrap/cilium/` から `helm template` して `KubeInlineManifestConfig` に包む
@@ -322,10 +327,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       描く**ので、ずれていると移行した瞬間に別物が入る。
       **CI では自動化できない**(helm の値はリリースの Secret の中で、`bootstrap-applier` に
       Secret の権限は意図的に無い)。手順と注意は [bootstrap/README.md](bootstrap/README.md)。
-- [ ] **argocd と infisical の chart の版を固定する。** `HelmChart` CR に `version:` が無く、
-      **そのときの最新**が入る(作り直すと別の版になり、Renovate も追えない)。
-      **SOPS 済みなので `sops set` で足す** ── 手順は [bootstrap/README.md](bootstrap/README.md)
-      「Helm で入れるもの」。いまは argo-cd 10.8.1 / infisical-standalone 1.10.0。
+- [x] **argocd と infisical の chart の版を固定した(2026-09-08)。**
+      argo-cd 10.8.1 / infisical-standalone 1.10.0。それまでは `HelmChart` CR に
+      `version:` が無く、**そのときの最新**が入っていた。手順は
+      [bootstrap/README.md](bootstrap/README.md)「Helm で入れるもの」。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
 
 ### Phase 3 — Talos 定常運用

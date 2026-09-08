@@ -850,9 +850,14 @@ if !ok {
 
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
-| **machine config(inlineManifests)** | Cilium(`helm template` の出力)、ArgoCD(同)、`bootstrap-applier` の RBAC、**SOPS 済みの Secret 4 つ** | machine config 自体が SOPS 済みなので同じ信頼水準 |
-| **GitHub Actions** | `bootstrap/` の残り(平文のもの) | OIDC。**Secret 権限なし・delete なし**の狭い RBAC |
-| **ArgoCD** | `apps/`(**Infisical もここに移す**) | — |
+| **machine config** | **`bootstrap/` のほぼ全部。** inline が 9 つ(cilium / local-path / metrics-server / `bootstrap-applier` の RBAC / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | machine config 自体が SOPS 済みなので同じ信頼水準 |
+| **GitHub Actions** | `bootstrap/` の残り(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、平文のもの) | OIDC。**Secret 権限なし・delete なし**の狭い RBAC |
+| **ArgoCD** | `apps/`(**infisical は来ない**。上の「infisical だけは ArgoCD に移せない」) | — |
+
+**CRD だけ URL で渡すのは大きさの都合。** argocd 1.83 MB・cert-manager 1.30 MB・
+gateway-api 1.1 MB で、埋めると machine config が 341 KB → 4 MB を超える。
+`KubeExternalManifestConfig` は Talos がそのために用意している入口
+([talos/render.sh](../talos/render.sh))。
 
 **なぜ ArgoCD を CI 側に置かないか。** ArgoCD の導入には CRD・ClusterRole・Secret が要る ──
 つまり実質 cluster-admin。CI の RBAC を狭く保っている意味が消える

@@ -7,6 +7,11 @@
 
 Argo CD は同期しない(`bootstrap/` は対象外)。手で当てる。
 
+**これは k3s 期の当て方。** Talos では [../../talos/render.sh](../../talos/render.sh) が
+この値で `helm template` して machine config の inlineManifest にする ──
+**あちらでは `helm upgrade` を使わず、`render.sh` → `apply-config` → `upgrade-k8s`** が
+更新経路になる([../../talos/README.md](../../talos/README.md)「上げ方 / 当て直し方」)。
+
 ```shell
 helm repo add cilium https://helm.cilium.io
 helm upgrade --install cilium cilium/cilium --version "$(sed -n 's/^version: //p' version.yaml)" \
