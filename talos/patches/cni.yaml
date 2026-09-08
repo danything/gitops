@@ -1,0 +1,36 @@
+# **Cilium を入れるために、Talos の既定の CNI と kube-proxy を止める。**
+#
+# ROADMAP には「`cni.name: none` と `proxy.disabled: true` にする」と書いてあったが、
+# **patches には入っていなかった**(2026-09-08 に気づいた)。このまま生成すると
+# **flannel と kube-proxy が動くクラスタ**になり、`kubeProxyReplacement: true` の
+# Cilium と正面衝突する。
+#
+# ## v1.14 では書き方が違う
+#
+# v1alpha1 の `cluster.network.cni` は**もう書けない**。書くと apply が弾く:
+#
+#   * cluster network config in v1alpha1 config (.machine.cluster.network)
+#     can't be used with KubeFlannelCNIConfig document, please remove it to avoid conflicts
+#
+# `talosctl gen config` は型付きの `KubeFlannelCNIConfig` と `KubeProxyConfig` を
+# **既定で吐く**ので、そちらを消す/無効にする。
+#
+# - **`KubeFlannelCNIConfig` に `enabled` は無い。** ドキュメントが在ること自体が
+#   「flannel を入れる」の意味なので、`$patch: delete` で丸ごと消す
+# - `KubeProxyConfig` には `enabled` があるので `false` にする
+#
+# 生成物で確認済み(2026-09-08):
+#
+#   $ grep -c KubeFlannelCNIConfig out/controlplane.yaml   → 0
+#   $ grep -A1 "kind: KubeProxyConfig" out/controlplane.yaml
+#   enabled: false
+#   $ talosctl validate --mode metal                        → valid
+#
+# **CoreDNS は止めない**(`KubeCoreDNSConfig`)。Cilium は CoreDNS を置き換えない。
+apiVersion: v1alpha1
+kind: KubeFlannelCNIConfig
+$patch: delete
+---
+apiVersion: v1alpha1
+kind: KubeProxyConfig
+enabled: false

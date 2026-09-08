@@ -10,6 +10,10 @@
 
 talhelper は使わない。`talosctl gen config` にこのディレクトリのパッチを渡すだけで足りる。
 
+**パッチはファイル名を数え上げずにまとめて渡す。** 個別に列挙していたせいで、
+`cni.yaml` を足したときに CI 側だけ更新し忘れる、という事故が起きうる形だった
+(実際、CNI の設定そのものが長い間 patches に入っていなかった)。
+
 ```shell
 # 1) 秘密を作る。生成物は SOPS(age)で暗号化してコミットする
 talosctl gen secrets -o secrets.yaml
@@ -21,9 +25,7 @@ talosctl gen config doany https://10.0.0.2:6443 \
   --with-secrets /tmp/secrets.plain.yaml \
   --kubernetes-version v1.36.2 \
   --install-image factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.0 \
-  --config-patch @patches/cluster.yaml \
-  --config-patch @patches/main.yaml \
-  --config-patch @patches/apiserver.yaml \
+  $(for f in patches/*.yaml; do printf -- '--config-patch @%s ' "$f"; done) \
   --output-dir /tmp/talos-config
 shred -u /tmp/secrets.plain.yaml
 

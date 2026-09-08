@@ -199,8 +199,10 @@ Traefik の撤去と前後してまとめて片付けたぶん。**どれも Tal
 ### Phase 2 — k3s → Talos(停止を伴う。**ネットワーク構成は変えない**)
 
 OS 交換だけに集中する。Cilium と Gateway API は Phase 1.5 で落ち着いた構成のまま持っていく。
-Talos 側は machine config で `cni.name: none` と `proxy.disabled: true` にして、Cilium は
+Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubeProxyConfig` を
+`enabled: false`** にし([talos/patches/cni.yaml](talos/patches/cni.yaml))、Cilium は
 `k8sServicePort: 7445`(KubePrism)、`cgroup.autoMount.enabled: false` + `hostRoot: /sys/fs/cgroup` を足すだけ。
+**v1alpha1 の `cni.name: none` はもう書けない**(型付きドキュメントと衝突する)。
 
 - [ ] 作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から。cloudflared 経由の ssh は使えない。
       作業中の見せ方は未定(Cloudflare のワイルドカード CNAME を proxied にすれば全サブドメインを Cloudflare 受けにできるが、
