@@ -200,6 +200,73 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
 
+## ブートドリル 4 回目(2026-09-08、**本物の値で bootstrap 層まで**)
+
+3 回目までは Cilium・local-path・metrics-server だけだった。4 回目は
+**ArgoCD・cert-manager・infisical と SOPS 済みの Secret を入れた machine config**を
+そのまま焼いて、**`apply-config` 1 回でどこまで立ち上がるか**を見た。
+
+**立ち上がった:**
+
+```
+main   Ready   control-plane   v1.36.2
+
+argocd        argocd-application-controller-0 / applicationset / notifications /
+              redis / repo-server / server            すべて Running
+cert-manager  cert-manager / cainjector / webhook     Running(startupapicheck は Completed)
+infisical     infisical / postgresql-0 / redis-master-0  Running、/api/status が 200
+kube-system   cilium / envoy / operator / coredns ×2 / hubble ×2 / metrics-server
+local-path-storage  local-path-provisioner
+
+EPHEMERAL      partition  ready  /dev/vda5  13 GB
+u-local-path   partition  ready  /dev/vda6  11 GB
+```
+
+**ドリル専用の細工は 1 つだけ** ── ArgoCD の `extraObjects` を空にして
+app-of-apps を外した。本物のリポジトリを同期しに行くと cloudflare-ddns が
+DNS を書き換え、netbird が本番に繋ぎに行く(「副作用を出さないための遮断」と
+同じ理由)。それ以外は本番と同じ値。
+
+### 見つけた問題: **chart が `metadata.namespace` を書かないものがある**
+
+infisical の `Deployment` と `Service` が **`default` namespace に落ちた。**
+
+```
+$ kubectl get deploy -A | grep infisical
+default     deployment.apps/infisical   0/1     0   0   4m15s      ← ここ
+infisical   （無い）
+```
+
+`helm template -n infisical` は `.Release.Namespace` を渡すが、
+**chart 側がそれを `metadata.namespace` に書かない**ことがある(bitnami の subchart は
+書いていた。infisical 本体のテンプレートだけが書いていなかった)。helm や kubectl なら
+`-n` で決まるが、**Talos のマニフェスト適用には既定の namespace が無い。**
+
+**`infisical-secrets` は `infisical` namespace にあるので、`default` に落ちた Pod は
+永久に起動しない。** 移行当日は Infisical が上がらず、そこから全アプリの秘密が
+配られないので、**何も動かないところだった。**
+
+直し方は [`talos/add-namespace.awk`](../talos/add-namespace.awk) ── helm の描き出しを
+通して、`metadata.namespace` が無い名前空間付きリソースに補う。クラスタスコープのもの
+(Namespace / ClusterRole / CRD など)には足さない(足すと API が弾く)。
+**全部の chart の描き出しに通してある。**
+
+### `upgrade-k8s` が本当に reconcile することを実地で確かめた
+
+直した machine config を `apply-config` してから `talosctl upgrade-k8s` を流すと、
+**`infisical` namespace に Deployment が作られた**(`default` の古いものは残る。
+まっさらな導入なら存在しない)。[../talos/README.md](../talos/README.md)「上げ方 /
+当て直し方」に書いた手順が、実際にそのとおり効くことの裏付け。
+
+### ついでに分かったこと
+
+- **infisical はメール無しでも上がる。** 起動時に `Testing smtp connection` で
+  止まって見えるが、`infisical-smtp`(Infisical operator が作る Secret)が
+  無くても最終的に `1/1 Running` になり `/api/status` が 200 を返す。
+  **鶏卵にはならない**ことの確認になった
+- 起動直後に `CreateContainerConfigError: failed to sync secret cache` が数回出るが、
+  **optional な Secret の同期待ちで、放っておくと直る**
+
 ## ブートドリル 3 回目(2026-09-08、`render.sh` の出力をそのまま焼いた)
 
 1・2 回目は `talos/patches/` だけを起動した。3 回目は **[`talos/render.sh`](../talos/render.sh) が
