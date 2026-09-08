@@ -8,7 +8,8 @@
 #
 # 上流の kubernetes-operator にも NetworkRouter があるが、あれは
 # **Kubernetes の Service を公開する**ためのもので、物理 LAN のサブネットルータではない。
-# ここが必要としているのは後者なので、素の Deployment + hostNetwork で組む。
+# ここが必要としているのは後者なので、素の Deployment で組む(hostNetwork は
+# 2026-09-08 に外した。理由は下の spec のコメント)。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
