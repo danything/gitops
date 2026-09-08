@@ -22,7 +22,14 @@ cd "$ROOT"
 WORK=$(mktemp -d)
 # **呼び出し側から渡された SECRETS は消さない。** 自分で作ったものだけ片付ける。
 OWN_SECRETS=
-cleanup() { rm -rf "$WORK"; [ -n "$OWN_SECRETS" ] && rm -f "$OWN_SECRETS"; }
+# **最後を `[ -n ... ] &&` で終えないこと。** EXIT トラップの戻り値がスクリプトの
+# 終了コードになるので、`OWN_SECRETS` が空だとテストが偽になって 1 で落ちる
+# (CI が `SECRETS` を渡す場合がまさにそれ。実際に踏んだ)。
+cleanup() {
+	rm -rf "$WORK"
+	if [ -n "$OWN_SECRETS" ]; then rm -f "$OWN_SECRETS"; fi
+	return 0
+}
 trap cleanup EXIT INT TERM
 
 SECRETS=${SECRETS:-}
