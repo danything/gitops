@@ -1,0 +1,11 @@
+# **Talos でだけ変わるところ。** 正本は bootstrap/cert-manager/values.yaml で、
+# ここはその上に重ねる差分だけ(Cilium と talos/cilium-values.yaml の関係と同じ)。
+#
+# **CRD を chart から描かせない。** 6 つで 1.30 MB あり、**描き出しの 97%** を占める
+# (残りは 39 KB)。machine config に埋めると跳ね上がるので、**CRD は URL で渡す**
+# (`KubeExternalManifestConfig`。ArgoCD・Gateway API と同じ手。../talos/render.sh)。
+#
+# **k3s 期は `crds.enabled: true` のまま**(bootstrap/cert-manager/values.yaml)。
+# あちらは `helm upgrade` で入れるので chart に持たせるのが正しい。
+crds:
+  enabled: false

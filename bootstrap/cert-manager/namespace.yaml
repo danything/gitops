@@ -1,0 +1,8 @@
+# **`--create-namespace` の代わり。** k3s 期は `helm upgrade --install --create-namespace`
+# で作っていたが、**Talos ではこの層が machine config の inlineManifests に載る**ので、
+# namespace も一緒に描き出せるように git に出す([../../talos/render.sh](../../talos/render.sh))。
+# argocd / infisical と同じ形。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
