@@ -78,8 +78,11 @@ nodePort:
   #    範囲内のランダムな値を割り当てる。k3s 期は `recovery/restore.sh` が、
   #    Talos 期は `.github/workflows/bootstrap-apply.yml` がパッチを当てる
   # 3. 副作用として、**ホスト自身から**ノードの 80/443 に繋ぐと応答が返らない。
-  #    ホスト上にこの経路を使うものは無い
-  #    (`grep -rl doany.io /usr/local/bin /etc/cron.d /etc/systemd/system` が空)
+  #    **これは実害を出した(2026-09-08)。** ホスト上のスクリプトには使うものが無かったが、
+  #    **hostNetwork の Pod も「ホスト自身」**で、netbird のルーティングピアが
+  #    `nb.doany.io:443` に繋げず `Management: Disconnected` で止まった
+  #    (VPN 越しの DNS も LAN への RDP も落ちる)。あちらを hostNetwork から外して直した
+  #    (apps/netbird/routing-peer.yaml)。**hostNetwork の Pod を足すときは必ずこれを思い出すこと。**
   range: "80,443"
 
 # Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
