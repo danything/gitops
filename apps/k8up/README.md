@@ -334,6 +334,38 @@ tables=13 users,identities,sessions,paywall_hits,…
 rows=108
 ```
 
+### SQL のダンプは**先にロールを作る**(2026-09-08 に実測)
+
+`pg_dump` は `--no-owner` を付けていないので、**`ALTER … OWNER TO <ロール>` が入っている。**
+ロールが無いクラスタに流すと**そこだけ全部落ちる** ── データは入るが、所有者が
+postgres のままになる。
+
+mattermost のダンプ(10.7 MB)を捨てクラスタに流して数えた:
+
+```
+== ロールを作らずに流したとき
+130 role "mattermost" does not exist          ← エラーはこの 1 種類だけ
+118 テーブル / users 5 / posts 11922          ← データ自体は入る
+
+== 先に CREATE ROLE mattermost LOGIN してから
+0 エラー
+118 テーブル / users 5 / posts 11922
+```
+
+なので順番は **ロール → データベース(`OWNER` 付き) → ダンプ**:
+
+```shell
+psql -U postgres -c 'CREATE ROLE mattermost LOGIN'
+psql -U postgres -c 'CREATE DATABASE mattermost OWNER mattermost'
+psql -U postgres -d mattermost -f /restore/mattermost-postgres.sql
+```
+
+**infisical も同じ**(`pg_dump -U infisical -d infisicalDB`)。erpnext は MariaDB
+(`mysqldump`)なので事情が違う ── あちらは chart が作ったユーザーがそのままいる。
+
+**アプリを普通に起動してから流すのが一番早い。** chart が Postgres を初期化して
+ロールもデータベースも作るので、その中身をダンプで上書きするだけで済む。
+
 **`Succeeded` は「中身が戻った」の意味ではない。** 上の空スナップショットを戻したときも
 `Succeeded` で、ログだけが `Restored 0 files/dirs (0 B)` と言っていた。
 **戻したあとは必ず中身を見ること。**
