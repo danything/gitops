@@ -28,11 +28,12 @@ rules:
     resources: [schedules, backups, prunes, checks, restores]
     verbs: [get, list]
   # **注釈の付け忘れではなく、Schedule の付け忘れを捕まえるために要る。**
-  # PVC に `k8up.io/backup: "true"` を付けても、その namespace に Schedule が
-  # 無ければジョブは作られない(2026-09-08 に yuzuriha で実際に起きていた)。
-  # 名前と注釈しか読まない。中身(spec.volumeName など)には興味が無い。
+  # PVC に `k8up.io/backup: "true"` を付けても、Pod に `k8up.io/backupcommand` を
+  # 付けても、その namespace に Schedule が無ければジョブは作られない
+  # (2026-09-08 に yuzuriha で実際に起きていた)。
+  # 名前と注釈しか読まない。中身(`spec` の中)には興味が無い。
   - apiGroups: [""]
-    resources: [persistentvolumeclaims]
+    resources: [persistentvolumeclaims, pods]
     verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -231,10 +232,25 @@ data:
     // **ジョブ自体が作られず、何のエラーも出ない。** 上の 3 つの見張りは
     // 「あるはずのものが来ない」を見るので、**最初から一度も来ていないものには
     // 何も言わない。** 2026-09-08 に yuzuriha-data がこの穴に落ちていた。
-    const orphans = (await getCore("persistentvolumeclaims"))
-      .filter((p) => p.metadata.annotations?.["k8up.io/backup"] === "true")
-      .filter((p) => !backupNs.has(p.metadata.namespace))
-      .map((p) => `${p.metadata.namespace}/${p.metadata.name}`);
+    // **PVC と Pod の両方を見る。** ファイルは PVC の `k8up.io/backup`、DB は Pod の
+    // `k8up.io/backupcommand` で取っていて、**穴は同じ形で両方に開く。**
+    const wanted = [
+      ...(await getCore("persistentvolumeclaims")).filter(
+        (o) => o.metadata.annotations?.["k8up.io/backup"] === "true",
+      ),
+      ...(await getCore("pods")).filter((o) =>
+        Object.keys(o.metadata.annotations ?? {}).some((k) =>
+          k.startsWith("k8up.io/backupcommand"),
+        ),
+      ),
+    ];
+    const orphans = [
+      ...new Set(
+        wanted
+          .filter((o) => !backupNs.has(o.metadata.namespace))
+          .map((o) => `${o.metadata.namespace}/${o.metadata.name}`),
+      ),
+    ];
 
     const lines = [];
     if (stale.length) {
@@ -251,7 +267,7 @@ data:
       for (const n of silent) lines.push(`- ${n}`);
     }
     if (orphans.length) {
-      lines.push(`**注釈はあるが namespace に Schedule が無い PVC**`);
+      lines.push(`**注釈はあるが namespace に Schedule が無い PVC / Pod**`);
       for (const o of orphans) lines.push(`- ${o}`);
     }
     if (failed.length) {
