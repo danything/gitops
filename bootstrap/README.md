@@ -24,10 +24,8 @@ Talos では**この層は machine config の `inlineManifests` に載る**の�
 | **cert-manager** | [cert-manager/version.yaml](cert-manager/version.yaml) | [cert-manager/values.yaml](cert-manager/values.yaml) |
 | argocd / infisical | **HelmChart CR に未固定(下記)** | CR の `spec.values` |
 
-**cert-manager は版も値も git に無かった。** `helm install` した一度きりで入っていて、
-**作り直すと入らない**か、入っても別の版になる。しかも `config.enableGatewayAPI: true` が
-消えると **Gateway の証明書が発行されなくなる**(注釈が無視される)。cilium で 2026-09-07 に
-直したのと同じ形の穴だったので、同じ形(`version.yaml` + `values.yaml`)で出した。
+**cert-manager は版も値も git に無かった**(2026-09-08 に出した)。経緯は
+[cert-manager/values.yaml](cert-manager/values.yaml) の冒頭 ── ここには写さない。
 
 **argocd と infisical の chart は版が固定されていない。** `HelmChart` CR に `version:` が無く、
 コントローラが**そのときの最新**を入れる。作り直すと別の版になるし、Renovate も追えない

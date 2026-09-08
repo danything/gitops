@@ -1,9 +1,4 @@
-# **cert-manager の chart のバージョン。**
-#
-# **2026-09-08 まで、これはどこにも無かった。** `helm install` した一度きりで入っていて、
-# 版も値も git に記録が無い状態だった(cilium で 2026-09-07 に直したのと同じ形の穴)。
-# **作り直すと cert-manager が入らない**か、入っても別の版になる。
-#
-# 追うのは renovate.json の customManagers。
+# **cert-manager の chart のバージョン。** 経緯と当て方は values.yaml に書いてある。
+# 実機で動いているものと同じ値(`helm list -n cert-manager` → `cert-manager-v1.21.1`)。
 # renovate: datasource=helm depName=cert-manager registryUrl=https://charts.jetstack.io
 version: v1.21.1
