@@ -208,8 +208,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 **v1alpha1 の `cni.name: none` はもう書けない**(型付きドキュメントと衝突する)。
 
 - [ ] 作業は LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から。cloudflared 経由の ssh は使えない。
-      作業中の見せ方は未定(Cloudflare のワイルドカード CNAME を proxied にすれば全サブドメインを Cloudflare 受けにできるが、
-      読めるページを出すには Worker か Pages が要る。詳細は decisions.md)。
+      **作業中は何も見せない(2026-09-08 に決めた)。** Cloudflare のワイルドカードを proxied にして
+      Worker か Pages でメンテナンス画面、という案はあったが、**止まっている数時間のために
+      新しい配線を 1 つ増やす**ことになる。落ちたままでよい ── 見に来るのは自分だけ。
 - [ ] 最終バックアップを取り、`restic check` を通す。
 - [x] **`talos/registries.yaml` を作った(2026-09-08)。** ghcr.io の PAT。
       無いまま焼くと private なイメージが全部 `ImagePullBackOff` になる。
