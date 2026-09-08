@@ -20,14 +20,6 @@ machine:
     net.ipv6.conf.bond0.addr_gen_mode: "3"
     # IPv6 は bond0 に一本化する。eno4 側の RA でデフォルトルートを奪われると非対称ルーティングになる。
     net.ipv6.conf.eno4.disable_ipv6: "1"
-  kubelet:
-    # local-path-provisioner のデータ置き場。/var は EPHEMERAL パーティションなのでアップグレードで消えない。
-    # KubeletConfig ドキュメントには extraMounts が無いため、下でそれを削ってから v1alpha1 に書いている。
-    extraMounts:
-      - destination: /var/local-path-provisioner
-        type: bind
-        source: /var/local-path-provisioner
-        options: [bind, rshared, rw]
   network:
     # 名前は main 固定。local-path の PV の nodeAffinity が main を指している。
     hostname: main
@@ -58,19 +50,6 @@ machine:
         routes:
           - network: 10.10.0.0/24
             gateway: 10.10.0.1
----
-# extraMounts を v1alpha1 側に書くため、このドキュメントごと消す
-# (`KubeletConfig` には extraMounts が無い。v1.15 の config reference で確認)。
-#
-# **消すと kubelet のイメージも一緒に消える。** `--kubernetes-version` が入れていた
-# `ghcr.io/siderolabs/kubelet:<版>` がここにあるため。放っておくと Talos の既定
-# (v1.14.0 なら v1.37.0)で動き、**コントロールプレーンだけ v1.36.2 という逆向きの
-# バージョンスキュー**になる(kubelet が API サーバより新しいのはサポート外)。
-# **[../render.sh](../render.sh) が versions.yaml から書き戻している。**
-# 2026-09-08 の VM ドリルで、コンソールに `KUBERNETES v1.37.0` と出て見つけた。
-apiVersion: v1alpha1
-kind: KubeletConfig
-$patch: delete
 ---
 apiVersion: v1alpha1
 kind: KubeNetworkConfig

@@ -86,6 +86,9 @@ jobs:
             'name: metrics-server' \
             'system:metrics-server' \
             '--kubelet-insecure-tls' \
+            '/var/mnt/local-path' \
+            'name: EPHEMERAL' \
+            'maxSize: 64GiB' \
             "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
           do
             # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
@@ -96,7 +99,8 @@ jobs:
           # **無いことを確かめる側。** flannel は「ドキュメントが在ること」が
           # 有効化の意味なので、消えていることを見るしかない(talos/patches/cni.yaml)。
           for needle in \
-            'KubeFlannelCNIConfig'
+            'KubeFlannelCNIConfig' \
+            '/var/local-path-provisioner'
           do
             ! grep -qF -- "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が残っている"; exit 1; }
             echo "  無い: $needle"

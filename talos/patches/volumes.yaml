@@ -1,0 +1,77 @@
+# **ディスクの割り方。** 既定のままだと EPHEMERAL(= `/var`)が**ディスク全部**を取り、
+# etcd もコンテナイメージも PV データも同じ 1 枚に同居する。
+# **local-path は PVC の容量を一切強制しない**ので、1 個の PVC が暴走すると
+# etcd ごと道連れになる。k3s 期も同じ構造だったが、Talos なら分けられる。
+#
+# ドリルの VM で既定の姿を実測した(2026-09-08):
+#
+#   EPHEMERAL   partition   ready   /dev/vda5   24 GB     ← 26 GB のディスクほぼ全部
+#   ETCD        directory   ready                          ← その中
+#   CRI         directory   ready                          ← その中
+#
+# ## **入れ直さないと直せない**
+#
+# ボリュームの設定は**まだ確保されていないときにしか効かない**。入れたあとで書き足しても
+# 黙って無視されるので、直すにはディスクを消して入れ直すことになる。
+# **移行当日が最後のチャンス。**
+#
+# ## 順番の罠
+#
+# システムボリュームはユーザーボリュームより**先に**確保される。EPHEMERAL に `maxSize` を
+# 書き忘れると `grow: true` が全部持っていき、ユーザーボリュームの取り分が残らない
+# (siderolabs/talos#12713)。**先に上限を書くこと。**
+#
+# ## 大きさの根拠(実機の使用量、2026-09-08)
+#
+#   /var/lib/rancher/k3s/agent/containerd   22G   ← イメージと書き込み層。ここが大半
+#   /var/lib/rancher/k3s/server/db          84M   ← etcd
+#   /var/lib/kubelet                       925M
+#   /var/log                               1.2G
+#   合計                                    24G
+#
+# 64 GiB は実測の 2.6 倍。kubelet のイメージ GC は**割合**で効く(既定 85%)ので、
+# 上限を切っておくほうが 54 GiB あたりで掃除が始まって具合がいい ── 447 GB のまま
+# だと 380 GB まで貯め込んでから初めて動く。残り(約 380 GB)は下の local-path 用。
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+provisioning:
+  diskSelector:
+    match: system_disk
+  maxSize: 64GiB
+  grow: true
+---
+# **PV データの置き場。** `/var/mnt/local-path` に別パーティションとして生える
+# (マウント先は Talos が決める。`/var/mnt/<name>` 固定)。
+# [../manifests/local-path.yaml](../manifests/local-path.yaml) の `paths` がここを指している。
+#
+# **PVC の容量を強制するわけではない**(local-path は相変わらず強制しない)。
+# 効き目は「**溢れてもこのパーティションの中で止まる**」ことで、etcd と
+# コンテナランタイムを巻き添えにしない。
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: local-path
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 50GiB
+  grow: true
+filesystem:
+  type: xfs
+# **`noexec` を外す。** Talos v1.14 から `/var` 系は既定で `nosuid,nodev,noexec` で
+# マウントされる。**PVC の中の実行ファイルが動かなくなる。**
+#
+# 実機で数えたら 5 本あった(2026-09-08):
+#
+#   mattermost-data/plugins/{mattermost-ai,com.mattermost.calls,playbooks,github}/server/dist/plugin-linux-amd64
+#   adguardhome-ssl/process_acme_script.sh
+#
+# **Mattermost はプラグインを PVC から exec する**ので、`noexec` のままだと
+# プラグイン 4 つが起動に失敗する。上流も Longhorn と vCluster が同じ理由で
+# 壊れたと言っていて、逃げ道として `mount.secure` を用意している。
+#
+# `secure: false` は `nosuid` と `nodev` も一緒に外れる。PVC の中身を書けるのは
+# コンテナだけで、そこは Kubernetes 側(PSA・securityContext)で押さえているので
+# これで釣り合うと判断した。
+mount:
+  secure: false
