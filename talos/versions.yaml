@@ -51,9 +51,10 @@ gatewayAPI:
   # (`gatewayAPI.enabled: true` は「CRD は自分で入れてある前提」)、こちらで入れる。
   #
   # **standard チャンネルで足りる。** 使っているのは Gateway / HTTPRoute /
-  # GRPCRoute / ReferenceGrant の 4 つで、GRPCRoute は v1.1 から standard。
-  # experimental の TCPRoute / UDPRoute は**クラスタに CRD だけあって誰も使っていない**
-  # (`kubectl get tcproutes,udproutes -A` が空)。
+  # GRPCRoute / ReferenceGrant の 4 つ(GRPCRoute は v1.1 から standard)。
+  # **v1.6.1 の standard-install.yaml は CRD を 10 個とも持っている**
+  # ── TCPRoute / UDPRoute / TLSRoute / ListenerSet / BackendTLSPolicy も入っていて、
+  # **いまクラスタにあるものの上位集合**なので、これで失うものは無い(2026-09-08 に中身を確認)。
   #
   # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
   version: v1.6.1

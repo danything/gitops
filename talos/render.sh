@@ -110,6 +110,9 @@ inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-
 # 丸ごと消える(k3s のいまは、消したはずの Traefik の chart が置いていったものが残って
 # いるだけ。versions.yaml のコメント)。
 #
+# **standard-install.yaml は CRD を 10 個とも持っている**(TCPRoute や ListenerSet も)ので、
+# いまクラスタにあるものの上位集合になる。experimental の bundle は要らない。
+#
 # **中身は埋めずに URL で渡す。** standard-install.yaml は 1.1 MB あり、inline にすると
 # machine config がそれだけで膨らむ。Talos には `KubeExternalManifestConfig` という
 # **まさにこのための入口**があるので、そちらを使う(v1alpha1 の `cluster.extraManifests`
