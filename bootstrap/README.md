@@ -110,6 +110,12 @@ kubeconfig も age 鍵も GitHub に置いていない。トークンは実行�
 権限も cluster-admin ではなく、この層で実際に使う種類だけ([apiserver/rbac.yaml](apiserver/rbac.yaml))。
 **Secret は含まれていない**ので、GitHub 側が落ちても Secret は読まれない。`delete` も渡していない。
 
+**同じ 2 ファイルが人の入口でもある(2026-09-09)。** Entra を 2 つめの issuer として足し、
+Headlamp が利用者本人の id_token を API サーバへ転送する。アプリロール `admin` を持つ人は
+`entra:admin` で cluster-admin、それ以外は `entra:viewer` で読み取り専用(組み込みの `view`
+＋ CRD とノードぶんの `readonly-extra`)。**振り分けは CEL で、割り当ては Entra 側で完結する。**
+ここに置いたのは、ArgoCD も CI も要らずに効く層だから ── 締め出されたときに直せる。
+
 **設定を変えるときの手順**(2026-09-07 に実地で確認):
 
 | 変えるもの | 必要なこと |
