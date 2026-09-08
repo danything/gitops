@@ -299,7 +299,8 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       **PVC のファイルを寄せるほうも済んでいる**(上の Phase 2)。
 - [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
-- [ ] `talosctl upgrade` / `upgrade-k8s` の手順を README に。
+- [x] **`talosctl upgrade` / `upgrade-k8s` の手順を README に(2026-09-08)。**
+      [talos/README.md](talos/README.md)「上げ方 / 当て直し方」。
       **`upgrade-k8s` は inlineManifests の reconcile も兼ねる**(2026-09-08 に VM で実測。
       [docs/talos.md](docs/talos.md))ので、Talos 期の「bootstrap 層を当て直す」操作でもある。
 

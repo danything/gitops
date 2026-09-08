@@ -77,6 +77,52 @@ machine:
 `os:admin` のクライアント証明書を置くことになる。**検出は自動、適用は手動**
 (`versions.yaml` の Renovate と同じ方針)。
 
+## 上げ方 / 当て直し方
+
+**3 つの経路があり、混ぜない。** どれを使うかは「何を変えたか」で決まる。
+
+| 変えたもの | やること | 停止 |
+| --- | --- | --- |
+| `versions.yaml` の `talos:`(または schematic) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>` | **再起動** |
+| `versions.yaml` の `kubernetes:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
+| `patches/` / `bootstrap/cilium/values.yaml` / `manifests/` / `bootstrap/apiserver/rbac.yaml` | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
+
+### inlineManifests を直したとき
+
+**Cilium・local-path・metrics-server・bootstrap-applier の RBAC は machine config の中にいる。**
+だから**マニフェストを直しただけでは何も起きない。** 描き直して当てる:
+
+```shell
+./talos/render.sh /tmp/talos-config
+talosctl -n 10.0.0.2 apply-config -f /tmp/talos-config/controlplane.yaml
+talosctl -n 10.0.0.2 upgrade-k8s          # ← これが inlineManifests を reconcile する
+```
+
+- **`apply-config` だけでは inlineManifests は動かない。** 起動時にしか読まれない
+- **`upgrade-k8s` は版を上げなくても reconcile する。** 同じ版を指しても走る。SSA と
+  インベントリで**更新も削除も**する(2026-09-08 に VM で実測。
+  [../docs/talos.md](../docs/talos.md)「inlineManifests は「更新できない」ではない」)
+- **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。**
+  古い machine config のまま流すと**走っている Cilium が巻き戻る**
+
+### Talos 本体
+
+```shell
+talosctl -n 10.0.0.2 upgrade --image factory.talos.dev/installer/<schematic>:<版>
+```
+
+**A/B なので失敗すれば前のイメージに戻る。** ノードが 1 台なので再起動 = 全停止
+(なぜ自動化しないかは [versions.yaml](versions.yaml) の冒頭)。
+
+**schematic を変えたとき(拡張やカーネル引数)も同じコマンド。** ISO を焼き直す必要はない。
+
+### 当てても効かないもの
+
+- **ディスクの割り方**(`patches/volumes.yaml`)。ボリュームは**まだ確保されていないときにしか
+  効かない**ので、あとから `apply-config` しても黙って無視される。変えるには入れ直し
+- **`talosctl upgrade-k8s` は Kubernetes の API に直接繋ぎに行く。** `talosconfig` だけでなく
+  kubeconfig 側の到達性も要る(VM で SLIRP 越しに試すときは `--endpoint` を渡す)
+
 ## 確認できたこと / できていないこと
 
 `patches/` のインタフェース名とディスクだけを VM 用に読み替えて QEMU で実際に起動した
