@@ -6,6 +6,7 @@ metadata:
 spec:
     chart: argo-cd
     repo: https://argoproj.github.io/argo-helm
+    version: 10.8.1
     targetNamespace: argocd
     createNamespace: true
     values:
@@ -62,7 +63,7 @@ spec:
             # true by default; anything applied out-of-band gets wiped the next time
             # the HelmChart is reconciled.
             notifiers:
-                service.webhook.mattermost: ENC[AES256_GCM,data:EBF9hzzBc+7EZV6PVw4y1orbrTl7vDgPPn+9nqTXrzxfxSEjS24bB4BLZeyprfinPrJEEdbFoAaVLVIo838iJjMNpebXCBfl1yZljIj11pPpzHFtlb9BnMR6nQ+UQH0jUmZKH6f4zoaH4xLVPbd0wrSloTi2ow==,iv:qiCQZYFhOwvdD3O0qaZT7b64MtQEHJTHqKVWwAddX30=,tag:VXdV3Bn7LDpwR8Rj8qG65g==,type:str]
+                service.webhook.mattermost: ENC[AES256_GCM,data:93dnAn7chgMKEVWRCdxM5tSB9EtDLhvaToJXWYantixZCocXLGTf8N22YOzRVU2qBAkacpMgDPM7Z/Fvh31QHWdQv8JHIejEEiXOYXIF98YsItXaZvX4TqnH2uN6i/j4xWR1ZIIFq6LDyeD+4ZwNv5p19kT/Gg==,iv:YyUcoTJo09wZ7ADWcazKWCgerZYQGFbn/CCUvktqPgY=,tag:CDn8CRXAeK7li9PL/shb4g==,type:str]
             templates:
                 # Succeeded is back: Progressing -> Healthy flips too fast to read as a
                 # "deploy complete" signal, so sync-result gives that its own clear ping.
@@ -129,7 +130,7 @@ spec:
                 url: https://github.com/danything
                 githubAppID: "4434943"
                 githubAppInstallationID: "150067651"
-                githubAppPrivateKey: ENC[AES256_GCM,data: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,iv:yW49n4z5vQX75Rs+w9cgH6MLkJLL/wFvJF48Cvc2/Pg=,tag:zq4IcnwtQKOKQ+fx7NAHBQ==,type:str]
+                githubAppPrivateKey: ENC[AES256_GCM,data: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,iv:sAfNGkl3wb0+wdbisB4L9VsMjHZ0jXNgxg9+snsc6tw=,tag:6kzx9B4vTLhpuBrPlKWHWw==,type:str]
             # The anchor, and the only thing here that has to be applied by hand
             # (which the ArgoCD install already is). It syncs argocd/repos.yaml out of
             # this repo, that ApplicationSet discovers the app repos, and each repo's
@@ -165,14 +166,14 @@ sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA4N3d6SXZiSlhOaTRHU3R3
-            NGk2UmxGR1REZS82b0dCb01hZUYrTjc5NFhzCnZMZUlHMjZORGsrakZYRWpacEZy
-            aFU5UlBsS0RXVGtsdGFnUElZa3BlU2sKLS0tIDdoMnV4dmxvREtoMlZEaXdWcG9Z
-            ekZ6UTV4SXZPUndkR05uOGpTWEw2TlkKlzlhz06P0COtjs7sa1W3t6FtKILya34p
-            0nPbWVSWBw/pxgNr3ynv3Mtby0aP4FVHiksU4+eTjqvbDtK7/MQMPg==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBleE1BaUUwMURmWnphKzho
+            Zko2K1doMzhnVUNjcDFUeW9CWElueHRNQkdzCmY1VGVSK3lrL0pocXFMQ1dFcHBZ
+            SHd0Q2Z4b3oxVUI2VHdGbDJtcFVYdWcKLS0tIFVXcEhXZXNSREZlNjh6V1ROd3ht
+            SUo2Rys4N2pCRzZnSTZESVBBOTF1bzQKraQeqHnqFNBKm5pjGPuhlzKFZ8UO++fw
+            YomTHXgjdPgkNAFR4BiTnrI+l2UNJPKaa+V2KC9hxFhPTFIF25h1Hw==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-09-07T03:17:43Z"
-    mac: ENC[AES256_GCM,data:E7sWPyy9nJuw+vlxjcxuRSywrBdVekazBXc9mXthXrkcnlV7yMGCLhvjilkpwn+KyiTCMUibWbGcilZnRPutPUUJoqFbH0ZJYjiaxMXOJSt5je+uG+dsofEgg26RhJKEiSEto5fve5NbgeBJfUZoTqiG/+kqQUk77r2kjg4SDiY=,iv:4YeqtRl6pC5Vai7i/wxXI4AvSf7Yi9EXlgCEdlvzIR0=,tag:zizMkcMzofWaA30t16I78A==,type:str]
+    lastmodified: "2026-09-08T07:43:10Z"
+    mac: ENC[AES256_GCM,data:nU0GzeDrdHFNdeQVAu3KyKHna3dyf/2EbXWXQVSeoWb5T3ggxgMPp2/UvmcncAaH4BkZr8+XAinPRiJBHgBd/wdmXzLRkIinESj58yoPY7DdW0DjGguEohZJH68Z2FMYIVrvwaCiS5WzpMe+FTGW/k5fW5kw5WWrs87SZbhc9DM=,iv:pua6ys42jRChiB5cnSeKMk7C4mBfy+3vmGyVYaKX79s=,tag:iCZoXdzRzta2aeTLWlR2zw==,type:str]
     version: 3.13.3

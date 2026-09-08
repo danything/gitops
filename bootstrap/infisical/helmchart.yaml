@@ -10,6 +10,7 @@ spec:
     # to carry (the namespace is in its TARGET_NAMESPACES).
     chart: infisical-standalone
     repo: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+    version: 1.10.0
     targetNamespace: infisical
     values:
         infisical:
@@ -62,7 +63,7 @@ spec:
             enabled: true
             auth:
                 username: infisical
-                password: ENC[AES256_GCM,data:Dc4e1cPeDgh1L/7mo/GlSLyAkGP7fe8o4/XBXmyKIi9YuyiAu8J4SSWLNMTYI6/j,iv:kAM/E/HBtFxST/hpFfm4hz3ZYXB6LtxRpEC/nWMylvI=,tag:E+faw/b4ccg0ZrOFcaOTrQ==,type:str]
+                password: ENC[AES256_GCM,data:tzs6rXcW/d7LIO9MHkPzPGstbJTi6X/HA3cn/AIEw8X8w5oRE1wgt+irtJkqbOK6,iv:FszKvsLEi5uro0MjSz2t4UniDfoCb9XtVodHruuiBmc=,tag:mDw6Xv7K3MRl64urQL7tlw==,type:str]
                 database: infisicalDB
             primary:
                 persistence:
@@ -76,7 +77,7 @@ spec:
         redis:
             enabled: true
             auth:
-                password: ENC[AES256_GCM,data:5h4k6r2aNhl+fyLT8TLM+4KMyR4yQW6cUDQhnClE8fct6QqveWjSBDz6+nN7CSwg,iv:bU7jEEYBQ07NZejibptqIK12uVQn3klk4Sm48nJhr9w=,tag:DDWhBzr2iJp3sIgl38LJ6w==,type:str]
+                password: ENC[AES256_GCM,data:g0W0d+UEahqP4M2hRRFVzoskRW5z0z4gvgBEnHdQ5mPEH6H3LyuWFCcgnK8yUsO/,iv:39LyXW/qMk/7/uH/2a9kP3AH/UxhAO/0ufOYUZ+J8sU=,tag:MFwS1md8uQUSQxDtxUwLUg==,type:str]
             master:
                 persistence:
                     # Queue/cache only; nothing worth keeping across restarts.
@@ -85,14 +86,14 @@ sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBmT2haTUw3UUxpZk0yRFVO
-            SW03T28yTFgwQVphUmJnSTl1RWY4THl5UEhNCmlHeU93NENmNk5aL0lWckpGM3lB
-            OFB0LzZLcnNTaW5zMHIrNFVSV24xMncKLS0tIGFRME1pRVJzZ09GMDVHOW43eno5
-            dDhIWnFJTEZJNTBGdHRvMml1VCt0bmcKhF1yCgkOykX0s2TKbcuYZCWyCNFkcaxh
-            6pgHmqta05awjpWMRw2VaS301UfIYAJ4bSwR5nOxqiB7PFdQYai9mg==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBaZzRydnQ0WkFNdVQyeEZ5
+            eHRrbUoxQklDNDdjY3VPV1BPMFJIc0dwRXc0ClE5blBLZkVyT1ErSmhFL1kzYVZR
+            Z25Md29yTTZWZTdyR211UUwrVlNoTjAKLS0tIHlKWHlWc3ovZ1c2L2lJQk5zaU1s
+            UVJPblZjYVJtejVNTkJVV2E1MDVNS28Kp7IKaDa6zI3T0wBgImoof+JK+6U2DyUS
+            r3CcNWO/TMXlP1g5vrb+2uLt+VKfS5XI8wzJTXEGPQFcZtMt+O9qUg==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-09-07T05:13:45Z"
-    mac: ENC[AES256_GCM,data:WzM5pYJBk+CAUMuVVRCNOl+pIOeAWyIWFATDHE9np8uEeoKrYYA+n48Rh3EBncKKVJF8+TBONexS9tZi5m7ysveSXdUM+/BIazC7ALPAFkfsJbdNIXKgeA4h6t41dQ1M6VuugLa/NDtK3qLRisdeHT7Df4hpnML6qQrpWp4Xvh8=,iv:XY3RQxAduUsblhzt0a1jRH87KoT6rppn6ggvdViHeWY=,tag:FwK5xcdKZAo6KbrMaXwLhQ==,type:str]
+    lastmodified: "2026-09-08T07:43:10Z"
+    mac: ENC[AES256_GCM,data:zBGqgd5/Usr4twLvgrwI2MAxFvS4haSHyGz4GLPrBFvxPvizSgrSW9qD+W2iUyuf++JlUG+q3v/FXfVWveOPy19ZtKsGJdH9UTiqLssZVwstDOI2UUm8bCBZfD2jeYDuFuHGGHxd2NSJ3Un6BgAEn6mgBHcxWzs4BkEMOwBCd9A=,iv:eo/VUAhPhZ1HgRPtQD6LXi3yLrNJdTGYfrNQj3qZjhg=,tag:zWytZN21CYTE8TBIomOhcg==,type:str]
     version: 3.13.3
