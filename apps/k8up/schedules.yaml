@@ -21,6 +21,15 @@
 #   prune と違って namespace には縛られない(`restic/cli/check.go` は `--host` を渡さない)
 # - **バックエンドは書かない。** 書くと R2 のエンドポイント(Cloudflare の
 #   アカウント ID を含む)が git に載る。operator のグローバル設定に寄せてある
+# - **`podSecurityContext: {runAsUser: 0}` を全部に付ける。** k8up の既定は
+#   nonroot(65532)で、**`0600 root:root` のファイルが読めない。** そのとき restic は
+#   `errors: 7` を出しながら**中身が 0 バイトのスナップショットを作り、k8up はそれを
+#   `Succeeded` にする** ── 気づけない。2026-09-08 に実測で見つけた
+#   (adguardhome-conf / adguardhome-work / portainer-data の 3 本が空だった)。
+#   詳しくは README「空のスナップショット」。
+#   **Talos の PSA `baseline` でも通る**(root を禁じるのは `restricted` だけ)。
+#   **将来 `restricted` に寄せるならここが引っかかる** ── そのときは
+#   AdGuardHome / portainer 側がファイルを `0640` で作るようにするしかない
 ---
 apiVersion: k8up.io/v1
 kind: Schedule
@@ -33,6 +42,7 @@ spec:
   backup:
     schedule: "0 15 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -54,6 +64,7 @@ spec:
   backup:
     schedule: "15 15 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -75,6 +86,7 @@ spec:
   backup:
     schedule: "30 15 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -96,6 +108,7 @@ spec:
   backup:
     schedule: "45 15 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -117,6 +130,7 @@ spec:
   backup:
     schedule: "0 16 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -138,6 +152,7 @@ spec:
   backup:
     schedule: "15 16 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -159,6 +174,7 @@ spec:
   backup:
     schedule: "30 16 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -180,6 +196,7 @@ spec:
   backup:
     schedule: "45 16 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -201,6 +218,7 @@ spec:
   backup:
     schedule: "0 17 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -222,6 +240,7 @@ spec:
   backup:
     schedule: "15 17 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:
@@ -243,6 +262,7 @@ spec:
   backup:
     schedule: "30 17 * * *"
     tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
     failedJobsHistoryLimit: 2
     successfulJobsHistoryLimit: 1
   prune:

@@ -62,10 +62,14 @@ k8up のイメージに restic が入っている(`/usr/local/bin/restic`)ので
 `Schedule` の namespace には、その namespace 名のホストのスナップショットが 25 時間以内にあるはず。
 **こちらは時間で減衰しない。**
 
+**「新しい」だけでは足りない。** スナップショットは新しいのに**中身が 0 バイト**、が実際に
+起きていた(下の「空のスナップショット」)。`summary.total_bytes_processed` も見る。
+
 | | 何を捕まえる | 減衰 |
 | --- | --- | --- |
 | 履歴(過去 8 日の `(host, path)`) | **経路ごと**の退行(PVC 1 本だけ落ちた、など) | 8 日 |
 | `Schedule`(クラスタの意図) | namespace が**丸ごと**無音になった | しない |
+| `summary.total_bytes_processed` | 走ってはいるが**何も読めていない** | しない |
 
 **残る割り切り**: 経路を複数持つ namespace で**そのうち 1 本だけ**が 8 日を超えて止まった場合は、
 履歴からは落ち、namespace 単位では他の経路が新しいので無音に戻る。**その 8 日間は毎日
@@ -213,6 +217,118 @@ exit=0 bytes=911360
 **ハングした書き込みが残っていると失敗する。** 3 つとも rollback journal モードなので、
 放置された `-journal` があると読み取り専用の接続はロールバックできず `SQLITE_READONLY_ROLLBACK`
 で落ちる。そのときは k8up のジョブが失敗として見える(黙って壊れたコピーが残るよりよい)。
+
+## 空のスナップショット(2026-09-08 に見つけた)
+
+**3 本のバックアップが何週間も中身 0 バイトだった。**
+
+```
+76f8e95e  /data/adguardhome-conf   2 files, 0 B
+a9d31edb  /data/adguardhome-work   1 files, 0 B
+50f68f0b  /data/portainer-data     2 files, 0 B
+```
+
+(数えられている「2 files」はディレクトリのエントリだけ。中身は入っていない)
+
+### なぜ
+
+**k8up のバックアップ Pod は既定で nonroot(65532)で走る**ので、
+`0600 root:root` のファイルが読めない。そのとき restic は落ちずに**エラーを数えながら
+先へ進む**:
+
+```
+ERROR  /data/adguardhome-conf/AdGuardHome.yaml during archival  {"error": "error occurred during backup"}
+       … 7 本ぜんぶ …
+INFO   backup finished  {"new files": 0, "changed files": 0, "errors": 7}
+```
+
+**そして k8up はこの Backup を `Succeeded` にする。** オブジェクトを見ても、
+スナップショットの有無を見ても、日次通知を見ても気づけなかった
+── **どれも「新しいスナップショットができたか」しか見ていなかった**ため。
+
+`0640 root:root` は読めていた(`adguardhome-ssl`)。イメージが GID 0 で走るので
+グループ読みは通り、**その他ビットが無い `0600` だけが落ちる**。
+
+### 直し方
+
+Schedule 全部に `podSecurityContext: {runAsUser: 0, runAsGroup: 0}` を付けた。
+実測で `errors: 0` / `new files: 7` になることを確認済み:
+
+```
+$ kubectl -n adguardhome logs backup-perm-fix-probe-0-…
+starting backup for folder  {"foldername": "adguardhome-conf"}
+backup finished  {"new files": 7, "changed files": 0, "errors": 0}
+starting backup for folder  {"foldername": "adguardhome-work"}
+backup finished  {"new files": 6, "changed files": 0, "errors": 0}
+```
+
+**Talos の PSA `baseline` でも通る** ── root を禁じるのは `restricted` だけ。
+
+### 気づけるようにした
+
+`notify.js` が **`summary.total_bytes_processed == 0` のスナップショットを報告する**。
+`restic snapshots --json` にもとから入っている値なので、コマンドは増えない。
+実際の(直す前の)データで鳴ることを確かめた:
+
+```
+[k8up] FAILED ❌
+**中身が空のスナップショット(読めていない可能性)**
+- adguardhome/data/adguardhome-conf (0 バイト)
+- adguardhome/data/adguardhome-work (0 バイト)
+- portainer/data/portainer-data (0 バイト)
+```
+
+**本当に空の PVC は誤検知する。** そのときは通知の文面どおり「読めていない可能性」を
+確かめて、空でよいなら放っておくしかない(いまのところそんな PVC は無い)。
+`summary` を持たない古いスナップショットは黙って見送る。
+
+## 戻し方(検証済み、2026-09-08)
+
+k8up の `Restore` を作るだけ。**バックエンドは書かない**(バックアップと同じで
+operator のグローバル設定を使う)。
+
+```yaml
+apiVersion: k8up.io/v1
+kind: Restore
+metadata:
+  name: restore-worklog-db
+  namespace: <戻す先の namespace>
+spec:
+  snapshot: 999784d1          # 省略すると最新。**移行当日は必ず指定する**
+  restoreMethod:
+    folder:
+      claimName: <戻す先の PVC 名>
+```
+
+- **`folder` は PVC にそのまま書き戻す。** restic の `--target /restore` に PVC が
+  マウントされる。`trimPath: true` なので、`/data/<pvc>` で取ったものは
+  **`/data/<pvc>` の階層を落として**PVC の直下に出る(k8up が
+  `<snapshot>:/data/<pvc>` を指定するため)
+- **`backupcommand` で取ったもの**(SQLite・pg_dump)は 1 個のファイルとして出る。
+  `/worklog-worklog.db` なら PVC 直下に `worklog-worklog.db`。**そのままでは
+  アプリのファイル名ではない**ので、置き換えるときに名前を直すこと
+- スナップショット ID は `restic snapshots` で見る(`notify.yaml` の initContainer と
+  同じ形の使い捨て Job が手っ取り早い)
+
+実測:
+
+```
+$ kubectl -n k8up-drill get restore
+drill-lgtm-db   Succeeded   (18s)
+
+restoring snapshot 999784d1 of [/worklog-worklog.db] … to /restore
+Summary: Restored 1 files/dirs (164.000 KiB) in 0:00
+
+# 戻したものを開いてみる
+file: worklog-worklog.db 167936
+integrity=ok
+tables=13 users,identities,sessions,paywall_hits,…
+rows=108
+```
+
+**`Succeeded` は「中身が戻った」の意味ではない。** 上の空スナップショットを戻したときも
+`Succeeded` で、ログだけが `Restored 0 files/dirs (0 B)` と言っていた。
+**戻したあとは必ず中身を見ること。**
 
 ## ファイルの PVC をどう移すか(Talos で外す時)
 

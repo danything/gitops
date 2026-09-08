@@ -150,7 +150,14 @@ data:
         if (h > LEARN_H) continue;
         const key = `${s.hostname}:${path}`;
         if (!latest.has(key) || h < latest.get(key).h) {
-          latest.set(key, { h, host: s.hostname, path, key: `${s.hostname}${path}` });
+          latest.set(key, {
+            h,
+            host: s.hostname,
+            path,
+            key: `${s.hostname}${path}`,
+            // undefined = 古い restic で summary が無い。0 と区別する。
+            bytes: s.summary?.total_bytes_processed,
+          });
         }
       }
     }
@@ -166,6 +173,19 @@ data:
     const stale = [...latest.values()]
       .filter((x) => x.h > WINDOW_H && !superseded(x))
       .sort((a, b) => b.h - a.h);
+
+    // **「新しい」だけでは足りない。中身が空でも新しいスナップショットはできる。**
+    // 読めないファイルがあると restic は `errors: N` を出しながら 0 バイトの
+    // スナップショットを作り、**k8up はそれを Succeeded にする**。2026-09-08 に
+    // adguardhome-conf / adguardhome-work / portainer-data の 3 本が
+    // 何週間もこの状態だった(原因と対策は README「空のスナップショット」)。
+    // `restic snapshots --json` の `summary.total_bytes_processed` がそのまま使える
+    // ので、追加のコマンドは要らない。
+    // **`summary` を持たないスナップショットは黙って見送る**(古い restic で
+    // 取ったものには無い)。無いことを異常と呼ぶと過去のぶんで鳴り続ける。
+    const empty = [...latest.values()].filter(
+      (x) => x.h <= WINDOW_H && x.bytes === 0 && !superseded(x),
+    );
 
     // k8up 側の失敗も拾う。オブジェクトが残っていれば理由まで書ける。
     const TOKEN = await Bun.file("/var/run/secrets/kubernetes.io/serviceaccount/token").text();
@@ -200,6 +220,10 @@ data:
       lines.push(`**${stale.length} 件が ${WINDOW_H} 時間以上更新されていない**`);
       for (const s of stale.slice(0, 15)) lines.push(`- ${s.key} (${s.h.toFixed(0)} 時間前)`);
       if (stale.length > 15) lines.push(`- ほか ${stale.length - 15} 件`);
+    }
+    if (empty.length) {
+      lines.push(`**中身が空のスナップショット(読めていない可能性)**`);
+      for (const e of empty.slice(0, 15)) lines.push(`- ${e.key} (0 バイト)`);
     }
     if (silent.length) {
       lines.push(`**${WINDOW_H} 時間以内のスナップショットが 1 つも無い namespace**`);
