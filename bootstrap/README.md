@@ -40,6 +40,34 @@ sops set bootstrap/infisical/helmchart.yaml '["spec"]["version"]' '"1.10.0"'
 **`chart:` `repo:` `version:` が連続した 3 行になるように置くこと**(Renovate の正規表現が
 その並びを見ている)。いま動いているのは argo-cd 10.8.1 / infisical-standalone 1.10.0。
 
+## git と live がずれていないか(2026-09-08 に確認)
+
+**machine config は git の値で描く**ので、git と実機がずれていると、移行した瞬間に
+別物が入る。cilium は [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が
+毎日見ているが、**残りは見ていない**ので手で突き合わせた。
+
+```shell
+helm get values <release> -n <ns>     # ← 実機
+# ↑と bootstrap/<name>/values.yaml(cert-manager)または
+#   HelmChart CR の spec.values(argocd / infisical)を比べる
+```
+
+| | 結果 |
+| --- | --- |
+| cert-manager | **一致**(`config.enableGatewayAPI: true` / `crds.enabled: true`) |
+| argocd | **一致**(88 行、秘密を伏せて比較) |
+| infisical | **一致**(51 行、同上) |
+
+**CI では自動化できない。** helm の値は**リリースの Secret の中**にあり、
+`bootstrap-applier` の ClusterRole には**意図的に Secret の権限が無い**
+([apiserver/rbac.yaml](apiserver/rbac.yaml))。cilium が自動化できているのは、
+値が `cilium-config` という **ConfigMap** に出ているから。
+**権限を広げるより、移行前に手で見るほうが安い**と判断した。
+
+**比べるときは値を伏せること。** `helm get values` は平文を吐く。
+秘密のキー(`password` / `githubAppPrivateKey` / `service.webhook.mattermost` など)を
+`<SECRET>` に置き換えてから diff する ── **画面に出した時点で漏れたのと同じ。**
+
 ## Secret
 
 平文の Secret はアプリのリポジトリにはコミットしない。値は **Infisical**(https://il.doany.io、このクラスタでセルフホスト)が持ち、

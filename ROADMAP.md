@@ -317,6 +317,11 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
       再構築でストレージを引き直すときに、各アプリのマニフェストから `local-path-retain` の指定ごと外す。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
+- [x] **git と実機の helm 値がずれていないことを確認した(2026-09-08)。**
+      cert-manager / argocd / infisical の 3 つとも一致。**machine config は git の値で
+      描く**ので、ずれていると移行した瞬間に別物が入る。
+      **CI では自動化できない**(helm の値はリリースの Secret の中で、`bootstrap-applier` に
+      Secret の権限は意図的に無い)。手順と注意は [bootstrap/README.md](bootstrap/README.md)。
 - [ ] **argocd と infisical の chart の版を固定する。** `HelmChart` CR に `version:` が無く、
       **そのときの最新**が入る(作り直すと別の版になり、Renovate も追えない)。
       **SOPS 済みなので `sops set` で足す** ── 手順は [bootstrap/README.md](bootstrap/README.md)
