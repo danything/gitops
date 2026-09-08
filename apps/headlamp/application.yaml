@@ -1,7 +1,7 @@
-# Kubernetes の Web UI。Portainer と置き換えられるかを見るための試験導入で、
-# いまは宅内からだけ引ける hd.l.doany.io に出す。Portainer はまだ消していない。
+# Kubernetes の Web UI。Portainer の置き換え(2026-09-09 に入れ替えた)。
+# 宅内からだけ引ける hd.l.doany.io に出している。
 #
-# 見たいのは Resource Map。Gateway / HTTPRoute / GRPCRoute を最初から知っていて、
+# Resource Map が Gateway / HTTPRoute / GRPCRoute を最初から知っていて、
 # parentRefs と backendRefs の線も定義済みなので、公開経路が 1 枚で出る。
 #
 # 認証は入れていない。unsafeUseServiceAccountToken は Headlamp を訪ねた人を全員

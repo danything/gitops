@@ -1,7 +1,7 @@
 # metrics-server の値。Talos 用。
 #
 # k3s では組み込みのアドオン(`/var/lib/rancher/k3s/server/manifests/metrics-server/`)として
-# 動いていて、Talos には無い。入れないと `kubectl top` が使えず、ArgoCD・Portainer・
+# 動いていて、Talos には無い。入れないと `kubectl top` が使えず、ArgoCD・Headlamp・
 # Hubble の各 UI から使用量の表示が消える。HPA は今のところ 1 つも無いので停止には至らない。
 #
 # 版は ../talos/versions.yaml の `metricsServer`。

@@ -30,7 +30,7 @@ sudo systemctl start k3s-backup.service     # ホストのぶん
 ```
 
 - [ ] `restic check` が通る
-- [ ] **k8up の 23 系統が 25 時間以内**([apps/k8up/README.md](../apps/k8up/README.md)
+- [ ] **k8up の通知が OK ✅**(FAILED が出ないこと)([apps/k8up/README.md](../apps/k8up/README.md)
       「失敗したときに気づけるようにする」。`notify` の CronJob を手で 1 回回すのが早い)
 
 ## 3. machine config を作る

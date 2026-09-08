@@ -81,15 +81,6 @@
                 "frappe/erpnext"
             ],
             "sourceUrl": "https://github.com/frappe/erpnext"
-        },
-        {
-            "matchDatasources": [
-                "docker"
-            ],
-            "matchPackageNames": [
-                "portainer/portainer-ce"
-            ],
-            "sourceUrl": "https://github.com/portainer/portainer"
         }
     ]
 }
