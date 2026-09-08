@@ -187,8 +187,7 @@ INFISICAL_CR=$(decrypt_cr infisical "${INFISICAL_CHART:-}")
 if [ -n "$ARGOCD_CR" ]; then helmchart_inline argocd "$ARGOCD_CR"; fi
 if [ -n "$INFISICAL_CR" ]; then helmchart_inline infisical "$INFISICAL_CR"; fi
 
-# **ArgoCD の CRD は URL で渡す。** 3 つで 1.83 MB あり、chart の描き出しの 95% を
-# 占める(talos/argocd-values.yaml で `crds.install: false` にしてある)。
+# **ArgoCD の CRD は URL で渡す**(理由は talos/argocd-values.yaml)。
 # **版は chart の appVersion をそのまま使う** ── 版を 2 つ持つと必ずずれる。
 if [ -f "$WORK/inline-argocd.yaml" ]; then
 	ARGOCD_APP=$(helm show chart "argocd/$(hc "$ARGOCD_CR" chart)" \
@@ -250,7 +249,7 @@ inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書�
 inline_secret infisical-secrets bootstrap/infisical/secrets.yaml "${INFISICAL_SECRET:-}"
 inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.yaml "${CLOUDFLARE_SECRET:-}"
 
-# **cert-manager の CRD も URL で渡す。** 6 つで 1.30 MB、描き出しの 97%。
+# **cert-manager の CRD も URL で渡す**(理由は talos/cert-manager-values.yaml)。
 cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig
@@ -266,11 +265,11 @@ PATCH
 # **standard-install.yaml は CRD を 10 個とも持っている**(TCPRoute や ListenerSet も)ので、
 # いまクラスタにあるものの上位集合になる。experimental の bundle は要らない。
 #
-# **中身は埋めずに URL で渡す。** standard-install.yaml は 1.1 MB あり、inline にすると
-# machine config がそれだけで膨らむ。Talos には `KubeExternalManifestConfig` という
-# **まさにこのための入口**があるので、そちらを使う(v1alpha1 の `cluster.extraManifests`
-# の後継。1 ドキュメントに 1 URL)。**ノードが起動時に GitHub に出られる必要がある**が、
-# どのみちイメージを引くのでネットワークは要る。
+# **中身は埋めずに URL で渡す**(1.1 MB。なぜ URL かは
+# ../docs/decisions.md「層の分け方」。この CRD が要る理由は talos/versions.yaml)。
+# `KubeExternalManifestConfig` は v1alpha1 の `cluster.extraManifests` の後継で、
+# **1 ドキュメントに 1 URL**。ノードが起動時に GitHub に出られる必要はあるが、
+# どのみちイメージを引く。
 #
 # **Cilium より先に要る。** Cilium の chart は CRD を同梱せず、`gatewayAPI.enabled: true` は
 # 「CRD は入れてある前提」の設定。
