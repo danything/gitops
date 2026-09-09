@@ -67,3 +67,24 @@ jwt:
           ["bootstrap-apply.yml", "cilium-drift.yml"].exists(w,
             claims.workflow_ref.startsWith("danything/gitops/.github/workflows/" + w + "@"))
         message: "bootstrap-apply.yml と cilium-drift.yml 以外のワークフローからは受け付けない"
+
+  # Entra ID。Headlamp(hd.l.doany.io)が利用者本人のトークンをそのまま API サーバへ
+  # 転送するので、こちらが受ける側になる。Headlamp 自身は権限を持たない。
+  #
+  # audience は oauth2-proxy と同じアプリ登録。**この issuer と audience の組で
+  # 出た id_token はどれもクラスタの資格情報になる**ので、a.doany.io や
+  # hl.doany.io の認証で発行されたものもここを通る。登録を分けたくなったら
+  # audiences を差し替える(bootstrap/auth/ 側の CLIENT_ID とは独立に変えられる)。
+  - issuer:
+      url: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
+      audiences:
+        - b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
+    claimMappings:
+      # gha: と混ざらないように接頭辞を付ける。
+      username:
+        expression: '"entra:" + claims.preferred_username'
+      # アプリロール admin を持つ人だけ entra:admin、それ以外は entra:viewer。
+      # roles クレームはロールを 1 つも持たない利用者では存在しないので has() で守る。
+      # 割り当ては Entra 側で完結し、権限の中身は rbac.yaml。
+      groups:
+        expression: '(has(claims.roles) && "admin" in claims.roles) ? ["entra:admin"] : ["entra:viewer"]'

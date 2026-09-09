@@ -59,3 +59,18 @@ configuration:
             ["bootstrap-apply.yml", "cilium-drift.yml"].exists(w,
               claims.workflow_ref.startsWith("danything/gitops/.github/workflows/" + w + "@"))
           message: "bootstrap-apply.yml と cilium-drift.yml 以外のワークフローからは受け付けない"
+    # Entra ID。Headlamp が利用者本人のトークンを API サーバへ転送する。
+    # bootstrap/apiserver/authentication-config.yaml と同じ内容にすること。
+    - issuer:
+        url: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
+        # oauth2-proxy と同じアプリ登録。この組で出た id_token はどれも
+        # クラスタの資格情報になる(経緯は bootstrap 側の同ファイル)。
+        audiences:
+          - b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
+      claimMappings:
+        username:
+          expression: '"entra:" + claims.preferred_username'
+        # アプリロール admin を持つ人だけ entra:admin、それ以外は entra:viewer。
+        # ロールが 1 つも無い利用者には roles クレーム自体が無いので has() で守る。
+        groups:
+          expression: '(has(claims.roles) && "admin" in claims.roles) ? ["entra:admin"] : ["entra:viewer"]'
