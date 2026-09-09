@@ -115,9 +115,9 @@ ArgoCD が `apps/` と各リポジトリの `deploy/argocd.yaml` を同期する
 - [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy
 - [ ] **PVC が Bound になる**(`local-path` が要る。5 で確認済み)
 
-**`OutOfSync / Missing` のまま止まっているものは 1 回叩く。** `apps/infisical-operator/`
-が CRD を入れる前に同期しにいった Application は `(retried 5 times)` で諦めていて、
-**`refresh=hard` では戻らない**(2026-09-08 のドリル 5 回目)。
+**待てば戻る。** CRD より先に同期しにいった Application は昔ここで諦めていたが、
+`retry`(15s から倍々、上限 5 分、10 回 = 約 33 分)を入れたので自力で回復する。
+それでも `OutOfSync / Missing` のまま 30 分以上動かないものだけ叩く:
 
 ```shell
 kubectl -n argocd patch application <名前> --type=merge \
@@ -137,11 +137,32 @@ kubectl -n argocd patch application <名前> --type=merge \
 
 ## 9. 疎通確認
 
+公開している名前は全部これで一度に見る(クラスタが正本)。**手元の PC から叩くこと** ──
+ノードの上からは 80/443 に届かない(Gateway の nodePort が L7LB リダイレクトとして
+載っているため。[decisions.md](decisions.md)「本番での実施結果」)。
+
+```shell
+kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.hostnames[*]}{@}{"\n"}{end}{end}' \
+  | grep -v '^\*' | sort -u | while read h; do
+      printf '%-24s %s\n' "$h" "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "https://$h/" 2>/dev/null || echo ERR)"
+    done
+```
+
+移行前(2026-09-09)に流したときの答え。**同じ形になれば通っている**:
+
+| | |
+| --- | --- |
+| 200 | 大半(`doany.io` `ac` `en` `h` `il` `l` `mm` `nb` `ts` `w` `x` `y` `yk`) |
+| **302** | `a` / `ah` / `hl` ── oauth2-proxy が Entra へ飛ばしている |
+| **401** | `dp` ── **これが正しい。** 公開側から来た通信を denpa が弾いている。200 が返ったら X-Forwarded-For が壊れていて、住所判定が効いていない |
+| ERR | `dp.l.doany.io` ── 宅内専用の名前。AdGuard を引く端末からしか通らない |
+
+- [ ] **上の表と同じ形になる**
 - [ ] Infisical → operator → 各アプリの `Secret` が埋まる
+      (`kubectl get infisicalsecret -A` が全部 `Synced`)
 - [ ] DNS(cloudflare-ddns が A/AAAA を書く)
-- [ ] netbird(外から VPN に入れる)
-- [ ] AdGuard の公開リゾルバ
-- [ ] `*.doany.io` が HTTPS で開く
+- [ ] netbird(外から VPN に入れる)。**ここだけブラウザでは確かめられない**
+- [ ] AdGuard の公開リゾルバ(`dig @10.10.0.4 example.com`)
 
 ## 10. 後始末
 

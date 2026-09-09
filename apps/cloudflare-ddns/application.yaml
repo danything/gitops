@@ -42,3 +42,10 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # CRD より先に同期しにいくと既定の 5 回で諦める(migration-day の 7)。
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
