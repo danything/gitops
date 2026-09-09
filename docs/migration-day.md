@@ -21,7 +21,10 @@
 
 - [ ] **LAN(10.0.0.2 / 10.10.0.4)か iLO(10.0.0.3)から作業する。**
       cloudflared 経由の ssh は落ちる
-- [ ] iLO にログインできることを**先に**確かめる
+- [ ] iLO にログインできることを**先に**確かめる。
+      **USB で焼く場合も、コンソールの代わりに使えるので開けておく**
+      (`talosctl` は手元の PC から LAN 越しに叩く。実機の前に立つのは
+      ブートデバイスを選ぶのと maintenance mode の IP を読むときだけ)
 
 ## 2. 最終バックアップ
 
@@ -44,7 +47,19 @@ sudo systemctl start k3s-backup.service     # ホストのぶん
 
 ## 4. 焼く
 
-- [ ] iLO の仮想メディアで **ISO** を起動([talos.md](talos.md)「メディアに載せる」)
+**前もって USB を作っておく**([talos.md](talos.md)「メディアに載せる」)。ハイブリッド ISO なので
+そのまま書けばよい。Windows なら Rufus の **DD イメージモード**。
+
+```shell
+curl -LO https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.14.0/metal-amd64.iso
+sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+- [ ] **Secure Boot が Disabled** であること(RBSU は POST 中に F9 →
+      Server Security → Secure Boot Settings)。通常 ISO は署名されていない。
+      Boot Mode は UEFI のまま
+- [ ] USB を挿して電源を入れ、POST 中に **F11(Boot Menu)** で USB を選ぶ
+      (iLO の Virtual Media を使うなら "iLO Virtual USB 3 : iLO Virtual CD-ROM")
 - [ ] maintenance mode の IP をコンソールで確認
 - [ ] `talosctl get links --insecure -n <IP> -e <IP>` で**インタフェース名が
       `eno1` / `eno2` / `eno4` であること**を確かめる。違ったら
@@ -55,6 +70,9 @@ talosctl apply-config --insecure -n <IP> -f /tmp/talos-config/controlplane.yaml
 ```
 
 **`UnattendedInstallConfig` があるのでディスクに書かれる。**
+
+- [ ] **書き終わって再起動したら USB を抜く。** 挿したままだと、ブート順によっては
+      また maintenance mode で上がってくる
 
 ## 5. クラスタを起こす
 
