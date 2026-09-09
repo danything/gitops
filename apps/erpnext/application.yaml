@@ -120,12 +120,10 @@ spec:
             # chart の既定は true。common_site_config.json(DB と Redis の宛先)を書く。
             enabled: false
 
-        # The post-install OIDC/SMTP setup job used to live here as
-        # jobs.custom, but Job specs are immutable and this chart's custom-job
-        # mechanism doesn't expose an annotations field, so every edit required
-        # manually deleting the Job before it could be re-applied. It's now a
-        # plain manifest (job-setup-oidc.yaml) with an ArgoCD Replace=true
-        # sync-option, which handles that automatically.
+        # OIDC / SMTP を入れる Job は chart の jobs.custom には置けない。
+        # 注釈を出す口が無いので、ArgoCD のフックにできない。
+        # job-setup-oidc.yaml に PostSync フックとして分けてある
+        # (スクリプトは configmap-setup-oidc.yaml)。
   syncPolicy:
     automated:
       prune: true

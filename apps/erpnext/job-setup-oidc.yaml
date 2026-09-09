@@ -1,18 +1,23 @@
-# This Job's container spec changes every time the script below changes, and
-# Job specs are immutable -- neither `kubectl apply` nor ArgoCD's
-# Replace=true sync option (which turned out to still be bound by the same
-# immutability rules) can update it in place. So the name is versioned
-# (bump the "-vN" suffix whenever the script changes) instead: a new name is
-# just a plain create, no conflict, and the old Job/name falls out of git so
-# ArgoCD prunes it automatically on the next sync.
+# サイト作成のあとに Entra のソーシャルログイン・利用者のロール・SMTP を入れる。
+# 中身は configmap-setup-oidc.yaml。
+#
+# ArgoCD の PostSync フックにしてある。Job の spec は immutable なので、以前は
+# 名前に -vN を付けて手で上げていたが、hook-delete-policy: BeforeHookCreation なら
+# ArgoCD が作る前に古いものを消すので固定名でよい。
+#
+# 同期のたびに走る。スクリプトは何度流しても同じ状態になるように書いてある
+# (Social Login Key も Email Account も upsert)。
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: erpnext-setup-oidc-v3
+  name: erpnext-setup-oidc
   namespace: erpnext
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
-  backoffLimit: 0
-  ttlSecondsAfterFinished: 3600
+  # 0 だと一時的な失敗(mariadb がまだ、など)でそのまま Application が Failed になる。
+  backoffLimit: 2
   template:
     spec:
       restartPolicy: Never
@@ -20,6 +25,9 @@ spec:
         - name: sites-dir
           persistentVolumeClaim:
             claimName: erpnext-sites
+        - name: script
+          configMap:
+            name: erpnext-setup-oidc
       containers:
         - name: setup-oidc
           image: frappe/erpnext:version-15
@@ -37,102 +45,6 @@ spec:
           volumeMounts:
             - name: sites-dir
               mountPath: /home/frappe/frappe-bench/sites
-          command:
-            - bash
-            - -c
-            - |
-              export start=`date +%s`
-              until [ -f sites/en.doany.io/site_config.json ]; do
-                echo "waiting for en.doany.io site to be created"
-                sleep 10
-                if (( `date +%s`-start > 900 )); then
-                  echo "timed out waiting for site"
-                  exit 1
-                fi
-              done
-              bench --site en.doany.io set-config host_name https://en.doany.io
-              wait-for-it -t 120 erpnext-mariadb-sts:3306
-              bench --site en.doany.io console <<'PYEOF' | tee /tmp/console-output.log
-              import os
-              frappe.set_user("Administrator")
-
-              name = frappe.scrub("Microsoft Entra ID")
-              if frappe.db.exists("Social Login Key", name):
-                  doc = frappe.get_doc("Social Login Key", name)
-              else:
-                  doc = frappe.new_doc("Social Login Key")
-                  doc.provider_name = "Microsoft Entra ID"
-
-              doc.social_login_provider = "Custom"
-              doc.enable_social_login = 1
-              doc.custom_base_url = 0
-              doc.client_id = "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e"
-              doc.client_secret = os.environ["OIDC_CLIENT_SECRET"]
-              doc.base_url = "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b"
-              doc.authorize_url = "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/oauth2/v2.0/authorize"
-              doc.access_token_url = "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/oauth2/v2.0/token"
-              doc.api_endpoint = "https://graph.microsoft.com/oidc/userinfo"
-              doc.redirect_url = "/api/method/frappe.integrations.oauth2_logins.custom/" + name
-              doc.auth_url_data = frappe.as_json({"response_type": "code", "scope": "openid profile email"})
-              doc.sign_ups = "Allow"
-              doc.save(ignore_permissions=True)
-
-              from frappe.utils.oauth import update_oauth_user
-              frappe.set_user("Guest")
-              data = {"sub": "info-doany-manual", "email": "info@doany.io", "name": "Info Doany", "given_name": "Info", "family_name": "Doany", "preferred_username": "info@doany.io"}
-              update_oauth_user("info@doany.io", data, name)
-
-              frappe.set_user("Administrator")
-              user = frappe.get_doc("User", "info@doany.io")
-              user.user_type = "System User"
-              user.enabled = 1
-              for role_name in frappe.get_all("Role", filters={"disabled": 0}, pluck="name"):
-                  if role_name in ("Guest", "All"):
-                      continue
-                  user.add_roles(role_name)
-              user.save(ignore_permissions=True)
-
-              # Any other account that self-signs-up via OIDC (not the
-              # designated admin above) gets a normal operational member
-              # role set, not admin/manager access.
-              member_roles = ["Sales User", "Purchase User", "Accounts User", "Stock User"]
-              other_users = frappe.get_all(
-                  "User",
-                  filters={"name": ["not in", ["Administrator", "Guest", "info@doany.io"]], "enabled": 1},
-                  pluck="name",
-              )
-              for uname in other_users:
-                  u = frappe.get_doc("User", uname)
-                  if u.user_type == "Website User":
-                      u.user_type = "System User"
-                  for role_name in member_roles:
-                      u.add_roles(role_name)
-                  u.save(ignore_permissions=True)
-
-              # Outgoing mail via Exchange Online SMTP AUTH, using the
-              # info@doany.io mailbox (already a licensed account, and
-              # SMTP AUTH client submission is enabled on it tenant-side).
-              smtp_name = "SMTP Relay"
-              if frappe.db.exists("Email Account", smtp_name):
-                  smtp_doc = frappe.get_doc("Email Account", smtp_name)
-              else:
-                  smtp_doc = frappe.new_doc("Email Account")
-                  smtp_doc.email_account_name = smtp_name
-
-              smtp_doc.email_id = "info@doany.io"
-              smtp_doc.password = os.environ["SMTP_PASSWORD"]
-              smtp_doc.smtp_server = "smtp.office365.com"
-              smtp_doc.smtp_port = "587"
-              smtp_doc.use_tls = 1
-              smtp_doc.enable_outgoing = 1
-              smtp_doc.default_outgoing = 1
-              smtp_doc.always_use_account_email_id_as_sender = 1
-              smtp_doc.save(ignore_permissions=True)
-
-              frappe.db.commit()
-              print("SETUP_OK", doc.name, user.name, len(user.roles), "other_users_promoted:", len(other_users), "smtp:", smtp_doc.name)
-
-              PYEOF
-              # bench console is IPython reading from a pipe, so every output
-              # line is prefixed with "In [N]: " -- no line-start anchor here.
-              grep -q 'SETUP_OK' /tmp/console-output.log
+            - name: script
+              mountPath: /scripts
+          command: [bash, /scripts/run.sh]
