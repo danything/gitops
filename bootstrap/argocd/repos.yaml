@@ -81,6 +81,15 @@ spec:
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
+        # CRD を入れる Application より先に同期しにいったものは、既定の 5 回で諦めて
+        # OutOfSync のまま止まる(refresh=hard では戻らない。ドリル 5 回目で踏んだ)。
+        # backoff を伸ばして自力で戻るようにする。15s から倍々で上限 5 分、10 回で約 33 分。
+        retry:
+          limit: 10
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 5m
   # These four live in the patch rather than in template because plain
   # templating only substitutes strings, and they're booleans.
   templatePatch: |
