@@ -1,0 +1,113 @@
+# job-setup-oidc.yaml が流すスクリプト。Job の spec に直接書くと、中身を変えるたびに
+# spec が変わって immutable に当たるので外に出している。
+# ConfigMap は同期のたびに普通に更新され、Job(PostSync フック)は毎回作り直されるので、
+# ここを直せば次の同期でそのまま反映される。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: erpnext-setup-oidc
+  namespace: erpnext
+data:
+  run.sh: |
+    set -euo pipefail
+
+    # サイトがまだ無いときは何もせず成功で抜ける。PostSync フックなので、ここで
+    # 落とすと Application が Failed になる。移行当日は PV を戻す(migration-day の 8)
+    # まで sites/ が空なので、そこで赤くならないようにしている。
+    # 戻したあとに同期し直せば、そのときちゃんと流れる。
+    start=$(date +%s)
+    until [ -f sites/en.doany.io/site_config.json ]; do
+      if [ $(( $(date +%s) - start )) -gt 180 ]; then
+        echo "en.doany.io のサイトがまだ無い。設定は流さずに抜ける"
+        exit 0
+      fi
+      echo "waiting for en.doany.io site to be created"
+      sleep 10
+    done
+
+    bench --site en.doany.io set-config host_name https://en.doany.io
+    wait-for-it -t 120 erpnext-mariadb-sts:3306
+
+    # bench console は IPython がパイプを読む形なので、出力の各行に "In [N]: " が付く。
+    # 行頭アンカーは使えない。
+    bench --site en.doany.io console <<'PYEOF' | tee /tmp/console-output.log
+    import os
+    frappe.set_user("Administrator")
+
+    name = frappe.scrub("Microsoft Entra ID")
+    if frappe.db.exists("Social Login Key", name):
+        doc = frappe.get_doc("Social Login Key", name)
+    else:
+        doc = frappe.new_doc("Social Login Key")
+        doc.provider_name = "Microsoft Entra ID"
+
+    doc.social_login_provider = "Custom"
+    doc.enable_social_login = 1
+    doc.custom_base_url = 0
+    doc.client_id = "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e"
+    doc.client_secret = os.environ["OIDC_CLIENT_SECRET"]
+    doc.base_url = "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b"
+    doc.authorize_url = "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/oauth2/v2.0/authorize"
+    doc.access_token_url = "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/oauth2/v2.0/token"
+    doc.api_endpoint = "https://graph.microsoft.com/oidc/userinfo"
+    doc.redirect_url = "/api/method/frappe.integrations.oauth2_logins.custom/" + name
+    doc.auth_url_data = frappe.as_json({"response_type": "code", "scope": "openid profile email"})
+    doc.sign_ups = "Allow"
+    doc.save(ignore_permissions=True)
+
+    from frappe.utils.oauth import update_oauth_user
+    frappe.set_user("Guest")
+    data = {"sub": "info-doany-manual", "email": "info@doany.io", "name": "Info Doany", "given_name": "Info", "family_name": "Doany", "preferred_username": "info@doany.io"}
+    update_oauth_user("info@doany.io", data, name)
+
+    frappe.set_user("Administrator")
+    user = frappe.get_doc("User", "info@doany.io")
+    user.user_type = "System User"
+    user.enabled = 1
+    for role_name in frappe.get_all("Role", filters={"disabled": 0}, pluck="name"):
+        if role_name in ("Guest", "All"):
+            continue
+        user.add_roles(role_name)
+    user.save(ignore_permissions=True)
+
+    # Any other account that self-signs-up via OIDC (not the
+    # designated admin above) gets a normal operational member
+    # role set, not admin/manager access.
+    member_roles = ["Sales User", "Purchase User", "Accounts User", "Stock User"]
+    other_users = frappe.get_all(
+        "User",
+        filters={"name": ["not in", ["Administrator", "Guest", "info@doany.io"]], "enabled": 1},
+        pluck="name",
+    )
+    for uname in other_users:
+        u = frappe.get_doc("User", uname)
+        if u.user_type == "Website User":
+            u.user_type = "System User"
+        for role_name in member_roles:
+            u.add_roles(role_name)
+        u.save(ignore_permissions=True)
+
+    # Outgoing mail via Exchange Online SMTP AUTH, using the
+    # info@doany.io mailbox (already a licensed account, and
+    # SMTP AUTH client submission is enabled on it tenant-side).
+    smtp_name = "SMTP Relay"
+    if frappe.db.exists("Email Account", smtp_name):
+        smtp_doc = frappe.get_doc("Email Account", smtp_name)
+    else:
+        smtp_doc = frappe.new_doc("Email Account")
+        smtp_doc.email_account_name = smtp_name
+
+    smtp_doc.email_id = "info@doany.io"
+    smtp_doc.password = os.environ["SMTP_PASSWORD"]
+    smtp_doc.smtp_server = "smtp.office365.com"
+    smtp_doc.smtp_port = "587"
+    smtp_doc.use_tls = 1
+    smtp_doc.enable_outgoing = 1
+    smtp_doc.default_outgoing = 1
+    smtp_doc.always_use_account_email_id_as_sender = 1
+    smtp_doc.save(ignore_permissions=True)
+
+    frappe.db.commit()
+    print("SETUP_OK", doc.name, user.name, len(user.roles), "other_users_promoted:", len(other_users), "smtp:", smtp_doc.name)
+    PYEOF
+    grep -q 'SETUP_OK' /tmp/console-output.log
