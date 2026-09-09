@@ -47,22 +47,31 @@ ISO は約 400 MB。extension を足したくなったら schematic を作り直
 
 ## 2. メディアに載せる
 
-**実機は iLO の Virtual Media が一番楽**(USB を作らなくてよい)。
-
-1. https://10.0.0.3 に入り、Remote Console(HTML5)を開く。
-2. Virtual Drives → Image File CD-ROM/DVD → 手元の ISO を選ぶ(URL 指定なら上の factory の URL をそのまま貼ってもよい)。
-3. Power → Reset。POST 中に F11(Boot Menu)→ "iLO Virtual USB 3 : iLO Virtual CD-ROM" を選ぶ。
-   Secure Boot は RBSU(F9)→ Server Security → Secure Boot Settings で **Disabled** にしておく(通常 ISO は署名されていない)。
-   Boot Mode は UEFI のまま。
-
-USB で作る場合は、ISO をそのまま書けばよい(ハイブリッド ISO)。
+**本番は USB でやる**(2026-09-09 の判断。iLO の Virtual Media は USB を作らなくて済むが、
+挙動が怪しいことがあったため)。ISO はハイブリッドなので、そのまま書けばよい。
 
 ```shell
-# Linux / WSL から(USB が /dev/sdX として見えている前提。WSL では usbipd で持ってくる必要があるので Windows 側の方が早い)
+# Linux から(USB が /dev/sdX として見えている前提)
 sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
 Windows なら Rufus で ISO を選び、書き込みモードを聞かれたら **DD イメージモード**を選ぶ。balenaEtcher でもよい。
+WSL からは USB が見えないので(usbipd で渡す必要がある)Windows 側でやる方が早い。
+
+起動のしかた:
+
+1. Secure Boot を **Disabled** に(POST 中に F9 → RBSU → Server Security → Secure Boot Settings)。
+   通常 ISO は署名されていない。Boot Mode は UEFI のまま。
+2. USB を挿して電源を入れ、POST 中に **F11(Boot Menu)**でその USB を選ぶ。
+3. **インストールが終わって再起動したら USB を抜く。** 挿したままだとブート順によっては
+   また maintenance mode で上がる。
+
+**コンソールは iLO の Remote Console(HTML5)でよい** ── 実機の前に立たなくても
+ブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す。
+
+**iLO の Virtual Media を使う場合**: Remote Console → Virtual Drives → Image File CD-ROM/DVD で
+手元の ISO を選び(上の factory の URL を直接貼ってもよい)、Power → Reset して F11 で
+"iLO Virtual USB 3 : iLO Virtual CD-ROM" を選ぶ。
 
 **Hyper-V(検証用)**: 第 2 世代 VM、Secure Boot **オフ**、メモリ 4 GB 以上、CPU 2 以上、ディスク 40 GB 以上、
 DVD ドライブに ISO を接続、ネットワークは外部スイッチ(LAN の DHCP で IP が付く)。第 1 世代でも動くが UEFI にならないので実機と条件が変わる。
