@@ -64,3 +64,82 @@ subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: User
     name: "gha:danything/gitops:refs/heads/main"
+---
+# ここから下は人。Entra の id_token を Headlamp が API サーバへ転送してくる
+# (authentication-config.yaml の 2 つめの issuer)。アプリロール admin を持つ人は
+# entra:admin、それ以外は entra:viewer のグループになって届く。
+#
+# CI と同じくこのファイルは machine config に載るので、クラスタを作り直した
+# 直後から効く。ArgoCD も CI も要らない ── 締め出されたときに直せる層に置く。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: entra-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: "entra:admin"
+---
+# 組み込みの view は Secret を含まない代わりに、CRD もノードも含まない。
+# 足りないぶんはこれ。どれも get/list/watch だけ。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: readonly-extra
+rules:
+  - apiGroups: ["apiextensions.k8s.io", "apiregistration.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes", "persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+      - storage.k8s.io
+      - scheduling.k8s.io
+      - admissionregistration.k8s.io
+      - rbac.authorization.k8s.io
+      - metrics.k8s.io
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  # クラスタに実際に居る CRD の群。InfisicalSecret は値ではなく参照しか持たないので
+  # 読めても秘密は出ない。
+  - apiGroups:
+      - gateway.networking.k8s.io
+      - argoproj.io
+      - cert-manager.io
+      - acme.cert-manager.io
+      - cilium.io
+      - k8up.io
+      - secrets.infisical.com
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: entra-viewer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: "entra:viewer"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: entra-viewer-extra
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: readonly-extra
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: "entra:viewer"
