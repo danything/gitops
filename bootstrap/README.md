@@ -120,7 +120,7 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 
 | 変えるもの | 必要なこと |
 | --- | --- |
-| [apiserver/authentication-config.yaml](apiserver/authentication-config.yaml) | ホストの `/etc/rancher/k3s/` に置き直すだけ。**API サーバが自動で読み直す**(k8s 1.32+ の structured authn の再読み込み)。k3s の再起動は要らない |
+| [apiserver/authentication-config.yaml](apiserver/authentication-config.yaml) | ホストの `/etc/rancher/k3s/` に置き直すだけ。**API サーバが自動で読み直す**(k8s 1.32+ の structured authn の再読み込み)。k3s の再起動は要らない。**同じディレクトリに置いてから `mv` すること** ── `install` で直接上書きすると読みかけを掴んで `status="failure"` が増える(2026-09-09 に実測。壊れた内容は無視されて前の設定のまま動き、書き終わったあとの読み直しで success になるので実害は無いが、指標が汚れる) |
 | [apiserver/rbac.yaml](apiserver/rbac.yaml) | **手で `kubectl apply`。** ワークフローには ClusterRole を作る権限を渡していない(自分の権限を書き換えられないように) |
 | `kube-apiserver-arg` / `tls-san`(`/etc/rancher/k3s/config.yaml`) | **k3s の再起動が要る。** 失敗すると API サーバが上がらないので、必ず `config.yaml.pre-oidc` のような退避を取ってから |
 

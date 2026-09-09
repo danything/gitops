@@ -1,13 +1,16 @@
-# Kubernetes の Web UI。Portainer の置き換え(2026-09-09 に入れ替えた)。
-# 宅内からだけ引ける hd.l.doany.io に出している。
+# Kubernetes の Web UI。Portainer の置き換え(2026-09-09 に入れ替えた)。h.doany.io。
 #
 # Resource Map が Gateway / HTTPRoute / GRPCRoute を最初から知っていて、
 # parentRefs と backendRefs の線も定義済みなので、公開経路が 1 枚で出る。
 #
-# 認証は入れていない。unsafeUseServiceAccountToken は Headlamp を訪ねた人を全員
-# Pod の ServiceAccount として扱う設定で、宅内限定かつ読み取り専用だから許している。
-# 外に出すなら oauth2-proxy を前段に置く(bootstrap/auth/hubble-proxy.yaml と同じ形)か、
-# apiserver 側に OIDC を入れて利用者本人のトークンを通す。
+# 認証は Entra の OIDC。Headlamp は利用者の id_token を API サーバへ転送するだけで、
+# 権限を持たない。誰が何をできるかは apiserver 側で決まる
+# (bootstrap/apiserver/{authentication-config,rbac}.yaml)。アプリロール admin を
+# 持つ人は cluster-admin、それ以外は読み取り専用。
+#
+# コールバックは Headlamp が要求のホストから組み立てる(Envoy が x-forwarded-proto を
+# 付ける)ので指定しない。Entra 側の redirect URI は登録済み
+# (https://h.doany.io/oidc-callback、2026-09-09)。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -31,17 +34,22 @@ spec:
           create: true
           name: headlamp
         clusterRoleBinding:
-          create: true
-          # 組み込みの view。Secret を含まないのが効いている。足りないぶんは rbac.yaml。
-          clusterRoleName: view
+          # Headlamp 自身は API サーバを叩かない。利用者のトークンを転送するだけ。
+          create: false
+        # Infisical が Secret を差し替えたら入れ替わるように(push-bridge → operator)。
+        deploymentAnnotations:
+          secrets.infisical.com/auto-reload: "true"
         config:
           inCluster: true
           inClusterContextName: main
-          unsafeUseServiceAccountToken: true
           oidc:
-            # OIDC を使わないので空の Secret も要らない。既定は create: true。
+            # 値は headlamp-secrets.yaml が作る Secret から envFrom で入る。
+            # chart 側で作らせないこと。
             secret:
               create: false
+            externalSecret:
+              enabled: true
+              name: headlamp-oidc
         # chart の既定は resources: {} で上限が無い。
         resources:
           requests:
@@ -54,9 +62,9 @@ spec:
           parentRefs:
             - name: doany
               namespace: kube-system
-              sectionName: https-lan
+              sectionName: https
           hostnames:
-            - hd.l.doany.io
+            - h.doany.io
   syncPolicy:
     automated:
       prune: true
