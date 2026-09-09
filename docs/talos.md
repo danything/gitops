@@ -280,6 +280,8 @@ sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
 
 ### つまずいた点
 
+- **ディスクは 140 GB 取る(sparse なので実消費は 4 GB ちょい)。** 小さくすると
+  `volumes.yaml` の値を縮めることになり、`maxSize: 64GiB` が効くかを試したことにならない
 - **ISO ではなく `metal-amd64.raw.zst` を焼く。** ISO 経由だと「ISO で起動 →
   `apply-config` → 再起動 → **ISO 側がインストール** → 再起動 → ディスク」という段取りに
   なり、外す時機を間違えると PXE ブートに落ちる。raw なら最初から maintenance mode で上がる。
@@ -309,6 +311,34 @@ sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
 - `talosctl upgrade-k8s` は **k8s の API に直接繋ぎに行く**ので、SLIRP のときは
   `--endpoint https://127.0.0.1:<hostfwd>` を渡す。`kubeconfig` の書き換えだけでは足りない
 - ハブの構成は monitor の `info network` で確認できる
+
+## ブートドリル 6 回目(2026-09-09、移行直前の確認)
+
+5 回目のあとに 7 本マージしたので、machine config に効くぶんを確かめ直した
+(Entra を 2 つめの issuer にした `bootstrap/apiserver/` と `talos/patches/apiserver.yaml`)。
+
+**今回はディスクを 140 GB にした。** 3〜5 回目は VM のディスクが小さくて
+`talos/patches/volumes.yaml` の値を縮めて焼いていたので、**本番と同じ
+`maxSize: 64GiB` / `minSize: 50GiB` のまま試したのはこれが初めて。**
+
+確かめたこと:
+
+| | |
+| --- | --- |
+| apiserver が Entra の issuer を載せて起動する | `--authentication-config=/system/config/kubernetes/kube-apiserver/authentication-config.yaml` が渡り、ファイルに issuer が 2 本(github + login.microsoftonline.com)。`anonymous` の livez/readyz/healthz も残っている |
+| groups の CEL | `entra:admin` / `entra:viewer` が両方描かれている |
+| RBAC が inlineManifest から入る | `entra-admin`(→ cluster-admin)・`entra-viewer`(→ view)・`entra-viewer-extra`(→ `readonly-extra`)と ClusterRole `readonly-extra` |
+| `EPHEMERAL` | **ちょうど 64.0 GiB**。`maxSize` が効く |
+| `u-local-path` | 72.0 GiB(残りに grow)、ready |
+| control-plane の taint | 無し |
+| Pod | 25 個が Running / Completed。そのあと ArgoCD が Application 16 本を復元しはじめる |
+
+所要: `apply-config` → apid 復帰 75 秒 → bootstrap → ノード Ready 200 秒 → bootstrap 層が全部 Running まで 120 秒。
+
+**headlamp は `secret "headlamp-oidc" not found` で止まる。これは正常。** Infisical の DB が
+空なので `InfisicalSecret` を使うアプリは Secret をもらえない。
+[migration-day.md](migration-day.md) の 7 が「先に Infisical の DB だけ戻す」と言っているとおりで、
+当日は 8 の手順で 1 本だけ戻してから待つ。`portainer` の namespace が作られないことも確認した。
 
 ## ブートドリル 5 回目(2026-09-08、**app-of-apps まで通した**)
 
