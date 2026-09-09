@@ -1,4 +1,4 @@
-# Kubernetes の Web UI。Portainer の置き換え(2026-09-09 に入れ替えた)。hd.doany.io。
+# Kubernetes の Web UI。Portainer の置き換え(2026-09-09 に入れ替えた)。h.doany.io。
 #
 # Resource Map が Gateway / HTTPRoute / GRPCRoute を最初から知っていて、
 # parentRefs と backendRefs の線も定義済みなので、公開経路が 1 枚で出る。
@@ -10,7 +10,7 @@
 #
 # コールバックは Headlamp が要求のホストから組み立てる(Envoy が x-forwarded-proto を
 # 付ける)ので指定しない。Entra 側の redirect URI は登録済み
-# (https://hd.doany.io/oidc-callback、2026-09-09)。
+# (https://h.doany.io/oidc-callback、2026-09-09)。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -64,7 +64,7 @@ spec:
               namespace: kube-system
               sectionName: https
           hostnames:
-            - hd.doany.io
+            - h.doany.io
   syncPolicy:
     automated:
       prune: true

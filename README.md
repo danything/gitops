@@ -51,10 +51,10 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
-`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。
+`h`(headlamp)・`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。
 新しく足すときは上の規則で 2 文字にする(1 文字はもう埋まっているものが多い)。
-**headlamp が `hd` なのは例外。** head + lamp でも hubble の 1 語読みでも `hl` になって
-ぶつかるので、前半だけ取った。
+headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble の 1 語読みでも `hl` に
+なってぶつかるため。
 
 `doany.io` そのものはブログ。`*.s.doany.io` は SSO を通して LAN のホストへ中継する口で、
 `dp.l.doany.io` のように途中に段が入るものは**宅内からしか引けない名前**
@@ -72,7 +72,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
 | [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。**Talos でホストのスクリプトが使えなくなる**ぶんの受け皿 |
 | [`infisical/`](apps/infisical/) [`infisical-operator/`](apps/infisical-operator/) [`infisical-push-bridge/`](apps/infisical-push-bridge/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジ |
-| [`headlamp/`](apps/headlamp/) | Kubernetes の Web UI(Portainer の置き換え)。認証は Entra、権限は `bootstrap/apiserver/` |
+| [`headlamp/`](apps/headlamp/) | Kubernetes の Web UI(`h.doany.io`、Portainer の置き換え)。認証は Entra、権限は `bootstrap/apiserver/` |
 
 **アプリの多くはこのリポジトリに無い。** 各アプリのリポジトリの `deploy/` に置いてあり、
 `bootstrap/argocd/repos.yaml` の ApplicationSet が拾う(上の「仕組み」)。
