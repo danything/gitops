@@ -136,6 +136,13 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       **PVC のファイルを寄せるほうも済んでいる**(上の Phase 2)。
 - [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
+- [ ] **移行して 1〜2 か月してから R2 の容量をもう一度見る。** k3s 期はホストの
+      `backup/k3s-backup` が `/var/lib/rancher/k3s/storage` を丸ごと取っていて、
+      k8up の per-PVC の保持設計がどれも効いていなかった
+      ([docs/decisions.md](docs/decisions.md)「バックアップに何を含めるか」)。
+      ホストのスクリプトが消えて `host=main` のスナップショットが保持から落ちきると、
+      [apps/k8up/denpa-library-forget.yaml](apps/k8up/denpa-library-forget.yaml) を含めて
+      ようやく効きはじめる。そこで初めて本当の定常サイズが分かる。
 - [x] **`talosctl upgrade` / `upgrade-k8s` の手順を README に(2026-09-08)。**
       [talos/README.md](talos/README.md)「上げ方 / 当て直し方」。
       **`upgrade-k8s` は inlineManifests の reconcile も兼ねる**(2026-09-08 に VM で実測。
