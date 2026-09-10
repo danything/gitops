@@ -1,0 +1,60 @@
+# 録画データ(denpa-library)だけ世代を持たない。
+#
+# k8up の Schedule は namespace 単位で、保持も Schedule 単位でしか書けない。
+# 一方 restic の forget は既定で (host, paths) ごとに保持を効かせる
+# (k8up は --group-by を渡さないので restic の既定のまま)ので、
+# PVC ごとに別の保持を当てるにはこうして path を絞った forget を回すしかない。
+#
+# なぜ要るか。ライブラリは中身が入れ替わる。9/7 の世代が 10.08 GiB、9/9 が 8.14 GiB で、
+# 3 世代あわせた実データは 18.15 GiB、最新 1 世代だけなら 8.09 GiB。
+# つまり消えたファイルのぶんが 10 GiB ほど残っていた。リポジトリ全体が 33.5 GiB なので
+# 3 割がこれだった。他の PVC は小さいので世代を持ったままでよい。
+#
+# 承知しておくこと: 最新 1 世代しか残らないので、録画を誤って消したことに
+# 翌日までに気づかないと戻せない。それでよい、という判断(本人、2026-09-10)。
+# 余裕が欲しくなったら --keep-last 2 にする(1 日ぶん、約 2 GiB)。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: denpa-library-forget
+  namespace: k8up
+spec:
+  # denpa のバックアップ(16:30)と notify(18:00)より後。日曜の prune 群は
+  # 20:00〜22:45 なので重ならない。restic はリポジトリをロックするため、
+  # ここを動かすときは schedules.yaml の時刻と突き合わせること。
+  schedule: "30 18 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: forget
+              # notify と同じ。k8up のイメージに restic が入っている。
+              image: ghcr.io/k8up-io/k8up:v2.16.0
+              command:
+                - sh
+                - -ec
+                - |
+                  export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
+                  restic forget \
+                    --host denpa --path /data/denpa-library \
+                    --keep-last 1 --prune
+              env:
+                - name: ENDPOINT
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
+                - name: BUCKET
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: bucket}}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: accessKeyId}}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
+                - name: RESTIC_PASSWORD
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {memory: 1Gi}
