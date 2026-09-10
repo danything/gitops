@@ -57,6 +57,10 @@ Infisical を戻すための `infisical-postgresql.sql` もその R2 にある�
 (`notify()` が Mattermost に投げる)、**バックアップを全部 k8up に移した時点で穴になった。**
 [notify.yaml](notify.yaml) の CronJob が日次(18:00 UTC)でそれを埋める。
 
+その 30 分後に [denpa-library-forget.yaml](denpa-library-forget.yaml) が走る。
+録画データだけ世代を持たないための forget で、理由は
+[../../docs/decisions.md](../../docs/decisions.md)「バックアップに何を含めるか」。
+
 **ArgoCD の通知は使えない。** Mattermost に繋がってはいるが(`bootstrap/argocd/helmchart.yaml`)、
 **あれは Application しか見ない**ので k8up の `Backup` CR の失敗は拾えない。
 
