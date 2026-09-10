@@ -16,6 +16,17 @@
       ([talos/README.md](../talos/README.md)「上げ方 / 当て直し方」)
 - [ ] `talos/versions.yaml` の版が意図どおり(**上げるなら今日ではない日に**)
 - [ ] **作業中は何も見せない。** 決定済み(ROADMAP の Phase 2)。メンテナンス画面は用意しない
+- [ ] **手元の PC に道具がそろっている。** 移行後は**ノードにシェルが無い**ので
+      `ssh main 'kubectl …'` が使えなくなる。5 以降は全部手元から叩く
+
+      | | 用途 |
+      | --- | --- |
+      | `talosctl` | 3〜5。版はクラスタに合わせなくてよい |
+      | `kubectl` | 5〜9。**クラスタと同じ v1.36.2** |
+      | `restic` | 8 でスナップショット ID を選ぶ |
+      | `helm` / `sops` / `age` / `jq` | 3(`render.sh`)と調べもの |
+
+      2026-09-10 に全部そろえた(`~/.local/bin`)。
 
 ## 1. 経路の確保
 
@@ -127,6 +138,8 @@ kubectl -n argocd patch application <名前> --type=merge \
 ## 8. PV データを戻す
 
 **順番が決まっている。** 手順は [apps/k8up/README.md](../apps/k8up/README.md)「戻し方」。
+スナップショット ID は**手元の `restic snapshots`** で見る ── ホストにはもう入れない。
+資格情報は Infisical の `/k8up/k8up-global`(`endpoint` / `bucket` / 鍵 2 つ / `repoPassword`)。
 
 1. アプリを止める(`kubectl scale deploy/… --replicas=0`)
 2. `Restore` を作る。**スナップショット ID を明示する**
