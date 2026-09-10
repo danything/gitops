@@ -167,6 +167,10 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 ## 10. 後始末
 
 - [ ] ホストの `k3s-backup` はもう無い(Talos にシェルが無い)。**k8up だけが残る**
+- [ ] **k8up の通知が `main/…` を「25 時間以上更新されていない」と言い出すが、これは想定どおり。**
+      ホストのスクリプトが止まったため。notify は過去 8 日に出てきた経路を「あるべきもの」と
+      みなす作りなので、**8 日で勝手に鳴りやむ**([apps/k8up/notify.yaml](../apps/k8up/notify.yaml))。
+      慌てて消しに行かないこと ── その 8 日ぶんが移行前の最後の退避でもある
 - [ ] `bootstrap/storageclass.yaml`(`local-path-retain`)を消す
       ── 再構築で PVC を引き直したこの時だけ消せる(ROADMAP)
 - [ ] `talosctl etcd snapshot` を 1 本取って R2 へ
