@@ -255,29 +255,6 @@ spec:
       keepMonthly: 6
       tags: [k8up]
 ---
-# portainer が使っていた枠(17:30 / 日曜 22:30)をそのまま使う。
-apiVersion: k8up.io/v1
-kind: Schedule
-metadata:
-  name: noren
-  namespace: noren
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-spec:
-  backup:
-    schedule: "30 17 * * *"
-    tags: [k8up]
-    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
-    failedJobsHistoryLimit: 2
-    successfulJobsHistoryLimit: 1
-  prune:
-    schedule: "30 22 * * 0"
-    retention:
-      keepDaily: 7
-      keepWeekly: 4
-      keepMonthly: 6
-      tags: [k8up]
----
 apiVersion: k8up.io/v1
 kind: Schedule
 metadata:
