@@ -305,4 +305,9 @@ data:
       process.exit(1);
     }
     // 問題があればジョブも落とす。通知が届かなくても kubectl から見えるように。
-    if (lines.length) process.exit(1);
+    // FAILED でも exit 0。以前は非ゼロで終わらせていたが、それだと
+    //   1. backoffLimit ぶん(3 回)走り直して同じ警告を 3 回投稿する
+    //   2. Job が失敗扱い → CronJob が Degraded → ArgoCD が gitops の同期を
+    //      retry に入れて apps/ 配下の更新が止まる(2026-09-12 に実際に起きた)
+    // 「投稿できた」がこの Job の成功で、警告の中身は Mattermost 側で伝わっている。
+    // 非ゼロで終わるのは投稿そのものに失敗したとき(上)だけ。
