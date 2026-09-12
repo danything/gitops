@@ -300,6 +300,30 @@ spec:
       keepMonthly: 6
       tags: [k8up]
 ---
+# shadai(車台)。DB は Pod の backupcommand、添付は PVC shadai-files をファイルとして。
+# 18:00 / 日曜 23:15 は空いていた枠
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: shadai
+  namespace: shadai
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  backup:
+    schedule: "0 18 * * *"
+    tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    failedJobsHistoryLimit: 2
+    successfulJobsHistoryLimit: 1
+  prune:
+    schedule: "15 23 * * 0"
+    retention:
+      keepDaily: 7
+      keepWeekly: 4
+      keepMonthly: 6
+      tags: [k8up]
+---
 # リポジトリの健全性チェック。これだけ 1 本。
 # ホストの `backup/k3s-backup` が `restic check --read-data-subset=5%` を回していたぶんで、
 # Talos に移るとあれが無くなるので k8up 側に置いておく。
