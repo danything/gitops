@@ -68,6 +68,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
 | [`erpnext/`](apps/erpnext/) | ERPNext (Helm chart + OIDC セットアップ) |
 | [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL |
+| [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
 | [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。**Talos でホストのスクリプトが使えなくなる**ぶんの受け皿 |

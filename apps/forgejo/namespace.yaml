@@ -1,0 +1,10 @@
+# PSA は privileged。理由: Runner の docker(dind)が privileged で動く(runner.yaml)。
+# 一覧と背景は docs/talos.md「PSA のラベル」(k3s では効かない。Talos のために書いておく)。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgejo
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

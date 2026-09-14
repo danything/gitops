@@ -1,0 +1,108 @@
+# Forgejo(git のホスティング + Forgejo Actions)。fj.doany.io。
+# GitHub Actions の課金を避けるため、CI をこのクラスタの Runner(runner.yaml)で回す受け皿。
+#
+# 版は LTS(15.x)に合わせる。chart 17.1.x の appVersion が 15.0.8。
+# 16 系に上げるときは chart の メジャーも変わるので、リリースノートの破壊的変更を読んでから。
+#
+# DB は自前の postgres(postgres.yaml、mattermost と同じ形)。chart は DB の subchart を持たない。
+# リポジトリ・パッケージ・Actions のログは PVC forgejo-data(k8up でファイルとして取る)。
+#
+# SSH は出さない(Gateway は HTTP しか持たない)。clone/push は HTTPS + アクセストークン。
+# 公開経路は chart ではなく httproute.yaml に置く(docs/decisions.md「公開経路をどこに置くか」)。
+#
+# 秘密は Infisical の /forgejo/ 以下(forgejo-secrets.yaml)。入れてから同期すること。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  source:
+    # OCI のレジストリはスキーム無しで書く(ArgoCD 3.x)。公開なので資格情報は要らない。
+    repoURL: code.forgejo.org/forgejo-helm
+    chart: forgejo
+    targetRevision: 17.1.6
+    helm:
+      releaseName: forgejo
+      valuesObject:
+        # Service 名を forgejo-http にする(既定だとリリース名 + chart 名で forgejo-forgejo-http になる)
+        fullnameOverride: forgejo
+        test:
+          enabled: false
+        deployment:
+          annotations:
+            secrets.infisical.com/auto-reload: "true"
+        persistence:
+          enabled: true
+          create: true
+          claimName: forgejo-data
+          size: 50Gi
+          storageClass: local-path-retain
+          annotations:
+            # リポジトリはファイルとして取る。git のオブジェクトは足していくだけなので、
+            # 動いたままコピーしても壊れにくい。DB は postgres.yaml の pg_dump で別に取る。
+            k8up.io/backup: "true"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+        gitea:
+          admin:
+            # キー username / password(Infisical /forgejo/forgejo-admin)。
+            # 最初の起動で作るだけで、以後 UI で変えたパスワードを上書きしない。
+            existingSecret: forgejo-admin
+            passwordMode: initialOnlyNoReset
+            email: forgejo-admin@doany.io
+          additionalConfigFromEnvs:
+            - name: FORGEJO__DATABASE__PASSWD
+              valueFrom:
+                secretKeyRef:
+                  # chart が Secret forgejo(app.ini の元)を作るので名前をずらす
+                  name: forgejo-db
+                  key: postgres-password
+          config:
+            APP_NAME: Forgejo
+            server:
+              DOMAIN: fj.doany.io
+              ROOT_URL: https://fj.doany.io/
+              DISABLE_SSH: true
+              START_SSH_SERVER: false
+            database:
+              DB_TYPE: postgres
+              HOST: postgres.forgejo.svc:5432
+              NAME: forgejo
+              USER: forgejo
+            service:
+              # 使うのは自分だけ。アカウントは管理画面で作る
+              DISABLE_REGISTRATION: true
+              REQUIRE_SIGNIN_VIEW: false
+            actions:
+              ENABLED: true
+              # `uses: actions/checkout@v4` を GitHub から取る。GitHub のワークフローをそのまま動かすため
+              DEFAULT_ACTIONS_URL: https://github.com
+            repository:
+              DEFAULT_BRANCH: main
+            session:
+              COOKIE_SECURE: true
+        service:
+          ssh:
+            # SSH は使わないが chart は Service を必ず作る。外には出ていない(ClusterIP)
+            type: ClusterIP
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
