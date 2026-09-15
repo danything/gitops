@@ -84,6 +84,15 @@ nameservers:
     - address: 1.1.1.1
     - address: 1.0.0.1
 ---
+# ノード(containerd)から fj.doany.io のイメージを取るため、名前を中継の ClusterIP に向ける。
+# ノード自身からは Gateway の 443 に繋がらない(bootstrap/cilium/values.yaml の nodePort の 3)。
+# 中継は apps/forgejo/node-access.yaml。k3s 期はホストの /etc/hosts に同じ行(2026-09-15)
+apiVersion: v1alpha1
+kind: StaticHostConfig
+name: 10.43.200.10
+hostnames:
+    - fj.doany.io
+---
 # 単一ノードなので control-plane に taint を付けない。
 #
 # `KubeNodeConfig` は既定で `node-role.kubernetes.io/control-plane: NoSchedule` を入れる。

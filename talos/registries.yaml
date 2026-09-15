@@ -1,22 +1,22 @@
 machine:
     registries:
         config:
-            ghcr.io:
+            fj.doany.io:
                 auth:
-                    username: ENC[AES256_GCM,data:VjNb,iv:RoPS3oFNYMo4y/MutpTH3jzbZ+QLPQb1jRu7jm2zTuc=,tag:1FDq8DnFfWL3h5sXckAChA==,type:str]
-                    password: ENC[AES256_GCM,data:ggffaxpnnpA3LOkCLAWqA7FcMXdsJdL8fP8W/BUPzz+RuKeoiLNzNw==,iv:exzfs9Og6GCXAyoQ3L0vmClsPHTH0EcyreRh6SaRjjA=,tag:/HjyWUe78xOw6FmGoazhqA==,type:str]
+                    username: ENC[AES256_GCM,data:2fi9Gw==,iv:IrUHdYAPJqH9jwgyhA1trkmJeDhrvFcKLEQYjUHTP4g=,tag:0bg6wsrUvusRzqSTXHvIxA==,type:str]
+                    password: ENC[AES256_GCM,data:SvfWLk1UhP9ne1iB5O3dyla4jvxGQNM1Wls6un/d2GhEPG1SJnEKLw==,iv:faFsN+V/tQfzmdOdsjybMZ0Fg/l7T2EtuBkdX8br/kg=,tag:oG9N6T/gUk43+TpNPw7w2g==,type:str]
 sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAxZEJTK0ZNc1RHWklraU1C
-            bU5jQmpkU0x4TllQWXpEb2lXTkFEQjM3ajE0CmhRbkRLbU5LcjRWV1VsQkVWdEha
-            VTF1bXQ2Zm5PWjZKVFVFdzV1NzRZZWcKLS0tIGlUeHRhRzlYdnRCMnBVUnBodytR
-            S3pLVkxoNTZJYW1UZWc4QTRaalcyMzgK8w5htSInX8mqWNi6lbp0/iIK5oE32QoS
-            7fLQ8s4Xgy5W6a2oMsTPbMyayz6trKyQrwhk9jGsa1JLJGUWJVf1OQ==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBkRFNibzZTMzM5ckRLdEJ1
+            ZlYvbFJFbkU1ZkQ0cUZMem4vZnZHelRIUHlJCnpVL1pGUWE2QllpdWRhcW83NXJy
+            cXR6N1JiUytVdS9UanlKcUQxbllOVVEKLS0tIEFCZHcyTFEwSEpMQUxkV3lrcis5
+            NGNBQzB3Wkh6Tm84SkNGdm1BQ3RQSmMK5BEZF/RzotWHQjGPFoyr2GPm3F54pckb
+            YBuMuLhhiExdR7hA9Zpw+qbStZ7UJcRDXD5Ors+UC4tOYtzUZplN0g==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-    lastmodified: "2026-09-08T07:36:41Z"
-    mac: ENC[AES256_GCM,data:6quIsUyzyycbQK7svl97m22Jwi0iyjK5J/KCDCGI1U612NoFIwhrv4wzXo7mGVo08RI0mth/mFAdQsFLyl4YCajamam8s+YydZUyMUjApn92WQvVBafdly1yUNnYuYnh8csf4rYGG2OmQJzCoi1JRqLpDnoGiDgOfXwrfb/yMx8=,iv:hmzQszqvigBEP1EP2pbr9nC45jrtn3RcHmdWZ8u1ORs=,tag:ZsFKbU7jAdYWU5xCwicVJg==,type:str]
+    lastmodified: "2026-09-15T04:11:01Z"
+    mac: ENC[AES256_GCM,data:fbsIm1K0pnTDlp+SxYegzU4KZ2qM7ponxF2B9dBL21uGUEIq5sRoH7tr7TuYeoUWKW0FjBuJxnH5MvrtpkCDGzCDaVygdnLCss4sgY1pgrl7xpDAlMNO/zEXkysrSZ7UB65b3Nr9wym098xKaiTsxM5WZnJDbmINmeim2puF0Is=,iv:ACAsiu0LZ1GqEjb7GX0gxfwKMcV9YSlG2hXiYAnouTM=,tag:7FqPSVhwcGTHBCcVq2N7SQ==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.13.3

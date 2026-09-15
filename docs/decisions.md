@@ -674,7 +674,7 @@ Infisical から作って `imagePullSecrets` で参照していた(tamasagashi�
 
 **その後(2026-09-15): ghcr の資格情報そのものが要らなくなった。** 非公開のリポジトリを GitHub から Forgejo に移し
 (apps/forgejo/README.md)、ghcr.io に残るイメージは全部公開。ノードの `registries.yaml` から ghcr.io を外し、
-代わりに fj.doany.io を同じ node 単位の形で持つ。ghcr.io の PAT(Infisical `/worklog/ghcr-pull`)は使っていない。
+代わりに fj.doany.io を同じ node 単位の形で持つ。ghcr.io の PAT はどこでも使っていない(Infisical の `/worklog/ghcr-pull` も既に無い)。
 
 
 ## PT3 チューナー(Talos で動かすための算段)
