@@ -229,5 +229,8 @@ data:
   FORGEJO__actions__DEFAULT_ACTIONS_URL: https://github.com
   FORGEJO__repository__DEFAULT_BRANCH: main
   FORGEJO__repository__DEFAULT_PRIVATE: private
+  # マージはスカッシュだけにする方針(GitHub の頃と同じ)。組織単位で縛る設定は Forgejo に無いので、
+  # 既定のマージ方法だけここで決め、許すマージ方法はリポジトリごとに API で絞る(README「マージはスカッシュ」)
+  FORGEJO__repository_0X2E_pull_0X2D_request__DEFAULT_MERGE_STYLE: squash
   FORGEJO__session__COOKIE_SECURE: "true"
   FORGEJO__log__LEVEL: Info

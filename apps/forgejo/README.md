@@ -100,3 +100,16 @@
 ホストからは Gateway の 443 に繋がらないので、[node-access.yaml](node-access.yaml) の中継 + ホストの `/etc/hosts`
 (`10.43.200.10 fj.doany.io`)+ `/etc/rancher/k3s/registries.yaml` の資格情報(info の `read:package`)。
 アプリ側に `imagePullSecrets` は要らない。Talos では [../../talos/README.md](../../talos/README.md)。
+
+## マージはスカッシュ
+
+**組織単位でマージ方法を縛る設定は Forgejo に無い**(15 時点)。既定のマージ方法は `forgejo.yaml` の
+`DEFAULT_MERGE_STYLE`、許すマージ方法はリポジトリごと。リポジトリを作ったり取り込んだりしたら、これを当てる:
+
+```shell
+curl -X PATCH -H "Authorization: token $T" -H 'Content-Type: application/json' \
+  -d '{"allow_merge_commits":false,"allow_rebase":false,"allow_rebase_explicit":false,"allow_fast_forward_only_merge":false,"allow_squash_merge":true,"default_merge_style":"squash","default_delete_branch_after_merge":true}' \
+  https://fj.doany.io/api/v1/repos/danything/<name>
+```
+
+2026-09-15 に shadai / renovate / tamasagashi / worklog-cloud へ当てた。
