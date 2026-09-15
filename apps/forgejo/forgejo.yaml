@@ -5,7 +5,8 @@
 # resource.exclusions)ので、それらが作られず Pod が起動しない(2026-09-15 に踏んだ)。
 # 設定は環境変数(FORGEJO__<section>__<KEY>)で渡し、イメージの docker-setup.sh が app.ini に書く。
 #
-# 版は LTS(15.x)。16 系に上げるときはリリースノートの破壊的変更を読んでから。
+# 版は最新を追う(LTS に留めない。2026-09-15 に 15.0.8 → 16.0.4)。Renovate が PR を出す。
+# メジャーを上げるときはリリースノートの破壊的変更を読んでから。
 #
 # 名前が forgejo-web / forgejo-repos なのは、chart 時代の Application が消えるときに
 # 同名のリソース(forgejo / forgejo-http / forgejo-data)を消すので、それに巻き込まれないように。
@@ -123,7 +124,7 @@ spec:
         fsGroup: 1000
       initContainers:
         - name: setup
-          image: code.forgejo.org/forgejo/forgejo:15.0.8-rootless
+          image: code.forgejo.org/forgejo/forgejo:16.0.4-rootless
           command: [/bin/sh, /scripts/setup.sh]
           envFrom:
             - configMapRef:
@@ -153,7 +154,7 @@ spec:
               mountPath: /tmp
       containers:
         - name: forgejo
-          image: code.forgejo.org/forgejo/forgejo:15.0.8-rootless
+          image: code.forgejo.org/forgejo/forgejo:16.0.4-rootless
           command: [/usr/bin/dumb-init, --, /bin/sh, /scripts/start.sh]
           envFrom:
             - configMapRef:
