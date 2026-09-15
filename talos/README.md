@@ -23,7 +23,7 @@ CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.s
 **別の作り方をすると「CI は通るが当日は通らない」が起きる**ので、道具は 1 つにしてある。
 
 **秘密は 2 つとも作ってコミット済み**(2026-09-08)── [secrets.yaml](secrets.yaml) は
-クラスタの CA 一式、[registries.yaml](registries.yaml) は ghcr.io の資格情報。
+クラスタの CA 一式、[registries.yaml](registries.yaml) はイメージ取得の資格情報(**中身は作り直しが要る**。下記)。
 **`secrets.yaml` を作り直すと別のクラスタになる**ので触らない。作り方は下記。
 
 ```shell
@@ -45,32 +45,29 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kub
 
 ```shell
 talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
-# registries.yaml は下の「ghcr.io と fj.doany.io の資格情報」
+# registries.yaml は下の「fj.doany.io の資格情報」
 ```
 
-## ghcr.io と fj.doany.io の資格情報
+## fj.doany.io の資格情報
 
-**k3s 期はホストの `/etc/rancher/k3s/registries.yaml` にあった。** ノード単位で持つので
+**k3s 期はホストの `/etc/rancher/k3s/registries.yaml` にある。** ノード単位で持つので
 **namespace ごとの `imagePullSecrets` が要らない**という作りで、Talos でも同じにする
-(`machine.registries`)。無いと danything の private なリポジトリから出ているイメージが
-`ImagePullBackOff` になる。
+(`machine.registries`)。
 
-値は Infisical の `/worklog/ghcr-pull` と同じ PAT。
-**fj.doany.io**(Forgejo のコンテナレジストリ、2026-09-15 に足した)は Forgejo のユーザー `info` の
-`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`)。プライベートのリポジトリを
-GitHub から Forgejo に移したので、イメージもこちらから取る。**Talos に移すときは下の例のとおり 2 つとも書く**
-(k3s 期のホストのファイルからそのまま写す)。**平文は git に入れない**ので、
-`talos/registries.yaml` を作って SOPS で丸ごと暗号化する([`../.sops.yaml`](../.sops.yaml) に規則がある)。
+**2026-09-15 に ghcr.io を外した。** 非公開のリポジトリ(shadai・tamasagashi・worklog-cloud・noren)を
+Forgejo に移し、ghcr.io に残っているイメージは全部公開になったので、ghcr.io は資格情報なしで取れる。
+代わりに **fj.doany.io**(Forgejo のコンテナレジストリ)を Forgejo のユーザー `info` の
+`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`)で持つ。
+
+**コミット済みの `talos/registries.yaml` は古い**(ghcr.io の PAT が入っている)。Talos に移す前に、
+ホストのファイルから fj.doany.io のぶんを写して作り直し、SOPS で暗号化し直すこと
+(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml)):
 
 ```yaml
 # talos/registries.yaml (暗号化前)
 machine:
   registries:
     config:
-      ghcr.io:
-        auth:
-          username: 5ym
-          password: ghp_…
       fj.doany.io:
         auth:
           username: info
