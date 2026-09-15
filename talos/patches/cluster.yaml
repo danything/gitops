@@ -18,6 +18,11 @@ machine:
     # 実機の NetworkManager も ipv6.token は使っておらず、静的アドレスを直接書いている
     # (`ip token show` はどのインタフェースも `token ::`)。
     net.ipv6.conf.bond0.addr_gen_mode: "3"
+    # Forgejo の Runner(dind)で vite などがファイル監視を使う。既定の 128 は全コンテナの root で
+    # 共有なので足りず、worklog-cloud の e2e が EMFILE で落ちた(2026-09-15)。k3s 期はホストの
+    # /etc/sysctl.d/90-inotify.conf に同じ値
+    fs.inotify.max_user_instances: "8192"
+    fs.inotify.max_user_watches: "1048576"
     # IPv6 は bond0 に一本化する。eno4 側の RA でデフォルトルートを奪われると非対称ルーティングになる。
     net.ipv6.conf.eno4.disable_ipv6: "1"
   network:
