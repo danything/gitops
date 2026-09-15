@@ -15,16 +15,20 @@
 
 ## 使い始め
 
-1. **Infisical に 3 つ入れる(同期より先に)**
+1. **Infisical に 2 つ入れる(同期より先に)**
    - `/forgejo/forgejo-db`: `postgres-password` ── 英数字だけのランダム(`openssl rand -hex 32` など)。
      postgres は最初の起動でしかパスワードを設定しないので、**後から変えるなら DB 側も変える**
-   - `/forgejo/forgejo-admin`: `username` / `password` ── Entra が使えないときの非常口(`admin` は予約語で使えない)
    - `/forgejo/forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく bootstrap/auth にも平文で書いてある)、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
 2. Entra のアプリ登録 Main のリダイレクト URI(Web)に `https://fj.doany.io/user/oauth2/entra/callback` ── **2026-09-15 に `az ad app update` で追加済み**
-3. main にマージ → ArgoCD が同期。`https://fj.doany.io` で「entra でサインイン」。
-   テナントの人は誰でも入れて、チーム members(読む・fork・PR)に入る
-4. **最初に入った自分を管理者にする**: `forgejo-admin` でログインし、サイト管理 → ユーザー → 自分 →「管理者」。
-   続けて組織 `danything` とチーム `members`(権限: 読み取り、「すべてのリポジトリ」)を作る。
+3. main にマージ → ArgoCD が同期
+4. **管理者を作る**(1 度だけ)。Entra のメールと同じにしておくと、Entra でログインしたときに自動で紐づいて管理者になる。
+   パスワードは捨てる(表示させない)。組織 `danything` とチーム `members`(読み取り・すべてのリポジトリ)も作る
+
+   ```shell
+   kubectl -n forgejo exec deploy/forgejo -c forgejo -- \
+     forgejo admin user create --admin --username info --email info@doany.io --random-password >/dev/null
+   ```
+
    **members を作る前にログインした人は、次のログインで入る**
 5. **Runner を登録**: 管理画面 `/admin/actions/runners` →「Create new runner」。
    出た UUID と Token を Infisical `/forgejo/forgejo-runner` に `uuid` / `token` で入れる。

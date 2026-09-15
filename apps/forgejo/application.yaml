@@ -55,18 +55,18 @@ spec:
           limits:
             memory: 1Gi
         gitea:
+          # chart に管理者を作らせない(username を空にすると作る処理ごと飛ぶ)。
+          # 管理者は同期のあと Pod の中で 1 度だけ作る(apps/forgejo/README.md「使い始め」)。
+          # Entra のアカウントとメールで自動で紐づく(ACCOUNT_LINKING: auto)ので、パスワードは使わず捨てる。
+          # Entra が使えないときは kubectl exec で `forgejo admin user change-password` すればよい。
           admin:
-            # キー username / password(Infisical /forgejo/forgejo-admin)。Entra が使えないときの非常口。
-            # 最初の起動で作るだけで、以後 UI で変えたパスワードを上書きしない。
-            existingSecret: forgejo-admin
-            passwordMode: initialOnlyNoReset
-            email: forgejo-admin@doany.io
+            username: ""
           # Entra ID でログイン(docs/entra.md のアプリ登録 Main を共用)。
           # コールバックは https://fj.doany.io/user/oauth2/entra/callback(name から決まる)。Entra 側に登録すること。
           #
           # テナントの人は誰でも入れて、組織 danything のチーム members(全リポジトリ読み取り)に入る。
           # 見分けに使うのは tid(テナント ID)。Forgejo はグループのクレームを 1 つしか取れないので、
-          # roles(アプリロール admin)と両方は使えない。**サイトの管理者は Entra ではなく Forgejo の管理画面で付ける**
+          # roles(アプリロール admin)と両方は使えない。**サイトの管理者は Entra のロールでは決まらない**(README「使い始め」の 4 で作る)
           # (adminGroup を書かないと、ログインのたびに管理者フラグを上書きしない)。
           # tid は ID トークンに入っていて、goth が RawData にそのまま載せる(providers/openidConnect の FetchUser)。
           # 組織 danything とチーム members は先に作っておく(無いと割り当てが飛ばされる)。
