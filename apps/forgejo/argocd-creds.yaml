@@ -1,0 +1,41 @@
+# ArgoCD が Forgejo の danything/* を読むための資格情報(repo-creds)。
+# bootstrap/argocd/repos.yaml の gitea scmProvider の API スキャンにも同じトークンを使う。
+#
+# Infisical /argocd/forgejo-repo-creds に 3 つ:
+#   url      https://fj.doany.io/danything
+#   username トークンを作ったユーザー名
+#   password Forgejo のアクセストークン(read:repository と read:organization だけ)
+#
+# GitHub App の資格情報(bootstrap/argocd/helmchart.yaml)と違って Infisical から取ってよい。
+# Forgejo 自体が ArgoCD と Infisical の上に載っているので、復旧の順番が逆転しない。
+apiVersion: secrets.infisical.com/v1alpha1
+kind: InfisicalSecret
+metadata:
+  name: forgejo-repo-creds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
+spec:
+  hostAPI: http://infisical.infisical.svc:8080/api
+  authentication:
+    kubernetesAuth:
+      identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
+      autoCreateServiceAccountToken: true
+      serviceAccountRef:
+        name: infisical-auth
+        namespace: infisical
+      secretsScope:
+        projectSlug: doa
+        envSlug: prod
+        secretsPath: /argocd/forgejo-repo-creds
+        recursive: false
+  managedKubeSecretReferences:
+    - secretName: forgejo-repo-creds
+      secretNamespace: argocd
+      creationPolicy: Orphan
+      template:
+        # includeAllSecrets が無いと template がフォルダの中身を捨てて空の Secret になる(argocd/oidc-secret.yaml と同じ)
+        includeAllSecrets: true
+        metadata:
+          labels:
+            argocd.argoproj.io/secret-type: repo-creds

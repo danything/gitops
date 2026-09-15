@@ -8,7 +8,8 @@
 | [postgres.yaml](postgres.yaml) | DB。k8up が `pg_dump` を取る |
 | [runner.yaml](runner.yaml) | Runner(v13)+ docker(dind)。`runs-on: ubuntu-latest` をそのまま拾う |
 | [httproute.yaml](httproute.yaml) | 公開経路。SSH は出さない(clone / push は HTTPS + トークン) |
-| [forgejo-secrets.yaml](forgejo-secrets.yaml) | Infisical から Secret 3 つ |
+| [forgejo-secrets.yaml](forgejo-secrets.yaml) | Infisical から Secret 4 つ |
+| [argocd-creds.yaml](argocd-creds.yaml) | ArgoCD が Forgejo のリポジトリを読むための資格情報 |
 
 バックアップは [../k8up/schedules.yaml](../k8up/schedules.yaml)(毎日 14:45 UTC)。
 
@@ -26,20 +27,32 @@
    出た UUID と Token を Infisical `/forgejo/forgejo-runner` に `uuid` / `token` で入れる。
    Pod が入れ替わり、一覧に Runner が「Idle」で出れば済み
 
-## リポジトリを移す(1 本ずつ)
+## プライベートのリポジトリを移す(1 本ずつ)
 
-ArgoCD の ApplicationSet は GitHub の org を見ている([bootstrap/argocd/repos.yaml](../../bootstrap/argocd/repos.yaml))ので、
-**GitHub は残して、Forgejo から GitHub へ push ミラーする**形にする。
+**方針: プライベートは GitHub に置かない**(2026-09-15)。GitHub Actions の課金はプライベートにだけ掛かるので、
+公開リポジトリ(gitops・blog など)は GitHub のままでよい。対象は shadai / tamasagashi / worklog-cloud(noren は閉じた)。
 
-1. Forgejo で「新しい移行」→ GitHub から取り込む(Issue / PR も取れる)
-2. リポジトリの設定 → ミラー → **push ミラー**で GitHub へ(GitHub の fine-grained トークン、Contents: write)
-3. **GitHub 側の Actions を止める**(Settings → Actions → Disable)。止めないとミラーの push で GitHub でも走り、課金が減らない
-4. ワークフローは `.github/workflows/` のままで Forgejo が読む(`.forgejo/workflows/` が無ければそちら)。
-   `uses: actions/checkout@v4` などは GitHub から取る設定(`DEFAULT_ACTIONS_URL`)
-5. `secrets.GITHUB_TOKEN` で ghcr.io に push していたものは、GitHub の PAT(`write:packages`)を Forgejo の Secret に入れて差し替える。
-   Forgejo の `GITHUB_TOKEN` は Forgejo 自身のトークンで、GitHub には効かない
+**Forgejo が唯一の置き場になる。** バックアップは k8up(R2)の 1 日 1 回だけなので、手元の clone も捨てないこと。
 
-**失うもの**: claude-review(GitHub App)は GitHub の PR でしか動かない。PR を Forgejo で開くなら使えなくなる。
+先に 1 回だけ:
+
+1. Forgejo に組織 `danything` を作る
+2. ArgoCD 用のアクセストークンを作り(`read:repository` と `read:organization`)、Infisical `/argocd/forgejo-repo-creds` に
+   `url` = `https://fj.doany.io/danything` / `username` / `password` = トークン で入れる([argocd-creds.yaml](argocd-creds.yaml))
+3. `bootstrap/argocd/repos.yaml` に Forgejo の generator を足す PR をマージする(**Forgejo とトークンが揃ってから**。
+   API に届かないと ApplicationSet 全体の生成が止まる)
+
+リポジトリごとに:
+
+1. Forgejo の「新しい移行」で GitHub から取り込む(Issue / PR / リリースも)
+2. ワークフローを Forgejo 向けに直す(`.github/workflows/` のままで読まれる)
+   - イメージは `ghcr.io/danything/<name>` → `fj.doany.io/danything/<name>`。push はワークフローの `secrets.GITHUB_TOKEN`(Forgejo のトークン)で通る
+   - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンを Infisical から `kubernetes.io/dockerconfigjson` で)
+   - claude-review(GitHub App)のワークフローは消す。Forgejo では動かない
+3. Forgejo で CI とイメージの push が通るのを確かめる
+4. **GitHub のリポジトリを消す**。両方に `deploy/argocd.yaml` があると Application 名がぶつかる。
+   ApplicationSet は `preserveResourcesOnDeletion: true` なので、Application が作り直されても Pod や PVC は消えない
+5. ghcr.io の古いパッケージを消す
 
 ## 気をつけること
 
