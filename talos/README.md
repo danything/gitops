@@ -77,6 +77,19 @@ machine:
           password: …
 ```
 
+**fj.doany.io はこれだけでは取れない。** ホストからノードの 443(Gateway)に繋がらないので、
+ホストの名前解決で fj.doany.io を中継の ClusterIP に向ける([../apps/forgejo/node-access.yaml](../apps/forgejo/node-access.yaml))。
+k3s 期は `/etc/hosts` に `10.43.200.10 fj.doany.io`。Talos では machine config に書く(秘密ではないのでパッチでよい):
+
+```yaml
+machine:
+  network:
+    extraHostEntries:
+      - ip: 10.43.200.10
+        aliases:
+          - fj.doany.io
+```
+
 `render.sh` はこのファイルがあれば復号して `--config-patch` に足し、**無ければ警告して続ける**
 (作る前でも他の作業は進められる)。CI には age の鍵を渡さないので、
 `REGISTRIES` にダミーを入れて経路だけ通している。
