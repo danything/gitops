@@ -672,6 +672,10 @@ Infisical から作って `imagePullSecrets` で参照していた(tamasagashi�
 用意する必要が無くなった。Talos では同じ値が `talos/registries.yaml`(SOPS 済み)に入る
 ([talos/README.md](../talos/README.md))。
 
+**その後(2026-09-15): ghcr の資格情報そのものが要らなくなった。** 非公開のリポジトリを GitHub から Forgejo に移し
+(apps/forgejo/README.md)、ghcr.io に残るイメージは全部公開。ノードの `registries.yaml` から ghcr.io を外し、
+代わりに fj.doany.io を同じ node 単位の形で持つ。ghcr.io の PAT(Infisical `/worklog/ghcr-pull`)は使っていない。
+
 
 ## PT3 チューナー(Talos で動かすための算段)
 
