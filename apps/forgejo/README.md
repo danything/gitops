@@ -14,11 +14,15 @@
 
 ## 使い始め
 
-1. **Infisical に 2 つ入れる(同期より先に)**
-   - `/forgejo/forgejo-db`: `postgres-password`
-   - `/forgejo/forgejo-admin`: `username` / `password`(`admin` は Forgejo が予約しているので使えない)
-2. main にマージ → ArgoCD が同期。`https://fj.doany.io` に上の管理者で入る
-3. **Runner を登録**: 管理画面 `/admin/actions/runners` →「Create new runner」。
+1. **Infisical に 3 つ入れる(同期より先に)**
+   - `/forgejo/forgejo-db`: `postgres-password` ── 英数字だけのランダム(`openssl rand -hex 32` など)。
+     postgres は最初の起動でしかパスワードを設定しないので、**後から変えるなら DB 側も変える**
+   - `/forgejo/forgejo-admin`: `username` / `password` ── Entra が使えないときの非常口(`admin` は予約語で使えない)
+   - `/forgejo/forgejo-oauth`: `key` = アプリ登録 Main のクライアント ID、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
+2. **Entra のアプリ登録 Main にリダイレクト URI を足す**: `https://fj.doany.io/user/oauth2/entra/callback`(Web)
+3. main にマージ → ArgoCD が同期。`https://fj.doany.io` で「entra でサインイン」。
+   **アプリロール admin を持つ人だけ入れて、Forgejo の管理者になる**(ゲストは入れない)
+4. **Runner を登録**: 管理画面 `/admin/actions/runners` →「Create new runner」。
    出た UUID と Token を Infisical `/forgejo/forgejo-runner` に `uuid` / `token` で入れる。
    Pod が入れ替わり、一覧に Runner が「Idle」で出れば済み
 
@@ -40,6 +44,6 @@ ArgoCD の ApplicationSet は GitHub の org を見ている([bootstrap/argocd/r
 ## 気をつけること
 
 - **Runner の docker は privileged**。namespace の PSA が `privileged` なのはこのため。
-  登録していない人は push できない(`DISABLE_REGISTRATION`)ので、ジョブを走らせられるのは自分だけ
+  入れるのは Entra のロール admin を持つ人だけ(`requiredClaimValue`)なので、ジョブを走らせられるのもその人だけ
 - dind のイメージ置き場は `emptyDir`。Pod が入れ替わると次のジョブで pull し直す
 - Cilium は vxlan なので dind の MTU を 1400 にしてある。1500 に戻すと大きい pull が途中で止まる

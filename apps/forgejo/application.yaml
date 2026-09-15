@@ -56,11 +56,25 @@ spec:
             memory: 1Gi
         gitea:
           admin:
-            # キー username / password(Infisical /forgejo/forgejo-admin)。
+            # キー username / password(Infisical /forgejo/forgejo-admin)。Entra が使えないときの非常口。
             # 最初の起動で作るだけで、以後 UI で変えたパスワードを上書きしない。
             existingSecret: forgejo-admin
             passwordMode: initialOnlyNoReset
             email: forgejo-admin@doany.io
+          # Entra ID でログイン(docs/entra.md のアプリ登録 Main を共用)。
+          # コールバックは https://fj.doany.io/user/oauth2/entra/callback(name から決まる)。Entra 側に登録すること。
+          # 入れるのはアプリロール admin を持つ人だけ(テナントのゲストは入れない)。その人は Forgejo でも管理者。
+          # 管理画面の設定は起動のたびに init が name で上書きする。
+          oauth:
+            - name: entra
+              provider: openidConnect
+              existingSecret: forgejo-oauth
+              autoDiscoverUrl: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0/.well-known/openid-configuration
+              scopes: openid profile email
+              requiredClaimName: roles
+              requiredClaimValue: admin
+              groupClaimName: roles
+              adminGroup: admin
           additionalConfigFromEnvs:
             - name: FORGEJO__DATABASE__PASSWD
               valueFrom:
@@ -81,9 +95,16 @@ spec:
               NAME: forgejo
               USER: forgejo
             service:
-              # 使うのは自分だけ。アカウントは管理画面で作る
-              DISABLE_REGISTRATION: true
+              # アカウントは Entra でのログインでだけ作られる(フォームからの登録は無い)
+              DISABLE_REGISTRATION: false
+              ALLOW_ONLY_EXTERNAL_REGISTRATION: true
+              SHOW_REGISTRATION_BUTTON: false
               REQUIRE_SIGNIN_VIEW: false
+            oauth2_client:
+              ENABLE_AUTO_REGISTRATION: true
+              # Forgejo のユーザー名はメールの @ の前
+              USERNAME: email
+              ACCOUNT_LINKING: auto
             actions:
               ENABLED: true
               # `uses: actions/checkout@v4` を GitHub から取る。GitHub のワークフローをそのまま動かすため
