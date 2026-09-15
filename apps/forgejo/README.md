@@ -20,7 +20,7 @@
      postgres は最初の起動でしかパスワードを設定しないので、**後から変えるなら DB 側も変える**
    - `/forgejo/forgejo-admin`: `username` / `password` ── Entra が使えないときの非常口(`admin` は予約語で使えない)
    - `/forgejo/forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく bootstrap/auth にも平文で書いてある)、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
-2. **Entra のアプリ登録 Main にリダイレクト URI を足す**: `https://fj.doany.io/user/oauth2/entra/callback`(Web)
+2. Entra のアプリ登録 Main のリダイレクト URI(Web)に `https://fj.doany.io/user/oauth2/entra/callback` ── **2026-09-15 に `az ad app update` で追加済み**
 3. main にマージ → ArgoCD が同期。`https://fj.doany.io` で「entra でサインイン」。
    テナントの人は誰でも入れて、チーム members(読む・fork・PR)に入る
 4. **最初に入った自分を管理者にする**: `forgejo-admin` でログインし、サイト管理 → ユーザー → 自分 →「管理者」。
