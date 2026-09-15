@@ -23,7 +23,7 @@ CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.s
 **別の作り方をすると「CI は通るが当日は通らない」が起きる**ので、道具は 1 つにしてある。
 
 **秘密は 2 つとも作ってコミット済み**(2026-09-08)── [secrets.yaml](secrets.yaml) は
-クラスタの CA 一式、[registries.yaml](registries.yaml) はイメージ取得の資格情報(**中身は作り直しが要る**。下記)。
+クラスタの CA 一式、[registries.yaml](registries.yaml) は fj.doany.io のイメージ取得の資格情報。
 **`secrets.yaml` を作り直すと別のクラスタになる**ので触らない。作り方は下記。
 
 ```shell
@@ -59,9 +59,9 @@ Forgejo に移し、ghcr.io に残っているイメージは全部公開にな�
 代わりに **fj.doany.io**(Forgejo のコンテナレジストリ)を Forgejo のユーザー `info` の
 `read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`)で持つ。
 
-**コミット済みの `talos/registries.yaml` は古い**(ghcr.io の PAT が入っている)。Talos に移す前に、
-ホストのファイルから fj.doany.io のぶんを写して作り直し、SOPS で暗号化し直すこと
-(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml)):
+**`talos/registries.yaml` は 2026-09-15 に fj.doany.io 用に作り直した**(それまでは ghcr.io の PAT)。
+ホストのファイルから値を写して SOPS で暗号化してある(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml))。
+トークンを替えたら、ホストと同じ値でこれも作り直す:
 
 ```yaml
 # talos/registries.yaml (暗号化前)
@@ -76,16 +76,8 @@ machine:
 
 **fj.doany.io はこれだけでは取れない。** ホストからノードの 443(Gateway)に繋がらないので、
 ホストの名前解決で fj.doany.io を中継の ClusterIP に向ける([../apps/forgejo/node-access.yaml](../apps/forgejo/node-access.yaml))。
-k3s 期は `/etc/hosts` に `10.43.200.10 fj.doany.io`。Talos では machine config に書く(秘密ではないのでパッチでよい):
-
-```yaml
-machine:
-  network:
-    extraHostEntries:
-      - ip: 10.43.200.10
-        aliases:
-          - fj.doany.io
-```
+k3s 期は `/etc/hosts` に `10.43.200.10 fj.doany.io`。Talos では [patches/cluster.yaml](patches/cluster.yaml) の
+`StaticHostConfig`(秘密ではないのでパッチに書いてある)。
 
 `render.sh` はこのファイルがあれば復号して `--config-patch` に足し、**無ければ警告して続ける**
 (作る前でも他の作業は進められる)。CI には age の鍵を渡さないので、

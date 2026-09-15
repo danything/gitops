@@ -39,10 +39,11 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
-# ghcr.io の pull 資格情報。k3s 期はホストの /etc/rancher/k3s/registries.yaml に
-# 置いていたもので、ノード単位で持つので namespace ごとの imagePullSecrets が要らない。
-# 無いと danything の private なリポジトリから出ているイメージが引けない。
-# 値は Infisical の /worklog/ghcr-pull と同じ PAT。
+# fj.doany.io(Forgejo のコンテナレジストリ)の pull 資格情報。k3s 期はホストの
+# /etc/rancher/k3s/registries.yaml にあるもので、ノード単位で持つので namespace ごとの
+# imagePullSecrets が要らない。無いと非公開のリポジトリ(shadai など)のイメージが引けない。
+# 値は Forgejo のユーザー info の read:package だけのトークン(k3s-registry-pull)。
+# ghcr.io は 2026-09-15 に外した(残るイメージは全部公開)。
 #
 # 平文は書き出さないので、talos/registries.yaml(SOPS で丸ごと暗号化)を復号して渡す。
 # CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通す。
@@ -54,8 +55,8 @@ if [ -z "$REGISTRIES" ]; then
 	else
 		# 止めない。このファイルが無くても他は描けるので、作る前でも作業は進む。
 		# ただし気づかず焼くと private イメージが全部 ImagePullBackOff になるので、
-		# はっきり言う(talos/README.md「ghcr.io の資格情報」)。
-		echo "WARNING: talos/registries.yaml が無い。ghcr.io の private イメージが引けない構成になる" >&2
+		# はっきり言う(talos/README.md「fj.doany.io の資格情報」)。
+		echo "WARNING: talos/registries.yaml が無い。fj.doany.io の非公開イメージが引けない構成になる" >&2
 	fi
 fi
 
