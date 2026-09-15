@@ -1,0 +1,114 @@
+# ノード自身(containerd)が fj.doany.io に届くための口。
+#
+# **ホストからノードの 80/443 には繋がらない**(bootstrap/cilium/values.yaml の nodePort の説明の 3)。
+# 公開経路は Gateway なので、containerd が fj.doany.io のイメージを取ろうとすると
+# 接続がタイムアウトする(2026-09-15 に shadai で踏んだ)。レジストリはトークンの取得先(realm)も
+# `https://fj.doany.io/v2/token` を返すので、IP だけ差し替えるミラーでは足りない。
+#
+# そこで fj.doany.io の証明書を持つ nginx を ClusterIP の 443 に置き、**ホストの /etc/hosts で
+# fj.doany.io をこの ClusterIP に向ける**。ホストから ClusterIP には届く(Pod と違って Gateway を通らない)。
+# /etc/hosts はホストのプロセスにしか効かず、Pod の名前解決(CoreDNS)は変わらない。
+#
+#   k3s:   /etc/hosts に `10.43.200.10 fj.doany.io`(2026-09-15 に足した)
+#   Talos: machine.network.extraHostEntries(talos/README.md)
+#
+# ClusterIP は固定。変えるとホストの /etc/hosts と揃わなくなる
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: fj-node
+  namespace: forgejo
+spec:
+  secretName: fj-node-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+    - fj.doany.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgejo-node
+  namespace: forgejo
+spec:
+  clusterIP: 10.43.200.10
+  selector:
+    app: forgejo-node
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-node
+  namespace: forgejo
+data:
+  default.conf: |
+    server {
+      listen 8443 ssl;
+      server_name fj.doany.io;
+      ssl_certificate /tls/tls.crt;
+      ssl_certificate_key /tls/tls.key;
+      # イメージの層は大きい。上限なし、溜めずに流す
+      client_max_body_size 0;
+      proxy_request_buffering off;
+      proxy_buffering off;
+      proxy_read_timeout 1h;
+      location / {
+        proxy_pass http://forgejo-web.forgejo.svc.cluster.local:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo-node
+  namespace: forgejo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forgejo-node
+  template:
+    metadata:
+      labels:
+        app: forgejo-node
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: nginx
+          image: nginx:1.31-alpine
+          # 証明書は cert-manager が期限前に差し替える。nginx は読み直さないので 6 時間ごとに reload する
+          command:
+            - /bin/sh
+            - -c
+            - nginx -g 'daemon off;' & while sleep 21600; do nginx -s reload; done
+          ports:
+            - containerPort: 8443
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: conf
+          configMap:
+            name: forgejo-node
+        # cert-manager が作る Secret(ArgoCD は Secret を管理しないので、ここに書かない)
+        - name: tls
+          secret:
+            secretName: fj-node-tls

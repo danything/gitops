@@ -45,17 +45,21 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kub
 
 ```shell
 talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
-# registries.yaml は下の「ghcr.io の資格情報」
+# registries.yaml は下の「ghcr.io と fj.doany.io の資格情報」
 ```
 
-## ghcr.io の資格情報
+## ghcr.io と fj.doany.io の資格情報
 
 **k3s 期はホストの `/etc/rancher/k3s/registries.yaml` にあった。** ノード単位で持つので
 **namespace ごとの `imagePullSecrets` が要らない**という作りで、Talos でも同じにする
 (`machine.registries`)。無いと danything の private なリポジトリから出ているイメージが
 `ImagePullBackOff` になる。
 
-値は Infisical の `/worklog/ghcr-pull` と同じ PAT。**平文は git に入れない**ので、
+値は Infisical の `/worklog/ghcr-pull` と同じ PAT。
+**fj.doany.io**(Forgejo のコンテナレジストリ、2026-09-15 に足した)は Forgejo のユーザー `info` の
+`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`)。プライベートのリポジトリを
+GitHub から Forgejo に移したので、イメージもこちらから取る。**Talos に移すときは下の例のとおり 2 つとも書く**
+(k3s 期のホストのファイルからそのまま写す)。**平文は git に入れない**ので、
 `talos/registries.yaml` を作って SOPS で丸ごと暗号化する([`../.sops.yaml`](../.sops.yaml) に規則がある)。
 
 ```yaml
@@ -67,6 +71,23 @@ machine:
         auth:
           username: 5ym
           password: ghp_…
+      fj.doany.io:
+        auth:
+          username: info
+          password: …
+```
+
+**fj.doany.io はこれだけでは取れない。** ホストからノードの 443(Gateway)に繋がらないので、
+ホストの名前解決で fj.doany.io を中継の ClusterIP に向ける([../apps/forgejo/node-access.yaml](../apps/forgejo/node-access.yaml))。
+k3s 期は `/etc/hosts` に `10.43.200.10 fj.doany.io`。Talos では machine config に書く(秘密ではないのでパッチでよい):
+
+```yaml
+machine:
+  network:
+    extraHostEntries:
+      - ip: 10.43.200.10
+        aliases:
+          - fj.doany.io
 ```
 
 `render.sh` はこのファイルがあれば復号して `--config-patch` に足し、**無ければ警告して続ける**
