@@ -4,7 +4,7 @@
 
 | ファイル | 中身 |
 | --- | --- |
-| [forgejo.yaml](forgejo.yaml) | Forgejo 本体(15.0.8 LTS)。chart は使わない(理由はファイルの先頭) |
+| [forgejo.yaml](forgejo.yaml) | Forgejo 本体(最新を追う)。chart は使わない(理由はファイルの先頭) |
 | [postgres.yaml](postgres.yaml) | DB。k8up が `pg_dump` を取る |
 | [runner.yaml](runner.yaml) | Runner(v13)+ docker(dind)。`runs-on: ubuntu-latest` をそのまま拾う |
 | [httproute.yaml](httproute.yaml) | 公開経路。SSH は出さない(clone / push は HTTPS + トークン) |
