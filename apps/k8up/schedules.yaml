@@ -277,7 +277,7 @@ spec:
       keepMonthly: 6
       tags: [k8up]
 ---
-# shadai(車台)。DB は Pod の backupcommand、添付は PVC shadai-files をファイルとして。
+# トドロク(旧 shadai。k8s の名前はそのまま)。DB は Pod の backupcommand、添付は PVC shadai-files をファイルとして。
 # 17:30 / 日曜 22:30 が空いていた枠。最初 18:00 に置いたら notify.yaml(18:00 UTC)と同じ分に
 # 走り、通知側が「25 時間以内のスナップショットが無い」と鳴った(バックアップ自体は 18:00:26 に成功)。
 # 上の決まりどおり、バックアップは 15:00〜17:45 UTC、prune は日曜 20:00〜22:45 UTC の枠に置く
