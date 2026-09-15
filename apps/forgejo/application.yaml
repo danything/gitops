@@ -63,18 +63,21 @@ spec:
             email: forgejo-admin@doany.io
           # Entra ID でログイン(docs/entra.md のアプリ登録 Main を共用)。
           # コールバックは https://fj.doany.io/user/oauth2/entra/callback(name から決まる)。Entra 側に登録すること。
-          # テナントの人は誰でも入れる。アプリロール admin を持つ人は Forgejo でも管理者、それ以外は普通のユーザー
-          # (リポジトリを読んで fork し、PR を出せる。下の REQUIRE_SIGNIN_VIEW と apps/forgejo/README.md)。
-          # roles は配列のまま比べられる(routers/web/auth/oauth.go の claimValueToStringSet)。
-          # 管理画面の設定は起動のたびに init が name で上書きする。
+          #
+          # テナントの人は誰でも入れて、組織 danything のチーム members(全リポジトリ読み取り)に入る。
+          # 見分けに使うのは tid(テナント ID)。Forgejo はグループのクレームを 1 つしか取れないので、
+          # roles(アプリロール admin)と両方は使えない。**サイトの管理者は Entra ではなく Forgejo の管理画面で付ける**
+          # (adminGroup を書かないと、ログインのたびに管理者フラグを上書きしない)。
+          # tid は ID トークンに入っていて、goth が RawData にそのまま載せる(providers/openidConnect の FetchUser)。
+          # 組織 danything とチーム members は先に作っておく(無いと割り当てが飛ばされる)。
           oauth:
             - name: entra
               provider: openidConnect
               existingSecret: forgejo-oauth
               autoDiscoverUrl: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0/.well-known/openid-configuration
               scopes: openid profile email
-              groupClaimName: roles
-              adminGroup: admin
+              groupClaimName: tid
+              groupTeamMap: '{"22ac977d-b140-4dc8-8150-90d645d3475b": {"danything": ["members"]}}'
           additionalConfigFromEnvs:
             - name: FORGEJO__DATABASE__PASSWD
               valueFrom:
@@ -99,9 +102,9 @@ spec:
               DISABLE_REGISTRATION: false
               ALLOW_ONLY_EXTERNAL_REGISTRATION: true
               SHOW_REGISTRATION_BUTTON: false
-              # **ログインしないと何も見えない。** リポジトリは Forgejo の中では「公開」にして、
-              # テナントの人全員が読めて PR を出せるようにしている。これを false にするとコードが外に出る
-              REQUIRE_SIGNIN_VIEW: true
+              # インスタンスは公開(ログインしなくても公開リポジトリは見える)。非公開のリポジトリは
+              # チーム members(= テナントの人)と管理者だけが読める
+              REQUIRE_SIGNIN_VIEW: false
               # 組織を作れるのは管理者だけ
               DEFAULT_ALLOW_CREATE_ORGANIZATION: false
             oauth2_client:
@@ -115,8 +118,8 @@ spec:
               DEFAULT_ACTIONS_URL: https://github.com
             repository:
               DEFAULT_BRANCH: main
-              # 上の REQUIRE_SIGNIN_VIEW と組で、新しいリポジトリはログインした人全員に見せる
-              DEFAULT_PRIVATE: public
+              # 新しいリポジトリは非公開から始める
+              DEFAULT_PRIVATE: private
             session:
               COOKIE_SECURE: true
         service:

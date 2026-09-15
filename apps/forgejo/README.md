@@ -19,11 +19,14 @@
    - `/forgejo/forgejo-db`: `postgres-password` ── 英数字だけのランダム(`openssl rand -hex 32` など)。
      postgres は最初の起動でしかパスワードを設定しないので、**後から変えるなら DB 側も変える**
    - `/forgejo/forgejo-admin`: `username` / `password` ── Entra が使えないときの非常口(`admin` は予約語で使えない)
-   - `/forgejo/forgejo-oauth`: `key` = アプリ登録 Main のクライアント ID、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
+   - `/forgejo/forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく bootstrap/auth にも平文で書いてある)、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
 2. **Entra のアプリ登録 Main にリダイレクト URI を足す**: `https://fj.doany.io/user/oauth2/entra/callback`(Web)
 3. main にマージ → ArgoCD が同期。`https://fj.doany.io` で「entra でサインイン」。
-   テナントの人は誰でも入れる。**アプリロール admin を持つ人は管理者、それ以外は普通のユーザー**(読む・fork・PR)
-4. **Runner を登録**: 管理画面 `/admin/actions/runners` →「Create new runner」。
+   テナントの人は誰でも入れて、チーム members(読む・fork・PR)に入る
+4. **最初に入った自分を管理者にする**: `forgejo-admin` でログインし、サイト管理 → ユーザー → 自分 →「管理者」。
+   続けて組織 `danything` とチーム `members`(権限: 読み取り、「すべてのリポジトリ」)を作る。
+   **members を作る前にログインした人は、次のログインで入る**
+5. **Runner を登録**: 管理画面 `/admin/actions/runners` →「Create new runner」。
    出た UUID と Token を Infisical `/forgejo/forgejo-runner` に `uuid` / `token` で入れる。
    Pod が入れ替わり、一覧に Runner が「Idle」で出れば済み
 
@@ -44,8 +47,7 @@
 
 リポジトリごとに:
 
-1. Forgejo の「新しい移行」で GitHub から取り込み(Issue / PR / リリースも)、**設定で「公開」に変える**。
-   GitHub で非公開だったものは非公開のまま入り、そのままだとテナントの人が読めない(PR を出せない)
+1. Forgejo の「新しい移行」で組織 `danything` の下に取り込む(Issue / PR / リリースも)。非公開のまま入り、チーム members が読める
 2. ワークフローを Forgejo 向けに直す(`.github/workflows/` のままで読まれる)
    - イメージは `ghcr.io/danything/<name>` → `fj.doany.io/danything/<name>`。push はワークフローの `secrets.GITHUB_TOKEN`(Forgejo のトークン)で通る
    - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンを Infisical から `kubernetes.io/dockerconfigjson` で)
@@ -57,17 +59,17 @@
 
 ## 誰が何をできるか
 
-| | 見る | fork・PR | push・マージ | 管理画面 |
-| --- | --- | --- | --- | --- |
-| ログインしていない人 | **何も見えない**(`REQUIRE_SIGNIN_VIEW`) | ─ | ─ | ─ |
-| テナントの人(Entra でログイン) | 全リポジトリ | できる | できない | ─ |
-| アプリロール admin を持つ人 | 全部 | できる | できる | できる |
+| | 公開リポジトリ | 非公開リポジトリ | fork・PR | push・マージ | 管理画面 |
+| --- | --- | --- | --- | --- | --- |
+| ログインしていない人 | 見える | 見えない | ─ | ─ | ─ |
+| テナントの人(Entra、チーム members) | 見える | 読める | できる | できない | ─ |
+| 管理者(Forgejo の管理画面で付ける) | 全部 | 全部 | できる | できる | できる |
 
-- **リポジトリは Forgejo の中で「公開」**にしてある。外から見えないのはサインイン必須のおかげなので、`REQUIRE_SIGNIN_VIEW` を外さないこと
-- **テナントのゲスト(ERPNext のために招いた人)も入れる**し、コードも読める。外したくなったら Forgejo 専用のアプリ登録を作り、
-  「割り当てが必要」にして人ごとにロールを割り当てる(Main の設定を変えると ERPNext のゲストが締め出される)
-- **fork からの PR のワークフローは、管理者が承認するまで走らない**(Forgejo の既定)。Runner は privileged なので、
-  中身を見ずに承認しないこと
+- **テナントのゲスト(ERPNext のために招いた人)も tid が同じなので members に入る。** 外したくなったら Forgejo 専用のアプリ登録を作り、
+  「割り当てが必要」にして人ごとに割り当てる(Main の設定を変えると ERPNext のゲストが締め出される)
+- **Entra のアプリロール admin は Forgejo の管理者に連動しない**(グループのクレームを tid に使っているため)。管理者は管理画面で付け外しする
+- **fork からの PR のワークフローは、管理者が承認するまで走らない**(読み取り権限だけの人は承認が要る。Forgejo の既定)。
+  Runner は privileged なので、中身を見ずに承認しないこと
 
 ## 気をつけること
 
