@@ -43,6 +43,31 @@ spec:
               revision: '{{ .branch }}'
               files:
                 - path: deploy/argocd.yaml
+    # 同じ形で Forgejo(fj.doany.io)の danything も見る。**プライベートのリポジトリは GitHub に置かず
+    # Forgejo にだけ置く**方針(2026-09-15。GitHub Actions の課金はプライベートにだけ掛かる)。
+    # Forgejo の API は Gitea と同じなので gitea の scmProvider で読める。
+    # 読むための資格情報は apps/forgejo/argocd-creds.yaml(Infisical から)。scan と clone の両方に使う。
+    # **同じリポジトリが GitHub と Forgejo の両方にあると Application 名がぶつかって generator ごと止まる。**
+    # 移すときは GitHub 側を消してから(apps/forgejo/README.md)。
+    - matrix:
+        generators:
+          - scmProvider:
+              cloneProtocol: https
+              gitea:
+                owner: danything
+                api: https://fj.doany.io/
+                allBranches: false
+                tokenRef:
+                  secretName: forgejo-repo-creds
+                  key: password
+              filters:
+                - pathsExist:
+                    - deploy/argocd.yaml
+          - git:
+              repoURL: '{{ .url }}'
+              revision: '{{ .branch }}'
+              files:
+                - path: deploy/argocd.yaml
   # generator の結果から repo が消えても(改名の途中、一時的な API エラー)、Application は消しても
   # その中の実リソース(Deployment や PVC)は道連れにしない。
   syncPolicy:
