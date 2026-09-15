@@ -1,0 +1,231 @@
+# Forgejo 本体(git のホスティング + Forgejo Actions)。fj.doany.io。
+#
+# **chart(forgejo-helm)は使わない。** chart は app.ini の元と init のスクリプトを Secret で作るが、
+# このクラスタの ArgoCD は Secret を丸ごと管理対象から外している(bootstrap/argocd/helmchart.yaml の
+# resource.exclusions)ので、それらが作られず Pod が起動しない(2026-09-15 に踏んだ)。
+# 設定は環境変数(FORGEJO__<section>__<KEY>)で渡し、イメージの docker-setup.sh が app.ini に書く。
+#
+# 版は LTS(15.x)。16 系に上げるときはリリースノートの破壊的変更を読んでから。
+#
+# 名前が forgejo-web / forgejo-repos なのは、chart 時代の Application が消えるときに
+# 同名のリソース(forgejo / forgejo-http / forgejo-data)を消すので、それに巻き込まれないように。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-repos
+  namespace: forgejo
+  annotations:
+    # リポジトリ・パッケージ・Actions のログ・app.ini。ファイルとして取る。
+    # git のオブジェクトは足していくだけなので、動いたままコピーしても壊れにくい。
+    # DB は postgres.yaml の pg_dump で別に取る。
+    k8up.io/backup: "true"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path-retain
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgejo-web
+  namespace: forgejo
+spec:
+  selector:
+    app: forgejo
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-setup
+  namespace: forgejo
+data:
+  # 起動の前に 1 回ずつ走る。何度走っても同じ結果になる
+  setup.sh: |
+    #!/bin/sh
+    set -eu
+    # 1. SECRET_KEY などを初回だけ作って PVC に置く。
+    #    Forgejo は SECRET_KEY が空だと決め打ちの値を使ってしまう。値は表示しない
+    f=/var/lib/gitea/custom/conf/generated.env
+    mkdir -p "$(dirname "$f")"
+    if [ ! -s "$f" ]; then
+      umask 077
+      {
+        echo "FORGEJO__security__SECRET_KEY=$(gitea generate secret SECRET_KEY)"
+        echo "FORGEJO__security__INTERNAL_TOKEN=$(gitea generate secret INTERNAL_TOKEN)"
+        echo "FORGEJO__oauth2__JWT_SECRET=$(gitea generate secret JWT_SECRET)"
+        echo "FORGEJO__server__LFS_JWT_SECRET=$(gitea generate secret LFS_JWT_SECRET)"
+      } > "$f.tmp"
+      mv "$f.tmp" "$f"
+    fi
+    set -a; . "$f"; set +a
+    # 2. 環境変数を app.ini に書く(イメージの手順そのまま)
+    /usr/local/bin/docker-setup.sh
+    # 3. DB を作る / 上げる。postgres が上がるまで待つ
+    until gitea migrate; do echo "DB を待っている"; sleep 5; done
+    # 4. Entra のログイン。name で探して、無ければ足し、あれば上書きする
+    #    テナントの人は tid で組織 danything のチーム members(全リポジトリ読み取り)に入る。
+    #    Forgejo はグループのクレームを 1 つしか取れないので、Entra のロール admin は使っていない。
+    #    サイトの管理者は Pod の中で作る(README「使い始め」)。
+    #    tid は ID トークンに入っていて、goth が RawData に載せる(providers/openidConnect の FetchUser)
+    set -- \
+      --name entra \
+      --provider openidConnect \
+      --key "$OAUTH_KEY" \
+      --secret "$OAUTH_SECRET" \
+      --auto-discover-url https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0/.well-known/openid-configuration \
+      --scopes "openid profile email" \
+      --group-claim-name tid \
+      --group-team-map '{"22ac977d-b140-4dc8-8150-90d645d3475b": {"danything": ["members"]}}'
+    id=$(gitea admin auth list --vertical-bars | grep -E '\|entra +\|' | awk '{print $1}')
+    if [ -z "$id" ]; then
+      gitea admin auth add-oauth "$@"
+    else
+      gitea admin auth update-oauth --id "$id" "$@"
+    fi
+  start.sh: |
+    #!/bin/sh
+    set -a; . /var/lib/gitea/custom/conf/generated.env; set +a
+    exec /usr/local/bin/docker-entrypoint.sh
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo-web
+  namespace: forgejo
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  # ReadWriteOnce。Forgejo は同時に 2 つ動かせない
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: forgejo
+  template:
+    metadata:
+      labels:
+        app: forgejo
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: setup
+          image: code.forgejo.org/forgejo/forgejo:15.0.8-rootless
+          command: [/bin/sh, /scripts/setup.sh]
+          envFrom:
+            - configMapRef:
+                name: forgejo-config
+          env: &secretEnv
+            - name: FORGEJO__database__PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-db
+                  key: postgres-password
+            - name: OAUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-oauth
+                  key: key
+            - name: OAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-oauth
+                  key: secret
+          volumeMounts: &mounts
+            - name: data
+              mountPath: /var/lib/gitea
+            - name: scripts
+              mountPath: /scripts
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: forgejo
+          image: code.forgejo.org/forgejo/forgejo:15.0.8-rootless
+          command: [/usr/bin/dumb-init, --, /bin/sh, /scripts/start.sh]
+          envFrom:
+            - configMapRef:
+                name: forgejo-config
+          env: *secretEnv
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: 3000
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts: *mounts
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: forgejo-repos
+        - name: scripts
+          configMap:
+            name: forgejo-setup
+        - name: tmp
+          emptyDir: {}
+---
+# app.ini の中身。秘密でないものだけ(DB のパスワードと OAuth は上の Deployment が Secret から)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-config
+  namespace: forgejo
+data:
+  FORGEJO__DEFAULT__APP_NAME: Forgejo
+  FORGEJO__DEFAULT__RUN_MODE: prod
+  FORGEJO__server__DOMAIN: fj.doany.io
+  FORGEJO__server__ROOT_URL: https://fj.doany.io/
+  FORGEJO__server__HTTP_PORT: "3000"
+  # SSH は出さない(Gateway は HTTP しか持たない)。clone / push は HTTPS + アクセストークン
+  FORGEJO__server__DISABLE_SSH: "true"
+  FORGEJO__server__START_SSH_SERVER: "false"
+  FORGEJO__database__DB_TYPE: postgres
+  FORGEJO__database__HOST: postgres.forgejo.svc:5432
+  FORGEJO__database__NAME: forgejo
+  FORGEJO__database__USER: forgejo
+  FORGEJO__security__INSTALL_LOCK: "true"
+  # アカウントは Entra でのログインでだけ作られる(フォームからの登録は無い)
+  FORGEJO__service__DISABLE_REGISTRATION: "false"
+  FORGEJO__service__ALLOW_ONLY_EXTERNAL_REGISTRATION: "true"
+  FORGEJO__service__SHOW_REGISTRATION_BUTTON: "false"
+  # パスワードでのログインを出さない(Entra だけ)。Entra に入れなくなったら一時的に true にする。
+  # git の HTTPS(アクセストークン)は Basic 認証なので、ENABLE_BASIC_AUTHENTICATION は残す
+  FORGEJO__service__ENABLE_INTERNAL_SIGNIN: "false"
+  # インスタンスは公開(ログインしなくても公開リポジトリは見える)。
+  # 非公開のリポジトリはチーム members(= テナントの人)と管理者だけが読める
+  FORGEJO__service__REQUIRE_SIGNIN_VIEW: "false"
+  FORGEJO__service__DEFAULT_ALLOW_CREATE_ORGANIZATION: "false"
+  FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION: "true"
+  # Forgejo のユーザー名はメールの @ の前。同じメールのアカウントがあれば自動で紐づく
+  FORGEJO__oauth2_client__USERNAME: email
+  FORGEJO__oauth2_client__ACCOUNT_LINKING: auto
+  FORGEJO__actions__ENABLED: "true"
+  # `uses: actions/checkout@v4` を GitHub から取る。GitHub のワークフローをそのまま動かすため
+  FORGEJO__actions__DEFAULT_ACTIONS_URL: https://github.com
+  FORGEJO__repository__DEFAULT_BRANCH: main
+  FORGEJO__repository__DEFAULT_PRIVATE: private
+  FORGEJO__session__COOKIE_SECURE: "true"
+  FORGEJO__log__LEVEL: Info

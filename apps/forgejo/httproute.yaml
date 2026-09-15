@@ -16,7 +16,7 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: forgejo-http
+        - name: forgejo-web
           port: 3000
       # 大きいリポジトリの clone / push やコンテナイメージの push は 15 秒では終わらない
       timeouts:
