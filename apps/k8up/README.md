@@ -403,7 +403,7 @@ SQLite は上で片付いたので、残りは注釈を足すだけ。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `adguardhome-*` `erpnext-sites` `mattermost-data` `netbird-routing-peer-data` `forgejo-data` | ファイル | gitops にあるのでここで `"true"` |
+| `adguardhome-*` `erpnext-sites` `mattermost-data` `netbird-routing-peer-data` `forgejo-repos` | ファイル | gitops にあるのでここで `"true"` |
 | `denpa-library` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `noren-assets` `noren-files` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` `noren-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
 | `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`。DB は `backupcommand` で取っているので**ファイルとしては除外**し、`logos/` だけを取る。**この注釈は JSON でパースされる**(`backupcommand` の `qsplit` とは別の経路。`operator/backupcontroller/executor.go`)。**パースに失敗すると `continue` でその PVC が黙って飛ばされる**ので、変えたら実物を見ること |

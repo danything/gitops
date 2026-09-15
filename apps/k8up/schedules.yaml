@@ -303,7 +303,7 @@ spec:
       keepMonthly: 6
       tags: [k8up]
 ---
-# forgejo。DB は postgres の backupcommand(pg_dump)、リポジトリは PVC forgejo-data をファイルとして。
+# forgejo。DB は postgres の backupcommand(pg_dump)、リポジトリは PVC forgejo-repos をファイルとして。
 # 15:00〜17:45 UTC の枠が埋まっているので、その手前の 14:45 UTC に置く(ホストのスクリプトとは離れている)。
 # prune は日曜の枠(20:00〜22:45 UTC)も埋まっているので check(23:00 UTC)の後ろ。
 # 重なっても check と prune は排他で、後から来た側が 30 秒ごとに待つ(下の check の説明)

@@ -4,11 +4,11 @@
 
 | ファイル | 中身 |
 | --- | --- |
-| [application.yaml](application.yaml) | Forgejo 本体(chart `forgejo-helm/forgejo` 17.1.6 = Forgejo 15.0.8 LTS) |
+| [forgejo.yaml](forgejo.yaml) | Forgejo 本体(15.0.8 LTS)。chart は使わない(理由はファイルの先頭) |
 | [postgres.yaml](postgres.yaml) | DB。k8up が `pg_dump` を取る |
 | [runner.yaml](runner.yaml) | Runner(v13)+ docker(dind)。`runs-on: ubuntu-latest` をそのまま拾う |
 | [httproute.yaml](httproute.yaml) | 公開経路。SSH は出さない(clone / push は HTTPS + トークン) |
-| [forgejo-secrets.yaml](forgejo-secrets.yaml) | Infisical から Secret 4 つ |
+| [forgejo-secrets.yaml](forgejo-secrets.yaml) | Infisical から Secret 3 つ |
 | [argocd-creds.yaml](argocd-creds.yaml) | ArgoCD が Forgejo のリポジトリを読むための資格情報 |
 
 バックアップは [../k8up/schedules.yaml](../k8up/schedules.yaml)(毎日 14:45 UTC)。
@@ -25,8 +25,8 @@
    パスワードは捨てる(表示させない)。組織 `danything` とチーム `members`(読み取り・すべてのリポジトリ)も作る
 
    ```shell
-   kubectl -n forgejo exec deploy/forgejo -c forgejo -- \
-     forgejo admin user create --admin --username info --email info@doany.io --random-password >/dev/null
+   kubectl -n forgejo exec deploy/forgejo-web -c forgejo -- \
+     gitea admin user create --admin --username info --email info@doany.io --random-password >/dev/null
    ```
 
    **members を作る前にログインした人は、次のログインで入る**
