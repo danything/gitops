@@ -45,7 +45,9 @@
 
 1. Forgejo に組織 `danything` を作る
 2. ArgoCD 用のアクセストークンを作り(`read:repository` と `read:organization`)、Infisical `/argocd/forgejo-repo-creds` に
-   `url` = `https://fj.doany.io/danything` / `username` / `password` = トークン で入れる([argocd-creds.yaml](argocd-creds.yaml))
+   `url` = `https://fj.doany.io/danything` / `username` / `password` = トークン で入れる([argocd-creds.yaml](argocd-creds.yaml))。
+   **スコープは repository・organization・issue の読み取り。** issue が無いと、非公開リポジトリができた時点で
+   ApplicationSet が `token does not have at least one of required scope(s): [read:issue]` で止まる(2026-09-15)
 3. `bootstrap/argocd/repos.yaml` に Forgejo の generator を足す PR をマージする(**Forgejo とトークンが揃ってから**。
    API に届かないと ApplicationSet 全体の生成が止まる)
 
@@ -80,3 +82,21 @@
 - **Runner の docker は privileged**。namespace の PSA が `privileged` なのはこのため
 - dind のイメージ置き場は `emptyDir`。Pod が入れ替わると次のジョブで pull し直す
 - Cilium は vxlan なので dind の MTU を 1400 にしてある。1500 に戻すと大きい pull が途中で止まる
+
+## 組織 danything は「ログインユーザーのみ」(limited)
+
+**公開にしてはいけない。** パッケージ(コンテナイメージ)の読み取り権限はリポジトリではなく**組織の公開範囲**で決まり、
+公開の組織だと非公開リポジトリのイメージでも匿名で pull できる(`services/packages/perm.go` の
+`HasOrgOrUserVisible`。2026-09-15 に shadai のイメージが匿名で取れるのを見つけて limited にした)。
+
+## Actions からイメージを push するとき
+
+**ワークフローの自動トークン(`GITHUB_TOKEN`)ではパッケージに書けない**(Forgejo 15。`services/packages/perm.go` に
+`TODO: ActionUser permission check` とあり、Actions のユーザーは組織のメンバー扱いにならない)。
+組織の Actions のシークレット `REGISTRY_TOKEN`(info の `write:package` だけのトークン)で `docker login` する。
+
+## ノードからイメージを取る
+
+ホストからは Gateway の 443 に繋がらないので、[node-access.yaml](node-access.yaml) の中継 + ホストの `/etc/hosts`
+(`10.43.200.10 fj.doany.io`)+ `/etc/rancher/k3s/registries.yaml` の資格情報(info の `read:package`)。
+アプリ側に `imagePullSecrets` は要らない。Talos では [../../talos/README.md](../../talos/README.md)。
