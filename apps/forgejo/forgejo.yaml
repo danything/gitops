@@ -83,7 +83,9 @@ data:
       --scopes "openid profile email" \
       --group-claim-name tid \
       --group-team-map '{"22ac977d-b140-4dc8-8150-90d645d3475b": {"danything": ["members"]}}'
-    id=$(gitea admin auth list --vertical-bars | grep -E '\|entra +\|' | awk '{print $1}')
+    # 一覧はタブ区切り(ID Name Type Enabled)。--vertical-bars の出力は空白の入り方が一定でなく、
+    # grep で拾えずに 2 回目の起動で add-oauth が「already exists」で落ちた(2026-09-15)
+    id=$(gitea admin auth list | awk '$2 == "entra" {print $1}')
     if [ -z "$id" ]; then
       gitea admin auth add-oauth "$@"
     else
