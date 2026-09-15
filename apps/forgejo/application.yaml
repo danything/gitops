@@ -63,7 +63,9 @@ spec:
             email: forgejo-admin@doany.io
           # Entra ID でログイン(docs/entra.md のアプリ登録 Main を共用)。
           # コールバックは https://fj.doany.io/user/oauth2/entra/callback(name から決まる)。Entra 側に登録すること。
-          # 入れるのはアプリロール admin を持つ人だけ(テナントのゲストは入れない)。その人は Forgejo でも管理者。
+          # テナントの人は誰でも入れる。アプリロール admin を持つ人は Forgejo でも管理者、それ以外は普通のユーザー
+          # (リポジトリを読んで fork し、PR を出せる。下の REQUIRE_SIGNIN_VIEW と apps/forgejo/README.md)。
+          # roles は配列のまま比べられる(routers/web/auth/oauth.go の claimValueToStringSet)。
           # 管理画面の設定は起動のたびに init が name で上書きする。
           oauth:
             - name: entra
@@ -71,8 +73,6 @@ spec:
               existingSecret: forgejo-oauth
               autoDiscoverUrl: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0/.well-known/openid-configuration
               scopes: openid profile email
-              requiredClaimName: roles
-              requiredClaimValue: admin
               groupClaimName: roles
               adminGroup: admin
           additionalConfigFromEnvs:
@@ -99,7 +99,11 @@ spec:
               DISABLE_REGISTRATION: false
               ALLOW_ONLY_EXTERNAL_REGISTRATION: true
               SHOW_REGISTRATION_BUTTON: false
-              REQUIRE_SIGNIN_VIEW: false
+              # **ログインしないと何も見えない。** リポジトリは Forgejo の中では「公開」にして、
+              # テナントの人全員が読めて PR を出せるようにしている。これを false にするとコードが外に出る
+              REQUIRE_SIGNIN_VIEW: true
+              # 組織を作れるのは管理者だけ
+              DEFAULT_ALLOW_CREATE_ORGANIZATION: false
             oauth2_client:
               ENABLE_AUTO_REGISTRATION: true
               # Forgejo のユーザー名はメールの @ の前
@@ -111,6 +115,8 @@ spec:
               DEFAULT_ACTIONS_URL: https://github.com
             repository:
               DEFAULT_BRANCH: main
+              # 上の REQUIRE_SIGNIN_VIEW と組で、新しいリポジトリはログインした人全員に見せる
+              DEFAULT_PRIVATE: public
             session:
               COOKIE_SECURE: true
         service:

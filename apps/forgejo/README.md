@@ -22,7 +22,7 @@
    - `/forgejo/forgejo-oauth`: `key` = アプリ登録 Main のクライアント ID、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
 2. **Entra のアプリ登録 Main にリダイレクト URI を足す**: `https://fj.doany.io/user/oauth2/entra/callback`(Web)
 3. main にマージ → ArgoCD が同期。`https://fj.doany.io` で「entra でサインイン」。
-   **アプリロール admin を持つ人だけ入れて、Forgejo の管理者になる**(ゲストは入れない)
+   テナントの人は誰でも入れる。**アプリロール admin を持つ人は管理者、それ以外は普通のユーザー**(読む・fork・PR)
 4. **Runner を登録**: 管理画面 `/admin/actions/runners` →「Create new runner」。
    出た UUID と Token を Infisical `/forgejo/forgejo-runner` に `uuid` / `token` で入れる。
    Pod が入れ替わり、一覧に Runner が「Idle」で出れば済み
@@ -44,7 +44,8 @@
 
 リポジトリごとに:
 
-1. Forgejo の「新しい移行」で GitHub から取り込む(Issue / PR / リリースも)
+1. Forgejo の「新しい移行」で GitHub から取り込み(Issue / PR / リリースも)、**設定で「公開」に変える**。
+   GitHub で非公開だったものは非公開のまま入り、そのままだとテナントの人が読めない(PR を出せない)
 2. ワークフローを Forgejo 向けに直す(`.github/workflows/` のままで読まれる)
    - イメージは `ghcr.io/danything/<name>` → `fj.doany.io/danything/<name>`。push はワークフローの `secrets.GITHUB_TOKEN`(Forgejo のトークン)で通る
    - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンを Infisical から `kubernetes.io/dockerconfigjson` で)
@@ -54,9 +55,22 @@
    ApplicationSet は `preserveResourcesOnDeletion: true` なので、Application が作り直されても Pod や PVC は消えない
 5. ghcr.io の古いパッケージを消す
 
+## 誰が何をできるか
+
+| | 見る | fork・PR | push・マージ | 管理画面 |
+| --- | --- | --- | --- | --- |
+| ログインしていない人 | **何も見えない**(`REQUIRE_SIGNIN_VIEW`) | ─ | ─ | ─ |
+| テナントの人(Entra でログイン) | 全リポジトリ | できる | できない | ─ |
+| アプリロール admin を持つ人 | 全部 | できる | できる | できる |
+
+- **リポジトリは Forgejo の中で「公開」**にしてある。外から見えないのはサインイン必須のおかげなので、`REQUIRE_SIGNIN_VIEW` を外さないこと
+- **テナントのゲスト(ERPNext のために招いた人)も入れる**し、コードも読める。外したくなったら Forgejo 専用のアプリ登録を作り、
+  「割り当てが必要」にして人ごとにロールを割り当てる(Main の設定を変えると ERPNext のゲストが締め出される)
+- **fork からの PR のワークフローは、管理者が承認するまで走らない**(Forgejo の既定)。Runner は privileged なので、
+  中身を見ずに承認しないこと
+
 ## 気をつけること
 
-- **Runner の docker は privileged**。namespace の PSA が `privileged` なのはこのため。
-  入れるのは Entra のロール admin を持つ人だけ(`requiredClaimValue`)なので、ジョブを走らせられるのもその人だけ
+- **Runner の docker は privileged**。namespace の PSA が `privileged` なのはこのため
 - dind のイメージ置き場は `emptyDir`。Pod が入れ替わると次のジョブで pull し直す
 - Cilium は vxlan なので dind の MTU を 1400 にしてある。1500 に戻すと大きい pull が途中で止まる
