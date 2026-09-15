@@ -122,14 +122,15 @@ FAILED を出している**ので、そこで気づけなかった、という�
 
 ## 何をどう取っているか
 
-`Schedule` は [schedules.yaml](schedules.yaml) に 12 本まとめてある(時刻と決まりごともあちら)。
-11 本が namespace ごとの backup + prune で、**残り 1 本はリポジトリ全体の `check`**。
+`Schedule` は [schedules.yaml](schedules.yaml) に 14 本まとめてある(時刻と決まりごともあちら)。
+13 本が namespace ごとの backup + prune で、**残り 1 本はリポジトリ全体の `check`**。
 **注釈だけでは動かない** ── その namespace に `Schedule` が無いとジョブが作られない。
 **取る中身を決めているのは Pod 側の注釈**で、それがどこにあるかがここ。
 
 | namespace | 中身 | `k8up.io/backupcommand` の在処 |
 | --- | --- | --- |
 | mattermost | postgres の `pg_dump` | [../mattermost/postgres.yaml](../mattermost/postgres.yaml) |
+| forgejo | postgres の `pg_dump` + リポジトリの PVC(ファイル) | [../forgejo/postgres.yaml](../forgejo/postgres.yaml) |
 | erpnext | mariadb の `mariadb-dump` | 上流 chart の `worker.gunicorn.podAnnotations`([application.yaml](../erpnext/application.yaml)) |
 | infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
 | lgtm / xool / worklog / denpa / blog / noren | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
@@ -402,7 +403,7 @@ SQLite は上で片付いたので、残りは注釈を足すだけ。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `adguardhome-*` `erpnext-sites` `mattermost-data` `netbird-routing-peer-data` | ファイル | gitops にあるのでここで `"true"` |
+| `adguardhome-*` `erpnext-sites` `mattermost-data` `netbird-routing-peer-data` `forgejo-data` | ファイル | gitops にあるのでここで `"true"` |
 | `denpa-library` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `noren-assets` `noren-files` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` `noren-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
 | `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`。DB は `backupcommand` で取っているので**ファイルとしては除外**し、`logos/` だけを取る。**この注釈は JSON でパースされる**(`backupcommand` の `qsplit` とは別の経路。`operator/backupcontroller/executor.go`)。**パースに失敗すると `continue` でその PVC が黙って飛ばされる**ので、変えたら実物を見ること |

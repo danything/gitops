@@ -1,0 +1,138 @@
+# Forgejo(git のホスティング + Forgejo Actions)。fj.doany.io。
+# GitHub Actions の課金を避けるため、CI をこのクラスタの Runner(runner.yaml)で回す受け皿。
+#
+# 版は LTS(15.x)に合わせる。chart 17.1.x の appVersion が 15.0.8。
+# 16 系に上げるときは chart の メジャーも変わるので、リリースノートの破壊的変更を読んでから。
+#
+# DB は自前の postgres(postgres.yaml、mattermost と同じ形)。chart は DB の subchart を持たない。
+# リポジトリ・パッケージ・Actions のログは PVC forgejo-data(k8up でファイルとして取る)。
+#
+# SSH は出さない(Gateway は HTTP しか持たない)。clone/push は HTTPS + アクセストークン。
+# 公開経路は chart ではなく httproute.yaml に置く(docs/decisions.md「公開経路をどこに置くか」)。
+#
+# 秘密は Infisical の /forgejo/ 以下(forgejo-secrets.yaml)。入れてから同期すること。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  source:
+    # OCI のレジストリはスキーム無しで書く(ArgoCD 3.x)。公開なので資格情報は要らない。
+    repoURL: code.forgejo.org/forgejo-helm
+    chart: forgejo
+    targetRevision: 17.1.6
+    helm:
+      releaseName: forgejo
+      valuesObject:
+        # Service 名を forgejo-http にする(既定だとリリース名 + chart 名で forgejo-forgejo-http になる)
+        fullnameOverride: forgejo
+        test:
+          enabled: false
+        deployment:
+          annotations:
+            secrets.infisical.com/auto-reload: "true"
+        persistence:
+          enabled: true
+          create: true
+          claimName: forgejo-data
+          size: 50Gi
+          storageClass: local-path-retain
+          annotations:
+            # リポジトリはファイルとして取る。git のオブジェクトは足していくだけなので、
+            # 動いたままコピーしても壊れにくい。DB は postgres.yaml の pg_dump で別に取る。
+            k8up.io/backup: "true"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+        gitea:
+          # chart に管理者を作らせない(username を空にすると作る処理ごと飛ぶ)。
+          # 管理者は同期のあと Pod の中で 1 度だけ作る(apps/forgejo/README.md「使い始め」)。
+          # Entra のアカウントとメールで自動で紐づく(ACCOUNT_LINKING: auto)ので、パスワードは使わず捨てる。
+          # Entra が使えないときは kubectl exec で `forgejo admin user change-password` すればよい。
+          admin:
+            username: ""
+          # Entra ID でログイン(docs/entra.md のアプリ登録 Main を共用)。
+          # コールバックは https://fj.doany.io/user/oauth2/entra/callback(name から決まる)。Entra 側に登録すること。
+          #
+          # テナントの人は誰でも入れて、組織 danything のチーム members(全リポジトリ読み取り)に入る。
+          # 見分けに使うのは tid(テナント ID)。Forgejo はグループのクレームを 1 つしか取れないので、
+          # roles(アプリロール admin)と両方は使えない。**サイトの管理者は Entra のロールでは決まらない**(README「使い始め」の 4 で作る)
+          # (adminGroup を書かないと、ログインのたびに管理者フラグを上書きしない)。
+          # tid は ID トークンに入っていて、goth が RawData にそのまま載せる(providers/openidConnect の FetchUser)。
+          # 組織 danything とチーム members は先に作っておく(無いと割り当てが飛ばされる)。
+          oauth:
+            - name: entra
+              provider: openidConnect
+              existingSecret: forgejo-oauth
+              autoDiscoverUrl: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0/.well-known/openid-configuration
+              scopes: openid profile email
+              groupClaimName: tid
+              groupTeamMap: '{"22ac977d-b140-4dc8-8150-90d645d3475b": {"danything": ["members"]}}'
+          additionalConfigFromEnvs:
+            - name: FORGEJO__DATABASE__PASSWD
+              valueFrom:
+                secretKeyRef:
+                  # chart が Secret forgejo(app.ini の元)を作るので名前をずらす
+                  name: forgejo-db
+                  key: postgres-password
+          config:
+            APP_NAME: Forgejo
+            server:
+              DOMAIN: fj.doany.io
+              ROOT_URL: https://fj.doany.io/
+              DISABLE_SSH: true
+              START_SSH_SERVER: false
+            database:
+              DB_TYPE: postgres
+              HOST: postgres.forgejo.svc:5432
+              NAME: forgejo
+              USER: forgejo
+            service:
+              # アカウントは Entra でのログインでだけ作られる(フォームからの登録は無い)
+              DISABLE_REGISTRATION: false
+              ALLOW_ONLY_EXTERNAL_REGISTRATION: true
+              SHOW_REGISTRATION_BUTTON: false
+              # インスタンスは公開(ログインしなくても公開リポジトリは見える)。非公開のリポジトリは
+              # チーム members(= テナントの人)と管理者だけが読める
+              REQUIRE_SIGNIN_VIEW: false
+              # 組織を作れるのは管理者だけ
+              DEFAULT_ALLOW_CREATE_ORGANIZATION: false
+            oauth2_client:
+              ENABLE_AUTO_REGISTRATION: true
+              # Forgejo のユーザー名はメールの @ の前
+              USERNAME: email
+              ACCOUNT_LINKING: auto
+            actions:
+              ENABLED: true
+              # `uses: actions/checkout@v4` を GitHub から取る。GitHub のワークフローをそのまま動かすため
+              DEFAULT_ACTIONS_URL: https://github.com
+            repository:
+              DEFAULT_BRANCH: main
+              # 新しいリポジトリは非公開から始める
+              DEFAULT_PRIVATE: private
+            session:
+              COOKIE_SECURE: true
+        service:
+          ssh:
+            # SSH は使わないが chart は Service を必ず作る。外には出ていない(ClusterIP)
+            type: ClusterIP
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

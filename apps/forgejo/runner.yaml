@@ -1,0 +1,168 @@
+# Forgejo Actions の Runner。ジョブは同じ Pod の docker(dind)の中のコンテナで動く。
+# 形は forgejo/runner の examples/kubernetes/dind-docker.yaml に寄せてある。
+#
+# 登録(uuid / token)は Forgejo の管理画面で作る(v13 の方式。`register` コマンドは使わない):
+#   1. https://fj.doany.io/admin/actions/runners →「Create new runner」
+#   2. 出た UUID と Token を Infisical の /forgejo/forgejo-runner に uuid / token で入れる
+#   3. push-bridge → operator が Secret を作り、auto-reload で Pod が入れ替わる
+# キーが入るまで runner コンテナは「待っている」とログに出して止まっている(落ちない)。
+#
+# 設定ファイルは起動のたびに作る。Pod は状態を持たない(.runner ファイルも PVC も要らない)。
+#
+# ラベル: GitHub のワークフローの `runs-on: ubuntu-latest` をそのまま拾う。
+# catthehacker/ubuntu:act-* は GitHub のランナーに近い道具入りのイメージ(docker CLI・git・node など)。
+#
+# ネットワークは host(dind の中のジョブが Pod のネットワークをそのまま使う)。
+# ジョブの中から docker を使う(イメージを作る)ときは DOCKER_HOST と証明書が要るので、envs と valid_volumes で渡す。
+# Cilium は vxlan なので Pod の MTU は 1500 より小さい。dind の既定 1500 のままだと大きいパケットが落ちる。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-runner
+  namespace: forgejo
+data:
+  start.sh: |
+    #!/bin/sh
+    set -eu
+    while [ -z "${RUNNER_UUID:-}" ] || [ -z "${RUNNER_TOKEN:-}" ]; do
+      echo "Infisical の /forgejo/forgejo-runner に uuid と token が入るのを待っている"
+      sleep 60
+    done
+    while ! nc -z localhost 2376 </dev/null; do
+      echo "docker を待っている"
+      sleep 5
+    done
+    cat > /tmp/config.yml <<EOF
+    log:
+      level: info
+    runner:
+      capacity: 2
+      timeout: 3h
+      labels:
+        - ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04
+        - ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04
+        - docker:docker://node:22-bookworm
+      envs:
+        DOCKER_HOST: tcp://localhost:2376
+        DOCKER_TLS_VERIFY: "1"
+        DOCKER_CERT_PATH: /certs/client
+    cache:
+      enabled: true
+      dir: /cache
+    container:
+      network: host
+      options: -v /certs/client:/certs/client
+      valid_volumes:
+        - /certs/client
+    server:
+      connections:
+        forgejo:
+          url: https://fj.doany.io/
+          uuid: ${RUNNER_UUID}
+          token: ${RUNNER_TOKEN}
+    EOF
+    exec forgejo-runner --config /tmp/config.yml daemon
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo-runner
+  namespace: forgejo
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: forgejo-runner
+  template:
+    metadata:
+      labels:
+        app: forgejo-runner
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: runner
+          image: code.forgejo.org/forgejo/runner:13.1.0
+          command: [/bin/sh, /scripts/start.sh]
+          env:
+            # ルートは読み取り専用。uses: のアクションの取り置き($HOME/.cache/act)を /tmp に置く
+            - name: HOME
+              value: /tmp
+            - name: RUNNER_UUID
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-runner
+                  key: uuid
+                  optional: true
+            - name: RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-runner
+                  key: token
+                  optional: true
+            - name: DOCKER_HOST
+              value: tcp://localhost:2376
+            - name: DOCKER_CERT_PATH
+              value: /certs/client
+            - name: DOCKER_TLS_VERIFY
+              value: "1"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: docker-certs
+              mountPath: /certs
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /cache
+        - name: docker
+          image: docker.io/library/docker:29.8.0-dind
+          args: [--mtu=1400]
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: /certs
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            # e2e(ブラウザ)を並列で回すので多めに。ノードは 44 コア / 46 GiB
+            limits:
+              memory: 12Gi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: docker-certs
+              mountPath: /certs
+            - name: docker-data
+              mountPath: /var/lib/docker
+      volumes:
+        - name: scripts
+          configMap:
+            name: forgejo-runner
+        - name: docker-certs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        # イメージの置き場。Pod が入れ替わると消える(次の pull でまた入る)
+        - name: docker-data
+          emptyDir:
+            sizeLimit: 60Gi
