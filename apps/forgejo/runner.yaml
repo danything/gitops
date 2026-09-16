@@ -133,7 +133,7 @@ spec:
             - name: cache
               mountPath: /cache
         - name: docker
-          image: docker.io/library/docker:29.8.0-dind
+          image: docker.io/library/docker:29.8.1-dind
           args: [--mtu=1400]
           env:
             - name: DOCKER_TLS_CERTDIR
