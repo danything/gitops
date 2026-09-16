@@ -45,7 +45,7 @@
 
 1. Forgejo に組織 `danything` を作る
 2. ArgoCD 用のアクセストークンを作り(`read:repository` と `read:organization`)、Infisical `/argocd/forgejo-repo-creds` に
-   `url` = `https://fj.doany.io/danything` / `username` / `password` = トークン で入れる([argocd-creds.yaml](argocd-creds.yaml))。
+   `url` = `https://fj.doany.io/doa` / `username` / `password` = トークン で入れる([argocd-creds.yaml](argocd-creds.yaml))。
    **スコープは repository・organization・issue の読み取り。** issue が無いと、非公開リポジトリができた時点で
    ApplicationSet が `token does not have at least one of required scope(s): [read:issue]` で止まる(2026-09-15)
 3. `bootstrap/argocd/repos.yaml` に Forgejo の generator を足す PR をマージする(**Forgejo とトークンが揃ってから**。
@@ -55,7 +55,7 @@
 
 1. Forgejo の「新しい移行」で組織 `danything` の下に取り込む(Issue / PR / リリースも)。非公開のまま入り、チーム members が読める
 2. ワークフローを Forgejo 向けに直す(`.github/workflows/` のままで読まれる)
-   - イメージは `ghcr.io/danything/<name>` → `fj.doany.io/danything/<name>`。push はワークフローの `secrets.GITHUB_TOKEN`(Forgejo のトークン)で通る
+   - イメージは `ghcr.io/danything/<name>` → `fj.doany.io/doa/<name>`。push はワークフローの `secrets.GITHUB_TOKEN`(Forgejo のトークン)で通る
    - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンを Infisical から `kubernetes.io/dockerconfigjson` で)
    - claude-review(GitHub App)のワークフローは消す。Forgejo では動かない
 3. Forgejo で CI とイメージの push が通るのを確かめる

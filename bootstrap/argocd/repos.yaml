@@ -43,7 +43,11 @@ spec:
               revision: '{{ .branch }}'
               files:
                 - path: deploy/argocd.yaml
-    # 同じ形で Forgejo(fj.doany.io)の danything も見る。**プライベートのリポジトリは GitHub に置かず
+    # 同じ形で Forgejo(fj.doany.io)の doa(2026-09-16 に danything から改名)も見る。
+    # **改名したら必ずここを直す。** 旧名のままだと Forgejo が 307 を返し、ArgoCD の
+    # git クライアントはリダイレクトを追わないので、対象のアプリが丸ごと Unknown で止まる。
+    # あわせて Infisical /argocd/forgejo-repo-creds の url も直すこと(repo-creds は URL の
+    # 接頭辞で照合するため、ずれると資格情報が付かない)。**プライベートのリポジトリは GitHub に置かず
     # Forgejo にだけ置く**方針(2026-09-15。GitHub Actions の課金はプライベートにだけ掛かる)。
     # Forgejo の API は Gitea と同じなので gitea の scmProvider で読める。
     # 読むための資格情報は apps/forgejo/argocd-creds.yaml(Infisical から)。scan と clone の両方に使う。
@@ -54,7 +58,7 @@ spec:
           - scmProvider:
               cloneProtocol: https
               gitea:
-                owner: danything
+                owner: doa
                 api: https://fj.doany.io/
                 allBranches: false
                 tokenRef:
