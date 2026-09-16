@@ -36,7 +36,11 @@ data:
     log:
       level: info
     runner:
-      capacity: 2
+      # 同時に受けるジョブの数。ワークフローが 2 本(test と claude-review)ある PR を
+      # 3 リポジトリぶん積むと 2 では順番待ちが長い。ノードは 44 コア / 46 GiB で
+      # 使用率は CPU 8% / メモリ 16%、CPU は余っているので詰まるのは下の dind のメモリ。
+      # 8 本のうち重いのは e2e(ブラウザ)くらいで、それが同時に何本も来ることは稀
+      capacity: 8
       timeout: 3h
       labels:
         - ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04
@@ -113,8 +117,9 @@ spec:
             requests:
               cpu: 50m
               memory: 64Mi
+            # 8 本ぶんのログを同時に流すので少し余裕を持たせる
             limits:
-              memory: 1Gi
+              memory: 2Gi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -142,9 +147,11 @@ spec:
             requests:
               cpu: 100m
               memory: 256Mi
-            # e2e(ブラウザ)を並列で回すので多めに。ノードは 44 コア / 46 GiB
+            # **ジョブのコンテナは全部この中で動く**ので、ここが CI 全体の上限になる。
+            # ノードは 46 GiB で、CI 以外の実使用は 8 GiB ほど。28Gi なら 10 GiB 残る。
+            # ここを超えるとノードごと OOM に巻き込むので、capacity を上げるときは必ず一緒に見る
             limits:
-              memory: 12Gi
+              memory: 28Gi
           securityContext:
             privileged: true
           volumeMounts:
