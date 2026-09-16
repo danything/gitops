@@ -22,6 +22,16 @@ reconcile するので、古い machine config のまま流すと**走ってい�
 CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う。
 **別の作り方をすると「CI は通るが当日は通らない」が起きる**ので、道具は 1 つにしてある。
 
+**当てたあとのズレは [drift.sh](drift.sh) で見る。** git から作った machine config と、
+ノードが実際に持っているもの(`talosctl get machineconfig`)を並べて diff を出す。読むだけで、
+当てはしない ── 適用は再起動を伴うことがあり、Talos API は mTLS だけなので CI には渡さない
+(talos-validate と同じ「検出は自動、適用は手動」)。鍵と証明書は両方から落として比べる。
+
+```shell
+./talos/drift.sh            # talosconfig の既定のノード
+./talos/drift.sh 10.0.0.2   # ノードを指定。一致 0 / ズレ 1
+```
+
 **秘密は 2 つとも作ってコミット済み**(2026-09-08)── [secrets.yaml](secrets.yaml) は
 クラスタの CA 一式、[registries.yaml](registries.yaml) は fj.doany.io のイメージ取得の資格情報。
 **`secrets.yaml` を作り直すと別のクラスタになる**ので触らない。作り方は下記。
