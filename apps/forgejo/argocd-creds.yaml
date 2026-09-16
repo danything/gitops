@@ -1,8 +1,8 @@
-# ArgoCD が Forgejo の danything/* を読むための資格情報(repo-creds)。
+# ArgoCD が Forgejo の doa/* を読むための資格情報(repo-creds)。
 # bootstrap/argocd/repos.yaml の gitea scmProvider の API スキャンにも同じトークンを使う。
 #
 # Infisical /argocd/forgejo-repo-creds に 3 つ:
-#   url      https://fj.doany.io/danything
+#   url      https://fj.doany.io/doa  ← 組織名を変えたらここも直す(接頭辞で照合する)
 #   username トークンを作ったユーザー名
 #   password Forgejo のアクセストークン(read:repository と read:organization だけ)
 #
