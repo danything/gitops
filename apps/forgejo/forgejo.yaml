@@ -124,7 +124,7 @@ spec:
         fsGroup: 1000
       initContainers:
         - name: setup
-          image: code.forgejo.org/forgejo/forgejo:16.0.4-rootless
+          image: code.forgejo.org/forgejo/forgejo:16.0.5-rootless
           command: [/bin/sh, /scripts/setup.sh]
           envFrom:
             - configMapRef:
@@ -154,7 +154,7 @@ spec:
               mountPath: /tmp
       containers:
         - name: forgejo
-          image: code.forgejo.org/forgejo/forgejo:16.0.4-rootless
+          image: code.forgejo.org/forgejo/forgejo:16.0.5-rootless
           command: [/usr/bin/dumb-init, --, /bin/sh, /scripts/start.sh]
           envFrom:
             - configMapRef:
