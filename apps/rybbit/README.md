@@ -13,7 +13,7 @@
 | [postgres.yaml](postgres.yaml) | ユーザー・サイト・設定。forgejo と同じ 17 系、`pg_dump` を k8up に |
 | [redis.yaml](redis.yaml) | セッション追跡のカウンタ。PVC は持たない |
 | [rybbit-secrets.yaml](rybbit-secrets.yaml) | Infisical `/rybbit/rybbit` の 4 キー → Secret `rybbit` |
-| [httproute.yaml](httproute.yaml) | `rb.doany.io`。`/api` と `/.well-known/oauth-*` は backend、ほかは client(上流の Caddyfile と同じ) |
+| [httproute.yaml](httproute.yaml) | `rb.doany.io`。`/api` は backend、ほかは client。上流の Caddyfile にある `/.well-known/oauth-*`(MCP 向け)は使わないので置かない |
 
 バックアップは [../k8up/schedules.yaml](../k8up/schedules.yaml) の `rybbit`(ClickHouse の PVC をファイルとして、PostgreSQL は `pg_dump`)。
 
