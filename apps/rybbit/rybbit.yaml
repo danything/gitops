@@ -110,9 +110,9 @@ spec:
                 secretKeyRef:
                   name: rybbit
                   key: better-auth-secret
-            # 最初のアカウントを作るまで false。作ったら true にする(誰でも登録できる状態にしない)
+            # 最初のアカウント(管理者)は 2026-09-19 に作った。以後は誰も登録できない
             - name: DISABLE_SIGNUP
-              value: "false"
+              value: "true"
             - name: DISABLE_TELEMETRY
               value: "true"
             # 上流の既定は 4。1 サイトなので 2
@@ -157,7 +157,7 @@ spec:
             - name: NEXT_PUBLIC_BACKEND_URL
               value: https://rt.doany.io
             - name: NEXT_PUBLIC_DISABLE_SIGNUP
-              value: "false"
+              value: "true"
           readinessProbe:
             httpGet:
               path: /

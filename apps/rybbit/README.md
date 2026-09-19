@@ -24,7 +24,8 @@
    入れるまで Pod は `CreateContainerConfigError` で待つ(壊れてはいない)
 2. <https://rt.doany.io> を開き、最初のアカウントを作る(これが管理者)
 3. **すぐに** [rybbit.yaml](rybbit.yaml) の `DISABLE_SIGNUP` と `NEXT_PUBLIC_DISABLE_SIGNUP` を `"true"` にして
-   PR を出す。false のままだと誰でもこのインスタンスにアカウントを作れる
+   PR を出す。false のままだと誰でもこのインスタンスにアカウントを作れる(2026-09-19 に済み。
+   人を足すなら一時的に false に戻すか、画面の招待で。招待メールは Resend が無いので届かない)
 4. 画面で「サイトを追加」→ `tk.doany.io`。出てくるサイト ID をトドロクの `PUBLIC_RYBBIT_SITE_ID`
    (todoroku の `deploy/deployment.yaml`)に入れる。トドロクの root layout が
    `https://rt.doany.io/api/script.js` を読み、購入完了と車両の登録をイベントで送る
