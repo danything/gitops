@@ -1,4 +1,4 @@
-# Rybbit 本体。rb.doany.io。backend(Fastify、/api)と client(Next.js、画面)の 2 つ。
+# Rybbit 本体。rt.doany.io。backend(Fastify、/api)と client(Next.js、画面)の 2 つ。
 # 版は GitHub のリリースに合わせて 2 つ同じタグで上げる(タグは v 付き。latest は追わない)。
 #
 # 環境変数は上流の docker-compose.yml の backend / client と同じ。DISABLE_SIGNUP は
@@ -67,7 +67,7 @@ spec:
             - name: NODE_ENV
               value: production
             - name: BASE_URL
-              value: https://rb.doany.io
+              value: https://rt.doany.io
             - name: CLICKHOUSE_HOST
               value: http://clickhouse:8123
             - name: CLICKHOUSE_DB
@@ -155,7 +155,7 @@ spec:
             - name: NODE_ENV
               value: production
             - name: NEXT_PUBLIC_BACKEND_URL
-              value: https://rb.doany.io
+              value: https://rt.doany.io
             - name: NEXT_PUBLIC_DISABLE_SIGNUP
               value: "false"
           readinessProbe:

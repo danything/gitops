@@ -3,7 +3,7 @@
 # /.well-known/openid-configuration(MCP クライアント向けの OAuth の案内。Rybbit が OAuth サーバになる側)も
 # backend に流すが、MCP は使わないので置かない。Gateway API の PathPrefix は / 区切りの要素単位で、
 # `/.well-known/oauth-` のような途中までの前方一致は書けない(要るなら Exact でフルパスを並べる)。
-# 計測のスクリプトは https://rb.doany.io/api/script.js、イベントの送り先は /api/track。
+# 計測のスクリプトは https://rt.doany.io/api/script.js、イベントの送り先は /api/track。
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -14,7 +14,7 @@ spec:
     - name: doany
       namespace: kube-system
       sectionName: https
-  hostnames: ["rb.doany.io"]
+  hostnames: ["rt.doany.io"]
   rules:
     - matches:
         - path:

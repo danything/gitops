@@ -1,4 +1,4 @@
-# Rybbit(rb.doany.io)
+# Rybbit(rt.doany.io)
 
 アクセス解析。Google Analytics の置き換えで、クッキーを使わない(同意バナーが要らない)。
 トドロク(tk.doany.io)の LP から購入までのどこで離脱するかを、ファネル・ユーザージャーニー・
@@ -13,7 +13,7 @@
 | [postgres.yaml](postgres.yaml) | ユーザー・サイト・設定。forgejo と同じ 17 系、`pg_dump` を k8up に |
 | [redis.yaml](redis.yaml) | セッション追跡のカウンタ。PVC は持たない |
 | [rybbit-secrets.yaml](rybbit-secrets.yaml) | Infisical `/rybbit/rybbit` の 4 キー → Secret `rybbit` |
-| [httproute.yaml](httproute.yaml) | `rb.doany.io`。`/api` は backend、ほかは client。上流の Caddyfile にある `/.well-known/oauth-*`(MCP 向け)は使わないので置かない |
+| [httproute.yaml](httproute.yaml) | `rt.doany.io`。`/api` は backend、ほかは client。上流の Caddyfile にある `/.well-known/oauth-*`(MCP 向け)は使わないので置かない |
 
 バックアップは [../k8up/schedules.yaml](../k8up/schedules.yaml) の `rybbit`(ClickHouse の PVC をファイルとして、PostgreSQL は `pg_dump`)。
 
@@ -22,12 +22,12 @@
 1. Infisical(il.doany.io)に フォルダ `/rybbit/rybbit` を作り、`clickhouse-password` / `postgres-password` /
    `redis-password` / `better-auth-secret` を英数字のランダム(32 文字くらい)で入れる。
    入れるまで Pod は `CreateContainerConfigError` で待つ(壊れてはいない)
-2. <https://rb.doany.io> を開き、最初のアカウントを作る(これが管理者)
+2. <https://rt.doany.io> を開き、最初のアカウントを作る(これが管理者)
 3. **すぐに** [rybbit.yaml](rybbit.yaml) の `DISABLE_SIGNUP` と `NEXT_PUBLIC_DISABLE_SIGNUP` を `"true"` にして
    PR を出す。false のままだと誰でもこのインスタンスにアカウントを作れる
 4. 画面で「サイトを追加」→ `tk.doany.io`。出てくるサイト ID をトドロクの `PUBLIC_RYBBIT_SITE_ID`
    (todoroku の `deploy/deployment.yaml`)に入れる。トドロクの root layout が
-   `https://rb.doany.io/api/script.js` を読み、購入完了と車両の登録をイベントで送る
+   `https://rt.doany.io/api/script.js` を読み、購入完了と車両の登録をイベントで送る
 5. Rybbit のファネルに「LP → ログイン → 台帳 → 車両の登録 → 料金 → 購入」を作る
 
 ## 気にしておくこと
