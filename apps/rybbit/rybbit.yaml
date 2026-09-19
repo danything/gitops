@@ -1,0 +1,172 @@
+# Rybbit 本体。rb.doany.io。backend(Fastify、/api)と client(Next.js、画面)の 2 つ。
+# 版は GitHub のリリースに合わせて 2 つ同じタグで上げる(タグは v 付き。latest は追わない)。
+#
+# 環境変数は上流の docker-compose.yml の backend / client と同じ。DISABLE_SIGNUP は
+# 最初のアカウントを作ったら true にする(README「使い始め」)。テレメトリは切る。
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: rybbit
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client
+  namespace: rybbit
+spec:
+  selector:
+    app: client
+  ports:
+    - name: http
+      port: 3002
+      targetPort: 3002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: rybbit
+  annotations:
+    # 参照している Secret を Infisical operator が同期したら、自動でローリング再起動する
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      initContainers:
+        # backend は DB を一定回数しか待たずに落ちるので、初回(initdb 中・ClickHouse の起動中)は先に待つ
+        - name: wait-for-db
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - |
+              until wget -q -O- http://clickhouse:8123/ping >/dev/null 2>&1; do echo "ClickHouse を待っている"; sleep 5; done
+              until nc -z postgres 5432; do echo "PostgreSQL を待っている"; sleep 5; done
+              until nc -z redis 6379; do echo "Redis を待っている"; sleep 5; done
+      containers:
+        - name: backend
+          image: ghcr.io/rybbit-io/rybbit-backend:v2.9.0
+          ports:
+            - containerPort: 3001
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: BASE_URL
+              value: https://rb.doany.io
+            - name: CLICKHOUSE_HOST
+              value: http://clickhouse:8123
+            - name: CLICKHOUSE_DB
+              value: analytics
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rybbit
+                  key: clickhouse-password
+            # 上流の既定は CLICKHOUSE_PASSWORD と同じ値。backend が rybbit_query ユーザーをこの値で作る
+            - name: CLICKHOUSE_QUERY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rybbit
+                  key: clickhouse-password
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: analytics
+            - name: POSTGRES_USER
+              value: rybbit
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rybbit
+                  key: postgres-password
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rybbit
+                  key: redis-password
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: rybbit
+                  key: better-auth-secret
+            # 最初のアカウントを作るまで false。作ったら true にする(誰でも登録できる状態にしない)
+            - name: DISABLE_SIGNUP
+              value: "false"
+            - name: DISABLE_TELEMETRY
+              value: "true"
+            # 上流の既定は 4。1 サイトなので 2
+            - name: CLUSTER_WORKERS
+              value: "2"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client
+  namespace: rybbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client
+  template:
+    metadata:
+      labels:
+        app: client
+    spec:
+      containers:
+        - name: client
+          image: ghcr.io/rybbit-io/rybbit-client:v2.9.0
+          ports:
+            - containerPort: 3002
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: NEXT_PUBLIC_BACKEND_URL
+              value: https://rb.doany.io
+            - name: NEXT_PUBLIC_DISABLE_SIGNUP
+              value: "false"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3002
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 20m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
