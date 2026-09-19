@@ -162,8 +162,10 @@ spec:
             - -ec
             - |
               export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
-              # forget は「方針」か ID を要る(--host だけだと何も消さずに落ちる)。ID を並べる
-              restic forget $(restic snapshots --host noren --compact | awk '/^[0-9a-f]{8} /{print $1}')
+              # forget は「方針」か ID を要る(--host だけだと何も消さずに落ちる)。ID を並べる。
+              # 2 つの操作は独立。消すものが無くても(2 回目など)tag のほうまで進む
+              ids=$(restic snapshots --host noren --compact | awk '/^[0-9a-f]{8} /{print $1}')
+              [ -n "$ids" ] && restic forget $ids
               restic tag --host shadai --add retired
               restic snapshots --compact --host noren --host shadai
           env:
