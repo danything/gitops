@@ -50,7 +50,7 @@ spec:
       initContainers:
         # backend は DB を一定回数しか待たずに落ちるので、初回(initdb 中・ClickHouse の起動中)は先に待つ
         - name: wait-for-db
-          image: busybox:1.37.0
+          image: busybox:1.38.0
           command:
             - sh
             - -c
@@ -60,7 +60,7 @@ spec:
               until nc -z redis 6379; do echo "Redis を待っている"; sleep 5; done
       containers:
         - name: backend
-          image: ghcr.io/rybbit-io/rybbit-backend:v2.9.0
+          image: ghcr.io/rybbit-io/rybbit-backend:v2.9.1
           ports:
             - containerPort: 3001
           env:
@@ -148,7 +148,7 @@ spec:
     spec:
       containers:
         - name: client
-          image: ghcr.io/rybbit-io/rybbit-client:v2.9.0
+          image: ghcr.io/rybbit-io/rybbit-client:v2.9.1
           ports:
             - containerPort: 3002
           env:
