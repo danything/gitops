@@ -351,7 +351,7 @@ spec:
       keepWeekly: 4
       keepMonthly: 6
       tags: [k8up]
-
+---
 # リポジトリの健全性チェック。これだけ 1 本。
 # ホストの `backup/k3s-backup` が `restic check --read-data-subset=5%` を回していたぶんで、
 # Talos に移るとあれが無くなるので k8up 側に置いておく。
