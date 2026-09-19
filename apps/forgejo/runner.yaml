@@ -89,7 +89,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: runner
-          image: code.forgejo.org/forgejo/runner:13.1.0
+          image: code.forgejo.org/forgejo/runner:13.2.0
           command: [/bin/sh, /scripts/start.sh]
           env:
             # ルートは読み取り専用。uses: のアクションの取り置き($HOME/.cache/act)を /tmp に置く

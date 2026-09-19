@@ -92,7 +92,7 @@ spec:
       # ダッシュボードに出る名前がノード名(`main`)から Pod 名に変わる。
       containers:
         - name: netbird
-          image: netbirdio/netbird:0.78.2
+          image: netbirdio/netbird:0.79.0
           env:
             - name: NB_SETUP_KEY
               valueFrom:
