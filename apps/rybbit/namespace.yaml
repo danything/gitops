@@ -1,0 +1,10 @@
+# PSA は baseline。hostPort も privileged も無い(ClickHouse は uid 101、postgres は起動時に root から落とすだけ)。
+# 一覧と背景は docs/talos.md「PSA のラベル」(k3s では効かない。Talos のために書いておく)。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rybbit
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

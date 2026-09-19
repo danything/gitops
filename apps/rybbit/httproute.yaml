@@ -1,0 +1,35 @@
+# 公開経路。証明書は Gateway(bootstrap/gateway/)のワイルドカードなので指定しない。
+# 上流の Caddyfile と同じ振り分け: /api と /.well-known/oauth-* / openid-configuration は backend、ほかは client。
+# 計測のスクリプトは https://rb.doany.io/api/script.js、イベントの送り先は /api/track。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rybbit
+  namespace: rybbit
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["rb.doany.io"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+        - path:
+            type: PathPrefix
+            value: /.well-known/oauth-
+        - path:
+            type: PathPrefix
+            value: /.well-known/openid-configuration
+      backendRefs:
+        - name: backend
+          port: 3001
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: client
+          port: 3002
