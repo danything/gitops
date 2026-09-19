@@ -120,6 +120,67 @@ FAILED を出している**ので、そこで気づけなかった、という�
 [k8up] OK ✅ (32 系統すべて 25 時間以内)
 ```
 
+## やめたアプリの残り(2026-09-19)
+
+通知は**過去 8 日に出てきた (host, path) を「あるべきもの」**とみなす。namespace ごと
+消したアプリや名前を変えたアプリは、その 8 日のあいだ毎日「25 時間以上更新されていない」と
+鳴り続ける(2026-09-19 に noren 3 本と shadai 3 本で起きた。noren は 09-12 に撤去、
+shadai は 09-16 に todoroku に改名)。窓が閉じれば黙るが、5 日も FAILED を眺めるものではない。
+
+やめ方は 2 つ。どちらも `restic` を repo に向けて 1 回打つだけ(下の Job)。
+
+- **消してよいもの**(noren): `restic forget --host noren`。スナップショットが消え、
+  中身は日曜の prune で解放される
+- **残しておきたいもの**(shadai = トドロクの改名前の履歴):
+  `restic tag --host shadai --add retired`。通知は `retired` の付いたスナップショットを
+  見ない([notify.yaml](notify.yaml))。**中身はそのまま**で、`restic restore` も
+  `snapshots` も今までどおり効く。保持は schedule の prune(`--keep-daily` 等)に
+  そのまま従うので、時間が経てば自然に減る
+
+打ち方。k8up の CronJob と同じイメージ・同じ秘密(`k8up-global`)で、Job を 1 つ流す。
+**バックアップの時間帯(14:45〜18:30 UTC、日曜は 23:15 まで)を外す** ── forget と tag は
+repo をロックする。gitops には置かない(Argo CD が毎回流してしまう)ので、その場で
+`kubectl create -f -` に食わせる。1 時間で自分で消える(`ttlSecondsAfterFinished`)。
+
+```sh
+sudo k3s kubectl -n k8up create -f - <<'JOB'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k8up-retire
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: restic
+          image: ghcr.io/k8up-io/k8up:v2.16.0
+          command:
+            - sh
+            - -ec
+            - |
+              export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
+              # forget は「方針」か ID を要る(--host だけだと何も消さずに落ちる)。ID を並べる
+              restic forget $(restic snapshots --host noren --compact | awk '/^[0-9a-f]{8} /{print $1}')
+              restic tag --host shadai --add retired
+              restic snapshots --compact --host noren --host shadai
+          env:
+            - name: ENDPOINT
+              valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
+            - name: BUCKET
+              valueFrom: {secretKeyRef: {name: k8up-global, key: bucket}}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: k8up-global, key: accessKeyId}}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
+            - name: RESTIC_PASSWORD
+              valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+JOB
+sudo k3s kubectl -n k8up logs -f job/k8up-retire
+```
+
 ## 何をどう取っているか
 
 `Schedule` は [schedules.yaml](schedules.yaml) に 14 本まとめてある(時刻と決まりごともあちら)。
@@ -133,7 +194,7 @@ FAILED を出している**ので、そこで気づけなかった、という�
 | forgejo | postgres の `pg_dump` + リポジトリの PVC(ファイル) | [../forgejo/postgres.yaml](../forgejo/postgres.yaml) |
 | erpnext | mariadb の `mariadb-dump` | 上流 chart の `worker.gunicorn.podAnnotations`([application.yaml](../erpnext/application.yaml)) |
 | infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
-| lgtm / xool / worklog / denpa / blog / noren | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
+| lgtm / xool / worklog / denpa / blog / todoroku | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
 | netbird | `store.db` / `idp.db` / `events.db` を tar 1 本に | [../netbird/deployment.yaml](../netbird/deployment.yaml) |
 | adguardhome | ファイルだけ(下記) | ─ |
 

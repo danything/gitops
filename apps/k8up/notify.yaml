@@ -153,8 +153,16 @@ data:
     const hours = (t) => (now - Date.parse(t)) / 3600e3;
 
     // (host, path) ごとに最新を拾う。ホストのスクリプト(k3s-host)のぶんも一緒に見る。
+    //
+    // **やめたアプリの残りは見ない。** namespace ごと消したアプリ(noren)や名前を
+    // 変えたアプリ(shadai → todoroku)のスナップショットは、8 日の学習窓が閉じるまで
+    // 毎日「更新されていない」と鳴る。消してよいものは `restic forget --host <名前>` で
+    // 消すが、**残しておきたいもの(改名前の履歴)は `restic tag --host <旧名> --add retired`**
+    // で印を付ける(README「やめたアプリの残り」)。印の付いたものはここで落とす。
+    // 中身はそのままなので、戻すときは今までどおり restore できる。
     const latest = new Map();
     for (const s of snapshots) {
+      if ((s.tags ?? []).includes("retired")) continue;
       for (const path of s.paths ?? []) {
         const h = hours(s.time);
         if (h > LEARN_H) continue;
