@@ -203,7 +203,7 @@ spec:
     spec:
       containers:
         - name: dashboard
-          image: netbirdio/dashboard:v2.92.0
+          image: netbirdio/dashboard:v2.93.0
           # getting-started.sh の render_dashboard_env() のとおり。
           # 内蔵 IdP を使うので client-id / audience は固定文字列 `netbird-dashboard`、
           # client secret は無い(PKCE)。
