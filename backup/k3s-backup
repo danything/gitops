@@ -11,9 +11,9 @@
 #                                                 2026-09-07 に足した authentication-config.yaml が漏れていた。
 #                                                 config.yaml がそれを参照するので、**復元しても API サーバが起動しない**
 #                                                 という壊れ方をする。ディレクトリごと取れば同じ漏れは起きない
-#   /etc/NetworkManager/system-connections/       bond0 / eno4 のプロファイル(旧 setup-network.sh)
-#   /etc/netplan/                                 Ubuntu では NM が profile を netplan 経由でここに書く
-#   /etc/NetworkManager/conf.d/20-no-auto-default.conf
+#   /etc/netplan/                                 bond0 / eno4 の構成(netplan + systemd-networkd。
+#                                                 2026-09-24 に NetworkManager をやめた)
+#   /etc/systemd/networkd.conf.d/                 Cilium の経路を networkd が消さないための設定
 #   /etc/k3s-backup/env, このスクリプト, systemd unit  復元後にそのまま timer が動くように
 #
 # 秘密は /etc/k3s-backup/env だけ(RESTIC_REPOSITORY / RESTIC_PASSWORD / S3 の鍵)。
@@ -148,9 +148,8 @@ for p in \
 	"$K3S_SERVER_DIR/tls" "$K3S_SERVER_DIR/cred" "$K3S_SERVER_DIR/token" \
 	"$SNAP_DIR" \
 	/etc/rancher/k3s \
-	/etc/NetworkManager/system-connections \
-	/etc/NetworkManager/conf.d/20-no-auto-default.conf \
 	/etc/netplan \
+	/etc/systemd/networkd.conf.d \
 	"$ENV_FILE" \
 	/usr/local/bin/k3s-backup \
 	/etc/systemd/system/k3s-backup.service \
