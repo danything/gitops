@@ -352,6 +352,33 @@ spec:
       keepMonthly: 6
       tags: [k8up]
 ---
+# ashi(as.doany.io)。状態ディレクトリの PVC ashi-data をファイルとして(JSON と Markdown、
+# 書くときは一時ファイルから差し替えるので途中の形は残らない)。DB は無い。
+# 2026-09-25 に PVC に注釈を付けたのにここを足し忘れ、notify が「Schedule が無い」と鳴った。
+# ashi の NetworkPolicy は app: ashi の Pod だけを絞るので、バックアップの Pod は R2 に出られる。
+# 14:30 / 14:45 は埋まっているので 14:15、prune は日曜の 23:00(check)・23:15・23:45 の間の 23:30
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: ashi
+  namespace: ashi
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  backup:
+    schedule: "15 14 * * *"
+    tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    failedJobsHistoryLimit: 2
+    successfulJobsHistoryLimit: 1
+  prune:
+    schedule: "30 23 * * 0"
+    retention:
+      keepDaily: 7
+      keepWeekly: 4
+      keepMonthly: 6
+      tags: [k8up]
+---
 # リポジトリの健全性チェック。これだけ 1 本。
 # ホストの `backup/k3s-backup` が `restic check --read-data-subset=5%` を回していたぶんで、
 # Talos に移るとあれが無くなるので k8up 側に置いておく。

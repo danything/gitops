@@ -215,8 +215,29 @@ data:
     const parked = [...backupNs].filter((n) => !live.has(n)).sort();
     const isParked = (ns) => parked.includes(ns);
 
+    // **取るのをやめた経路も失敗と呼ばない。** ホストのスクリプトは 1 回で複数の経路を
+    // 1 つのスナップショットに取る。そのホストの**いちばん新しい複数経路のスナップショットが
+    // 25 時間以内にあり、そこに入っていない経路**は、スクリプトから外したもの
+    // (2026-09-24 に NetworkManager をやめて /etc/NetworkManager/* を外したら、
+    // 8 日の学習窓が閉じるまで毎日「更新されていない」と鳴った)。
+    // k8up のスナップショットは PVC 1 本につき経路 1 つなので、この判定にはかからない
+    // (1 本だけ取れていない PVC は、今までどおり stale として鳴る)。
+    // retired の札で消す手もあるが、ホストの forget は `--group-by host,tags` なので、
+    // 札を足すと保持のグループが割れる。こちらで落とす
+    const newestMulti = new Map();
+    for (const s of snapshots) {
+      if ((s.paths ?? []).length < 2) continue;
+      const h = hours(s.time);
+      const cur = newestMulti.get(s.hostname);
+      if (!cur || h < cur.h) newestMulti.set(s.hostname, { h, paths: new Set(s.paths) });
+    }
+    const dropped = (x) => {
+      const m = newestMulti.get(x.host);
+      return Boolean(m && m.h <= WINDOW_H && m.h < x.h && !m.paths.has(x.path));
+    };
+
     const stale = [...latest.values()]
-      .filter((x) => x.h > WINDOW_H && !superseded(x) && !isParked(x.host))
+      .filter((x) => x.h > WINDOW_H && !superseded(x) && !dropped(x) && !isParked(x.host))
       .sort((a, b) => b.h - a.h);
 
     // **「新しい」だけでは足りない。中身が空でも新しいスナップショットはできる。**
