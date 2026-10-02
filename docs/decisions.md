@@ -699,14 +699,14 @@ Infisical から作って `imagePullSecrets` で参照していた(tamasagashi�
 
 ## 依存の更新をどこまで自動で入れるか(2026-09-07)
 
-Renovate は共有プリセット(`5ym/renovate-config`)を使っていて、**全部を 1 つの PR にまとめて自動マージ**する
+Renovate は共有プリセット(`5ym/renovate`)を使っていて、**全部を 1 つの PR にまとめて自動マージ**する
 設定だった。`separateMajorMinor: false` も付いていたので、**postgres 17 → 18 が nginx のパッチと
 同じ PR に入り、自動マージの対象になっていた**(danything/gitops#7)。そのまま入っていたら Mattermost が落ちる。
 
-**直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/renovate-config#2)。
+**直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/renovate#2)。
 パッチとマイナーはこれまでどおり 1 つにまとめて自動マージする。小さくて頻繁で、タグを戻せば済むため。
 
-いまの自動マージの範囲(プリセット `5ym/renovate-config`):
+いまの自動マージの範囲(プリセット `5ym/renovate`):
 
 | まとまり | 自動マージ |
 | --- | --- |
@@ -734,7 +734,7 @@ postgres 17.10 → 17.11(パッチ、無害)と **erpnext 8.0.15 → 8.0.78**。
 決めるときは「メジャーかどうか」だけでは足りない。
 
 **そこでプリセット側で `helm` の datasource を丸ごと自動マージから外した**
-(5ym/renovate-config#3)。chart は更新の種類を問わず人が見る。`helm charts` という別の
+(5ym/renovate#3)。chart は更新の種類を問わず人が見る。`helm charts` という別の
 グループにしてあるのは、chart を止めることで `all dependencies` の PR まで自動マージ
 されなくなるのを避けるため。
 
