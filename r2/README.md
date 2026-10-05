@@ -5,7 +5,7 @@ restic の置き場(Cloudflare R2 の `doany-restic`)の設定を git で持つ�
 毎週と `r2/` を触ったときに実物と突き合わせる。**読むだけで、当てはしない。**
 
 道具は Cloudflare の [`cf`](https://blog.cloudflare.com/cloudflare-cf-cli-launch/)(2026-09-28 に open beta)。
-版は [package-lock.json](package-lock.json) で固定してあり、Renovate が追う。
+版は [bun.lock](bun.lock) で固定してあり、Renovate が追う。bun の版は [.bun-version](.bun-version)。
 
 ## なぜ「見るだけ」か
 
@@ -33,14 +33,15 @@ restic の置き場(Cloudflare R2 の `doany-restic`)の設定を git で持つ�
 ## 手元で流す
 
 ```shell
-cd r2 && npm ci
-npm run typecheck                                             # 型の検査(CI も流す)
-CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… node drift.ts
+cd r2 && bun install
+bun run typecheck                                             # 型の検査(CI も流す)
+CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… bun drift.ts
 ```
 
-**TypeScript だがビルドは無い。** Node 24 が `.ts` から型を剥がして直接走らせる。そのため
-剥がすだけで済む書き方に限る(enum・namespace・引数プロパティは不可。`tsconfig.json` の
-`erasableSyntaxOnly` が弾く)。型そのものは Node は見ないので、`npm run typecheck` で別に見る。
+**TypeScript だがビルドは無い。** bun が `.ts` を直接走らせる。bun は型を見ないので、
+`bun run typecheck` で別に見る。**`cf` も bun の上で起動する**(`cf` の bin は `#!/usr/bin/env node`
+なので、そのまま起動すると node を探しに行く)。bun の上で `cf` が動くことは 2026-10-05 に
+本物の R2 で確かめた。node は要らない。
 
 トークンは CI と同じ読み取り専用のもので足りる(`cf auth login` 済みなら要らない)。
 

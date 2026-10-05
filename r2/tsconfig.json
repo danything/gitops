@@ -1,14 +1,12 @@
 {
-  // 型の検査だけに使う(npm run typecheck)。実行は Node が .ts から型を剥がして走らせる
+  // 型の検査だけに使う(bun run typecheck)。実行は bun が .ts を直接走らせる
   "compilerOptions": {
-    "target": "es2024",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "types": ["node"],
+    "target": "esnext",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": ["bun"],
     "strict": true,
     "noEmit": true,
-    // Node の型の剥がし方で動く書き方だけに絞る(enum・namespace・引数プロパティは不可)
-    "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true

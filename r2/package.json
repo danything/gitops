@@ -4,11 +4,11 @@
   "description": "R2 のバケット設定が git の想定どおりかを見る(drift.ts)。版は Renovate が追う",
   "type": "module",
   "scripts": {
-    "drift": "node drift.ts",
+    "drift": "bun drift.ts",
     "typecheck": "tsc"
   },
   "devDependencies": {
-    "@types/node": "24.19.1",
+    "@types/bun": "1.4.2",
     "cf": "1.0.0-beta.12",
     "typescript": "7.0.2"
   }

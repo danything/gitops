@@ -1,10 +1,9 @@
 // R2 のバケット設定が「あるべき姿」のままかを見る。**読むだけ。** 直すのは人が手で `cf` を打つ。
 //
-//   cd r2 && npm ci && CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… node drift.ts
+//   cd r2 && bun install && CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… bun drift.ts
 //
-// Node 24 は .ts をそのまま走らせる(型を剥がすだけ)ので、ビルドは無い。型の検査は
-// `npm run typecheck`(CI も流す)。剥がすだけで済む書き方に限る(enum や namespace は不可。
-// tsconfig.json の erasableSyntaxOnly が弾く)。
+// bun が .ts をそのまま走らせるのでビルドは無い。bun は型を見ないので、型の検査は
+// `bun run typecheck`(CI も流す)。
 //
 // CI(../.github/workflows/r2-drift.yml)も同じものを流す。一致 0 / ズレ 1。
 // 当てるところまで自動化しない理由は README.md(**R2 を書ける鍵はバックアップを消せる鍵**)。
@@ -59,6 +58,9 @@ interface StorageMetrics {
 }
 
 // ---- ここから下は道具 -----------------------------------------------------------
+// cf は自分と同じランタイム(bun)で起動する。cf の bin は `#!/usr/bin/env node` なので、
+// そのまま起動すると node を探しに行く(CI の runner に node を入れずに済ませたい)。
+// bun の上で cf が動くことは 2026-10-05 に本物の R2 で確認した。
 const CF = new URL("./node_modules/.bin/cf", import.meta.url).pathname;
 const GHA = !!process.env.GITHUB_ACTIONS;
 const errors: string[] = [];
@@ -89,7 +91,7 @@ const isBool = (v: unknown): v is boolean => typeof v === "boolean";
 function cf(...args: string[]): Obj {
   let out: string;
   try {
-    out = execFileSync(CF, args, {
+    out = execFileSync(process.execPath, [CF, ...args], {
       encoding: "utf8",
       env: { ...process.env, DO_NOT_TRACK: "1" },
       stdio: ["ignore", "pipe", "pipe"],
