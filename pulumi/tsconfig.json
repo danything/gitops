@@ -1,5 +1,5 @@
 {
-  // 型の検査だけに使う(bun run typecheck)。実行は bun が .ts を直接走らせる
+  // 型の検査だけに使う(bun run typecheck)。実行は bun が .ts を直接走らせる(Pulumi も bun ランタイム)
   "compilerOptions": {
     "target": "esnext",
     "module": "preserve",
@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "include": ["drift.ts"]
+  "include": ["index.ts", "report.ts"]
 }
