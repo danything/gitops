@@ -118,6 +118,9 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       PV を使い回したので**ホスト上のディレクトリ名は改名前のまま**(Talos で引き直せば揃う)。
       マニフェストは gitops と 8 リポジトリ(ashi#89 / blog#123 / lgtm#56 / xool#159 / yuzuriha#19 /
       todoroku#342 / worklog-cloud#142 / denpa#430)。
+- [ ] **改名前の録画のスナップショットを消す。** k8up の `/data/denpa-library` のぶんは、改名後は
+      どの forget も見ない(`denpa-encoded-forget` は新しいパスだけ)。`/data/denpa-encoded` の 1 本目が
+      入ったら、旧パスのスナップショットを ID で forget する(録画は 1 世代でよい)。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
 - [x] **git と実機の helm 値がずれていないことを確認した(2026-09-08)。**
       cert-manager / argocd / infisical の 3 つとも一致。**machine config は git の値で

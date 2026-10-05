@@ -164,6 +164,7 @@ done
 # 中身は数時間で入れ替わるので、日次のスナップショットに残す意味も薄い。
 # 除外は PVC のディレクトリ名で当てる(local-path は <pv 名>_<ns>_<pvc 名> で掘る)。
 RECORDED_GLOB="${RECORDED_GLOB:-*_denpa_denpa-recorded}"
+RAW_GLOB="${RAW_GLOB:-*_denpa_denpa-raw}"
 # **エンコード済みの録画(`denpa-library`。Pod の中では `/media/encoded`、生 TS の
 # `denpa-recorded` は `/media/raw` ── denpa#382)もここでは取らない(2026-10-05)。** k8up が
 # PVC の注釈で取っていて、apps/k8up/denpa-encoded-forget.yaml が 1 世代に絞っている。
@@ -174,10 +175,14 @@ RECORDED_GLOB="${RECORDED_GLOB:-*_denpa_denpa-recorded}"
 # **ディレクトリ名は改名前の PVC 名のまま。** 2026-10-05 に PVC を denpa-raw / denpa-encoded に
 # 改名したが、PV を使い回して結び直したので、local-path が掘ったディレクトリ
 # (`<pv>_denpa_denpa-recorded` / `<pv>_denpa_denpa-library`)は変わらない。
+# 新しい名前でも外す ── PVC が引き直されたら(denpa の chart が先に当たった、など)
+# ディレクトリは新しい名前で掘られ、古い名前だけの除外では素通りする。
 LIBRARY_GLOB="${LIBRARY_GLOB:-*_denpa_denpa-library}"
+ENCODED_GLOB="${ENCODED_GLOB:-*_denpa_denpa-encoded}"
 
 # shellcheck disable=SC2086
-restic backup --tag "$TAG" --exclude-caches --exclude "$RECORDED_GLOB" --exclude "$LIBRARY_GLOB" $PATHS
+restic backup --tag "$TAG" --exclude-caches --exclude "$RECORDED_GLOB" --exclude "$RAW_GLOB" \
+	--exclude "$LIBRARY_GLOB" --exclude "$ENCODED_GLOB" $PATHS
 
 # バックアップが終わった時点で戻す。forget/prune/check は動かしたままでよい。
 restore_replicas
