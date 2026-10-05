@@ -84,9 +84,9 @@ jobs:
           pulumi-version-file: pulumi/.pulumi-version
           comment-on-pr: true
           edit-pr-comment: true
-          # 毎週の実行は実物を読み直し、1 つでも差分があれば落とす(= Cloudflare 側を直接いじった)
-          refresh: ${{ github.event_name == 'schedule' }}
-          expect-no-changes: ${{ github.event_name == 'schedule' }}
+          # 毎週の実行(と手動実行)は実物を読み直し、1 つでも差分があれば落とす(= Cloudflare 側を直接いじった)
+          refresh: ${{ github.event_name != 'pull_request' }}
+          expect-no-changes: ${{ github.event_name != 'pull_request' }}
 
       # preview がずれで落ちても流す(ずれと公開状態を同じ実行で見たい)
       - if: always() && github.event_name != 'pull_request'

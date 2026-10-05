@@ -7,7 +7,7 @@ Cloudflare の設定を [Pulumi](https://www.pulumi.com/) で持つ。**いま�
 | --- | --- | --- |
 | PR | `pulumi preview`。**差分が PR にコメントされる** | 読み取り(R2 の設定) |
 | main に入った | `pulumi up`。**マージした時点で当たる** | 書き込み(Environment `pulumi-apply`、main だけ) |
-| 毎週月曜 | `preview --refresh --expect-no-changes`。Cloudflare 側を直接いじっていたら落ちる。あわせて [report.ts](report.ts) | 読み取り |
+| 毎週月曜(と手動実行) | `preview --refresh --expect-no-changes`。Cloudflare 側を直接いじっていたら落ちる。あわせて [report.ts](report.ts) | 読み取り |
 
 ワークフローは [../.github/workflows/pulumi.yml](../.github/workflows/pulumi.yml)。
 
