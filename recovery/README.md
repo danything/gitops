@@ -51,7 +51,7 @@ age -p -o recovery/env.age /etc/k3s-backup/env
 | 層 | 何で戻すか |
 | --- | --- |
 | ホストの設定 | **machine config**。`talos/render.sh` が repo から描き直す。戻すものは無い |
-| k8s オブジェクト | **git から ArgoCD で再構築**。etcd スナップショットは使わない |
+| k8s オブジェクト | **git から ArgoCD で再構築**(主経路)。etcd の日次スナップショット(restic の `--host etcd`)は git に無い状態まで一度に戻したいときの近道([../docs/talos.md](../docs/talos.md)「etcd スナップショットからの復旧」) |
 | **PV データ** | **k8up の `Restore`**([../apps/k8up/README.md](../apps/k8up/README.md)「戻し方」) |
 
 順番は [`../docs/migration-day.md`](../docs/migration-day.md) がそのまま使える。あれは

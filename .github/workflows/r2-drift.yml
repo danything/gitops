@@ -1,0 +1,50 @@
+# **R2(restic の置き場)の設定が r2/drift.mjs の想定どおりかを見る。読むだけ。**
+#
+# cilium-drift と同じ「検出は自動、適用は手動」。R2 を書ける鍵は**バックアップを消せる鍵**なので
+# 公開リポジトリの CI には置かない(CI に delete を渡さない方針。r2/README.md)。
+#
+# 秘密は 2 つ(リポジトリの Actions secrets):
+#   R2_READ_TOKEN          Account API token。権限は「Workers R2 Storage: Read」だけ
+#   CLOUDFLARE_ACCOUNT_ID  アカウント ID。endpoint と同じく git には置かない(apps/k8up/README.md)
+name: r2 drift
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - r2/**
+      - .github/workflows/r2-drift.yml
+  # Cloudflare 側だけを触ったときは push が無いので、定期的にも見る(cilium-drift の 1 時間後)
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency: r2-drift
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # renovate-validate.yml と揃える
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: r2/package-lock.json
+
+      # cf の版は r2/package-lock.json で固定(beta なのでコマンドの形が動く。Renovate が追う)
+      - run: npm ci --no-audit --no-fund
+        working-directory: r2
+
+      - run: node drift.mjs
+        working-directory: r2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.R2_READ_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # cf はテレメトリが既定で有効(drift.mjs でも立てているが、npm ci の段から)
+          DO_NOT_TRACK: "1"

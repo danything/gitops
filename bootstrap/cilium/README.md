@@ -72,7 +72,9 @@ Cilium は machine config の `inlineManifests` に載り、**`talosctl upgrade-
 版も `version.yaml` から読む。Renovate が追う先も変わらない。
 経緯は ../../docs/decisions.md「machine config と Cilium の chart をどう連動させるか」。
 
-**そのとき上の drift チェックは役目を終える。** `upgrade-k8s` 自身が差分を出すため。
+**上の drift チェックは Talos でも続ける。** `upgrade-k8s` は流せば差分を出すが、
+**流し忘れたことは教えてくれない。** Talos では `talos/cilium-values.yaml` を重ねて描く
+(重ねないと `cgroup-root` が必ず食い違う)。切り替えはサーバの版で自動。
 
 ## 当てたあとに確認すること
 

@@ -1,0 +1,18 @@
+# Pod から Talos API を叩けるようにする。etcd スナップショットの日次取得のためだけ。
+# (受け手は ../after-migration/etcd-snapshot.yaml。移行後に apps/k8up/ へ移す)
+#
+# 渡す役割は `os:etcd:backup` だけで、namespace も k8up に絞る。Talos は
+# `talos.dev/v1alpha1` の ServiceAccount を見て、この役割の talosconfig を
+# 同名の Secret に書く。`os:admin` を Pod に置かずに済むのはこの仕組みだけ
+# (talosconfig を Infisical に入れる案は、同じ証明書でノードを入れ直せてしまう)。
+#
+# **当てても再起動は要らない**が、効くのは apply-config のあと。当日の焼き込みに
+# 最初から入っているので、手順としては何もしなくてよい。
+machine:
+  features:
+    kubernetesTalosAPIAccess:
+      enabled: true
+      allowedRoles:
+        - os:etcd:backup
+      allowedKubernetesNamespaces:
+        - k8up

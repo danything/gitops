@@ -126,6 +126,20 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       `version:` が無く、**そのときの最新**が入っていた。手順は
       [bootstrap/README.md](bootstrap/README.md)「Helm で入れるもの」。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
+- [x] **見直しで漏れを 3 つ見つけて塞いだ(2026-10-05)。** どれも 09-08 のドリルより後に足したものか、
+      ドリルが通らない経路だった。
+      - **CI の CA が k3s のままだった。** `bootstrap/apiserver/ca.crt` は k3s の CA で、Talos の CA
+        (`talos/secrets.yaml`)とは別物。当日の 6 で `bootstrap-apply` が TLS で落ち、
+        **nodePort 80/443 の当て直しも走らず公開経路が戻らない**ところだった。両方を 1 ファイルに入れた
+        (移行後に k3s のぶんを消す。migration-day の 10)
+      - **Forgejo を戻すまで ApplicationSet が丸ごと止まる。** gitea の generator が失敗すると、
+        ApplicationSet は GitHub 側も含めて Application を 1 本も作らない(argo-cd の
+        `applicationset_controller.go`)。まっさらなクラスタでは Forgejo は空で、読むトークンを当てるのは
+        このリポジトリの Application 自身 ── **抜けられない詰まり方**だった。`repos` と `repos-forgejo` に
+        分け、migration-day の 7 に「Forgejo を Infisical の次に戻す」を足した。Forgejo は 09-15 に
+        入れたもので、**ドリルでは一度も通っていない**
+      - **cilium-drift が Talos で毎週偽の FAILED を出す。** `talos/cilium-values.yaml` を重ねないと
+        `cgroup-root` が必ず食い違う。サーバの版で k3s / Talos を見分けて重ねるようにした
 
 ### Phase 3 — Talos 定常運用
 
@@ -134,9 +148,21 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       掃除されるので証拠にならない。「失敗した」だけでなく「そもそも走らなかった」も拾う。
       `restic check` も [schedules.yaml](apps/k8up/schedules.yaml) に 1 本置いた。
       **PVC のファイルを寄せるほうも済んでいる**(上の Phase 2)。
-- [ ] etcd スナップショットを定期化(talosconfig を Secret にした CronJob か、手元マシンの timer)。同じバケットへ。
-- [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。
-- [ ] **移行して 1〜2 か月してから R2 の容量をもう一度見る。** k3s 期はホストの
+- [ ] **etcd スナップショットの定期化。用意は済んだ(2026-10-05)** ── 移行後に
+      `talos/after-migration/etcd-snapshot.yaml` を `apps/k8up/` へ移すだけ(migration-day の 10)。
+      Talos の `kubernetesTalosAPIAccess` で **`os:etcd:backup` だけ**を k8up の namespace に渡し
+      (`talos/patches/etcd-backup.yaml`。`os:admin` の talosconfig を Secret に置く案はやめた)、
+      日次で同じ restic リポジトリへ(`--host etcd`)。**戻すときの主経路は git からの再構築のまま**で、
+      こちらは近道(docs/talos.md「etcd スナップショットからの復旧」。recovery/README と食い違っていたのも揃えた)。
+- [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。**初回は Forgejo を含めること**
+      (非公開アプリのイメージとマニフェストが Forgejo から来る経路は、まだ一度も通していない)。
+- [ ] **R2 のずれ検知を動かす(2026-10-05 に作った)。** 読み取り専用トークンを Actions secrets に入れて
+      `r2 drift` を 1 回流す。**実物の応答ではまだ流していない**([r2/README.md](r2/README.md)「最初にやること」)。
+- [ ] **k3s 期の残りを畳む。** ホストのスナップショット(`host=main`)は保持が `--keep-monthly 2` なので
+      移行から約 2 か月で落ちきる。そこで `backup/`、`recovery/restore.sh`、
+      `apps/k8up/README.md` の `sudo k3s kubectl …` の例を消す(`recovery/env.age` は残す ──
+      Talos 期も `k8up-global` を手で作るのに要る)。それまでは k3s に戻る道として置いておく。
+- [ ] **移行して 1〜2 か月してから R2 の容量をもう一度見る。** 数字は `r2 drift` の Summary に毎週出る。 k3s 期はホストの
       `backup/k3s-backup` が `/var/lib/rancher/k3s/storage` を丸ごと取っていて、
       k8up の per-PVC の保持設計がどれも効いていなかった
       ([docs/decisions.md](docs/decisions.md)「バックアップに何を含めるか」)。

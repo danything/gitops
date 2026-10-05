@@ -1,0 +1,12 @@
+{
+  "name": "r2-drift",
+  "private": true,
+  "description": "R2 のバケット設定が git の想定どおりかを見る(drift.mjs)。版は Renovate が追う",
+  "type": "module",
+  "scripts": {
+    "drift": "node drift.mjs"
+  },
+  "devDependencies": {
+    "cf": "1.0.0-beta.12"
+  }
+}

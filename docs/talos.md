@@ -245,6 +245,18 @@ talosctl bootstrap --recover-from=./etcd.snapshot
 `bootstrap --recover-from` は etcd サービスが上がるまで `bootstrap is not available yet` を返すので、
 数分待って再試行する。
 
+**どちらで戻すか(2026-10-05 に揃えた)。** 主経路は **git から建て直す**ほう
+(docs/migration-day.md の 3 以降。ドリルで通してあり、スナップショットの鮮度に左右されない)。
+etcd スナップショットは**近道**で、git に無い状態(Application の同期状態、発行済みの証明書、
+API サーバが割り当てた nodePort など)まで一度に戻したいときに使う。日次で取っているのは
+[../talos/after-migration/etcd-snapshot.yaml](../talos/after-migration/etcd-snapshot.yaml)
+(移行後は `apps/k8up/`)で、restic の `--host etcd`。取り出しは:
+
+```shell
+restic snapshots --host etcd
+restic dump <ID> /work/etcd.snapshot > etcd.snapshot
+```
+
 ## VM の組み方(QEMU/KVM)
 
 本番サーバの上で回す。**ホストのネットワークには触らない。** ドリル 4 回ぶんの

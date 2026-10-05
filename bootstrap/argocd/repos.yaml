@@ -1,3 +1,12 @@
+# **Forgejo 側は別の ApplicationSet(下の `repos-forgejo`)に分けてある(2026-10-05)。**
+# ApplicationSet は generator が 1 つでも失敗すると**全体の Application を 1 本も作らず**
+# 戻る(argo-cd の applicationset_controller.go: `GenerateApplications` がエラーを返したら
+# 生成も更新もせずに requeue)。まっさらなクラスタでは Forgejo はまだ空で、読むための
+# `forgejo-repo-creds` も無い(それを当てるのは **このリポジトリの Application** ──
+# apps/forgejo/argocd-creds.yaml)。同じ ApplicationSet に同居させていると、gitea 側が落ちて
+# このリポジトリ自身の Application も作られず、Forgejo もデプロイされないので**自力で抜けられない**。
+# 分けておけば GitHub 側が先に全部立ち、Forgejo が戻った時点で下が追いつく。
+# 2 つの template は同じ形を保つこと(片方だけ直すとアプリの扱いが Git の置き場で変わる)。
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -43,6 +52,79 @@ spec:
               revision: '{{ .branch }}'
               files:
                 - path: deploy/argocd.yaml
+  # generator の結果から repo が消えても(改名の途中、一時的な API エラー)、Application は消しても
+  # その中の実リソース(Deployment や PVC)は道連れにしない。
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      # Declared per-repo rather than derived from the repo name, because the
+      # hand-made Applications don't match their repos (denpa -> epg,
+      # worklog-cloud -> worklog). Keeping the existing
+      # names lets the controller adopt them in place -- it adds its
+      # ownerReference to the Application that's already there instead of
+      # standing up a second one fighting over the same resources.
+      name: '{{ .name }}'
+    spec:
+      project: default
+      source:
+        repoURL: '{{ .url }}'
+        targetRevision: '{{ .branch }}'
+        path: '{{ .sourcePath }}'
+        directory:
+          include: '*.yaml'
+          # gitops keeps its manifests at the repo root (sourcePath: .,
+          # recurse: true), so its deploy/argocd.yaml ends up inside the synced
+          # path one level down; without this the sync fails on a document
+          # with no apiVersion/kind.  matches it there and at top level for
+          # any repo whose sourcePath is the same directory argocd.yaml lives in.
+          # bootstrap/ も外す。gitops repo は同期対象を apps/ に絞っているので通常は当たらないが、
+          # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
+          # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
+          exclude: '{**/argocd.yaml,bootstrap/**}'
+      destination:
+        server: https://kubernetes.default.svc
+        # Empty for a repo whose manifests span several namespaces, which is
+        # fine because every manifest in these repos carries its own.
+        namespace: '{{ .namespace }}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        # CRD を入れる Application より先に同期しにいったものは、既定の 5 回で諦めて
+        # OutOfSync のまま止まる(refresh=hard では戻らない。ドリル 5 回目で踏んだ)。
+        # backoff を伸ばして自力で戻るようにする。15s から倍々で上限 5 分、10 回で約 33 分。
+        retry:
+          limit: 10
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 5m
+  # These four live in the patch rather than in template because plain
+  # templating only substitutes strings, and they're booleans.
+  templatePatch: |
+    spec:
+      source:
+        directory:
+          recurse: {{ .recurse }}
+      syncPolicy:
+        automated:
+          enabled: {{ .autoSync }}
+          prune: {{ .prune }}
+          selfHeal: {{ .selfHeal }}
+---
+# Forgejo(fj.doany.io)の doa を見る。上の `repos` と分けている理由は上のコメント。
+# **ここが失敗していても上の `repos` は止まらない。** 失敗中は
+# `kubectl -n argocd get applicationset repos-forgejo -o yaml` の `ErrorOccurred` に理由が出る。
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: repos-forgejo
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
     # 同じ形で Forgejo(fj.doany.io)の doa(2026-09-16 に danything から改名)も見る。
     # **改名したら必ずここを直す。** 旧名のままだと Forgejo が 307 を返し、ArgoCD の
     # git クライアントはリダイレクトを追わないので、対象のアプリが丸ごと Unknown で止まる。
@@ -51,7 +133,8 @@ spec:
     # Forgejo にだけ置く**方針(2026-09-15。GitHub Actions の課金はプライベートにだけ掛かる)。
     # Forgejo の API は Gitea と同じなので gitea の scmProvider で読める。
     # 読むための資格情報は apps/forgejo/argocd-creds.yaml(Infisical から)。scan と clone の両方に使う。
-    # **同じリポジトリが GitHub と Forgejo の両方にあると Application 名がぶつかって generator ごと止まる。**
+    # **同じリポジトリが GitHub と Forgejo の両方にあると Application 名がぶつかる**(上の `repos` と
+    # 同じ Application を取り合い、所有者の食い違いで片方が ErrorOccurred になる)。
     # 移すときは GitHub 側を消してから(apps/forgejo/README.md)。
     - matrix:
         generators:

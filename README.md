@@ -17,6 +17,7 @@ k3s クラスタ上のセルフホストアプリを [Argo CD](https://argo-cd.r
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト |
 | [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある)。**main へのマージで GitHub Actions が当てる**(SOPS 済みの 4 ファイルと `cilium/` だけ手で) |
 | [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST |
+| [`r2/`](r2/) | restic の置き場(R2 の `doany-restic`)の**あるべき設定**。CI が毎週実物と突き合わせる(読むだけ。道具は Cloudflare の `cf`) |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
 | [`talos/`](talos/) | Talos への移行用 machine config(**v1.14 の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**Talos では `bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
 | [`docs/`](docs/) | **[移行当日の手順](docs/migration-day.md)**、[決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos の実機検証](docs/talos.md)、[Entra ID の認可](docs/entra.md) |

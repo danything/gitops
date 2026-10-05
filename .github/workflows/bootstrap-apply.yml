@@ -3,6 +3,12 @@
 # **保存している秘密はゼロ。** GitHub Actions の OIDC トークンを API サーバが直接受ける
 # (bootstrap/apiserver/authentication-config.yaml)。kubeconfig も age 鍵も置いていない。
 #
+# **`bootstrap/apiserver/ca.crt` には CA が 2 枚入っている**(k3s と Talos。2026-10-05)。
+# Talos の CA は `talos/secrets.yaml` のもので k3s とは別物なので、k3s の 1 枚だけだと
+# 移行当日にこのワークフローが TLS で落ち、下の nodePort の当て直しも走らず公開経路が
+# 戻らない。kubectl はバンドルを受けるので、両方入れておけば切り替えの瞬間を選ばない。
+# **移行が済んだら k3s の 1 枚目を消す**(docs/migration-day.md の 10)。cilium-drift も同じファイルを使う。
+#
 # **SOPS で暗号化した 4 ファイルは当てない**(復号鍵を GitHub に置かないため)。
 # あれらは滅多に変わらないので手で当てる。判定はファイルの中身を見てやっているので、
 # 暗号化ファイルが増えても自動で除外される。

@@ -49,7 +49,10 @@
    **スコープは repository・organization・issue の読み取り。** issue が無いと、非公開リポジトリができた時点で
    ApplicationSet が `token does not have at least one of required scope(s): [read:issue]` で止まる(2026-09-15)
 3. `bootstrap/argocd/repos.yaml` に Forgejo の generator を足す PR をマージする(**Forgejo とトークンが揃ってから**。
-   API に届かないと ApplicationSet 全体の生成が止まる)
+   API に届かないと ApplicationSet 全体の生成が止まる)。
+   **2026-10-05 に `repos-forgejo` という別の ApplicationSet に分けた。** 同居していると、まっさらな
+   クラスタ(Forgejo が空で、トークンもまだ無い)で GitHub 側の Application まで 1 本も作られず、
+   Forgejo 自身もデプロイされないので抜けられなかった。いまは止まるのは Forgejo 側だけ
 
 リポジトリごとに:
 
@@ -59,7 +62,8 @@
    - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンを Infisical から `kubernetes.io/dockerconfigjson` で)
    - claude-review(GitHub App)のワークフローは消す。Forgejo では動かない
 3. Forgejo で CI とイメージの push が通るのを確かめる
-4. **GitHub のリポジトリを消す**。両方に `deploy/argocd.yaml` があると Application 名がぶつかる。
+4. **GitHub のリポジトリを消す**。両方に `deploy/argocd.yaml` があると Application 名がぶつかる
+   (ApplicationSet が `repos` と `repos-forgejo` に分かれているので、2 つが同じ Application を奪い合う)。
    ApplicationSet は `preserveResourcesOnDeletion: true` なので、Application が作り直されても Pod や PVC は消えない
 5. ghcr.io の古いパッケージを消す
 
