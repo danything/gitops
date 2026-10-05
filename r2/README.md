@@ -1,11 +1,11 @@
 # r2
 
 restic の置き場(Cloudflare R2 の `doany-restic`)の設定を git で持つ。
-**あるべき姿は [drift.mjs](drift.mjs) の先頭**にあり、CI([r2-drift](../.github/workflows/r2-drift.yml))が
+**あるべき姿は [drift.ts](drift.ts) の先頭**にあり、CI([r2-drift](../.github/workflows/r2-drift.yml))が
 毎週と `r2/` を触ったときに実物と突き合わせる。**読むだけで、当てはしない。**
 
 道具は Cloudflare の [`cf`](https://blog.cloudflare.com/cloudflare-cf-cli-launch/)(2026-09-28 に open beta)。
-版は [package-lock.json](package-lock.json) で固定してあり、Renovate が追う。
+版は [bun.lock](bun.lock) で固定してあり、Renovate が追う。bun の版は [.bun-version](.bun-version)。
 
 ## なぜ「見るだけ」か
 
@@ -33,15 +33,21 @@ restic の置き場(Cloudflare R2 の `doany-restic`)の設定を git で持つ�
 ## 手元で流す
 
 ```shell
-cd r2 && npm ci
-CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… node drift.mjs
+cd r2 && bun install
+bun run typecheck                                             # 型の検査(CI も流す)
+CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… bun drift.ts
 ```
+
+**TypeScript だがビルドは無い。** bun が `.ts` を直接走らせる。bun は型を見ないので、
+`bun run typecheck` で別に見る。**`cf` も bun の上で起動する**(`cf` の bin は `#!/usr/bin/env node`
+なので、そのまま起動すると node を探しに行く)。bun の上で `cf` が動くことは 2026-10-05 に
+本物の R2 で確かめた。node は要らない。
 
 トークンは CI と同じ読み取り専用のもので足りる(`cf auth login` 済みなら要らない)。
 
 ## ずれていたら
 
-1. **Cloudflare 側が正しい**(わざと変えた)なら、`drift.mjs` の `BUCKETS` を直す PR を出す
+1. **Cloudflare 側が正しい**(わざと変えた)なら、`drift.ts` の `BUCKETS` を直す PR を出す
 2. **git 側が正しい**なら、手元から `cf` で直す。**書ける鍵はその場で作ってその場で捨てる**
    (`cf auth login` のブラウザ認証で済む。保存しない)
 
@@ -54,7 +60,7 @@ cf r2 buckets lifecycle update doany-restic …   # 引数は `--help`。--dry-r
 
 `R2_READ_TOKEN` は **Workers R2 Storage Metadata Read だけ**の Account API token
 (名前は `gitops r2-drift (read-only)`)。**設定は読めて、オブジェクトの中身は読めない。**
-`Workers R2 Storage Read` より狭く、drift.mjs が叩くもの(バケット・lifecycle・ロック・
+`Workers R2 Storage Read` より狭く、drift.ts が叩くもの(バケット・lifecycle・ロック・
 ドメイン・容量)は全部これで読める(2026-10-05 に確認)。
 
 作り直すときは `cf` で作れる(`cf auth login` に `account_api_tokens:create` が入っている)。
@@ -69,4 +75,4 @@ cf accounts tokens create --name "gitops r2-drift (read-only)" \
 ```
 
 **`cf` の出力は API の封筒(`{success, result}`)を外した `result` だけ**(beta.12 で確認)。
-drift.mjs は両方の形を読めるようにしてある。
+drift.ts は両方の形を読めるようにしてある。

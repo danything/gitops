@@ -1,12 +1,15 @@
 {
   "name": "r2-drift",
   "private": true,
-  "description": "R2 のバケット設定が git の想定どおりかを見る(drift.mjs)。版は Renovate が追う",
+  "description": "R2 のバケット設定が git の想定どおりかを見る(drift.ts)。版は Renovate が追う",
   "type": "module",
   "scripts": {
-    "drift": "node drift.mjs"
+    "drift": "bun drift.ts",
+    "typecheck": "tsc"
   },
   "devDependencies": {
-    "cf": "1.0.0-beta.12"
+    "@types/bun": "1.4.2",
+    "cf": "1.0.0-beta.12",
+    "typescript": "7.0.2"
   }
 }
