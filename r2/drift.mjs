@@ -39,6 +39,20 @@ const err = (msg) => {
   console.log(GHA ? `::error::${msg}` : `ズレ: ${msg}`);
 };
 
+// 応答に想定のキーが無いときは**素通りさせない。** `rules ?? []` のように読むと、
+// cf や API の形が変わった日に「ロックも削除ルールも無い」と読めてしまう。
+function need(obj, key, isOk, what) {
+  const v = obj?.[key];
+  if (!isOk(v)) {
+    err(`${what}: 応答に \`${key}\` が想定の形で無い(cf の版で形が変わった?): ${JSON.stringify(obj).slice(0, 300)}`);
+    return undefined;
+  }
+  return v;
+}
+const isArr = Array.isArray;
+const isStr = (v) => typeof v === "string";
+const isBool = (v) => typeof v === "boolean";
+
 // `cf` は API の応答を JSON で出す(既定)。封筒(`{success, result}`)ごと出す版と
 // `result` だけ出す版のどちらでも読めるようにしておく(beta なので形が動きうる)。
 function cf(...args) {
@@ -65,12 +79,14 @@ for (const [name, want] of Object.entries(BUCKETS)) {
   console.log(`== ${name}`);
 
   const b = cf("r2", "buckets", "get", name);
-  const loc = String(b.location ?? "").toLowerCase();
-  if (loc !== want.location) err(`${name}: location が ${b.location} (想定 ${want.location})`);
-  if (b.storage_class !== want.storageClass)
-    err(`${name}: storage_class が ${b.storage_class} (想定 ${want.storageClass})`);
+  const loc = need(b, "location", isStr, `${name} get`);
+  if (loc !== undefined && loc.toLowerCase() !== want.location)
+    err(`${name}: location が ${loc} (想定 ${want.location})`);
+  const cls = need(b, "storage_class", isStr, `${name} get`);
+  if (cls !== undefined && cls !== want.storageClass)
+    err(`${name}: storage_class が ${cls} (想定 ${want.storageClass})`);
 
-  const rules = cf("r2", "buckets", "lifecycle", "get", name).rules ?? [];
+  const rules = need(cf("r2", "buckets", "lifecycle", "get", name), "rules", isArr, `${name} lifecycle`) ?? [];
   for (const r of rules.filter((r) => r.enabled !== false)) {
     if (r.deleteObjectsTransition)
       err(`${name}: オブジェクトを消す lifecycle ルールがある (${r.id})。restic の pack が消える`);
@@ -81,16 +97,19 @@ for (const [name, want] of Object.entries(BUCKETS)) {
   if (want.requireAbortMultipart && !abort)
     err(`${name}: マルチパートの残骸を消すルールが無い`);
 
-  const locks = (cf("r2", "buckets", "locks", "get", name).rules ?? []).filter((r) => r.enabled !== false);
+  const locks = (need(cf("r2", "buckets", "locks", "get", name), "rules", isArr, `${name} locks`) ?? []).filter(
+    (r) => r.enabled !== false,
+  );
   if (locks.length) err(`${name}: バケットロックがある (${locks.map((r) => r.id).join(", ")})。prune が消せなくなる`);
 
   const managed = cf("r2", "buckets", "domains", "managed", "list", "--bucket-name", name);
-  if (managed.enabled) err(`${name}: r2.dev で公開されている (${managed.domain})`);
-  const custom = cf("r2", "buckets", "domains", "custom", "list", "--bucket-name", name).domains ?? [];
+  if (need(managed, "enabled", isBool, `${name} r2.dev`)) err(`${name}: r2.dev で公開されている (${managed.domain})`);
+  const custom =
+    need(cf("r2", "buckets", "domains", "custom", "list", "--bucket-name", name), "domains", isArr, `${name} custom domains`) ?? [];
   if (custom.length) err(`${name}: カスタムドメインが付いている (${custom.map((d) => d.domain).join(", ")})`);
 
   summary.push(
-    `| ${name} | ${b.location} / ${b.storage_class} | ${rules.length} 本 (${rules.map((r) => r.id).join(", ") || "なし"}) | ${locks.length} | ${managed.enabled ? "**公開**" : "非公開"} |`,
+    `| ${name} | ${loc} / ${cls} | ${rules.length} 本 (${rules.map((r) => r.id).join(", ") || "なし"}) | ${locks.length} | ${managed.enabled ? "**公開**" : "非公開"} |`,
   );
 }
 
