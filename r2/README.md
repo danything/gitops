@@ -37,7 +37,7 @@ cd r2 && npm ci
 CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… node drift.mjs
 ```
 
-トークンは CI と同じ読み取り専用のもので足りる。
+トークンは CI と同じ読み取り専用のもので足りる(`cf auth login` 済みなら要らない)。
 
 ## ずれていたら
 
@@ -50,11 +50,23 @@ cf r2 buckets lifecycle get doany-restic        # まず今の姿を見る
 cf r2 buckets lifecycle update doany-restic …   # 引数は `--help`。--dry-run がある
 ```
 
-## 最初にやること(2026-10-05 時点で未実施)
+## トークン
 
-- [ ] Cloudflare で Account API token を作る。権限は **Workers R2 Storage: Read だけ**
-- [ ] リポジトリの Actions secrets に `R2_READ_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` を入れる
-- [ ] `r2 drift` を `workflow_dispatch` で 1 回流す。**実物の応答ではまだ一度も流していない** ──
-      応答の形(キー名)は Cloudflare API の文書から書いたので、初回に `取れなかった` やキーの
-      食い違いが出たら drift.mjs のほうを直す。容量(metrics)だけ別の権限が要るかもしれない
-      (そのときは warning で済み、落ちない)
+`R2_READ_TOKEN` は **Workers R2 Storage Metadata Read だけ**の Account API token
+(名前は `gitops r2-drift (read-only)`)。**設定は読めて、オブジェクトの中身は読めない。**
+`Workers R2 Storage Read` より狭く、drift.mjs が叩くもの(バケット・lifecycle・ロック・
+ドメイン・容量)は全部これで読める(2026-10-05 に確認)。
+
+作り直すときは `cf` で作れる(`cf auth login` に `account_api_tokens:create` が入っている)。
+値は画面に出さずに secrets へ流す:
+
+```shell
+A=$(cf auth whoami | jq -r '.accounts[0].id'); export CLOUDFLARE_ACCOUNT_ID=$A
+cf accounts tokens permission-groups list | jq '.[] | select(.name=="Workers R2 Storage Metadata Read") | .id'
+cf accounts tokens create --name "gitops r2-drift (read-only)" \
+  --policies "[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.$A\":\"*\"},\"permission_groups\":[{\"id\":\"<上の id>\"}]}]" \
+  | jq -r .value | gh secret set R2_READ_TOKEN
+```
+
+**`cf` の出力は API の封筒(`{success, result}`)を外した `result` だけ**(beta.12 で確認)。
+drift.mjs は両方の形を読めるようにしてある。
