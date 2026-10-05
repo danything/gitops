@@ -7,15 +7,21 @@ k3s クラスタ上のセルフホストアプリを [Argo CD](https://argo-cd.r
 [`bootstrap/argocd/repos.yaml`](bootstrap/argocd/repos.yaml) の ApplicationSet が org 内のリポジトリを走査し、
 各リポジトリの `deploy/argocd.yaml` を見つけて Argo CD の Application を生成する。
 このリポジトリがどうデプロイされるか(同期対象パス・autoSync 等)もクラスタ側ではなく
-[`deploy/argocd.yaml`](deploy/argocd.yaml) で決まる。**Argo CD が同期するのは `apps/` 以下だけ**で、
-`bootstrap/` は同期対象外(下記)。
+[`deploy/argocd.yaml`](deploy/argocd.yaml) で決まる。**Argo CD が同期するのは `apps/` 以下と、
+`bootstrap/argocd/repos.yaml` の 1 ファイルだけ**で、`bootstrap/` のほかは同期対象外(下記)。
+
+`repos.yaml` を同期しているのは、Argo CD の chart が自分で作る `apps` という Application
+(`bootstrap/argocd/helmchart.yaml` の中。`directory.include: repos.yaml`、prune / selfHeal 付き)。
+ApplicationSet は Argo CD がいないと意味を持たないので、chart と一緒に入る ── **まっさらなクラスタでも
+CI を待たずに走りはじめる**のはこのため。CI の `bootstrap-apply` も同じファイルを当てるが、
+中身が同じなので衝突しない。
 
 ## ディレクトリ
 
 | | |
 | --- | --- |
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト |
-| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある)。**main へのマージで GitHub Actions が当てる**(SOPS 済みの 4 ファイルと `cilium/` だけ手で) |
+| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある。例外は `argocd/repos.yaml` だけ ── 上の「仕組み」)。**main へのマージで GitHub Actions が当てる**(SOPS 済みの 4 ファイルと `cilium/` だけ手で) |
 | [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST |
 | [`r2/`](r2/) | restic の置き場(R2 の `doany-restic`)の**あるべき設定**。CI が毎週実物と突き合わせる(読むだけ。道具は Cloudflare の `cf`) |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
