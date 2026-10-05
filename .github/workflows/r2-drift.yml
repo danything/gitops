@@ -4,7 +4,8 @@
 # 公開リポジトリの CI には置かない(CI に delete を渡さない方針。r2/README.md)。
 #
 # 秘密は 2 つ(リポジトリの Actions secrets):
-#   R2_READ_TOKEN          Account API token。権限は「Workers R2 Storage: Read」だけ
+#   R2_READ_TOKEN          Account API token。権限は「Workers R2 Storage Metadata Read」だけ
+#                          (設定は読めて中身は読めない。2026-10-05 にこれで全部読めることを確認)
 #   CLOUDFLARE_ACCOUNT_ID  アカウント ID。endpoint と同じく git には置かない(apps/k8up/README.md)
 name: r2 drift
 

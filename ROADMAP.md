@@ -156,8 +156,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       こちらは近道(docs/talos.md「etcd スナップショットからの復旧」。recovery/README と食い違っていたのも揃えた)。
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。**初回は Forgejo を含めること**
       (非公開アプリのイメージとマニフェストが Forgejo から来る経路は、まだ一度も通していない)。
-- [ ] **R2 のずれ検知を動かす(2026-10-05 に作った)。** 読み取り専用トークンを Actions secrets に入れて
-      `r2 drift` を 1 回流す。**実物の応答ではまだ流していない**([r2/README.md](r2/README.md)「最初にやること」)。
+- [x] **R2 のずれ検知が動いた(2026-10-05)。** 初回から「一致」。容量は **90.87 GiB**(アカウント全体 =
+      `doany-restic` だけ)で、09-10 の 33.5 GiB から増えている。ほぼ全部がホストのスクリプト(`host=main`)の
+      `denpa-library`(最新 1 本で 39.66 GiB)で、ホスト側は録画にも 7 日 + 4 週 + 2 か月の世代を持たせているため。
+      k8up 側は `denpa-library-forget` で 1 世代なので、**移行してホストの世代が落ちきれば録画 1 世代ぶんまで下がる**。
 - [ ] **k3s 期の残りを畳む。** ホストのスナップショット(`host=main`)は保持が `--keep-monthly 2` なので
       移行から約 2 か月で落ちきる。そこで `backup/`、`recovery/restore.sh`、
       `apps/k8up/README.md` の `sudo k3s kubectl …` の例を消す(`recovery/env.age` は残す ──
