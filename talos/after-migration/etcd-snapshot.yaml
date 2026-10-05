@@ -48,7 +48,7 @@ spec:
             # talosctl だけのイメージ(シェルが無い)なので、取るだけを init に分ける。
             # 版は talos/versions.yaml と揃える(クライアントとノードの版は離れすぎないこと)。
             - name: snapshot
-              image: ghcr.io/siderolabs/talosctl:v1.14.0
+              image: ghcr.io/siderolabs/talosctl:v1.14.2
               # ノードは 1 台。Pod からノードの 50000 に直接届く(Talos はファイアウォールを張っていない)
               args: [-e, 10.0.0.2, -n, 10.0.0.2, etcd, snapshot, /work/etcd.snapshot]
               volumeMounts:
