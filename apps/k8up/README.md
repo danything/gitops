@@ -57,7 +57,7 @@ Infisical を戻すための `infisical-postgresql.sql` もその R2 にある�
 (`notify()` が Mattermost に投げる)、**バックアップを全部 k8up に移した時点で穴になった。**
 [notify.yaml](notify.yaml) の CronJob が日次(18:00 UTC)でそれを埋める。
 
-その 30 分後に [denpa-library-forget.yaml](denpa-library-forget.yaml) が走る。
+その 30 分後に [denpa-encoded-forget.yaml](denpa-encoded-forget.yaml) が走る。
 録画データだけ世代を持たないための forget で、理由は
 [../../docs/decisions.md](../../docs/decisions.md)「バックアップに何を含めるか」。
 
@@ -468,9 +468,9 @@ SQLite は上で片付いたので、残りは注釈を足すだけ。
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
 | `adguardhome-*` `erpnext-sites` `mattermost-data` `netbird-routing-peer-data` `forgejo-repos` | ファイル | gitops にあるのでここで `"true"` |
-| `denpa-library` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `noren-assets` `noren-files` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
+| `denpa-encoded`(旧 `denpa-library`) `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `noren-assets` `noren-files` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` `noren-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
 | `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`。DB は `backupcommand` で取っているので**ファイルとしては除外**し、`logos/` だけを取る。**この注釈は JSON でパースされる**(`backupcommand` の `qsplit` とは別の経路。`operator/backupcontroller/executor.go`)。**パースに失敗すると `continue` でその PVC が黙って飛ばされる**ので、変えたら実物を見ること |
 | `netbird-data` | SQLite + 再取得できるファイル | `"false"`。DB はサイドカーの `backupcommand` で取る。同居している GeoLite2-City(65 MB)と geonames(7 MB)は起動時に落とし直せる |
 | `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | もう論理バックアップがある。mattermost の 2 本には `k8up.io/backup: "false"` を明示してある(注釈が無ければ既に対象外だが、意図して外していると分かるように) |
-| `denpa-recorded` | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |
+| `denpa-raw`(旧 `denpa-recorded`) | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |
