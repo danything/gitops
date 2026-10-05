@@ -121,15 +121,34 @@ GitHub Actions の **bootstrap apply** を `workflow_dispatch` で回す。
       `infisical/secrets.yaml` と `cert-manager/cloudflare-secret.yaml` は
       **machine config に入っている**ので何もしなくてよい。残り 2 つは chart なので同じ
 - [ ] Gateway に証明書が付く(`kubectl get certificate -A`)
+- [ ] **ワークフローが TLS で落ちないこと。** `bootstrap/apiserver/ca.crt` に k3s と Talos の
+      CA を 2 枚入れてあるので何もしなくてよい(2026-10-05。1 枚だけだった頃はここで落ちて、
+      最後の nodePort 80/443 の当て直しが走らず公開経路が戻らなかった)
 
 ## 7. アプリが戻るのを待つ
 
-**先に Infisical の DB(`infisical-postgresql.sql`)だけ戻しておく** ── 下の 8 の
-やり方で 1 本だけ。空のままだと `InfisicalSecret` を使うアプリが Secret をもらえず、
-ここが「全部 Healthy」にならない。
+**先に 2 つだけ戻す。** どちらも下の 8 のやり方で、ほかのアプリより前に。
+
+1. **Infisical の DB(`infisical-postgresql.sql`)。** 空のままだと `InfisicalSecret` を使う
+   アプリが Secret をもらえず、ここが「全部 Healthy」にならない
+2. **Forgejo(`forgejo-postgres.sql` と PVC `forgejo-repos`)。** 1 が済んで GitHub 側の
+   Application が立つと Forgejo も上がってくるが、**中身が空**。非公開アプリは
+   **イメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、Argo CD が読む
+   マニフェストも、それを読むトークン(Forgejo の DB の中)も全部 Forgejo にある**ので、
+   戻すまで 1 本も上がらない。2026-09-15 に入れたもので、**ドリルでは一度も通っていない**
 
 ArgoCD が `apps/` と各リポジトリの `deploy/argocd.yaml` を同期する。
+ApplicationSet は 2 つに分けてある(`repos` = GitHub、`repos-forgejo` = Forgejo)。
+**2 を戻すまで `repos-forgejo` が `ErrorOccurred` なのは想定どおり**で、`repos` 側は止まらない
+(同居させていた頃は、ここで GitHub 側も含めて Application が 1 本も作られなかった。
+[bootstrap/argocd/repos.yaml](../bootstrap/argocd/repos.yaml))。
 
+```shell
+kubectl -n argocd get applicationset -o custom-columns='NAME:.metadata.name,ERR:.status.conditions[?(@.type=="ErrorOccurred")].status,MSG:.status.conditions[?(@.type=="ErrorOccurred")].message'
+```
+
+- [ ] `repos` の ERR が `False`(1 のあと)
+- [ ] `repos-forgejo` の ERR が `False`(2 のあと。Forgejo の Pod を作り直すと早い)
 - [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy
 - [ ] **PVC が Bound になる**(`local-path` が要る。5 で確認済み)
 
@@ -193,7 +212,21 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
       慌てて消しに行かないこと ── その 8 日ぶんが移行前の最後の退避でもある
 - [ ] `bootstrap/storageclass.yaml`(`local-path-retain`)を消す
       ── 再構築で PVC を引き直したこの時だけ消せる(ROADMAP)
-- [ ] `talosctl etcd snapshot` を 1 本取って R2 へ
+- [ ] **etcd の日次スナップショットを有効にする。** k3s には CRD が無いので
+      `talos/after-migration/` に置いてある。移して PR にする:
+
+      ```shell
+      git mv talos/after-migration/etcd-snapshot.yaml apps/k8up/
+      ```
+
+      マージされたら 1 回だけ手で回して、R2 に入ることを見る:
+
+      ```shell
+      kubectl -n k8up get secret etcd-snapshot          # Talos が talosconfig を書いている
+      kubectl -n k8up create job --from=cronjob/etcd-snapshot etcd-snapshot-first
+      kubectl -n k8up logs -f job/etcd-snapshot-first -c upload
+      ```
+- [ ] **`bootstrap/apiserver/ca.crt` から k3s の CA(1 枚目、`CN=k3s-server-ca@…`)を消す**
 
 ---
 

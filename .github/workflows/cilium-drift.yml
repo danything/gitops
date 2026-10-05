@@ -13,6 +13,13 @@
 # ここに手をかけても捨てることになる。
 #
 # **代わりにズレを見つけるところまでを自動でやる。** 権限は cilium-config の `get` だけ。
+#
+# **Talos でも続ける。** 当て忘れ(values.yaml を直したのに `render.sh` → `apply-config` →
+# `upgrade-k8s` を流していない)は Talos でも起きる。`upgrade-k8s` は流せば差分を出すが、
+# 流し忘れたことは教えてくれない。Talos では render.sh と同じく `talos/cilium-values.yaml` を
+# 重ねて描く ── 重ねないと `cgroup-root` が `/run/cilium/cgroupv2` と `/sys/fs/cgroup` で
+# 必ず食い違い、毎週偽の FAILED になる(2026-10-05 に `helm template` で確認)。
+# どちらの時代かはサーバの版(k3s は `+k3s` が付く)で決める。
 name: cilium drift
 
 on:
@@ -20,6 +27,7 @@ on:
     branches: [main]
     paths:
       - bootstrap/cilium/**
+      - talos/cilium-values.yaml
       - .github/workflows/cilium-drift.yml
   # クラスタ側だけを手でいじったときは push が無いので、定期的にも見る。
   schedule:
@@ -71,9 +79,17 @@ jobs:
           KV=$(k version -o json | jq -r .serverVersion.gitVersion)
           echo "kube-version=$KV"
 
+          # Talos なら render.sh と同じ値を重ねる(上のコメント)
+          case "$KV" in
+            *+k3s*) EXTRA=(); export HOWTO="bootstrap/cilium/README.md の手順で helm upgrade を当てること" ;;
+            *)      EXTRA=(-f talos/cilium-values.yaml)
+                    export HOWTO="talos/README.md「inlineManifests を直したとき」の render.sh → apply-config → upgrade-k8s を流すこと" ;;
+          esac
+          echo "extra values: ${EXTRA[*]:-なし}"
+
           helm repo add cilium https://helm.cilium.io >/dev/null
           helm template cilium cilium/cilium --version "${{ steps.v.outputs.chart }}" \
-            -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$KV" \
+            -n kube-system -f bootstrap/cilium/values.yaml "${EXTRA[@]}" --kube-version "$KV" \
             --show-only templates/cilium-configmap.yaml \
             | yq -o=json '.data' > rendered.json
 
@@ -82,7 +98,7 @@ jobs:
           # YAML はここまでで JSON にしてある。python は標準ライブラリだけで済ませる
           # (ランナーに PyYAML が入っている保証は無い)。
           python3 - <<'PY'
-          import sys, json
+          import os, sys, json
           r = json.load(open("rendered.json"))
           l = json.load(open("live.json"))
           only_git  = sorted(set(r) - set(l))
@@ -94,6 +110,6 @@ jobs:
           for k in only_git:  print(f"::error::git にしか無い: {k} = {r[k]!r}")
           for k in only_live: print(f"::error::live にしか無い: {k} = {l[k]!r}")
           for k in differ:    print(f"::error::値が違う: {k}  git={r[k]!r}  live={l[k]!r}")
-          print("::error::bootstrap/cilium/README.md の手順で helm upgrade を当てること")
+          print(f"::error::{os.environ['HOWTO']}")
           sys.exit(1)
           PY

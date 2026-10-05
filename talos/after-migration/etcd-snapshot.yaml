@@ -1,0 +1,99 @@
+# etcd のスナップショットを日次で restic(R2)へ。
+#
+# **移行が済んだら apps/k8up/ へ `git mv` する**(docs/migration-day.md の 10)。
+# ここに置いてあるのは、k3s には `talos.dev/v1alpha1` の CRD が無いから ──
+# apps/ に置くと Argo CD が適用に失敗し続けて、apps/ の同期が丸ごと止まる
+# (SkipDryRunOnMissingResource は dry-run を飛ばすだけで、適用の失敗は防げない)。
+#
+# **戻すときの主経路ではない。** 主経路は「git から Argo CD で建て直して PV を k8up で戻す」
+# (docs/migration-day.md。ドリルで通してある)。こちらは git に無い状態
+# (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書、
+# API サーバが割り当てた nodePort など)まで含めて**一瞬で戻したいとき**の近道。
+# 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
+#
+# Talos API への権限は `os:etcd:backup` だけ(talos/patches/etcd-backup.yaml)。
+# 下の ServiceAccount を見て Talos が同名の Secret に talosconfig を書く。
+#
+# **通知は何も足さなくてよい。** notify は過去 8 日に出てきた (host, path) を
+# 「あるべきもの」として学ぶので、`etcd/work/etcd.snapshot` も最初の 1 本から見張られる。
+---
+apiVersion: talos.dev/v1alpha1
+kind: ServiceAccount
+metadata:
+  name: etcd-snapshot
+  namespace: k8up
+spec:
+  roles:
+    - os:etcd:backup
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etcd-snapshot
+  namespace: k8up
+spec:
+  # 14:30〜17:45 UTC は k8up の Schedule で埋まっているので、その手前。
+  # forget はリポジトリをロックするので、動かすときは schedules.yaml と突き合わせること。
+  schedule: "15 14 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+            # talosctl だけのイメージ(シェルが無い)なので、取るだけを init に分ける。
+            # 版は talos/versions.yaml と揃える(クライアントとノードの版は離れすぎないこと)。
+            - name: snapshot
+              image: ghcr.io/siderolabs/talosctl:v1.14.0
+              # ノードは 1 台。Pod からノードの 50000 に直接届く(Talos はファイアウォールを張っていない)
+              args: [-e, 10.0.0.2, -n, 10.0.0.2, etcd, snapshot, /work/etcd.snapshot]
+              volumeMounts:
+                - {name: work, mountPath: /work}
+                # talosctl はここに置かれた talosconfig を自分で読む
+                - {name: talos-secrets, mountPath: /var/run/secrets/talos.dev}
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 256Mi}
+          containers:
+            - name: upload
+              # notify と同じ。k8up のイメージに restic が入っている。
+              image: ghcr.io/k8up-io/k8up:v2.16.0
+              workingDir: /work
+              command:
+                - sh
+                - -ec
+                - |
+                  export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
+                  # 空のファイルを「取れた」にしない(k8up の空スナップショットで懲りている。apps/k8up/README.md)
+                  [ -s etcd.snapshot ] || { echo "etcd.snapshot が空" >&2; exit 1; }
+                  # --host は k8up の namespace と被らない名前に。k8up の prune は
+                  # --host=<namespace> で絞るのでこちらには届かない ── 保持は自分で回す。
+                  # 中身の解放は日曜の k8up の prune がまとめてやる(prune はホストを問わない)。
+                  restic backup --host etcd --tag etcd etcd.snapshot
+                  restic forget --host etcd --tag etcd --keep-daily 7 --keep-weekly 4
+              env:
+                - name: ENDPOINT
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
+                - name: BUCKET
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: bucket}}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: accessKeyId}}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
+                - name: RESTIC_PASSWORD
+                  valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+              volumeMounts:
+                - {name: work, mountPath: /work}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {memory: 1Gi}
+          volumes:
+            - name: work
+              emptyDir: {}
+            - name: talos-secrets
+              secret:
+                secretName: etcd-snapshot
