@@ -34,6 +34,10 @@ Pulumi で表せないものは [report.ts](report.ts) が毎週見る。
 - **Environment `pulumi-apply` に置き、main からしか使えない。** PR のジョブには読み取りの鍵しか渡らない
 - **`doany-restic` に `protect` が付いている。** Pulumi はこのリソースを消すのを拒否する
 
+**承知していること:** preview の鍵も state バケットには書ける(state のロックに要る)。同じリポジトリから
+PR を出せる人は、ワークフローを書き換えて state をいじれる。ただし R2 の設定(バックアップのバケット)は
+読めるだけで変えられない。書けるのは本人だけ、という前提で受け入れている(2026-10-05)。
+
 state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレーズで暗号化している。
 **state に秘密は入れていない**(アカウント ID は環境変数で渡す)ので、パスフレーズを失くしても
 `pulumi stack init` からやり直せる。`doany-restic` は `import` で取り込み直される。

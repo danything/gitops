@@ -36,11 +36,6 @@ on:
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
-# state はロックされるが、待たずに落ちるので並べない。走っているものは止めない(up の途中で切らない)
-concurrency:
-  group: pulumi
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
@@ -56,6 +51,11 @@ jobs:
   preview:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
+    # 同じ PR の古い preview は捨ててよい。up とは別の列にする ── 1 列にまとめると、GitHub は
+    # 待ちを 1 件しか持たないので、マージ後の up が後から来た preview に押し出されて消えうる
+    concurrency:
+      group: pulumi-preview-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: read
       # 差分を PR にコメントする
@@ -88,7 +88,8 @@ jobs:
           refresh: ${{ github.event_name == 'schedule' }}
           expect-no-changes: ${{ github.event_name == 'schedule' }}
 
-      - if: github.event_name != 'pull_request'
+      # preview がずれで落ちても流す(ずれと公開状態を同じ実行で見たい)
+      - if: always() && github.event_name != 'pull_request'
         run: bun report.ts
         working-directory: pulumi
 
@@ -96,6 +97,12 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: pulumi-apply
+    # 走っている up は止めない(途中で切ると state がロックされたまま残る)。待ちが押し出されても、
+    # 残るのは新しい main なので取りこぼしは無い。preview と同時に走ると片方がロックで落ちるが、
+    # state は壊れない(落ちた方を流し直す)
+    concurrency:
+      group: pulumi-up
+      cancel-in-progress: false
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
