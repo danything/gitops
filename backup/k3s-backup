@@ -2,7 +2,7 @@
 # k3s-backup: この k3s ホストを restic で丸ごとバックアップする(root で実行、systemd timer 経由)。
 #
 # 取るもの(復元は restore.sh。`restic restore latest --target /` で元の場所に戻る前提の絶対パス構成):
-#   /var/lib/rancher/k3s/storage/                 local-path-retain の PVC データ(アプリの DB・メディア)
+#   /var/lib/rancher/k3s/storage/                 local-path の PVC データ(アプリの DB・メディア)
 #   /var/lib/rancher/k3s/server/{tls,cred,token}  クラスタ CA・証明書・join 資格情報(無いと復元後に別 CA が生成され state.db と食い違う)
 #   /var/lib/k3s-backup/state.db                  k3s の datastore(全 k8s オブジェクト)の sqlite ホットバックアップ
 #   /var/lib/k3s-backup/k3s-version               restore.sh が同じ k3s バージョンを入れるためのメモ
@@ -164,9 +164,25 @@ done
 # 中身は数時間で入れ替わるので、日次のスナップショットに残す意味も薄い。
 # 除外は PVC のディレクトリ名で当てる(local-path は <pv 名>_<ns>_<pvc 名> で掘る)。
 RECORDED_GLOB="${RECORDED_GLOB:-*_denpa_denpa-recorded}"
+RAW_GLOB="${RAW_GLOB:-*_denpa_denpa-raw}"
+# **エンコード済みの録画(`denpa-library`。Pod の中では `/media/encoded`、生 TS の
+# `denpa-recorded` は `/media/raw` ── denpa#382)もここでは取らない(2026-10-05)。** k8up が
+# PVC の注釈で取っていて、apps/k8up/denpa-encoded-forget.yaml が 1 世代に絞っている。
+# ここでも取ると、このスクリプトの保持(7 日 + 4 週 + 2 か月)で入れ替わった録画が世代の
+# 数だけ積もる ── 実際に 39.66 GiB のライブラリがリポジトリを 90 GiB まで押し上げていた。
+# 録画は 1 世代でよい(本人、2026-10-05)。
+#
+# **ディレクトリ名は改名前の PVC 名のまま。** 2026-10-05 に PVC を denpa-raw / denpa-encoded に
+# 改名したが、PV を使い回して結び直したので、local-path が掘ったディレクトリ
+# (`<pv>_denpa_denpa-recorded` / `<pv>_denpa_denpa-library`)は変わらない。
+# 新しい名前でも外す ── PVC が引き直されたら(denpa の chart が先に当たった、など)
+# ディレクトリは新しい名前で掘られ、古い名前だけの除外では素通りする。
+LIBRARY_GLOB="${LIBRARY_GLOB:-*_denpa_denpa-library}"
+ENCODED_GLOB="${ENCODED_GLOB:-*_denpa_denpa-encoded}"
 
 # shellcheck disable=SC2086
-restic backup --tag "$TAG" --exclude-caches --exclude "$RECORDED_GLOB" $PATHS
+restic backup --tag "$TAG" --exclude-caches --exclude "$RECORDED_GLOB" --exclude "$RAW_GLOB" \
+	--exclude "$LIBRARY_GLOB" --exclude "$ENCODED_GLOB" $PATHS
 
 # バックアップが終わった時点で戻す。forget/prune/check は動かしたままでよい。
 restore_replicas

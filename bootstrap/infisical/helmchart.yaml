@@ -67,9 +67,10 @@ spec:
                 database: infisicalDB
             primary:
                 persistence:
-                    # Retain: deleting this HelmChart must not take the secrets
-                    # database with it.
-                    storageClass: local-path-retain
+                    # 既定の local-path(reclaim は Delete。2026-10-05 に local-path-retain から寄せた)。
+                    # HelmChart を消しても PVC は残る ── StatefulSet の volumeClaimTemplates が作った
+                    # PVC は StatefulSet を消しても消えない。後ろ盾は k8up の日次 pg_dump。
+                    storageClass: local-path
                     size: 5Gi
                 podAnnotations:
                     k8up.io/backupcommand: /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" /opt/bitnami/postgresql/bin/pg_dump -U infisical -d infisicalDB --clean --if-exists'
@@ -94,6 +95,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-09-08T07:43:10Z"
-    mac: ENC[AES256_GCM,data:zBGqgd5/Usr4twLvgrwI2MAxFvS4haSHyGz4GLPrBFvxPvizSgrSW9qD+W2iUyuf++JlUG+q3v/FXfVWveOPy19ZtKsGJdH9UTiqLssZVwstDOI2UUm8bCBZfD2jeYDuFuHGGHxd2NSJ3Un6BgAEn6mgBHcxWzs4BkEMOwBCd9A=,iv:eo/VUAhPhZ1HgRPtQD6LXi3yLrNJdTGYfrNQj3qZjhg=,tag:zWytZN21CYTE8TBIomOhcg==,type:str]
+    lastmodified: "2026-10-05T07:25:19Z"
+    mac: ENC[AES256_GCM,data:ANmzj+/tCl0WISfIElGceFp22/KJHGL7UCqhgqKWZC7SIieerTnKdQmVxC0mNMbpp1tQAOorXDdiLtSn26mAn6gYBpH1b7CX2IyvHjQq4D5ppmtyPEaxb4AUOWAawsSRt1YSZ1XELi3n7aLutLTJQD1AcVUTKdn3MtYvZBWH5ys=,iv:Cmdv4DiiUEoRNNr0dpb7TbbfM7iF6uW/ZCf0fG/lMO0=,tag:QdK5Emvylapw5XZNO73EYw==,type:str]
     version: 3.13.3

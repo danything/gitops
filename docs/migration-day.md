@@ -210,8 +210,6 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
       ホストのスクリプトが止まったため。notify は過去 8 日に出てきた経路を「あるべきもの」と
       みなす作りなので、**8 日で勝手に鳴りやむ**([apps/k8up/notify.yaml](../apps/k8up/notify.yaml))。
       慌てて消しに行かないこと ── その 8 日ぶんが移行前の最後の退避でもある
-- [ ] `bootstrap/storageclass.yaml`(`local-path-retain`)を消す
-      ── 再構築で PVC を引き直したこの時だけ消せる(ROADMAP)
 - [ ] **etcd の日次スナップショットを有効にする。** k3s には CRD が無いので
       `talos/after-migration/` に置いてある。移して PR にする:
 

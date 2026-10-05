@@ -17,7 +17,7 @@
 #   リポジトリをロックするので、重なると片方が待たされる。
 #   バックアップは 15:00〜17:45 UTC、prune は日曜の 20:00〜22:45 UTC に置いてある。
 #   後ろは詰まっている。18:00 UTC に notify.yaml、18:30 UTC に
-#   denpa-library-forget.yaml の CronJob が走り、19:00 UTC がホストのスクリプト。
+#   denpa-encoded-forget.yaml の CronJob が走り、19:00 UTC がホストのスクリプト。
 #   これ以上うしろに足すならそれらもずらすこと
 # - 保持は全部 `keepDaily 7 / keepWeekly 4 / keepMonthly 6`
 # - `check` だけは 1 本でよい。`restic check` はリポジトリ全体を見るもので、

@@ -50,7 +50,7 @@ spec:
           enabled: true
           rootPassword: ""
           persistence:
-            storageClass: local-path-retain
+            storageClass: local-path
 
         # chart has no mariadb-sts branch for DB_ROOT_USER, falls back to this
         dbRootUser: root

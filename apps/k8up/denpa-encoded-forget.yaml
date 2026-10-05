@@ -1,4 +1,5 @@
-# 録画データ(denpa-library)だけ世代を持たない。
+# エンコード済みの録画(denpa-encoded。Pod の中では /media/encoded)だけ世代を持たない。
+# 録画は 1 世代でよい(本人、2026-10-05)。2026-10-05 に PVC を denpa-library から改名した。
 #
 # k8up の Schedule は namespace 単位で、保持も Schedule 単位でしか書けない。
 # 一方 restic の forget は既定で (host, paths) ごとに保持を効かせる
@@ -19,7 +20,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: denpa-library-forget
+  name: denpa-encoded-forget
   namespace: k8up
 spec:
   # denpa のバックアップ(16:30)と notify(18:00)より後。日曜の prune 群は
@@ -45,7 +46,7 @@ spec:
                 - |
                   export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
                   restic forget \
-                    --host denpa --path /data/denpa-library \
+                    --host denpa --path /data/denpa-encoded \
                     --keep-last 1 --prune
               env:
                 - name: ENDPOINT

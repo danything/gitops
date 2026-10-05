@@ -13,7 +13,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  # 既定の local-path(reclaim は Delete)。`local-path-retain` は使わない
+  # 既定の local-path(reclaim は Delete)
   # ---「git で消したものはちゃんと消える」に寄せた(docs/decisions.md)。
   # 後ろ盾は日次の restic。
   resources:

@@ -11,17 +11,10 @@
 # | データの置き場 | `/var/lib/rancher/k3s/storage` | `/var/mnt/local-path`([`talos/patches/volumes.yaml`](../patches/volumes.yaml) の `UserVolumeConfig` が切る別パーティション) |
 # | namespace | `kube-system` | `local-path-storage`(PSA は privileged。ヘルパー Pod が hostPath を使う) |
 #
-# StorageClass を 2 つ出す
+# StorageClass は既定の `local-path` 1 つだけ。
 #
-# `allowVolumeExpansion` は写さない。k3s の `local-path-retain` には `true` が
-# 付いているが、local-path は拡張に対応していないので、あれは実現しない能力を
-# 名乗っているだけ。バインド済みの PVC には何の影響も無いので、揃えずに落とす
-# (2026-09-08 に差分を確認したうえでの判断)。
-#
-# `local-path-retain` も残す。いま 21 本の PVC がその名前を参照していて、
-# バインド済み PVC の `storageClassName` は API が変更を拒否する。移行当日に
-# アプリ 6 リポジトリの PVC を書き換えるのは事故のもとなので、同じ名前を提供して
-# そのまま持っていく。整理は移行後に落ち着いてからでよい(ROADMAP の積み残し)。
+# k3s 期にあった `local-path-retain` は 2026-10-05 に撤去した(全 PVC を既存の PV ごと
+# `local-path` に結び直した。ROADMAP)。PVC を守るのは Retain ではなく日次の restic。
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -150,13 +143,4 @@ metadata:
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: rancher.io/local-path
 reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
----
-# k3s から持ち越す名前。消せるようになるのは、全 PVC がこの名前を参照しなくなってから。
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: local-path-retain
-provisioner: rancher.io/local-path
-reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer

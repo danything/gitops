@@ -43,8 +43,7 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       - **local-path-provisioner** … 入れないと **PVC が 1 つも bind しない**。
         [talos/manifests/local-path.yaml](talos/manifests/local-path.yaml)。
         `local-path-storage` の PSA ラベル(privileged)もここで付く。
-        **`local-path-retain` も同じ名前で出す** ── 21 本の PVC が参照していて、
-        バインド済みでは変更できないため。
+        (`local-path-retain` も出していたが、2026-10-05 に撤去した。下)
         データの置き場は **`/var/mnt/local-path`(専用パーティション)**
         ([talos/patches/volumes.yaml](talos/patches/volumes.yaml))。
         **ディスクの割り方は入れ直さないと変えられない**ので、当日の焼き込み前に確定させること
@@ -111,10 +110,17 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       同居しているので `k8up.io/backup-restic-args` で `denpa.db*` を除外している。
       対象の切り分けは [apps/k8up/README.md](apps/k8up/README.md)。
       **残るのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。**
-- [ ] **`bootstrap/storageclass.yaml`(`local-path-retain`)を消す。** いま 21 本の PVC が名前を
-      参照していて、**バインド済み PVC の `storageClassName` は API が変更を拒否する**ので今は消せない。
-      PV 側の reclaim policy は全部 `Delete` に揃えてあるので挙動はもう既定の `local-path` と同じ。
-      再構築でストレージを引き直すときに、各アプリのマニフェストから `local-path-retain` の指定ごと外す。
+- [x] **`local-path-retain` を消した(2026-10-05、移行を待たずに k3s のうちに)。** 28 本の PVC を
+      止めた状態で作り直した。**データはコピーしていない** ── PV の reclaim を `Retain` にして古い PVC を
+      消し、PV の `claimRef` を外して `storageClassName` を `local-path` に書き換え、新しい PVC を
+      `volumeName` で同じ PV に結んだ(使い捨ての PVC で先に確かめた)。あわせて denpa の録画の PVC を
+      置き場の名前にそろえた(`denpa-recorded` → `denpa-raw`、`denpa-library` → `denpa-encoded`。denpa#430)。
+      PV を使い回したので**ホスト上のディレクトリ名は改名前のまま**(Talos で引き直せば揃う)。
+      マニフェストは gitops と 8 リポジトリ(ashi#89 / blog#123 / lgtm#56 / xool#159 / yuzuriha#19 /
+      todoroku#342 / worklog-cloud#142 / denpa#430)。
+- [ ] **改名前の録画のスナップショットを消す。** k8up の `/data/denpa-library` のぶんは、改名後は
+      どの forget も見ない(`denpa-encoded-forget` は新しいパスだけ)。`/data/denpa-encoded` の 1 本目が
+      入ったら、旧パスのスナップショットを ID で forget する(録画は 1 世代でよい)。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
 - [x] **git と実機の helm 値がずれていないことを確認した(2026-09-08)。**
       cert-manager / argocd / infisical の 3 つとも一致。**machine config は git の値で
@@ -159,7 +165,8 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
 - [x] **R2 のずれ検知が動いた(2026-10-05)。** 初回から「一致」。容量は **90.87 GiB**(アカウント全体 =
       `doany-restic` だけ)で、09-10 の 33.5 GiB から増えている。ほぼ全部がホストのスクリプト(`host=main`)の
       `denpa-library`(最新 1 本で 39.66 GiB)で、ホスト側は録画にも 7 日 + 4 週 + 2 か月の世代を持たせているため。
-      k8up 側は `denpa-library-forget` で 1 世代なので、**移行してホストの世代が落ちきれば録画 1 世代ぶんまで下がる**。
+      k8up 側は `denpa-encoded-forget` で 1 世代。**2026-10-05 にホストのスクリプトから録画を外し、溜まっていた 10 本からも
+      `restic rewrite` で抜いた**(録画は 1 世代でよい、と本人)。中身はその夜のホストの `forget --prune` で空く。
 - [ ] **k3s 期の残りを畳む。** ホストのスナップショット(`host=main`)は保持が `--keep-monthly 2` なので
       移行から約 2 か月で落ちきる。そこで `backup/`、`recovery/restore.sh`、
       `apps/k8up/README.md` の `sudo k3s kubectl …` の例を消す(`recovery/env.age` は残す ──
@@ -169,7 +176,7 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       k8up の per-PVC の保持設計がどれも効いていなかった
       ([docs/decisions.md](docs/decisions.md)「バックアップに何を含めるか」)。
       ホストのスクリプトが消えて `host=main` のスナップショットが保持から落ちきると、
-      [apps/k8up/denpa-library-forget.yaml](apps/k8up/denpa-library-forget.yaml) を含めて
+      [apps/k8up/denpa-encoded-forget.yaml](apps/k8up/denpa-encoded-forget.yaml) を含めて
       ようやく効きはじめる。そこで初めて本当の定常サイズが分かる。
 - [x] **`talosctl upgrade` / `upgrade-k8s` の手順を README に(2026-09-08)。**
       [talos/README.md](talos/README.md)「上げ方 / 当て直し方」。
