@@ -161,6 +161,10 @@ kubectl -n argocd patch application <名前> --type=merge \
   -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'
 ```
 
+**Helm の chart から入れているもの(erpnext など)は `HEAD` が通らない。** `revision` は
+chart の版として読まれ、`improper constraint: HEAD` で落ちる(2026-10-05 に踏んだ)。
+`spec.source.targetRevision` の値(`8.0.78` など)を渡す。
+
 ## 8. PV データを戻す
 
 **順番が決まっている。** 手順は [apps/k8up/README.md](../apps/k8up/README.md)「戻し方」。
