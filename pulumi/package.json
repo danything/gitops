@@ -1,0 +1,20 @@
+{
+  "name": "doany-cloudflare",
+  "private": true,
+  "description": "Cloudflare の設定(いまは R2 だけ)を Pulumi で持つ。版は Renovate が追う",
+  "type": "module",
+  "scripts": {
+    "report": "bun report.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "cf": "1.0.0-beta.12",
+    "typescript": "7.0.2"
+  },
+  "main": "index.ts",
+  "dependencies": {
+    "@pulumi/cloudflare": "6.21.0",
+    "@pulumi/pulumi": "3.267.0"
+  }
+}

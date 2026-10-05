@@ -1,0 +1,5 @@
+# Cloudflare の設定を Pulumi で持つ。**いまは R2 の doany-restic だけ**(2026-10-05)。
+# PR で preview(差分を PR にコメント)、main に入ったら up。手順と鍵の分け方は README.md。
+name: doany-cloudflare
+description: doany の Cloudflare の設定(いまは R2 だけ)
+runtime: bun

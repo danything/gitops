@@ -172,7 +172,7 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       移行から約 2 か月で落ちきる。そこで `backup/`、`recovery/restore.sh`、
       `apps/k8up/README.md` の `sudo k3s kubectl …` の例を消す(`recovery/env.age` は残す ──
       Talos 期も `k8up-global` を手で作るのに要る)。それまでは k3s に戻る道として置いておく。
-- [ ] **移行して 1〜2 か月してから R2 の容量をもう一度見る。** 数字は `r2 drift` の Summary に毎週出る。 k3s 期はホストの
+- [ ] **移行して 1〜2 か月してから R2 の容量をもう一度見る。** 数字は `pulumi` ワークフローの週次の Summary に出る。 k3s 期はホストの
       `backup/k3s-backup` が `/var/lib/rancher/k3s/storage` を丸ごと取っていて、
       k8up の per-PVC の保持設計がどれも効いていなかった
       ([docs/decisions.md](docs/decisions.md)「バックアップに何を含めるか」)。
