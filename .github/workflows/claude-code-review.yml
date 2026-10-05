@@ -48,7 +48,9 @@ jobs:
           # 上の `if` で「bot は needs-review が付いているときだけ」に絞ってあるので、
           # ここは `*` ではなく renovate だけを名指しする。`*` は公開リポジトリでは
           # 外部の App がプロンプトを持ち込める(action のドキュメントの警告)。
-          allowed_bots: "renovate[bot]"
+          # Renovate は 2026-10 から自前の GitHub App(`doa-renovate`)で動いている。名前が変わると
+          # ここで黙って落ちる(#206 で発覚)ので、両方を名指ししておく
+          allowed_bots: "renovate[bot],doa-renovate[bot]"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
