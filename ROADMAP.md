@@ -118,9 +118,10 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       PV を使い回したので**ホスト上のディレクトリ名は改名前のまま**(Talos で引き直せば揃う)。
       マニフェストは gitops と 8 リポジトリ(ashi#89 / blog#123 / lgtm#56 / xool#159 / yuzuriha#19 /
       todoroku#342 / worklog-cloud#142 / denpa#430)。
-- [ ] **改名前の録画のスナップショットを消す。** k8up の `/data/denpa-library` のぶんは、改名後は
-      どの forget も見ない(`denpa-encoded-forget` は新しいパスだけ)。`/data/denpa-encoded` の 1 本目が
-      入ったら、旧パスのスナップショットを ID で forget する(録画は 1 世代でよい)。
+- [x] **改名前の録画のスナップショットを消した(2026-10-05)。** 手で k8up の `Backup` を 1 回走らせて
+      `/data/denpa-encoded` の 1 本目(`8a2c927b`、164 ファイル / 34.91 GiB)を取ってから、旧パスの
+      `539a08ac` を forget → prune。**49.4 GiB 解放、リポジトリは 88.6 → 37.3 GiB**、`restic check` はエラー無し。
+      旧スナップショットにだけあった 3 話分(ライブラリから削除済みのもの)はこれで戻せなくなった ── 1 世代の方針どおり。
 - [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす。
 - [x] **git と実機の helm 値がずれていないことを確認した(2026-09-08)。**
       cert-manager / argocd / infisical の 3 つとも一致。**machine config は git の値で
