@@ -161,6 +161,15 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       (`talos/patches/etcd-backup.yaml`。`os:admin` の talosconfig を Secret に置く案はやめた)、
       日次で同じ restic リポジトリへ(`--host etcd`)。**戻すときの主経路は git からの再構築のまま**で、
       こちらは近道(docs/talos.md「etcd スナップショットからの復旧」。recovery/README と食い違っていたのも揃えた)。
+- [ ] **いずれ Intel の GPU を足して QSV でエンコードする(2026-10-05 時点では未購入)。** いまの実機には
+      QSV が使える GPU が無い(Xeon E5-2696 v4 は内蔵 GPU なし、画面は iLO の Matrox G200 だけ)ので、
+      denpa の Pod から見えるのは `card0` だけで `renderD*` が無い。候補は **Intel Arc A310**(ロープロファイル、
+      補助電源なし、AV1 のハードウェアエンコード可)。買ったらやること:
+      - Talos なら schematic に **`siderolabs/i915`** を足す(新しい世代の Arc B シリーズなどは `siderolabs/xe`。
+        **両方は入れない** ── 同じ GPU を取り合う)。schematic を変えたら `talos/versions.yaml` の ID と depName を差し替え、
+        `talosctl upgrade` で当てる(ISO は焼き直さなくてよい)
+      - `talosctl ls /dev/dri` に `renderD128`、`talosctl dmesg` に GuC / HuC の読み込みが出ること
+      - **denpa 側は何もしなくてよい。** イメージの ffmpeg は QSV / VA-API 入りで、chart は `/dev/dri` をマウント済み
 - [ ] 四半期ごとに VM で復元リハーサル(PV + etcd の両方)。**初回は Forgejo を含めること**
       (非公開アプリのイメージとマニフェストが Forgejo から来る経路は、まだ一度も通していない)。
 - [x] **R2 のずれ検知が動いた(2026-10-05)。** 初回から「一致」。容量は **90.87 GiB**(アカウント全体 =
