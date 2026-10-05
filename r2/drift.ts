@@ -1,6 +1,10 @@
 // R2 のバケット設定が「あるべき姿」のままかを見る。**読むだけ。** 直すのは人が手で `cf` を打つ。
 //
-//   cd r2 && npm ci && CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… node drift.mjs
+//   cd r2 && npm ci && CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… node drift.ts
+//
+// Node 24 は .ts をそのまま走らせる(型を剥がすだけ)ので、ビルドは無い。型の検査は
+// `npm run typecheck`(CI も流す)。剥がすだけで済む書き方に限る(enum や namespace は不可。
+// tsconfig.json の erasableSyntaxOnly が弾く)。
 //
 // CI(../.github/workflows/r2-drift.yml)も同じものを流す。一致 0 / ズレ 1。
 // 当てるところまで自動化しない理由は README.md(**R2 を書ける鍵はバックアップを消せる鍵**)。
@@ -13,7 +17,13 @@ import { appendFileSync } from "node:fs";
 
 // ---- あるべき姿 ---------------------------------------------------------------
 // ここが正本。変えるときは先に Cloudflare 側を `cf` で直し、同じ PR でここを直す。
-const BUCKETS = {
+interface Want {
+  location: string;
+  storageClass: string;
+  requireAbortMultipart: boolean;
+}
+
+const BUCKETS: Record<string, Want> = {
   "doany-restic": {
     // decisions.md「リモートは Cloudflare R2 のバケット doany-restic(APAC、Standard)」
     location: "apac",
@@ -28,35 +38,56 @@ const BUCKETS = {
   },
 };
 
+// ---- API の応答の形(使うところだけ) -------------------------------------------
+// どれも「そう来るはず」の形。実際に来たかは need() で確かめてから使う。
+type Obj = Record<string, unknown>;
+
+interface Rule {
+  id: string;
+  enabled?: boolean;
+  deleteObjectsTransition?: unknown;
+  storageClassTransitions?: unknown[];
+  abortMultipartUploadsTransition?: unknown;
+}
+
+interface CustomDomain {
+  domain: string;
+}
+
+interface StorageMetrics {
+  published?: { payloadSize?: number; metadataSize?: number };
+}
+
 // ---- ここから下は道具 -----------------------------------------------------------
 const CF = new URL("./node_modules/.bin/cf", import.meta.url).pathname;
 const GHA = !!process.env.GITHUB_ACTIONS;
-const errors = [];
-const summary = [];
+const errors: string[] = [];
+const summary: string[] = [];
 
-const err = (msg) => {
+const err = (msg: string): void => {
   errors.push(msg);
   console.log(GHA ? `::error::${msg}` : `ズレ: ${msg}`);
 };
 
 // 応答に想定のキーが無いときは**素通りさせない。** `rules ?? []` のように読むと、
 // cf や API の形が変わった日に「ロックも削除ルールも無い」と読めてしまう。
-function need(obj, key, isOk, what) {
-  const v = obj?.[key];
+function need<T>(obj: Obj, key: string, isOk: (v: unknown) => v is T, what: string): T | undefined {
+  const v = obj[key];
   if (!isOk(v)) {
     err(`${what}: 応答に \`${key}\` が想定の形で無い(cf の版で形が変わった?): ${JSON.stringify(obj).slice(0, 300)}`);
     return undefined;
   }
   return v;
 }
-const isArr = Array.isArray;
-const isStr = (v) => typeof v === "string";
-const isBool = (v) => typeof v === "boolean";
+// 中身の形までは見ない(配列であることだけ)。要素は Rule などとして読む
+const isArr = <T>(v: unknown): v is T[] => Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === "string";
+const isBool = (v: unknown): v is boolean => typeof v === "boolean";
 
 // `cf` は API の応答を JSON で出す(既定)。封筒(`{success, result}`)ごと出す版と
 // `result` だけ出す版のどちらでも読めるようにしておく(beta なので形が動きうる)。
-function cf(...args) {
-  let out;
+function cf(...args: string[]): Obj {
+  let out: string;
   try {
     out = execFileSync(CF, args, {
       encoding: "utf8",
@@ -64,16 +95,21 @@ function cf(...args) {
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (e) {
-    throw new Error(`cf ${args.join(" ")} が失敗した:\n${e.stderr || e.stdout || e.message}`);
+    const x = e as { stderr?: string; stdout?: string; message: string };
+    throw new Error(`cf ${args.join(" ")} が失敗した:\n${x.stderr || x.stdout || x.message}`);
   }
-  let v;
+  let v: unknown;
   try {
     v = JSON.parse(out);
   } catch {
     throw new Error(`cf ${args.join(" ")} の出力が JSON ではない(cf の版で形が変わった?):\n${out.slice(0, 500)}`);
   }
-  return v && typeof v === "object" && "result" in v ? v.result : v;
+  if (v && typeof v === "object" && "result" in v) v = (v as { result: unknown }).result;
+  // オブジェクトでなければ need() が「想定の形で無い」と言えるよう、空のオブジェクトに包む
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : { _raw: v };
 }
+
+const on = (r: Rule): boolean => r.enabled !== false;
 
 for (const [name, want] of Object.entries(BUCKETS)) {
   console.log(`== ${name}`);
@@ -86,30 +122,34 @@ for (const [name, want] of Object.entries(BUCKETS)) {
   if (cls !== undefined && cls !== want.storageClass)
     err(`${name}: storage_class が ${cls} (想定 ${want.storageClass})`);
 
-  const rules = need(cf("r2", "buckets", "lifecycle", "get", name), "rules", isArr, `${name} lifecycle`) ?? [];
-  for (const r of rules.filter((r) => r.enabled !== false)) {
+  const rules = need(cf("r2", "buckets", "lifecycle", "get", name), "rules", isArr<Rule>, `${name} lifecycle`) ?? [];
+  for (const r of rules.filter(on)) {
     if (r.deleteObjectsTransition)
       err(`${name}: オブジェクトを消す lifecycle ルールがある (${r.id})。restic の pack が消える`);
     if (r.storageClassTransitions?.length)
       err(`${name}: ストレージクラスを移す lifecycle ルールがある (${r.id})`);
   }
-  const abort = rules.some((r) => r.enabled !== false && r.abortMultipartUploadsTransition);
+  const abort = rules.some((r) => on(r) && r.abortMultipartUploadsTransition);
   if (want.requireAbortMultipart && !abort)
     err(`${name}: マルチパートの残骸を消すルールが無い`);
 
-  const locks = (need(cf("r2", "buckets", "locks", "get", name), "rules", isArr, `${name} locks`) ?? []).filter(
-    (r) => r.enabled !== false,
-  );
+  const locks = (need(cf("r2", "buckets", "locks", "get", name), "rules", isArr<Rule>, `${name} locks`) ?? []).filter(on);
   if (locks.length) err(`${name}: バケットロックがある (${locks.map((r) => r.id).join(", ")})。prune が消せなくなる`);
 
   const managed = cf("r2", "buckets", "domains", "managed", "list", "--bucket-name", name);
-  if (need(managed, "enabled", isBool, `${name} r2.dev`)) err(`${name}: r2.dev で公開されている (${managed.domain})`);
+  const exposed = need(managed, "enabled", isBool, `${name} r2.dev`);
+  if (exposed) err(`${name}: r2.dev で公開されている (${String(managed.domain)})`);
   const custom =
-    need(cf("r2", "buckets", "domains", "custom", "list", "--bucket-name", name), "domains", isArr, `${name} custom domains`) ?? [];
+    need(
+      cf("r2", "buckets", "domains", "custom", "list", "--bucket-name", name),
+      "domains",
+      isArr<CustomDomain>,
+      `${name} custom domains`,
+    ) ?? [];
   if (custom.length) err(`${name}: カスタムドメインが付いている (${custom.map((d) => d.domain).join(", ")})`);
 
   summary.push(
-    `| ${name} | ${loc} / ${cls} | ${rules.length} 本 (${rules.map((r) => r.id).join(", ") || "なし"}) | ${locks.length} | ${managed.enabled ? "**公開**" : "非公開"} |`,
+    `| ${name} | ${loc} / ${cls} | ${rules.length} 本 (${rules.map((r) => r.id).join(", ") || "なし"}) | ${locks.length} | ${exposed ? "**公開**" : "非公開"} |`,
   );
 }
 
@@ -117,11 +157,13 @@ for (const [name, want] of Object.entries(BUCKETS)) {
 // (ROADMAP Phase 3「移行して 1〜2 か月してから R2 の容量をもう一度見る」の材料)。
 let size = "取れなかった";
 try {
-  const m = cf("r2", "buckets", "metrics", "list");
-  const gib = (c) => ((c?.published?.payloadSize ?? 0) + (c?.published?.metadataSize ?? 0)) / 2 ** 30;
+  const m = cf("r2", "buckets", "metrics", "list") as { standard?: StorageMetrics; infrequentAccess?: StorageMetrics };
+  const gib = (c?: StorageMetrics): number =>
+    ((c?.published?.payloadSize ?? 0) + (c?.published?.metadataSize ?? 0)) / 2 ** 30;
   size = `Standard ${gib(m.standard).toFixed(2)} GiB / IA ${gib(m.infrequentAccess).toFixed(2)} GiB`;
 } catch (e) {
-  console.log(GHA ? `::warning::${e.message.split("\n")[0]}` : e.message);
+  const msg = (e as Error).message;
+  console.log(GHA ? `::warning::${msg.split("\n")[0]}` : msg);
 }
 console.log(`容量(アカウント全体): ${size}`);
 

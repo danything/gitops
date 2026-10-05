@@ -4,5 +4,5 @@ talos/secrets.plain.yaml
 # (talos/README.md「ghcr.io の資格情報」)。書きかけの平文はこの名前に逃がす。
 talos/registries.plain.yaml
 
-# r2/drift.mjs の道具(package-lock.json で固定してある)
+# r2/drift.ts の道具(package-lock.json で固定してある)
 r2/node_modules/
