@@ -70,6 +70,11 @@ CI 用のアプリ登録を 2 つに分けてある(R2 の preview / apply と�
 | `gitops pulumi preview (Entra read)` | Microsoft Graph の `Application.Read.All`(読むだけ) | PR、main(週次・手動実行) | リポジトリの Variables `PREVIEW_AZURE_CLIENT_ID` |
 | `gitops pulumi apply (Entra write)` | `Application.ReadWrite.OwnedBy` + **共用のアプリ登録の所有者** | Environment `pulumi-apply` だけ | Environment の Variables `AZURE_CLIENT_ID` |
 
+**フェデレーションの subject は番号入りの形**(`repo:danything@143234231/gitops@1311609465:pull_request` など)。
+このリポジトリは「変わらない subject」(`use_immutable_subject`)を使っていて、組織やリポジトリの名前が変わっても
+信頼が崩れない。`repo:danything/gitops:…` で登録すると `AADSTS700213` で入れない(2026-10-06 に踏んだ)。
+今の形は `gh api repos/danything/gitops/actions/oidc/customization/sub` の `sub_claim_prefix`。
+
 apply 用は「自分が所有者のアプリ登録」しか書けないので、触れるのは共用のアプリ登録(`b0fa498f-…`)1 つだけ。
 テナント ID はリポジトリの Variables `AZURE_TENANT_ID`。
 
