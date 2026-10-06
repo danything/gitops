@@ -63,7 +63,7 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 ## Cloudflare の通知
 
 [notifications.ts](notifications.ts)。証明書・DDoS・オリジン不達・不正利用の報告・Security Insights を、Matrix の
-`notify-server`(hookshot の受け口 `cloudflare`)に流す。送り先の URL は hookshot の ID を含むので Actions secrets の
+部屋 `server`(スペース「通知」。hookshot の受け口 `cloudflare`)に流す。送り先の URL は hookshot の ID を含むので Actions secrets の
 `CLOUDFLARE_NOTIFY_WEBHOOK_URL`(Infisical `/matrix/matrix` の `hook-cloudflare` から作る)。トークンの Notifications の
 権限は 2026-10-07 に足した。
 

@@ -1,4 +1,4 @@
-// Cloudflare の通知を Matrix の notify-server に流す(hookshot の汎用の受け口 `cloudflare`。apps/matrix/hookshot.yaml)。
+// Cloudflare の通知を Matrix の部屋 server(スペース「通知」)に流す(hookshot の汎用の受け口 `cloudflare`。apps/matrix/hookshot.yaml)。
 //
 // 受け口の URL は ID を含むので git に置かない。CI は secrets の CLOUDFLARE_NOTIFY_WEBHOOK_URL から渡す
 // (値は Infisical /matrix/matrix の hook-cloudflare から作った https://m.doany.io/webhook/<ID>)。
@@ -14,7 +14,7 @@ if (!url) throw new Error("CLOUDFLARE_NOTIFY_WEBHOOK_URL が要る");
 
 const matrix = new cloudflare.NotificationPolicyWebhooks("matrix-notify-server", {
   accountId,
-  name: "Matrix notify-server (hookshot)",
+  name: "Matrix server (hookshot)",
   url: pulumi.secret(url),
 });
 
