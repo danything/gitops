@@ -169,6 +169,8 @@ data:
         state:
           name: GitHub
           transformationFunction: &github |
+            // **組織の webhook の events を増やすときは、このスクリプトも見直す**(最後の分岐は action だけで
+            // 「リポジトリの作成」と見ているので、discussion などの created が紛れ込む)。
             // GitHub の組織の webhook。hookshot の GitHub 連携(下の github.repository)が流さないものだけを拾う:
             // issue と PR へのコメント、リポジトリの作成と削除(作られたら下の接続に足す合図)。ヘッダーの種類は来ないので中身で見分ける
             const repo = data.repository ? `[${data.repository.full_name}](${data.repository.html_url})` : "";

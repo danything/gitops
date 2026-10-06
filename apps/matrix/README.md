@@ -53,8 +53,9 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 - **暗号化していない。** hookshot は暗号化したルームに書けない。暗号化を後から入れると戻せないので、入れないこと
 - webhook は [hookshot.yaml](hookshot.yaml) の `connections`。URL は `https://m.doany.io/webhook/<ID>` で、ID は
   Infisical `/matrix/matrix` の `hook-<部屋>`(公開のリポジトリなので git に置かない)
-- スマホに通知が来るのは worklog・denpa・github だけ(m.text で投稿する)。ほかは m.notice で、Element の既定では
-  未読が付くだけで通知されない(Mattermost のときと同じ分け方)
+- スマホに通知が来るのは worklog・denpa と、github のコメントだけ(m.text で投稿する)。ほかは m.notice で、Element の
+  既定では未読が付くだけで通知されない。github の issue・PR・push などは hookshot の GitHub 連携が m.notice で流す
+  (下の「GitHub 連携」)
 
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |
@@ -66,15 +67,18 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | `notify-worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
 | `notify-denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
 | `notify-forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
-| `notify-github` | GitHub | GitHub の組織 `danything` の webhook |
+| `notify-github` | GitHub | **主は hookshot の GitHub 連携**(下の「GitHub 連携」)。コメントとリポジトリの作成・削除だけ GitHub の組織 `danything` の webhook |
 
 足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
 `connections` と render の env に足す。
 
 ## GitHub 連携(hookshot)
 
-hookshot の GitHub 連携を使う。`notify-github`(組織の webhook を変換して流すだけ)と違って、
-**リポジトリごとにルームへつなぎ、通知の種類を選び、ルームから issue を作ったりできる**。
+hookshot の GitHub 連携を使う。組織の webhook を変換して流すだけのやり方と違って、
+**リポジトリをルームへつなぎ、通知の種類を選び、ルームから issue を作ったりできる**。
+**組織をまとめて 1 つのルームにつなぐ手段は無い**(2026-10-06 に 7.5.0 のソースで確認。接続の種類は
+`src/Connections/` にあり、GitHub の通知の行き先は `getConnectionsForGithubRepo` が org と repo の完全一致で選ぶ。
+`GithubUserSpace` は組織の Matrix の space を作るもので、中はリポジトリごとのルーム)。
 GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` としてルームに出る。
 
 **GitHub App `doa-hookshot`**(App ID 5211519、組織 `danything`)。2026-10-06 にマニフェストから作った
