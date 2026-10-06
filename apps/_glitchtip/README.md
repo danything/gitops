@@ -14,15 +14,15 @@ MIT。上流: <https://gitlab.com/glitchtip/glitchtip-backend>
 
 ## 動かしていない(2026-10-06)
 
-**このディレクトリは Argo CD が見ていない。** gitops の Application が同期するのは `apps/` 以下だけ
-([deploy/argocd.yaml](../../deploy/argocd.yaml) の `sourcePath: apps`)で、ここは `parked/` の下なので何も当たらない。
+**このディレクトリは Argo CD が同期しない。** 名前が `_` で始まるディレクトリは、ApplicationSet の
+`directory.exclude` で外している ([bootstrap/argocd/repos.yaml](../../bootstrap/argocd/repos.yaml))。
 用意はしたが当面は要らなくなったので、設定ごと寝かせてある。Namespace・InfisicalSecret・HTTPRoute・
 k8up の Schedule も全部この中にあり、クラスタには何も作られない(`gt.doany.io` は空いたまま)。
 
 **動かすときは、下の「使い始め」の 1 と 2(Infisical と Entra)を済ませてから、このディレクトリを `apps/` に戻すだけ。**
 
 ```shell
-git mv parked/glitchtip apps/glitchtip
+git mv apps/_glitchtip apps/glitchtip
 ```
 
 戻したら、ルートの [README.md](../../README.md) のアプリの表に載せ直す。Schedule は
