@@ -46,7 +46,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 ## 通知のルーム
 
-`notify-*` の 8 つ(2026-10-06 に作った)。Zulip のメッセージは持ってきていない(ほとんどが bot の通知のため)。
+`notify-*` の 7 つ(2026-10-06 に 8 つ作り、`notify-github` は 2026-10-07 に畳んだ)。Zulip のメッセージは持ってきていない(ほとんどが bot の通知のため)。
 
 - 作ったのは hookshot(`@hookshot:doany.io`)。`@info:doany.io` も作成者(room version 12 の `additional_creators`)
   なので、権限は最上位で外されない
@@ -68,7 +68,6 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | `notify-worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
 | `notify-denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
 | `notify-forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
-| `notify-github` | (使っていない) | **GitHub の通知は GitHub のアプリで受ける**(2026-10-07)。ルームは残っているが何も流れない |
 
 足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
 `connections` と render の env に足す。
@@ -109,6 +108,7 @@ GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` と
 **GitHub の通知は Matrix に流さない**(2026-10-07)。hookshot の連携で `notify-github` に流してみたが、1 本の流れに
 なってスレッドにもできず読みにくかったので、GitHub のアプリ(issue や PR ごとにまとまり、その場で返信や承認ができる)
 に寄せた。danything と 5ym のリポジトリは Watch にしてある(5ym のフォークは参加しているものだけ)。
+`notify-github` のルームは畳んだ(hookshot が抜け、本人が退出)。
 連携そのもの(App とログイン)は残してあり、ルームで `!hookshot github repo` を打てば、そのリポジトリだけまた流せる。
 **設定ファイルの固定の接続には書けない**(`ConfigError: … does not support static configuration`。2026-10-06 に
 書いて hookshot が起動しなくなった)。
