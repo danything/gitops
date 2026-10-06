@@ -68,7 +68,7 @@ spec:
         - name: data
           emptyDir: {}
 ---
-# memcached。Zulip は SASL で認証する。ユーザー名は application.yaml の SETTING_MEMCACHED_USERNAME と揃える
+# memcached。Zulip は SASL で認証する。ユーザー名は application.yaml の externalMemcached.user と揃える
 apiVersion: v1
 kind: Service
 metadata:

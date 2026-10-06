@@ -58,7 +58,24 @@ kubectl -n zulip exec zulip-0 -c zulip -- bash -euc '
 # 自分をオーナーに(取り込んだ組織では誰もオーナーになっていないことがある)
 kubectl -n zulip exec zulip-0 -c zulip -- runuser -u zulip -- \
   /home/zulip/deployments/current/manage.py change_user_role -r '' info@doany.io owner
+
+# 最初のチャンネルを Zulip の既定に揃える(Town Square → general、Off-Topic → sandbox、Zulip を作る)
+kubectl -n zulip exec -i zulip-0 -c zulip -- runuser -u zulip -- \
+  /home/zulip/deployments/current/manage.py shell < apps/zulip/post-import.py
 ```
+
+**最初のチャンネルは Mattermost に従わず、Zulip の既定に揃える**(本人、2026-10-05)。Mattermost の
+Town Square と Off-Topic は投稿が参加の 1 件ずつしかなかった(中身は `notify-*` にある)。
+[post-import.py](post-import.py) が次のようにする(何度流しても同じ結果になる)。
+
+| Zulip | 役目 | 元 |
+| --- | --- | --- |
+| `general` | 組織全体の会話。新しいチャンネルと Zulip の更新のお知らせもここ | Town Square |
+| `sandbox` | 試し書き | Off-Topic |
+| `Zulip` | Zulip の使い方の質問と話し合い | 新しく作る |
+
+名前は英語のまま(Zulip の日本語訳でも名前は訳さない)、説明は Zulip の日本語訳の文。3 つとも新しく入った人が
+自動で参加するチャンネルにする。`notify-*` はそのまま移る。
 
 - チャンネル → ストリーム、DM → DM、リアクション・添付・カスタム絵文字は移る
 - **ユーザーはメールアドレスで Entra に結びつく。** 取り込んだ人は Entra で入ればそのまま自分のアカウント。
