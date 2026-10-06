@@ -5,7 +5,7 @@ Matrix のサーバー一式(`m.doany.io`)。**Zulip からの移行先**(2026-1
 | 名前 | 何か | ここで動くか |
 | --- | --- | --- |
 | Matrix | チャットのプロトコル(メールでいう SMTP) | ─ |
-| **Element** | 使うアプリ。スマホは **Element X**、PC は Element Desktop か https://app.element.io | 動かさない(公式のアプリ) |
+| **Element** | 使うアプリ。スマホは **Element X**、PC は Element Desktop か **https://e.doany.io** | Web 版だけ動かす([element-web.yaml](element-web.yaml))|
 | **Tuwunel** | Matrix のサーバー([tuwunel.yaml](tuwunel.yaml))。DB(RocksDB)も中にある | 動かす |
 | **hookshot** | 外からの通知をルームに流す([hookshot.yaml](hookshot.yaml)) | 動かす |
 
@@ -14,7 +14,10 @@ Matrix のサーバー一式(`m.doany.io`)。**Zulip からの移行先**(2026-1
 - **サーバーは Tuwunel 1 つ。** Tuwunel は自前の OAuth/OIDC サーバーを持ち、ログインを Entra に回せる。
   スマホの Element X は「OAuth か パスワード」しか受け付けない(legacy SSO を使わない。element-x-android の
   `LoginModePresenter.kt`)ので、Synapse だと MAS と Postgres が別に要る
-- **Element は自分で立てない。** 公式のアプリと app.element.io をそのまま使う
+- **Element Web だけ自分で立てる**(`e.doany.io`)。サーバーを doany.io に決め打ちにし、外のサービス
+  (統合マネージャー、利用統計など)を切ってある。中身は静的なファイルなので軽い。スマホと PC は公式のアプリ
+- **サーバー(`m.doany.io`)は隠せない。** Element Web はブラウザの中で動き、ブラウザが直接サーバーと話す。
+  スマホのアプリと外からの webhook も同じ。Web とサーバーのドメインを分けているのは、一緒にする利点が薄いため
 - **フェデレーションは無し。** 家の中だけで使う
 
 ## 承知していること

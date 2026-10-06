@@ -1,0 +1,111 @@
+# Element Web(ブラウザで使う Matrix のアプリ。https://github.com/element-hq/element-web)。e.doany.io。
+#
+# 中身は静的なファイルだけ(nginx が配る)。ブラウザに読み込まれたあとは、ブラウザが直接
+# m.doany.io(Tuwunel)と話す。ここを通るのはページの読み込みだけ。
+#
+# app.element.io との違いは、サーバーを doany.io に決め打ちにして、外のサービス
+# (統合マネージャー、地図、利用統計、不具合の報告)を全部切ってあること。
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: element-web
+  namespace: matrix
+data:
+  # 項目は element-web の docs/config.md
+  config.json: |
+    {
+      "default_server_config": {
+        "m.homeserver": {
+          "base_url": "https://m.doany.io",
+          "server_name": "doany.io"
+        }
+      },
+      "disable_custom_urls": true,
+      "disable_guests": true,
+      "disable_3pid_login": true,
+      "brand": "Element",
+      "default_country_code": "JP",
+      "room_directory": {
+        "servers": ["doany.io"]
+      },
+      "sso_redirect_options": {
+        "on_welcome_page": true
+      },
+      "integrations_ui_url": null,
+      "integrations_rest_url": null,
+      "integrations_widgets_urls": null,
+      "show_labs_settings": false,
+      "setting_defaults": {
+        "UIFeature.registration": false,
+        "UIFeature.passwordReset": false,
+        "UIFeature.identityServer": false,
+        "UIFeature.thirdPartyId": false,
+        "UIFeature.feedback": false
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: element-web
+  namespace: matrix
+spec:
+  selector:
+    app: element-web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: element-web
+  namespace: matrix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: element-web
+  template:
+    metadata:
+      labels:
+        app: element-web
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: element-web
+          image: vectorim/element-web:v1.12.30
+          env:
+            # イメージは root でない nginx で動くので、80 ではなく 8080 で待つ(docs/install.md)
+            - name: ELEMENT_WEB_PORT
+              value: "8080"
+          ports:
+            - containerPort: 8080
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet:
+              path: /config.json
+              port: 8080
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            # subPath なので ConfigMap を変えても自動では反映されない。変えたら Pod を作り直す
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: element-web
