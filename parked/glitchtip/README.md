@@ -1,7 +1,7 @@
 # GlitchTip(gt.doany.io)
 
 エラー収集。Sentry 互換で、Sentry の SDK(Android・JavaScript ほか)がそのまま送れる。
-denpa-tv(Android TV)のクラッシュと例外を受けるために置いた(2026-10-06)。denpa の Web からも送れる。
+denpa-tv(Android TV)のクラッシュと例外を受けるために用意した(2026-10-06)。denpa の Web からも送れる。
 MIT。上流: <https://gitlab.com/glitchtip/glitchtip-backend>
 
 | ファイル | 中身 |
@@ -10,8 +10,24 @@ MIT。上流: <https://gitlab.com/glitchtip/glitchtip-backend>
 | [postgres.yaml](postgres.yaml) | DB(イベントもここ)。rybbit と同じ 17 系、`pg_dump` を k8up に |
 | [glitchtip-secrets.yaml](glitchtip-secrets.yaml) | Infisical `/glitchtip/glitchtip` の 4 キー → Secret `glitchtip` |
 | [httproute.yaml](httproute.yaml) | `gt.doany.io`。SSO の前段は置かない(取り込みはアプリが直接叩くため。理由はファイルに) |
+| [k8up-schedule.yaml](k8up-schedule.yaml) | バックアップ(PostgreSQL は `pg_dump`、アップロードの PVC はファイルとして)。毎日 14:00 UTC、prune は月曜 00:00 UTC |
 
-バックアップは [../k8up/schedules.yaml](../k8up/schedules.yaml) の `glitchtip`(PostgreSQL は `pg_dump`、アップロードの PVC はファイルとして)。
+## 動かしていない(2026-10-06)
+
+**このディレクトリは Argo CD が見ていない。** gitops の Application が同期するのは `apps/` 以下だけ
+([deploy/argocd.yaml](../../deploy/argocd.yaml) の `sourcePath: apps`)で、ここは `parked/` の下なので何も当たらない。
+用意はしたが当面は要らなくなったので、設定ごと寝かせてある。Namespace・InfisicalSecret・HTTPRoute・
+k8up の Schedule も全部この中にあり、クラスタには何も作られない(`gt.doany.io` は空いたまま)。
+
+**動かすときは、下の「使い始め」の 1 と 2(Infisical と Entra)を済ませてから、このディレクトリを `apps/` に戻すだけ。**
+
+```shell
+git mv parked/glitchtip apps/glitchtip
+```
+
+戻したら、ルートの [README.md](../../README.md) のアプリの表に載せ直す。Schedule は
+[k8up-schedule.yaml](k8up-schedule.yaml) のままでも当たる(ほかのアプリに揃えて `apps/k8up/schedules.yaml` に移すのは任意)。
+寝かせているあいだも Renovate はイメージの版を上げに来る(`**/*.yaml` を見ている)。
 
 ## 使い始め
 
@@ -23,7 +39,7 @@ MIT。上流: <https://gitlab.com/glitchtip/glitchtip-backend>
    - `email-password` ── `/mattermost/mattermost` の `smtp-password` と同じ参照
 2. **Entra のアプリ登録 Main のリダイレクト URI(Web)に `https://gt.doany.io/accounts/oidc/entra/login/callback/` を足す**
    (末尾の `/` まで完全一致)
-3. main にマージ → ArgoCD が同期。初回は initContainer の `setup` がテーブルを作り、
+3. このディレクトリを `apps/` に戻す PR を main にマージ → ArgoCD が同期。初回は initContainer の `setup` がテーブルを作り、
    **管理者 `info@doany.io` を作る**(パスワードは使えない値)。ログに「最初の管理者を作った」と出る。
    ユーザーが 1 人もいない間は登録が開いてしまう作りなので、公開と同時に埋めている
 4. **パスワードを決める。** <https://gt.doany.io> のログイン画面 →「Forgot password」→ `info@doany.io`。

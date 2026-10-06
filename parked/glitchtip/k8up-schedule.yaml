@@ -1,0 +1,29 @@
+# k8up の Schedule。ほかのアプリは apps/k8up/schedules.yaml に 1 か所でまとめてあるが、GlitchTip は
+# **動かしていない**(README「動かしていない」)ので、このディレクトリに一緒に置いて寝かせてある。
+# apps/ に戻せばこれも一緒に当たる。namespace glitchtip が無いうちに Schedule だけ当てると
+# 同期が落ちるので、apps/k8up/schedules.yaml には入れていない(戻したあとで移すのは任意)。
+#
+# glitchtip(gt.doany.io)。DB は postgres の backupcommand(pg_dump)、ソースマップ等は PVC glitchtip-uploads をファイルとして。
+# 14:15 / 14:30 / 14:45 は埋まっているので 14:00。prune は日曜の 23:00(check)〜23:45 が埋まっているので
+# 日付をまたいだ月曜 00:00 UTC(バックアップの枠からもホストのスクリプト 19:00 UTC からも離れている)
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: glitchtip
+  namespace: glitchtip
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  backup:
+    schedule: "0 14 * * *"
+    tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    failedJobsHistoryLimit: 2
+    successfulJobsHistoryLimit: 1
+  prune:
+    schedule: "0 0 * * 1"
+    retention:
+      keepDaily: 7
+      keepWeekly: 4
+      keepMonthly: 6
+      tags: [k8up]

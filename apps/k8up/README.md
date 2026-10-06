@@ -185,8 +185,8 @@ sudo k3s kubectl -n k8up logs -f job/k8up-retire
 
 ## 何をどう取っているか
 
-`Schedule` は [schedules.yaml](schedules.yaml) に 17 本まとめてある(時刻と決まりごともあちら)。
-16 本が namespace ごとの backup + prune で、**残り 1 本はリポジトリ全体の `check`**。
+`Schedule` は [schedules.yaml](schedules.yaml) に 14 本まとめてある(時刻と決まりごともあちら)。
+13 本が namespace ごとの backup + prune で、**残り 1 本はリポジトリ全体の `check`**。
 **注釈だけでは動かない** ── その namespace に `Schedule` が無いとジョブが作られない。
 **取る中身を決めているのは Pod 側の注釈**で、それがどこにあるかがここ。
 
@@ -195,7 +195,6 @@ sudo k3s kubectl -n k8up logs -f job/k8up-retire
 | mattermost | postgres の `pg_dump` | [../mattermost/postgres.yaml](../mattermost/postgres.yaml) |
 | forgejo | postgres の `pg_dump` + リポジトリの PVC(ファイル) | [../forgejo/postgres.yaml](../forgejo/postgres.yaml) |
 | rybbit | postgres の `pg_dump` + ClickHouse の PVC(ファイル。パートは追記だけなので動いたまま取る) | [../rybbit/postgres.yaml](../rybbit/postgres.yaml) / [../rybbit/clickhouse.yaml](../rybbit/clickhouse.yaml) |
-| glitchtip | postgres の `pg_dump` + アップロード(ソースマップ等)の PVC(ファイル) | [../glitchtip/postgres.yaml](../glitchtip/postgres.yaml) |
 | erpnext | mariadb の `mariadb-dump` | 上流 chart の `worker.gunicorn.podAnnotations`([application.yaml](../erpnext/application.yaml)) |
 | infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
 | lgtm / xool / worklog / denpa / blog / todoroku | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |

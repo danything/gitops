@@ -21,6 +21,7 @@ CI を待たずに走りはじめる**のはこのため。CI の `bootstrap-app
 | | |
 | --- | --- |
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト |
+| [`parked/`](parked/) | 用意したが動かしていないアプリ。**Argo CD は見ない**(`apps/` の外)。動かすときは `apps/` へ `git mv` |
 | [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある。例外は `argocd/repos.yaml` だけ ── 上の「仕組み」)。**main へのマージで GitHub Actions が当てる**(SOPS 済みの 4 ファイルと `cilium/` だけ手で) |
 | [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST |
 | [`pulumi/`](pulumi/) | Cloudflare の設定を Pulumi で持つ(いまは R2 の `doany-restic` だけ)。**PR で差分がコメントされ、main に入ると当たる** |
@@ -82,7 +83,13 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`infisical/`](apps/infisical/) [`infisical-operator/`](apps/infisical-operator/) [`infisical-push-bridge/`](apps/infisical-push-bridge/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジ |
 | [`headlamp/`](apps/headlamp/) | Kubernetes の Web UI(`h.doany.io`、Portainer の置き換え)。認証は Entra、権限は `bootstrap/apiserver/` |
 | [`rybbit/`](apps/rybbit/) | Rybbit(`rt.doany.io`、アクセス解析。クッキー無し)+ ClickHouse + PostgreSQL + Redis。トドロクの離脱をファネル・ジャーニー・セッションリプレイで見る。**使い始めは [apps/rybbit/README.md](apps/rybbit/README.md)** |
-| [`glitchtip/`](apps/glitchtip/) | GlitchTip(`gt.doany.io`、Sentry 互換のエラー収集)+ PostgreSQL。denpa-tv(Android TV)のクラッシュを受ける。**使い始めは [apps/glitchtip/README.md](apps/glitchtip/README.md)** |
+
+**動かしていないもの**は [`parked/`](parked/) に置いてある。Argo CD が同期するのは `apps/` 以下だけなので、
+ここに置いたものはクラスタに何も作らない。動かすときは `git mv parked/<name> apps/<name>`。
+
+| ディレクトリ | 内容 |
+| --- | --- |
+| [`glitchtip/`](parked/glitchtip/) | GlitchTip(Sentry 互換のエラー収集)+ PostgreSQL。`gt.doany.io` の予定。**動かす手順は [parked/glitchtip/README.md](parked/glitchtip/README.md)** |
 
 **アプリの多くはこのリポジトリに無い。** 各アプリのリポジトリの `deploy/` に置いてあり、
 `bootstrap/argocd/repos.yaml` の ApplicationSet が拾う(上の「仕組み」)。
