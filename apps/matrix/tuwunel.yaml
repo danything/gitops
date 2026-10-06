@@ -39,9 +39,9 @@ data:
     # フェデレーションしないので鍵の取得先も要らない
     trusted_servers = []
 
-    # Element X(Android)と app.element.io は、ログインのときの「このアプリを許可しますか」を出さない。
-    # iOS のリダイレクト先は未確認なので、iOS では一度だけ許可の画面が出る
-    oidc_registration_allowed_redirect_hosts = ["element.io", "io.element.android"]
+    # Element X(Android)、e.doany.io(自前の Element Web)、app.element.io は、ログインのときの
+    # 「このアプリを許可しますか」を出さない。iOS のリダイレクト先は未確認なので、iOS では一度だけ許可の画面が出る
+    oidc_registration_allowed_redirect_hosts = ["e.doany.io", "element.io", "io.element.android"]
 
     [global.storage_provider.media.local]
     base_path = "/var/lib/tuwunel/media"

@@ -58,7 +58,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
-`h`(headlamp)・`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)・`z`(zulip)・`m`(matrix)は 1 文字で置いてある。
+`h`(headlamp)・`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)・`z`(zulip)・`m`(matrix)・`e`(element)は 1 文字で置いてある。
 新しく足すときは上の規則で 2 文字にする(1 文字はもう埋まっているものが多い)。
 headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble の 1 語読みでも `hl` に
 なってぶつかるため。

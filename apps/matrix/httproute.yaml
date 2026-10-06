@@ -1,6 +1,7 @@
 # 公開経路。m.doany.io は社内用なので Cloudflare を通さない(ExternalDNS の注釈を付けない。
 # ワイルドカードで直接つながる。docs/decisions.md「DNS:直接つなぐアプリと…」)。
 #
+#   e.doany.io/*                → Element Web(ブラウザのアプリ)
 #   m.doany.io/webhook/*        → hookshot(通知の受け口)
 #   m.doany.io/*                → Tuwunel(Matrix のクライアント API、OAuth、メディア)
 #   doany.io/.well-known/matrix/* → Tuwunel(ID を @…:doany.io にするための案内。doany.io 自体はブログ)
@@ -56,3 +57,20 @@ spec:
       backendRefs:
         - name: tuwunel
           port: 8008
+---
+# Element Web(ブラウザのアプリ)。静的なファイルを配るだけ。社内用なので m.doany.io と同じく直接つなぐ
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: element-web
+  namespace: matrix
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["e.doany.io"]
+  rules:
+    - backendRefs:
+        - name: element-web
+          port: 8080
