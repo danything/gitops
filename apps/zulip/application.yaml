@@ -35,12 +35,14 @@ spec:
         statefulSetAnnotations:
           secrets.infisical.com/auto-reload: "true"
 
+        # 上限は取り込み(manage.py import)で決めた。Mattermost の 3 万件の取り込みが 3Gi を超えて
+        # OOMKilled になった(2026-10-06)。ふだんは 1Gi 前後で、上限に余裕を持たせているだけ
         resources:
           requests:
             cpu: 100m
             memory: 1Gi
           limits:
-            memory: 3Gi
+            memory: 6Gi
 
         zulip:
           persistence:
