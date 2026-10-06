@@ -63,7 +63,10 @@ spec:
             # true by default; anything applied out-of-band gets wiped the next time
             # the HelmChart is reconciled.
             notifiers:
-                service.webhook.mattermost: ENC[AES256_GCM,data:93dnAn7chgMKEVWRCdxM5tSB9EtDLhvaToJXWYantixZCocXLGTf8N22YOzRVU2qBAkacpMgDPM7Z/Fvh31QHWdQv8JHIejEEiXOYXIF98YsItXaZvX4TqnH2uN6i/j4xWR1ZIIFq6LDyeD+4ZwNv5p19kT/Gg==,iv:YyUcoTJo09wZ7ADWcazKWCgerZYQGFbn/CCUvktqPgY=,tag:CDn8CRXAeK7li9PL/shb4g==,type:str]
+                # 送り先は Zulip(2026-10-06 に Mattermost から移した)。名前は mattermost のまま ──
+                # テンプレートと subscriptions が参照していて、.sops.yaml の encrypted_regex もこの名前で暗号化している。
+                # 送るのは {"text": …} なので、Zulip の Slack 互換の受け口(slack_incoming)でそのまま読める
+                service.webhook.mattermost: ENC[AES256_GCM,data:zuK99czoKo9tfdo4/3KHaaqDW1daP6BTRhGMg8a3Pda+AWAamtGgQq0HwQSzEs8diFhnY5wrQALHuKgZak8io/7rOltdSaItwY1FwCcYziI/sCfKKS66UUo/uKaxYMIpK57qVB13/Qy2ZWd+x4Q7zThM0VYfEqGLMVwIDOl3ILge2iwIpKX2lmHJqmRDQ5N9/3ATcVf3F7aqw0OYNgOs0TbK241N77P35Mh4djrB7X+pELuhVXQl4R5Nqqgn9w==,iv:+PPwuQcV4lw8je2N3qUDTdx+W2pLgVnrpomCFvZhP2c=,tag:7QnC69rQwqHy+/SnuGAH9Q==,type:str]
             templates:
                 # Succeeded is back: Progressing -> Healthy flips too fast to read as a
                 # "deploy complete" signal, so sync-result gives that its own clear ping.
@@ -174,6 +177,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-09-08T07:43:10Z"
-    mac: ENC[AES256_GCM,data:nU0GzeDrdHFNdeQVAu3KyKHna3dyf/2EbXWXQVSeoWb5T3ggxgMPp2/UvmcncAaH4BkZr8+XAinPRiJBHgBd/wdmXzLRkIinESj58yoPY7DdW0DjGguEohZJH68Z2FMYIVrvwaCiS5WzpMe+FTGW/k5fW5kw5WWrs87SZbhc9DM=,iv:pua6ys42jRChiB5cnSeKMk7C4mBfy+3vmGyVYaKX79s=,tag:iCZoXdzRzta2aeTLWlR2zw==,type:str]
+    lastmodified: "2026-10-06T10:35:24Z"
+    mac: ENC[AES256_GCM,data:W98ILOU9YuvbGtQ82TlqhcswCoz1OCquRK+9MYr77v8mNJVo0jywtu58rf+OualmFyfJcHaEIc614yiNFEE6f21Ud/j6gKndAvu1ba+IsrAeGjiNHUBE2g5qeFKut99NUuee2burWv52aSFFwYylrnoy36otjTEtpWj/gDb790c=,iv:S4452XyXlpKnvKxHqHy3JDNmGuduFnB/DQlera/e0G0=,tag:S0FKy5i+Z/swhu1K+gUCuw==,type:str]
     version: 3.13.3
