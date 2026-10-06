@@ -1,0 +1,75 @@
+# ExternalDNS。**Cloudflare を通すアプリの DNS レコードを、アプリの HTTPRoute から作る**(2026-10-06)。
+#
+# 方針(本人):
+#   - 社内用や通信量が多いアプリは**直接つなぐ**。何もしない ── `*.doany.io` のワイルドカード
+#     (proxied ではない CNAME)で引ける
+#   - SaaS のように外へ出すアプリは **Cloudflare のプロキシを通す**。アプリのリポジトリの HTTPRoute に
+#       external-dns.kubernetes.io/cloudflare-proxied: "true"
+#     を付ける。ExternalDNS がそのホストの proxied の CNAME(→ doany.io)を作る
+#   - **gitops 側には何も書かない**(アプリを足す・消すのはアプリのリポジトリの PR だけで済む)
+#
+# だから「注釈がある = Cloudflare を通す = 明示のレコードを持つ」。注釈の無い HTTPRoute には触れない
+# (annotationFilter)。CNAME の宛先は Gateway の注釈(bootstrap/gateway/ の external-dns.kubernetes.io/target)。
+#
+# **ExternalDNS が触るのは自分で作ったレコードだけ。** 作ったレコードの隣に所有の印の TXT
+# (`_externaldns.<名前>`)を置いて見分ける。メール(MX・SPF・DMARC・autodiscover)、ワイルドカード、
+# DDNS(apps/cloudflare-ddns)が書く apex の A / AAAA は、印が無いので触らない。印は頭に付ける ──
+# Cloudflare は同じ名前に CNAME と TXT を同居させられない。
+#
+# 注釈の接頭辞は v0.22 から `external-dns.kubernetes.io/`(それまでは `external-dns.alpha.kubernetes.io/`)。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+  source:
+    repoURL: https://kubernetes-sigs.github.io/external-dns/
+    chart: external-dns
+    targetRevision: 1.23.0
+    helm:
+      releaseName: external-dns
+      valuesObject:
+        provider:
+          name: cloudflare
+        env:
+          - name: CF_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: external-dns
+                key: cloudflare-api-token
+        # アプリの公開はどれも HTTPRoute(Ingress も Service の LoadBalancer も無い)
+        sources:
+          - gateway-httproute
+        domainFilters:
+          - doany.io
+        # Cloudflare を通すと決めた HTTPRoute だけ(上の方針)
+        annotationFilter: external-dns.kubernetes.io/cloudflare-proxied in (true)
+        # HTTPRoute や注釈を消したら、レコードも消す
+        policy: sync
+        registry: txt
+        # クラスタを作り直しても(Talos への移行など)変えないこと。変えると前のレコードを自分のものと思わなくなる
+        txtOwnerId: doany
+        txtPrefix: _externaldns.
+        # HTTPRoute が変わったらすぐ回す(既定は 1 分ごとの巡回だけ)
+        triggerLoopOnEvent: true
+        interval: 5m
+        # Infisical の値を変えたら入れ替わるように(auto-reload は Deployment 自身の注釈に要る)
+        deploymentAnnotations:
+          secrets.infisical.com/auto-reload: "true"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

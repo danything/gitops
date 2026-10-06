@@ -49,6 +49,10 @@ kind: Gateway
 metadata:
   name: doany
   namespace: kube-system
+  annotations:
+    # ExternalDNS(apps/external-dns/)が作る CNAME の宛先。apex(doany.io)の A / AAAA は DDNS が書く。
+    # これが無いと、ExternalDNS は Gateway の住所(LAN の 10.0.0.2)を宛先にしてしまう
+    external-dns.kubernetes.io/target: doany.io
 spec:
   gatewayClassName: cilium
   listeners:
