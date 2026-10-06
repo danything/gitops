@@ -8,16 +8,9 @@ services:
     network_mode: host
     working_dir: /repo
     environment:
-      - HOME=/home/me
+      # **ログインと鍵はリポジトリの .home/ に置く**(.gitignore 済み)。手元のホームは汚さない
+      - HOME=/repo/.home
       # 手元で設定しているときだけ渡す
       - INFISICAL_PROFILE
     volumes:
       - .:/repo
-      # 各コマンドのログインと鍵。手元の置き場所をそのまま使う(無ければ tools/t が空で作る)
-      - ${HOME}/.config/cloudflare:/home/me/.config/cloudflare
-      - ${HOME}/.config/sops:/home/me/.config/sops:ro
-      - ${HOME}/.infisical:/home/me/.infisical
-      - ${HOME}/infisical-keyring:/home/me/infisical-keyring
-      - ${HOME}/.kube:/home/me/.kube
-      - ${HOME}/.talos:/home/me/.talos
-      - ${HOME}/.pulumi:/home/me/.pulumi

@@ -3,9 +3,9 @@
 # 引数が無ければシェルに入る。Dockerfile を変えたら次の実行で作り直す(変わっていなければキャッシュで一瞬)。
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
-for d in .config/cloudflare .config/sops .infisical infisical-keyring .kube .talos .pulumi; do
-  mkdir -p "$HOME/$d"
-done
+# ログインと鍵の置き場(コンテナの中の HOME)。git には入らない
+mkdir -p "$root/.home"
+chmod 700 "$root/.home"
 HOST_UID=$(id -u) HOST_GID=$(id -g)
 export HOST_UID HOST_GID
 # パイプやリダイレクトのときは TTY を付けない

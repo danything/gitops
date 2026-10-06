@@ -9,3 +9,6 @@ pulumi/node_modules/
 
 # cf(Cloudflare の CLI)が動かした場所に作るキャッシュ
 .cloudflare/
+
+# tools/t のログインと鍵(コンテナの中の HOME。tools/README.md)
+/.home/
