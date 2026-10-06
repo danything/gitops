@@ -94,6 +94,9 @@ GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` と
 ### 使う(Element で)
 
 1. hookshot と DM を始めて `github login` → 出たリンクで GitHub にログイン(誰がつないだかの確認に使う)
+   - **DM を始めたときの最初のメッセージは無視されることがある**(2026-10-06 に踏んだ)。招待の処理と参加の
+     処理が同時に走り、hookshot が DM を管理用のルームとして登録し損ねる(印は残る)。2 回目も返事が無ければ
+     `kubectl -n matrix rollout restart deploy/hookshot`。起動時に印を読み直して直る
 2. つなぎたいルーム(暗号化なし)に `@hookshot:doany.io` を招待し、権限をモデレーター(50)以上にする
 3. ルームで `!hookshot github repo https://github.com/danything/<リポジトリ>`
 4. 通知の種類はルームの設定から(`!gh help` でコマンドの一覧)
