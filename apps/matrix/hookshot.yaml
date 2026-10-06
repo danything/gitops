@@ -51,8 +51,156 @@ data:
         services:
           - service: "*"
             level: admin
-    # 通知のルームごとの webhook。ルームを作ってから足す(apps/matrix/README.md「通知のルーム」)
-    connections: []
+    # 通知のルームごとの webhook。URL は https://m.doany.io/webhook/<stateKey>。
+    # stateKey は推測されない乱数で、Infisical /matrix/matrix の hook-<部屋>(公開のリポジトリなので git に置かない)。
+    # 下の render が ${HOOK_…} を差し替える。送り手は @_webhooks_<name>:doany.io
+    #
+    # スクリプトは 3 種類。slack(Slack 互換の {text, attachments})、slack-loud(同じで m.text。
+    # m.notice は Element の既定でスマホに通知されないので、通知したい部屋だけこちら)、github
+    connections:
+      # notify-server: k8up の通知、ホストのバックアップ(backup/k3s-backup)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_SERVER}
+        roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
+        state:
+          name: server
+          transformationFunction: &slack |
+            // Slack 互換({text, attachments})を Markdown に。<url|名前> をリンクに、:絵文字: を絵文字にする
+            const EMOJI = { tada: "🎉", rotating_light: "🚨", bar_chart: "📊", white_check_mark: "✅", heavy_check_mark: "✔️", x: "❌", warning: "⚠️", fire: "🔥", rocket: "🚀", tv: "📺", movie_camera: "🎥", floppy_disk: "💾", wastebasket: "🗑️", hourglass: "⌛", bell: "🔔", information_source: "ℹ️", red_circle: "🔴", green_circle: "🟢", large_blue_circle: "🔵", sparkles: "✨", wave: "👋", bust_in_silhouette: "👤", moneybag: "💰", credit_card: "💳", email: "📧", lock: "🔒", key: "🔑", inbox_tray: "📥", outbox_tray: "📤", memo: "📝", package: "📦", construction: "🚧", stop_sign: "🛑", zap: "⚡", recycle: "♻️", calendar: "📅", clock3: "🕒", "+1": "👍" };
+            const md = (s) => String(s ?? "")
+              .replace(/<(https?:[^|>]+)\|([^>]+)>/g, "[$2]($1)")
+              .replace(/<(https?:[^>]+)>/g, "$1")
+              .replace(/:([a-z0-9_+-]+):/g, (m, k) => EMOJI[k] ?? m);
+            const parts = [];
+            if (data.text) parts.push(md(data.text));
+            for (const a of data.attachments ?? []) {
+              if (a.pretext) parts.push(md(a.pretext));
+              if (a.title) parts.push(a.title_link ? `**[${a.title}](${a.title_link})**` : `**${md(a.title)}**`);
+              if (a.text) parts.push(md(a.text));
+              const fields = (a.fields ?? []).map((f) => `- **${md(f.title)}**: ${md(f.value)}`);
+              if (fields.length) parts.push(fields.join("\n"));
+              if (!data.text && !a.title && !a.text && a.fallback) parts.push(md(a.fallback));
+            }
+            result = parts.length
+              ? { version: "v2", plain: parts.join("\n\n"), msgtype: "m.notice" }
+              : { version: "v2", empty: true };
+      # notify-argocd: Argo CD の通知(bootstrap/argocd/helmchart.yaml)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_ARGOCD}
+        roomId: "!BeZ3yus1s1E22DPYFauQjZ1AMGT2VkusuLzLk2r1cJk"
+        state:
+          name: argocd
+          transformationFunction: *slack
+      # notify-ashi: ashi
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_ASHI}
+        roomId: "!Ffdb9KuBulsduDwuX3ig_Mm_L58QUBd78rcfGOTWoNs"
+        state:
+          name: ashi
+          transformationFunction: *slack
+      # notify-todoroku: todoroku
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_TODOROKU}
+        roomId: "!6cY5BJsmPL_0_-t2q2E-veifDIO73fz2ABcZErJXkhQ"
+        state:
+          name: todoroku
+          transformationFunction: *slack
+      # notify-worklog: worklog(スマホに通知する)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_WORKLOG}
+        roomId: "!aAFRLm9zquKQuIO3X7L-PkvvWcPg7_dqu5WIgYQNhe0"
+        state:
+          name: worklog
+          transformationFunction: &loud |
+            // slack と同じ。ただし m.text(スマホに通知が来る。m.notice は既定で通知されない)
+            const EMOJI = { tada: "🎉", rotating_light: "🚨", bar_chart: "📊", white_check_mark: "✅", heavy_check_mark: "✔️", x: "❌", warning: "⚠️", fire: "🔥", rocket: "🚀", tv: "📺", movie_camera: "🎥", floppy_disk: "💾", wastebasket: "🗑️", hourglass: "⌛", bell: "🔔", information_source: "ℹ️", red_circle: "🔴", green_circle: "🟢", large_blue_circle: "🔵", sparkles: "✨", wave: "👋", bust_in_silhouette: "👤", moneybag: "💰", credit_card: "💳", email: "📧", lock: "🔒", key: "🔑", inbox_tray: "📥", outbox_tray: "📤", memo: "📝", package: "📦", construction: "🚧", stop_sign: "🛑", zap: "⚡", recycle: "♻️", calendar: "📅", clock3: "🕒", "+1": "👍" };
+            const md = (s) => String(s ?? "")
+              .replace(/<(https?:[^|>]+)\|([^>]+)>/g, "[$2]($1)")
+              .replace(/<(https?:[^>]+)>/g, "$1")
+              .replace(/:([a-z0-9_+-]+):/g, (m, k) => EMOJI[k] ?? m);
+            const parts = [];
+            if (data.text) parts.push(md(data.text));
+            for (const a of data.attachments ?? []) {
+              if (a.pretext) parts.push(md(a.pretext));
+              if (a.title) parts.push(a.title_link ? `**[${a.title}](${a.title_link})**` : `**${md(a.title)}**`);
+              if (a.text) parts.push(md(a.text));
+              const fields = (a.fields ?? []).map((f) => `- **${md(f.title)}**: ${md(f.value)}`);
+              if (fields.length) parts.push(fields.join("\n"));
+              if (!data.text && !a.title && !a.text && a.fallback) parts.push(md(a.fallback));
+            }
+            result = parts.length
+              ? { version: "v2", plain: parts.join("\n\n"), msgtype: "m.text" }
+              : { version: "v2", empty: true };
+      # notify-denpa: denpa(録画の節目。スマホに通知する)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_DENPA}
+        roomId: "!CQd-N3QSuFJdX04nG7hg90kLuVi86uXrxOQXgva1oMs"
+        state:
+          name: denpa
+          transformationFunction: *loud
+      # notify-forgejo: Forgejo の組織 doa の webhook(種類は Slack)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_FORGEJO}
+        roomId: "!46KHKR8zfKiW1lpfzy5QvvoV4y41Hwy9UNmFpStxYHA"
+        state:
+          name: Forgejo
+          transformationFunction: *slack
+      # notify-github: GitHub の組織 danything の webhook(スマホに通知する)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_GITHUB}
+        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
+        state:
+          name: GitHub
+          transformationFunction: &github |
+            // GitHub の webhook(組織)。ヘッダーの種類は来ないので、中身の形で見分ける
+            const repo = data.repository ? `[${data.repository.full_name}](${data.repository.html_url})` : "";
+            const who = data.sender?.login ?? "";
+            const link = (t, u) => `[${String(t).replace(/[\[\]]/g, "")}](${u})`;
+            const branch = (ref) => String(ref ?? "").replace(/^refs\/(heads|tags)\//, "");
+            let out = null;
+            if (data.zen) {
+              out = `🏓 webhook がつながった(${data.hook?.type ?? ""} ${data.hook_id ?? ""})`;
+            } else if (data.workflow_run) {
+              const r = data.workflow_run;
+              if (data.action === "completed") {
+                const ok = r.conclusion === "success";
+                const icon = ok ? "✅" : r.conclusion === "cancelled" || r.conclusion === "skipped" ? "⚪" : "❌";
+                out = `${icon} ${repo} ${link(r.name, r.html_url)}: ${r.conclusion}(${branch(r.head_branch)})`;
+              }
+            } else if (data.review && data.pull_request) {
+              if (data.action === "submitted" && data.review.state !== "commented") {
+                out = `👀 ${repo} ${who} が ${link(`#${data.pull_request.number} ${data.pull_request.title}`, data.review.html_url)} をレビュー: ${data.review.state}`;
+              }
+            } else if (data.comment && data.issue) {
+              if (data.action === "created") {
+                const body = String(data.comment.body ?? "").slice(0, 500);
+                out = `💬 ${repo} ${who} が ${link(`#${data.issue.number} ${data.issue.title}`, data.comment.html_url)} にコメント\n\n> ${body.replace(/\n/g, "\n> ")}`;
+              }
+            } else if (data.pull_request) {
+              const p = data.pull_request;
+              const act = data.action === "closed" ? (p.merged ? "マージ" : "クローズ")
+                : { opened: "作成", reopened: "再オープン", ready_for_review: "レビュー待ち" }[data.action];
+              if (act) out = `🔀 ${repo} ${who} が PR ${link(`#${p.number} ${p.title}`, p.html_url)} を${act}`;
+            } else if (data.issue) {
+              const act = { opened: "作成", closed: "クローズ", reopened: "再オープン" }[data.action];
+              if (act) out = `📝 ${repo} ${who} が issue ${link(`#${data.issue.number} ${data.issue.title}`, data.issue.html_url)} を${act}`;
+            } else if (data.release) {
+              if (data.action === "published") out = `🏷️ ${repo} ${link(data.release.name || data.release.tag_name, data.release.html_url)} をリリース`;
+            } else if (Array.isArray(data.commits)) {
+              if (data.deleted) {
+                out = null; // 削除は delete のイベントで知らせる
+              } else if (data.commits.length) {
+                const lines = data.commits.slice(0, 10).map((c) => `- ${link(c.id.slice(0, 7), c.url)} ${String(c.message).split("\n")[0]}`);
+                if (data.commits.length > 10) lines.push(`- ほか ${data.commits.length - 10} 件`);
+                out = `⬆️ ${repo} ${who} が ${branch(data.ref)} に ${link(`${data.commits.length} 件`, data.compare)} push\n\n${lines.join("\n")}`;
+              }
+            } else if (data.ref_type && data.ref) {
+              const verb = "master_branch" in data ? "作成" : "削除";
+              out = `🌿 ${repo} ${who} が ${data.ref_type === "tag" ? "タグ" : "ブランチ"} ${data.ref} を${verb}`;
+            }
+            result = out
+              ? { version: "v2", plain: out, msgtype: "m.text", hints: { showUrlPreviews: false } }
+              : { version: "v2", empty: true };
   registration.yml.tmpl: |
     id: hookshot
     as_token: ${AS_TOKEN}
@@ -112,6 +260,9 @@ spec:
             - -euc
             - |
               cp /config/config.yml /data/config.yml
+              # webhook の stateKey(HOOK_*)を差し込む。値は 16 進なので sed でそのまま置ける
+              env | grep '^HOOK_' | while IFS='=' read -r k v; do sed -i "s|\${$k}|$v|g" /data/config.yml; done
+              if grep -q '\${HOOK_' /data/config.yml; then echo "差し込めていない HOOK_ がある" >&2; exit 1; fi
               sed -e "s|\${AS_TOKEN}|$AS_TOKEN|" -e "s|\${HS_TOKEN}|$HS_TOKEN|" /config/registration.yml.tmpl > /data/registration.yml
               echo "$PASSKEY_B64" | base64 -d > /data/passkey.pem
               chmod 600 /data/passkey.pem /data/registration.yml
@@ -122,6 +273,22 @@ spec:
               valueFrom: {secretKeyRef: {name: matrix, key: hookshot-hs-token}}
             - name: PASSKEY_B64
               valueFrom: {secretKeyRef: {name: matrix, key: hookshot-passkey-b64}}
+            - name: HOOK_SERVER
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-server}}
+            - name: HOOK_ARGOCD
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-argocd}}
+            - name: HOOK_ASHI
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-ashi}}
+            - name: HOOK_TODOROKU
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-todoroku}}
+            - name: HOOK_WORKLOG
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-worklog}}
+            - name: HOOK_DENPA
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-denpa}}
+            - name: HOOK_FORGEJO
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-forgejo}}
+            - name: HOOK_GITHUB
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-github}}
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
