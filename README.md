@@ -74,8 +74,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`adguardhome/`](apps/adguardhome/) | AdGuard Home (DNS フィルタ) |
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
 | [`external-dns/`](apps/external-dns/) | ExternalDNS。**Cloudflare を通すアプリの DNS を、アプリの HTTPRoute の注釈から作る**(gitops には書かない)。直接つなぐアプリはワイルドカードで引ける |
-| [`livekit/`](apps/livekit/) | LiveKit + lk-jwt-service(`lk.doany.io`)。Matrix の通話(Element Call)の音声と映像の中継。**hostPort 8443(UDP・TCP)をルーターで転送** |
-| [`matrix/`](apps/matrix/) | Matrix のサーバー一式(`m.doany.io`。Web 版の Element は `e.doany.io`、スマホと PC は公式のアプリ)。Tuwunel + hookshot(通知の受け口)。**Zulip からの移行先。使い始めは [apps/matrix/README.md](apps/matrix/README.md)** |
+| [`matrix/`](apps/matrix/) | Matrix のサーバー一式(`m.doany.io`。Web 版の Element は `e.doany.io`、スマホと PC は公式のアプリ)。Tuwunel + hookshot(通知の受け口)+ LiveKit(通話。`lk.doany.io`、hostPort 8443 をルーターで転送)。**Zulip からの移行先。使い始めは [apps/matrix/README.md](apps/matrix/README.md)** |
 | [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |

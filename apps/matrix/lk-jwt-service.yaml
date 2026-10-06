@@ -8,7 +8,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: lk-jwt-service
-  namespace: livekit
+  namespace: matrix
 spec:
   selector:
     app: lk-jwt-service
@@ -21,7 +21,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: lk-jwt-service
-  namespace: livekit
+  namespace: matrix
   annotations:
     secrets.infisical.com/auto-reload: "true"
 spec:
@@ -44,7 +44,7 @@ spec:
             - name: LIVEKIT_KEY
               value: matrix
             - name: LIVEKIT_SECRET
-              valueFrom: {secretKeyRef: {name: livekit, key: livekit-secret}}
+              valueFrom: {secretKeyRef: {name: matrix, key: livekit-secret}}
             - name: LIVEKIT_FULL_ACCESS_HOMESERVERS
               value: doany.io
             - name: LIVEKIT_JWT_BIND

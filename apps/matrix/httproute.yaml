@@ -2,6 +2,7 @@
 # ワイルドカードで直接つながる。docs/decisions.md「DNS:直接つなぐアプリと…」)。
 #
 #   e.doany.io/*                → Element Web(ブラウザのアプリ)
+#   lk.doany.io/*               → LiveKit と lk-jwt-service(通話。下のほう)
 #   m.doany.io/webhook/*        → hookshot(通知の受け口)
 #   m.doany.io/*                → Tuwunel(Matrix のクライアント API、OAuth、メディア)
 #   doany.io/.well-known/matrix/* → Tuwunel(ID を @…:doany.io にするための案内。doany.io 自体はブログ)
@@ -74,3 +75,38 @@ spec:
     - backendRefs:
         - name: element-web
           port: 8080
+---
+# LiveKit(通話。livekit.yaml、lk-jwt-service.yaml)。lk.doany.io
+#
+#   /sfu/get /get_token /delegate_delayed_leave /healthz → lk-jwt-service(トークン)
+#   それ以外                                             → LiveKit(合図の WebSocket)
+#
+# /sfu_webhook(LiveKit → lk-jwt-service)は中だけで足りるので外に出さない。
+# WebSocket は通話のあいだずっとつながるので、Gateway の時間切れ(Envoy の既定は 15 秒)を外す。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: livekit
+  namespace: matrix
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["lk.doany.io"]
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: /sfu/get}
+        - path: {type: PathPrefix, value: /get_token}
+        - path: {type: PathPrefix, value: /delegate_delayed_leave}
+        - path: {type: PathPrefix, value: /healthz}
+      backendRefs:
+        - name: lk-jwt-service
+          port: 8080
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      backendRefs:
+        - name: livekit
+          port: 7880
+      timeouts:
+        request: "0s"
