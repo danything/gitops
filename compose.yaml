@@ -1,0 +1,23 @@
+# 手元の運用のコマンドを Docker で動かす(tools/README.md)。直接ではなく tools/t から使う
+services:
+  tools:
+    build: tools
+    image: doany-gitops-tools
+    # 手元のユーザーのまま(作ったファイルの持ち主が root にならないように)。tools/t が入れる
+    user: "${HOST_UID:?tools/t から動かすこと}:${HOST_GID:?}"
+    # cf のログイン(ブラウザから localhost に戻ってくる)と、kubectl / talosctl の接続のため
+    network_mode: host
+    working_dir: /repo
+    environment:
+      HOME: /home/me
+      INFISICAL_PROFILE: ${INFISICAL_PROFILE:-}
+    volumes:
+      - .:/repo
+      # 各コマンドのログインと鍵。手元の置き場所をそのまま使う(無ければ tools/t が空で作る)
+      - ${HOME}/.config/cloudflare:/home/me/.config/cloudflare
+      - ${HOME}/.config/sops:/home/me/.config/sops:ro
+      - ${HOME}/.infisical:/home/me/.infisical
+      - ${HOME}/infisical-keyring:/home/me/infisical-keyring
+      - ${HOME}/.kube:/home/me/.kube
+      - ${HOME}/.talos:/home/me/.talos
+      - ${HOME}/.pulumi:/home/me/.pulumi

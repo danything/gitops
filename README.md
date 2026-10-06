@@ -26,6 +26,7 @@ CI を待たずに走りはじめる**のはこのため。CI の `bootstrap-app
 | [`pulumi/`](pulumi/) | Cloudflare の設定を Pulumi で持つ(いまは R2 の `doany-restic` だけ)。**PR で差分がコメントされ、main に入ると当たる** |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
 | [`talos/`](talos/) | Talos への移行用 machine config(**v1.14 の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**Talos では `bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
+| [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)は Docker で動かす**。`tools/t <コマンド>`。手元に入れるのは Docker だけ |
 | [`docs/`](docs/) | **[移行当日の手順](docs/migration-day.md)**、[決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos の実機検証](docs/talos.md)、[Entra ID の認可](docs/entra.md) |
 | [`ROADMAP.md`](ROADMAP.md) | 暫定構成から Talos までの道筋と、決定の記録 |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
