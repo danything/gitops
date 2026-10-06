@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "include": ["index.ts", "report.ts"]
+  "include": ["index.ts", "entra.ts", "report.ts"]
 }

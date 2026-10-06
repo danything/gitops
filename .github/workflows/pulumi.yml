@@ -20,6 +20,14 @@
 #   CLOUDFLARE_API_TOKEN / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 #                             R2 の設定の書き込み + doany-pulumi の読み書き
 # AWS_* は state の置き場(R2 の S3 API)のため。値は同じ API トークンから作る(ID と値の sha256)。
+#
+# Entra(pulumi/entra.ts)には**鍵を置かずに**入る。GitHub Actions の OIDC トークンを Entra の
+# ワークロード ID のフェデレーションで受ける(id-token: write が要る)。ID は秘密ではないので Variables:
+#   AZURE_TENANT_ID           リポジトリの Variables
+#   PREVIEW_AZURE_CLIENT_ID   リポジトリの Variables。アプリ登録「gitops pulumi preview (Entra read)」
+#                             (Application.Read.All。PR と main から入れる)
+#   AZURE_CLIENT_ID           Environment `pulumi-apply` の Variables。「gitops pulumi apply (Entra write)」
+#                             (Application.ReadWrite.OwnedBy。所有者になっている共用のアプリ登録しか書けない)
 name: pulumi
 
 on:
@@ -46,6 +54,9 @@ env:
   # cf / Pulumi のテレメトリを切る
   DO_NOT_TRACK: "1"
   PULUMI_SKIP_UPDATE_CHECK: "true"
+  # azuread provider は GitHub Actions の OIDC トークン(ACTIONS_ID_TOKEN_REQUEST_*)を自分で拾う
+  ARM_USE_OIDC: "true"
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
 
 jobs:
   preview:
@@ -60,7 +71,10 @@ jobs:
       contents: read
       # 差分を PR にコメントする
       pull-requests: write
+      # Entra へ OIDC で入る
+      id-token: write
     env:
+      ARM_CLIENT_ID: ${{ vars.PREVIEW_AZURE_CLIENT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.PREVIEW_AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.PREVIEW_AWS_SECRET_ACCESS_KEY }}
@@ -103,7 +117,12 @@ jobs:
     concurrency:
       group: pulumi-up
       cancel-in-progress: false
+    permissions:
+      contents: read
+      # Entra へ OIDC で入る
+      id-token: write
     env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
