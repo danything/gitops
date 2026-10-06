@@ -35,7 +35,7 @@ spec:
       timeouts:
         request: 300s
 ---
-# doany.io(ブログ)のうち /.well-known/matrix だけをこちらへ。パスが長い一致が勝つので、ブログの HTTPRoute
+# doany.io(ブログ)のうち /.well-known/matrix だけをこちらへ。apex は Gateway の別のリスナー(https-apex)。パスが長い一致が勝つので、ブログの HTTPRoute
 # (PathPrefix /)より先に当たる。Tuwunel は Host を見ずに well_known.client を返す
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -46,7 +46,7 @@ spec:
   parentRefs:
     - name: doany
       namespace: kube-system
-      sectionName: https
+      sectionName: https-apex
   hostnames: ["doany.io"]
   rules:
     - matches:
