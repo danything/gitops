@@ -48,7 +48,7 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 
 | どこ | 何 |
 | --- | --- |
-| Actions secrets | `PULUMI_BACKEND_URL` / `PULUMI_CONFIG_PASSPHRASE` / `CLOUDFLARE_ACCOUNT_ID` / `PREVIEW_CLOUDFLARE_API_TOKEN` / `PREVIEW_AWS_ACCESS_KEY_ID` / `PREVIEW_AWS_SECRET_ACCESS_KEY` |
+| Actions secrets | `PULUMI_BACKEND_URL` / `PULUMI_CONFIG_PASSPHRASE` / `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_NOTIFY_WEBHOOK_URL`(notifications.ts の送り先)/ `PREVIEW_CLOUDFLARE_API_TOKEN` / `PREVIEW_AWS_ACCESS_KEY_ID` / `PREVIEW_AWS_SECRET_ACCESS_KEY` |
 | Environment `pulumi-apply` | `CLOUDFLARE_API_TOKEN` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
 | 手元 | パスフレーズの写し `~/.config/doany/pulumi-passphrase` |
 
@@ -57,8 +57,15 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 
 | トークン(Cloudflare での名前) | 権限 |
 | --- | --- |
-| `gitops pulumi preview (R2 read + state)` | Workers R2 Storage Metadata Read(アカウント)+ Bucket Item Write(`doany-pulumi` だけ。state のロックに要る) |
-| `gitops pulumi apply (R2 write + state)` | Workers R2 Storage Write(アカウント)+ Bucket Item Write(`doany-pulumi` だけ) |
+| `gitops pulumi preview (R2 read + state)` | Workers R2 Storage Metadata Read(アカウント)+ Bucket Item Write(`doany-pulumi` だけ。state のロックに要る)+ Notifications Read |
+| `gitops pulumi apply (R2 write + state)` | Workers R2 Storage Write(アカウント)+ Bucket Item Write(`doany-pulumi` だけ)+ Notifications Write |
+
+## Cloudflare の通知
+
+[notifications.ts](notifications.ts)。証明書・DDoS・オリジン不達・不正利用の報告・Security Insights を、Matrix の
+`notify-server`(hookshot の受け口 `cloudflare`)に流す。送り先の URL は hookshot の ID を含むので Actions secrets の
+`CLOUDFLARE_NOTIFY_WEBHOOK_URL`(Infisical `/matrix/matrix` の `hook-cloudflare` から作る)。トークンの Notifications の
+権限は 2026-10-07 に足した。
 
 ## Entra
 
