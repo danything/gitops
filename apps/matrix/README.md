@@ -119,6 +119,12 @@ hookshot の feeds で RSS / Atom を購読する(10 分おき)。購読はル�
 ルームで `!hookshot feed <URL>` を打つか、hookshot の bot として state
 `uk.half-shot.matrix-hookshot.feed`(state key と本文の `url` に URL)を書く。
 
+流す先は **`notify-feed`**(2026-10-07 に作った。暗号化なし、`@info:doany.io` も作成者)。
+
+| 購読 | URL |
+| --- | --- |
+| doany.io のブログ | `https://doany.io/rss.xml` |
+
 ## 通話(LiveKit)
 
 LiveKit が Matrix の通話(Element Call)の音声と映像を中継する。2026-10-06 に入れた。手順の元は Tuwunel の
