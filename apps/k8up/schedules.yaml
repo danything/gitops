@@ -60,28 +60,6 @@ spec:
 apiVersion: k8up.io/v1
 kind: Schedule
 metadata:
-  name: erpnext
-  namespace: erpnext
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-spec:
-  backup:
-    schedule: "15 15 * * *"
-    tags: [k8up]
-    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
-    failedJobsHistoryLimit: 2
-    successfulJobsHistoryLimit: 1
-  prune:
-    schedule: "15 20 * * 0"
-    retention:
-      keepDaily: 7
-      keepWeekly: 4
-      keepMonthly: 6
-      tags: [k8up]
----
-apiVersion: k8up.io/v1
-kind: Schedule
-metadata:
   name: infisical
   namespace: infisical
   annotations:

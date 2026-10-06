@@ -73,7 +73,6 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | --- | --- |
 | [`adguardhome/`](apps/adguardhome/) | AdGuard Home (DNS フィルタ) |
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
-| [`erpnext/`](apps/erpnext/) | ERPNext (Helm chart + OIDC セットアップ) |
 | [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL。**Zulip へ移行中**(畳み方は [apps/zulip/README.md](apps/zulip/README.md) の 6) |
 | [`zulip/`](apps/zulip/) | Zulip(`z.doany.io`。Mattermost の移行先)+ PostgreSQL(PGroonga)+ RabbitMQ + memcached + Redis。**使い始めと移行の手順は [apps/zulip/README.md](apps/zulip/README.md)** |
 | [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
