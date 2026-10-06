@@ -183,11 +183,12 @@ data:
               "honey-token.triggered": "🚨 ハニートークンが使われた",
             }[data.event] ?? `Infisical: ${data.event ?? "?"}`;
             const where = [p.environment, p.secretPath].filter(Boolean).join(" ");
-            const by = p.changedBy ? `(${p.changedByActorType ?? ""} ${p.changedBy})` : "";
+            const who = [p.changedByActorType, p.changedBy].filter(Boolean).join(" ");
+            const by = who ? `(${who})` : "";
             result = data.event
               ? { version: "v2", plain: `${what}: \`${where}\`${by}`, msgtype: "m.notice" }
               : { version: "v2", empty: true };
-      # notify-server: Cloudflare の通知(証明書・DDoS・オリジン不達など。pulumi/notifications.ts)。本文は text に来る
+      # notify-server: Cloudflare の通知(証明書・DDoS・オリジン不達など。Pulumi で入れる予定)。本文は text に来る
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_CLOUDFLARE}
         roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
