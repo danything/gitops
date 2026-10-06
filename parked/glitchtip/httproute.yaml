@@ -1,0 +1,26 @@
+# 公開経路。証明書は Gateway(bootstrap/gateway/)のワイルドカードなので指定しない。
+#
+# oauth2-proxy は前に置かない。取り込みの口(/api/<project>/envelope/ と /api/<project>/store/)は
+# アプリ(denpa-tv の Android TV など)がインターネットから直接叩くので、SSO の後ろには置けない。
+# 口を分けて守る手もある(adguardhome の /dns-query と同じ形)が、GlitchTip は画面も API も
+# 自分でログインを要求する(登録は閉じてあり、ログインはパスワード + Entra。glitchtip.yaml)。
+# 取り込みは DSN の公開鍵だけで通る(Sentry と同じ。DSN はアプリに埋め込む前提の値)。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: glitchtip
+  namespace: glitchtip
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["gt.doany.io"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: glitchtip
+          port: 8000

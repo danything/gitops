@@ -1,0 +1,93 @@
+# GlitchTip の DB。rybbit/postgres.yaml と同じ形(17 系、pg_dump を k8up に取らせる)。
+# イベントもここに入る(GlitchTip は Postgres だけで動く。ClickHouse のような別の倉庫は無い)。
+#
+# max_locks_per_transaction だけ上げる。GlitchTip はイベントを日付 × 組織のパーティションに分けていて、
+# 1 つに絞れないクエリ(保持期間の掃除・pg_dump)はパーティションとその索引の数だけロックを取る。
+# 既定の 64 では足りないので、上流が自前で動かす人に勧めている 512 にする(上流の compose.yml)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: glitchtip
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: glitchtip
+  annotations:
+    # DB はファイルとして取らない。下の k8up.io/backupcommand の pg_dump で足りる。
+    k8up.io/backup: "false"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: glitchtip
+spec:
+  replicas: 1
+  # ReadWriteOnce なので古い Pod が消えてから新しい Pod が付ける。RollingUpdate だと詰まる。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+      annotations:
+        k8up.io/backupcommand: /bin/sh -c 'pg_dump -U glitchtip -d glitchtip --clean --if-exists'
+        k8up.io/file-extension: .sql
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17.11
+          args: [-c, max_locks_per_transaction=512]
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: glitchtip
+            - name: POSTGRES_USER
+              value: glitchtip
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: glitchtip
+                  key: postgres-password
+            # initdb は空でないディレクトリを嫌うので、マウント先の下の段に置く
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, glitchtip, -d, glitchtip]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data

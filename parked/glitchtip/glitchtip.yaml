@@ -1,0 +1,263 @@
+# GlitchTip 本体(Sentry 互換のエラー収集)。gt.doany.io。
+#
+# **chart(glitchtip-helm-chart)は使わない。** forgejo と同じ理由: chart は SECRET_KEY などを入れる Secret を
+# 自分で作るが、このクラスタの ArgoCD は Secret を丸ごと管理対象から外している
+# (bootstrap/argocd/helmchart.yaml の resource.exclusions)。existingSecret で逃げられはするが、DB のマイグレーションが
+# helm の hook の Job(ArgoCD では PreSync)になり、Postgres は CloudNativePG 前提で k8up の注釈も付けられない。
+# rybbit と同じく素のマニフェストで、DB は postgres.yaml。
+#
+# 1 プロセスで全部やる(画面・API・取り込み・タスクのワーカー・スケジューラ。上流の all-in-one)。
+# Valkey(Redis)は置かない。無くてもキャッシュとタスクのキューは Postgres に載る(VALKEY_URL を空にする)。
+# 1 アプリぶんのエラーなら十分で、Pod が 1 つ減る。
+#
+# 版は Docker Hub の glitchtip/glitchtip の X.Y.Z に合わせる(latest や 6 のような動くタグは追わない)。
+# Renovate が PR を出す。メジャー(7.0 で web と worker の分割が無くなる等)はリリースノートを読んでから。
+apiVersion: v1
+kind: Service
+metadata:
+  name: glitchtip
+  namespace: glitchtip
+spec:
+  selector:
+    app: glitchtip
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: glitchtip-uploads
+  namespace: glitchtip
+  annotations:
+    # ソースマップ・ProGuard のマッピング・デバッグ情報(/code/uploads/file_blobs)。ファイルとして取る。
+    # 書き終わったら変わらないファイルなので、動いたままコピーしても壊れにくい。DB は postgres.yaml の pg_dump
+    k8up.io/backup: "true"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glitchtip-setup
+  namespace: glitchtip
+data:
+  # 起動の前に 1 回ずつ走る(initContainer)。何度走っても同じ結果になる
+  setup.sh: |
+    #!/bin/sh
+    set -eu
+    # イメージの bin/run-all-in-one.sh が起動時にやる初期化と同じ。本体は SKIP_INIT=true で飛ばす
+    # (先にここで DB を作らないと、下の setup.py が触るテーブルがまだ無い)
+    python manage.py migrate --no-input --skip-checks
+    python manage.py maintain_partitions
+    python manage.py createcachetable
+    # /scripts から走らせるので、/code(GlitchTip 本体)を import できるようにする
+    PYTHONPATH=/code python /scripts/setup.py
+  setup.py: |
+    import os
+
+    import django
+
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "glitchtip.settings")
+    django.setup()
+
+    from allauth.socialaccount.models import SocialApp  # noqa: E402
+
+    from apps.users.models import User  # noqa: E402
+
+    # 1. 最初の管理者。ユーザーが 1 人もいない間は ENABLE_USER_REGISTRATION=false でも
+    #    登録が開いている(apps/users/utils.py の is_user_registration_open)ので、公開した瞬間に
+    #    誰かが先に取れないよう、ここで作る。パスワードは使えない値(set_password(None))で、
+    #    README「使い始め」のパスワード再設定で決める。値は表示しない
+    if not User.objects.exists():
+        User.objects.create_superuser(email=os.environ["GLITCHTIP_ADMIN_EMAIL"], password=None)
+        print("最初の管理者を作った")
+
+    # 2. Entra のログイン。provider_id で探して、無ければ足し、あれば上書きする(forgejo の setup.sh と
+    #    同じ考え方。Infisical で秘密を変えれば、auto-reload で Pod が入れ替わってここで入る)。
+    #    組織には結び付けない(インスタンス全体のログイン画面に出る)。組織に結び付けると「その IdP で
+    #    入れた人は誰でも組織に入れる」暗黙の招待になる(glitchtip/adapters.py)ので使わない。
+    #    ENABLE_SOCIAL_APPS_USER_REGISTRATION は ENABLE_USER_REGISTRATION(false)に従うので、
+    #    Entra で入れるのは GlitchTip にもう居て、プロフィールで Entra を繋いだ人だけ
+    _, created = SocialApp.objects.update_or_create(
+        provider="openid_connect",
+        provider_id="entra",
+        defaults={
+            "name": "Entra ID",
+            "client_id": os.environ["OIDC_CLIENT_ID"],
+            "secret": os.environ["OIDC_CLIENT_SECRET"],
+            "settings": {"server_url": os.environ["OIDC_SERVER_URL"]},
+        },
+    )
+    print("Entra のログインを" + ("足した" if created else "更新した"))
+---
+# 秘密でない設定(SECRET_KEY・DB のパスワード・OIDC とメールの秘密は下の Deployment が Secret から)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glitchtip-config
+  namespace: glitchtip
+data:
+  GLITCHTIP_DOMAIN: https://gt.doany.io
+  # Host ヘッダを固定する。kubelet のプローブは Pod の IP で来るので、POD_IP(Deployment)を足して通す
+  ALLOWED_HOSTS: gt.doany.io
+  CSRF_TRUSTED_ORIGINS: https://gt.doany.io
+  # Gateway(Cilium の Envoy)の X-Forwarded-Proto / -For だけを信じる。bootstrap/auth の
+  # oauth2-proxy の --trusted-proxy-ip と同じ範囲。これが効かないと GlitchTip が自分を http:// だと思い、
+  # Entra に渡す redirect_uri が http:// になって弾かれる(README「気にしておくこと」)
+  TRUSTED_PROXIES: 10.42.0.0/16
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: glitchtip
+  DATABASE_USER: glitchtip
+  # 空にすると Valkey を使わない(キャッシュもタスクのキューも Postgres)。消すと既定の redis://redis:6379 に繋ぎにいく
+  VALKEY_URL: ""
+  # 画面・API とワーカー・スケジューラを 1 プロセスで(7.0 からはこれしか無い)
+  GLITCHTIP_EMBED_WORKER: "true"
+  # 初期化(migrate など)は initContainer の setup.sh でやった
+  SKIP_INIT: "true"
+  # 登録は閉じる。最初の管理者は setup.py が作る。人を足すときは README「人を足すとき」
+  ENABLE_USER_REGISTRATION: "false"
+  ENABLE_ORGANIZATION_CREATION: "false"
+  GLITCHTIP_ADMIN_EMAIL: info@doany.io
+  # 保持は 30 日(上流の既定は 90)。家の箱で、見るのは「いま何が落ちているか」。
+  # イベント・パフォーマンス・ログ・アップタイム・添付が全部これに従う(リリースは別で 365 日のまま)
+  GLITCHTIP_RETENTION_DAYS: "30"
+  # Entra(共用アプリ Main。oauth2-proxy・Forgejo・Headlamp と同じ登録。クライアント ID は秘密ではない)
+  OIDC_CLIENT_ID: b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
+  OIDC_SERVER_URL: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
+  # メールは info@doany.io(Exchange Online の SMTP AUTH。mattermost と同じ)。
+  # アラート・招待・パスワード再設定に使う。差出人はメールボックスと同じでないと Exchange が拒む
+  EMAIL_HOST: smtp.office365.com
+  EMAIL_PORT: "587"
+  EMAIL_USE_TLS: "true"
+  EMAIL_HOST_USER: info@doany.io
+  DEFAULT_FROM_EMAIL: info@doany.io
+  # 上流の既定は 1 GiB 未満にならない(limit の半分と 1024 MiB の大きい方)ので、limit 1 GiB だと
+  # 入れ替え(新旧のワーカーが一瞬並ぶ)の前に OOM になる。limit の 4 割に固定する
+  # (単位は MiB。granian の --workers-max-rss)
+  GRANIAN_WORKERS_MAX_RSS: "400"
+  LOG_LEVEL: WARNING
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: glitchtip
+  namespace: glitchtip
+  annotations:
+    # 参照している Secret を Infisical operator が同期したら、自動でローリング再起動する
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  # ReadWriteOnce(uploads)なので古い Pod が消えてから新しい Pod が付ける
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: glitchtip
+  template:
+    metadata:
+      labels:
+        app: glitchtip
+    spec:
+      automountServiceAccountToken: false
+      # イメージは uid 5000(app)。作りたての PV は root のものなので、グループで書けるようにする
+      securityContext:
+        runAsUser: 5000
+        runAsGroup: 5000
+        fsGroup: 5000
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        # 初回は initdb が終わるまで Postgres が受け付けない
+        - name: wait-for-db
+          image: busybox:1.38.0
+          command:
+            - sh
+            - -c
+            - until nc -z postgres 5432; do echo "PostgreSQL を待っている"; sleep 5; done
+        - name: setup
+          image: glitchtip/glitchtip:6.2.6
+          command: [/bin/sh, /scripts/setup.sh]
+          envFrom:
+            - configMapRef:
+                name: glitchtip-config
+          env: &env
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: glitchtip
+                  key: secret-key
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: glitchtip
+                  key: postgres-password
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: glitchtip
+                  key: oidc-client-secret
+            - name: EMAIL_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: glitchtip
+                  key: email-password
+            # ALLOWED_HOSTS に足される(kubelet のプローブは Pod の IP で来る)。setup では使わないが、
+            # YAML のアンカーは丸ごとしか使い回せないので同じ一覧に入れておく
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+      containers:
+        - name: glitchtip
+          image: glitchtip/glitchtip:6.2.6
+          envFrom:
+            - configMapRef:
+                name: glitchtip-config
+          env: *env
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /_health/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /_health/
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: uploads
+              mountPath: /code/uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: glitchtip-uploads
+        - name: scripts
+          configMap:
+            name: glitchtip-setup
