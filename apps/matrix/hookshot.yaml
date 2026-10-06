@@ -62,6 +62,10 @@ data:
         hotlinkIssues:
           prefix: "#"
       userIdPrefix: _github_
+    # RSS / Atom の購読。ルームに feed の接続を書く(apps/matrix/README.md「RSS」)
+    feeds:
+      enabled: true
+      pollIntervalSeconds: 600
     permissions:
       - actor: doany.io
         services:
@@ -162,6 +166,35 @@ data:
         state:
           name: Forgejo
           transformationFunction: *slack
+      # notify-server: Infisical の秘密の変更(プロジェクトの webhook。種類は general)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_INFISICAL}
+        roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
+        state:
+          name: infisical
+          transformationFunction: |
+            // Infisical の webhook(種類は general)。どの環境・フォルダの秘密が、誰によって変わったかを 1 行に
+            const p = data.project ?? {};
+            const what = {
+              "secrets.modified": "🔑 秘密が変わった",
+              "secrets.rotation-failed": "🚨 秘密のローテーションに失敗",
+              "secrets.change-request.modified": "📝 変更の申請が動いた",
+              "secrets.access-request.modified": "📝 アクセスの申請が動いた",
+              "honey-token.triggered": "🚨 ハニートークンが使われた",
+            }[data.event] ?? `Infisical: ${data.event ?? "?"}`;
+            const where = [p.environment, p.secretPath].filter(Boolean).join(" ");
+            const who = [p.changedByActorType, p.changedBy].filter(Boolean).join(" ");
+            const by = who ? `(${who})` : "";
+            result = data.event
+              ? { version: "v2", plain: `${what}: \`${where}\`${by}`, msgtype: "m.notice" }
+              : { version: "v2", empty: true };
+      # notify-server: Cloudflare の通知(証明書・DDoS・オリジン不達など。Pulumi で入れる予定)。本文は text に来る
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_CLOUDFLARE}
+        roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
+        state:
+          name: cloudflare
+          transformationFunction: *slack
   registration.yml.tmpl: |
     id: hookshot
     as_token: ${AS_TOKEN}
@@ -243,6 +276,10 @@ spec:
               valueFrom: {secretKeyRef: {name: matrix, key: github-client-secret}}
             - name: GITHUB_KEY_B64
               valueFrom: {secretKeyRef: {name: matrix, key: github-private-key-b64}}
+            - name: HOOK_INFISICAL
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-infisical}}
+            - name: HOOK_CLOUDFLARE
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-cloudflare}}
             - name: HOOK_SERVER
               valueFrom: {secretKeyRef: {name: matrix, key: hook-server}}
             - name: HOOK_ARGOCD

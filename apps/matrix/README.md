@@ -59,6 +59,8 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |
 | `notify-server` | k8up の通知 | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
+| 〃 | Infisical(秘密の変更) | Infisical のプロジェクトの webhook(Project Settings → Webhooks。環境 prod、パス `/`) |
+| 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先(**まだ無い**。Pulumi で入れる予定。CI のトークンに通知の権限を足してから) |
 | 〃 | ホストのバックアップ | ホストの `/etc/k3s-backup/env` の `MATTERMOST_WEBHOOK`(**sed で書き換えない**。URL の `&` で壊れる) |
 | `notify-argocd` | Argo CD | `bootstrap/argocd/helmchart.yaml`(SOPS)の `service.webhook.mattermost` |
 | `notify-ashi` | ashi | Infisical `/ashi/ashi-secrets` の `notify-webhook-url` |
@@ -112,6 +114,12 @@ GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` と
 - 流れるのは issue・PR(レビュー含む)・push・リリース・Actions。**コメントは流れない**ので、GitHub の通知
   (GitHub のスマホのアプリ)で受ける(自分が関わっているものだけ)
 - 連携の投稿は m.notice(bot の発言)なので、Element の既定ではスマホに通知されない
+
+## RSS
+
+hookshot の feeds で RSS / Atom を購読する(10 分おき)。購読はルームに feed の接続(state)を書く。
+ルームで `!hookshot feed <URL>` を打つか、hookshot の bot として state
+`uk.half-shot.matrix-hookshot.feed`(state key と本文の `url` に URL)を書く。
 
 ## 通話(LiveKit)
 
