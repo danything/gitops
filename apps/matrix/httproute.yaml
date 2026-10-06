@@ -4,7 +4,6 @@
 #   e.doany.io/*                → Element Web(ブラウザのアプリ)
 #   lk.doany.io/*               → LiveKit と lk-jwt-service(通話。下のほう)
 #   m.doany.io/webhook/*        → hookshot(通知の受け口)
-#   m.doany.io/github/*         → hookshot(GitHub 連携)
 #   m.doany.io/*                → Tuwunel(Matrix のクライアント API、OAuth、メディア)
 #   doany.io/.well-known/matrix/* → Tuwunel(ID を @…:doany.io にするための案内。doany.io 自体はブログ)
 #
@@ -25,10 +24,6 @@ spec:
         - path:
             type: PathPrefix
             value: /webhook
-        # GitHub App の webhook(/github/webhook)と OAuth の戻り先(/github/oauth)
-        - path:
-            type: PathPrefix
-            value: /github
       backendRefs:
         - name: hookshot
           port: 9000

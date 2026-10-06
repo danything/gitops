@@ -77,44 +77,10 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 ## GitHub 連携(hookshot)
 
-hookshot の GitHub 連携を使う。組織の webhook を変換して流すだけのやり方と違って、
-**リポジトリをルームへつなぎ、通知の種類を選び、ルームから issue を作ったりできる**。
-**組織をまとめて 1 つのルームにつなぐ手段は無い**(2026-10-06 に 7.5.0 のソースで確認。接続の種類は
-`src/Connections/` にあり、GitHub の通知の行き先は `getConnectionsForGithubRepo` が org と repo の完全一致で選ぶ。
-`GithubUserSpace` は組織の Matrix の space を作るもので、中はリポジトリごとのルーム)。
-GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` としてルームに出る。
-
-**GitHub App `doa-hookshot`**(App ID 5211519、組織 `danything`)。2026-10-06 にマニフェストから作った
-(名前・webhook・権限・通知の種類を入れた状態で GitHub の作成画面を開き、本人が「作成」を押す。鍵は自動で受け取った)。
-
-| 項目 | 値 |
-| --- | --- |
-| Webhook URL | `https://m.doany.io/github/webhook` |
-| Callback URL(OAuth) | `https://m.doany.io/github/oauth` |
-| 権限(Repository) | Actions・Contents・Metadata = Read、Discussions・Issues・Pull requests = Read & write |
-| 通知の種類 | Create・Delete・Discussion・Discussion comment・Issue comment・Issues・Pull request・Pull request review・Pull request review comment・Push・Release・Repository・Workflow run |
-| 秘密 | Infisical `/matrix/matrix` の `github-webhook-secret`・`github-client-secret`・`github-private-key-b64`(秘密鍵の PEM を base64 で 1 行に) |
-
-鍵を作り直すときは App のページ(https://github.com/organizations/danything/settings/apps/doa-hookshot)で
-作って Infisical を書き換える。
-
-### 使う(Element で)
-
-1. hookshot と DM を始めて `github login` → 出たリンクで GitHub にログイン(誰がつないだかの確認に使う)
-   - **DM を始めたときの最初のメッセージは無視されることがある**(2026-10-06 に踏んだ)。招待の処理と参加の
-     処理が同時に走り、hookshot が DM を管理用のルームとして登録し損ねる(印は残る)。2 回目も返事が無ければ
-     `kubectl -n matrix rollout restart deploy/hookshot`。起動時に印を読み直して直る
-2. つなぎたいルーム(暗号化なし)に `@hookshot:doany.io` を招待し、権限をモデレーター(50)以上にする
-3. ルームで `!hookshot github repo https://github.com/danything/<リポジトリ>`
-4. 通知の種類はルームの設定から(`!gh help` でコマンドの一覧)
-
-**GitHub の通知は Matrix に流さない**(2026-10-07)。hookshot の連携で `notify-github` に流してみたが、1 本の流れに
-なってスレッドにもできず読みにくかったので、GitHub のアプリ(issue や PR ごとにまとまり、その場で返信や承認ができる)
-に寄せた。danything と 5ym のリポジトリは Watch にしてある(5ym のフォークは参加しているものだけ)。
-`notify-github` のルームは畳んだ(hookshot が抜け、本人が退出)。
-連携そのもの(App とログイン)は残してあり、ルームで `!hookshot github repo` を打てば、そのリポジトリだけまた流せる。
-**設定ファイルの固定の接続には書けない**(`ConfigError: … does not support static configuration`。2026-10-06 に
-書いて hookshot が起動しなくなった)。
+**使っていない**(2026-10-07)。GitHub の通知は GitHub のアプリで受ける。GitHub App `doa-hookshot` は消したので、
+hookshot の設定からも `github:` を外した。**App を消して設定を残すと、hookshot が `Integration not found` で
+起動しなくなり、通知が全部止まる**(2026-10-07 に踏んだ)。また入れるなら、GitHub App を作り直して
+`github:`・秘密・`/github` の経路・`@_github_` の名前空間を戻す(git の履歴の #243 が手順)。
 
 ## RSS
 
