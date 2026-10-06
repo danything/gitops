@@ -40,7 +40,7 @@ ipv6:
 # | --- | --- |
 # | NetBird の STUN(3478) | 外側アドレスを誤って返す → IPv4 の NAT 越えが成立せず relay 専用に落ちる |
 # | AdGuard(53/853) | IPv4 クライアントのクエリログとクライアント別ルールが効かない |
-# | 3proxy(3129/8444)・Mattermost calls(8443) | 送信元が全部同じに見える |
+# | 3proxy(3129/8444)・LiveKit(8443。Matrix の通話) | 送信元が全部同じに見える |
 #
 # `kubeProxyReplacement: true` と組み合わせるときの推奨設定でもある。
 bpf:
@@ -56,7 +56,7 @@ nodePort:
   enabled: true
   # 80 と 443 だけ。Gateway の Service がこの 2 つを nodePort として握っている。
   # 範囲を広げると、その中に入る hostPort を Cilium が張らなくなる
-  # (AdGuard の 853、Mattermost calls の 8443、3proxy の 3129 が一斉に落ちた)。
+  # (AdGuard の 853、Mattermost calls の 8443(いまは LiveKit)、3proxy の 3129 が一斉に落ちた)。
   #
   # hostNetwork にしても外せない。Service は NodePort 型のまま残り(下の
   # gatewayAPI.hostNetwork のコメント)、この 2 つの NodePort フロントエンドが
