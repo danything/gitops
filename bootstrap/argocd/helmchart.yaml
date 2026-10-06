@@ -66,7 +66,7 @@ spec:
                 # 送り先は Zulip(2026-10-06 に Mattermost から移した)。名前は mattermost のまま ──
                 # テンプレートと subscriptions が参照していて、.sops.yaml の encrypted_regex もこの名前で暗号化している。
                 # 送るのは {"text": …} なので、Zulip の Slack 互換の受け口(slack_incoming)でそのまま読める
-                service.webhook.mattermost: ENC[AES256_GCM,data:zuK99czoKo9tfdo4/3KHaaqDW1daP6BTRhGMg8a3Pda+AWAamtGgQq0HwQSzEs8diFhnY5wrQALHuKgZak8io/7rOltdSaItwY1FwCcYziI/sCfKKS66UUo/uKaxYMIpK57qVB13/Qy2ZWd+x4Q7zThM0VYfEqGLMVwIDOl3ILge2iwIpKX2lmHJqmRDQ5N9/3ATcVf3F7aqw0OYNgOs0TbK241N77P35Mh4djrB7X+pELuhVXQl4R5Nqqgn9w==,iv:+PPwuQcV4lw8je2N3qUDTdx+W2pLgVnrpomCFvZhP2c=,tag:7QnC69rQwqHy+/SnuGAH9Q==,type:str]
+                service.webhook.mattermost: ENC[AES256_GCM,data:oq54sDNQQS4ka53xXSNTsdh7f5PTuZSrXdU+4t3C7jREGRZeqq6XJydvb+fXrMtyFMiH3QBvCRQMynhqMdXbjdWVPfP8WhTeGxPph3HCydgOl0lp3vErlVt8K3jGPUeu0dXIQ40UuoLuKRN+L4mR/lRn67eu0YePE+pjFPjWxGc8njDJteHVdtz5sFoR,iv:pir6OWH3+MjoWmy2FloIP+o1iQjMAFSzN/HpShFlAuI=,tag:vN0FdvDXrg7mRwQ0VS/Wcg==,type:str]
             templates:
                 # Succeeded is back: Progressing -> Healthy flips too fast to read as a
                 # "deploy complete" signal, so sync-result gives that its own clear ping.
@@ -177,6 +177,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-10-06T10:35:24Z"
-    mac: ENC[AES256_GCM,data:W98ILOU9YuvbGtQ82TlqhcswCoz1OCquRK+9MYr77v8mNJVo0jywtu58rf+OualmFyfJcHaEIc614yiNFEE6f21Ud/j6gKndAvu1ba+IsrAeGjiNHUBE2g5qeFKut99NUuee2burWv52aSFFwYylrnoy36otjTEtpWj/gDb790c=,iv:S4452XyXlpKnvKxHqHy3JDNmGuduFnB/DQlera/e0G0=,tag:S0FKy5i+Z/swhu1K+gUCuw==,type:str]
+    lastmodified: "2026-10-06T13:08:58Z"
+    mac: ENC[AES256_GCM,data:KAgAcpuhGbIuJRN/N4NOdU2HJDpHqBx1qD1ai2OWstlhaMKeO4aSDNata/5UQ3oJXKdLyfkZkYg1CaMDMZa2bLiGJfk7xInqVqBcv+oykXYK3uztZcaFI89FYklNh7Azq4abbOWdUoMInbNilDvX9CE5K9pnnDnZAL1sAwBPKKE=,iv:OL4Mqk0JcppJdWZc9Uws7OT8Dhc7ATz2RWcyT0TlqLs=,tag:cxkiOin/torXW5USEtaMgg==,type:str]
     version: 3.13.3
