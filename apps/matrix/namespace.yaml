@@ -1,0 +1,10 @@
+# PSA は baseline。バックアップのサイドカーだけ root で動く(Tuwunel にシグナルを送るため。tuwunel.yaml)。
+# hostPort も privileged も無い。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: matrix
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

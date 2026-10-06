@@ -1,0 +1,58 @@
+# 公開経路。m.doany.io は社内用なので Cloudflare を通さない(ExternalDNS の注釈を付けない。
+# ワイルドカードで直接つながる。docs/decisions.md「DNS:直接つなぐアプリと…」)。
+#
+#   m.doany.io/webhook/*        → hookshot(通知の受け口)
+#   m.doany.io/*                → Tuwunel(Matrix のクライアント API、OAuth、メディア)
+#   doany.io/.well-known/matrix/* → Tuwunel(ID を @…:doany.io にするための案内。doany.io 自体はブログ)
+#
+# 同期(sliding sync)は長く待つ要求なので、Gateway の既定の時間切れ(Envoy は 15 秒)を延ばす。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: matrix
+  namespace: matrix
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["m.doany.io"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /webhook
+      backendRefs:
+        - name: hookshot
+          port: 9000
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: tuwunel
+          port: 8008
+      timeouts:
+        request: 300s
+---
+# doany.io(ブログ)のうち /.well-known/matrix だけをこちらへ。パスが長い一致が勝つので、ブログの HTTPRoute
+# (PathPrefix /)より先に当たる。Tuwunel は Host を見ずに well_known.client を返す
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: matrix-well-known
+  namespace: matrix
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["doany.io"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /.well-known/matrix
+      backendRefs:
+        - name: tuwunel
+          port: 8008
