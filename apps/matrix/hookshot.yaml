@@ -255,7 +255,7 @@ spec:
       initContainers:
         # 秘密を差し込んだ設定一式を /data に置く(hookshot は /data/config.yml と /data/registration.yml を読む)
         - name: render
-          image: busybox:1.37
+          image: busybox:1.38
           command:
             - sh
             - -euc
