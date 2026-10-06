@@ -5,6 +5,7 @@ set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 # ログインと鍵の置き場(コンテナの中の HOME)。git には入らない
 mkdir -p "$root/.home"
+chmod 700 "$root/.home"
 HOST_UID=$(id -u) HOST_GID=$(id -g)
 export HOST_UID HOST_GID
 # パイプやリダイレクトのときは TTY を付けない

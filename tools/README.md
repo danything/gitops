@@ -27,7 +27,9 @@ fish なら `abbr -a t ~/dev/gitops/tools/t` などで短くしておくと楽�
 - [../compose.yaml](../compose.yaml) の `tools` を `docker compose run` で動かす。リポジトリは `/repo` に置く
 - **ログインと鍵はリポジトリの `.home/` に置く**(コンテナの中の `HOME`。`.gitignore` 済み)。手元のホームは汚さない。
   cf のログイン(`.config/cloudflare`)、sops の age 鍵(`.config/sops/age/keys.txt`)、infisical のログイン
-  (`.infisical` と `infisical-keyring`)、pulumi(`.pulumi`)、kubectl / talosctl(`.kube` / `.talos`)がここに入る
+  (`.infisical` と `infisical-keyring`)、pulumi(`.pulumi`)、kubectl / talosctl(`.kube` / `.talos`)がここに入る。
+  kubeconfig と talosconfig は今は無い(k3s の間はノードに ssh して kubectl を使うため。Talos に移ったら置く)。
+  `.home/` は `tools/t` が自分だけ読める権限(700)にする
 - **`git clean -fdx` で消える**(無視しているファイルも消すため)。age 鍵は `recovery/sops-age.key.age` から戻せる
   (README「Infisical より下の層」)、ほかはログインし直せば戻る
 - **手元のユーザーの uid で動く**ので、作ったファイルの持ち主は自分のまま
