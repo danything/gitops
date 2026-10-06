@@ -71,6 +71,36 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
 `connections` と render の env に足す。
 
+## GitHub 連携(hookshot)
+
+hookshot の GitHub 連携を使う。`notify-github`(組織の webhook を変換して流すだけ)と違って、
+**リポジトリごとにルームへつなぎ、通知の種類を選び、ルームから issue を作ったりできる**。
+GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` としてルームに出る。
+
+**GitHub App `doa-hookshot`**(App ID 5211519、組織 `danything`)。2026-10-06 にマニフェストから作った
+(名前・webhook・権限・通知の種類を入れた状態で GitHub の作成画面を開き、本人が「作成」を押す。鍵は自動で受け取った)。
+
+| 項目 | 値 |
+| --- | --- |
+| Webhook URL | `https://m.doany.io/github/webhook` |
+| Callback URL(OAuth) | `https://m.doany.io/github/oauth` |
+| 権限(Repository) | Actions・Contents・Metadata = Read、Discussions・Issues・Pull requests = Read & write |
+| 通知の種類 | Create・Delete・Discussion・Discussion comment・Issue comment・Issues・Pull request・Pull request review・Pull request review comment・Push・Release・Repository・Workflow run |
+| 秘密 | Infisical `/matrix/matrix` の `github-webhook-secret`・`github-client-secret`・`github-private-key-b64`(秘密鍵の PEM を base64 で 1 行に) |
+
+鍵を作り直すときは App のページ(https://github.com/organizations/danything/settings/apps/doa-hookshot)で
+作って Infisical を書き換える。
+
+### 使う(Element で)
+
+1. hookshot と DM を始めて `github login` → 出たリンクで GitHub にログイン(誰がつないだかの確認に使う)
+2. つなぎたいルーム(暗号化なし)に `@hookshot:doany.io` を招待し、権限をモデレーター(50)以上にする
+3. ルームで `!hookshot github repo https://github.com/danything/<リポジトリ>`
+4. 通知の種類はルームの設定から(`!gh help` でコマンドの一覧)
+
+`notify-github`(組織全体の流しっぱなし)はそのまま残す。全リポジトリを 1 か所で見る用で、こちらは
+よく触るリポジトリをルームごとに深く見る用。要らなくなったら組織の webhook と `connections` から外す。
+
 ## 通話(LiveKit)
 
 LiveKit が Matrix の通話(Element Call)の音声と映像を中継する。2026-10-06 に入れた。手順の元は Tuwunel の
