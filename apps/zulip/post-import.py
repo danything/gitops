@@ -17,6 +17,7 @@
 from zerver.actions.default_streams import do_add_default_stream
 from zerver.actions.realm_settings import (
     do_set_realm_new_stream_announcements_stream,
+    do_set_realm_property,
     do_set_realm_zulip_update_announcements_stream,
 )
 from zerver.actions.streams import do_change_stream_description, do_rename_stream
@@ -65,3 +66,10 @@ do_set_realm_new_stream_announcements_stream(realm, general, general.id, acting_
 do_set_realm_zulip_update_announcements_stream(realm, general, general.id, acting_user=owner)
 
 print("最初のチャンネル:", ", ".join(made))
+
+# **「招待が必須」はオフ。** Entra で入れた人を自動で作る(application.yaml の auto_signup)には、
+# これがオフでないといけない。Mattermost から取り込むとオンで入ってくる。自分で登録する経路は
+# パスワードのログインが無効なので元から無い
+if realm.invite_required:
+    do_set_realm_property(realm, "invite_required", False, acting_user=owner)
+    print("招待が必須: オフにした")
