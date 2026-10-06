@@ -1,10 +1,11 @@
-# PSA は baseline。バックアップのサイドカーだけ root で動く(Tuwunel にシグナルを送るため。tuwunel.yaml)。
-# hostPort も privileged も無い。
+# PSA は privileged。理由: LiveKit が hostPort 8443(UDP・TCP。通話の音声と映像)を持ち、baseline に通らない。
+# ほかに baseline を破るのは、バックアップのサイドカーが root で動くことだけ(Tuwunel にシグナルを送るため。tuwunel.yaml)。
+# 一覧と背景は docs/talos.md「PSA のラベル」(k3s では効かない。Talos のために書いておく)。
 apiVersion: v1
 kind: Namespace
 metadata:
   name: matrix
   labels:
-    pod-security.kubernetes.io/enforce: baseline
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

@@ -13,7 +13,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: livekit
-  namespace: livekit
+  namespace: matrix
 data:
   livekit.yaml: |
     port: 7880
@@ -33,7 +33,7 @@ data:
     webhook:
       api_key: matrix
       urls:
-        - http://lk-jwt-service.livekit.svc:8080/sfu_webhook
+        - http://lk-jwt-service.matrix.svc:8080/sfu_webhook
     logging:
       level: info
 ---
@@ -41,7 +41,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: livekit
-  namespace: livekit
+  namespace: matrix
 spec:
   selector:
     app: livekit
@@ -54,7 +54,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: livekit
-  namespace: livekit
+  namespace: matrix
   annotations:
     secrets.infisical.com/auto-reload: "true"
 spec:
@@ -77,7 +77,7 @@ spec:
           args: [--config, /etc/livekit/livekit.yaml]
           env:
             - name: LIVEKIT_SECRET
-              valueFrom: {secretKeyRef: {name: livekit, key: livekit-secret}}
+              valueFrom: {secretKeyRef: {name: matrix, key: livekit-secret}}
             # 「鍵の名前: 秘密」。名前は秘密ではない(秘密が無いと使えない)
             - name: LIVEKIT_KEYS
               value: "matrix: $(LIVEKIT_SECRET)"
