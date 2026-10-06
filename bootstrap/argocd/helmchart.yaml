@@ -63,9 +63,9 @@ spec:
             # true by default; anything applied out-of-band gets wiped the next time
             # the HelmChart is reconciled.
             notifiers:
-                # 送り先は Zulip(2026-10-06 に Mattermost から移した)。名前は mattermost のまま ──
+                # 送り先は Matrix の notify-argocd(hookshot の webhook。2026-10-06 に Mattermost → Zulip → Matrix と移した)。名前は mattermost のまま ──
                 # テンプレートと subscriptions が参照していて、.sops.yaml の encrypted_regex もこの名前で暗号化している。
-                # 送るのは {"text": …} なので、Zulip の Slack 互換の受け口(slack_incoming)でそのまま読める
+                # 送るのは {"text": …}(Slack 互換)。hookshot の変換のスクリプト(apps/matrix/hookshot.yaml)が読む
                 service.webhook.mattermost: ENC[AES256_GCM,data:oq54sDNQQS4ka53xXSNTsdh7f5PTuZSrXdU+4t3C7jREGRZeqq6XJydvb+fXrMtyFMiH3QBvCRQMynhqMdXbjdWVPfP8WhTeGxPph3HCydgOl0lp3vErlVt8K3jGPUeu0dXIQ40UuoLuKRN+L4mR/lRn67eu0YePE+pjFPjWxGc8njDJteHVdtz5sFoR,iv:pir6OWH3+MjoWmy2FloIP+o1iQjMAFSzN/HpShFlAuI=,tag:vN0FdvDXrg7mRwQ0VS/Wcg==,type:str]
             templates:
                 # Succeeded is back: Progressing -> Healthy flips too fast to read as a
@@ -177,6 +177,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
-    lastmodified: "2026-10-06T13:08:58Z"
-    mac: ENC[AES256_GCM,data:KAgAcpuhGbIuJRN/N4NOdU2HJDpHqBx1qD1ai2OWstlhaMKeO4aSDNata/5UQ3oJXKdLyfkZkYg1CaMDMZa2bLiGJfk7xInqVqBcv+oykXYK3uztZcaFI89FYklNh7Azq4abbOWdUoMInbNilDvX9CE5K9pnnDnZAL1sAwBPKKE=,iv:OL4Mqk0JcppJdWZc9Uws7OT8Dhc7ATz2RWcyT0TlqLs=,tag:cxkiOin/torXW5USEtaMgg==,type:str]
+    lastmodified: "2026-10-06T13:14:05Z"
+    mac: ENC[AES256_GCM,data:YsXF/0rvaDOpEVK3UFWTOsegO3WvSGyZ0SM1qV7iv6LuyntEGTPBaPeUcwPeTIBeb2fNHTTWQCBE9j32ftMiHNfJKSaABqk1EAqnQfBI5wKrF+K2uGaAaNju8jrU9MQNaI0xOcSTa90iG2GDMmdHZy7zdte5g1lNGUi+mqZIo0A=,iv:r7iiJ21HFXB9jnESnATrX4ANigEmGWhik5DYQgVgnF8=,tag:v0GqIf3QQU9DYnUrQDoyHQ==,type:str]
     version: 3.13.3

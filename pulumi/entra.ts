@@ -27,7 +27,6 @@ const WEB_REDIRECTS: [string, string, string][] = [
   ["nb.doany.io", "/oauth2/callback", "NetBird"],
   ["nb.doany.io", "/oauth2/logout/callback", "NetBird(ログアウト)"],
   ["yk.doany.io", "/admin/callback", "yosegaki の管理画面"],
-  ["z.doany.io", "/complete/oidc/", "Zulip"],
 ];
 
 new azuread.ApplicationRedirectUris(
