@@ -6,3 +6,6 @@ talos/registries.plain.yaml
 
 # pulumi/ の道具(bun.lock で固定してある)
 pulumi/node_modules/
+
+# cf(Cloudflare の CLI)が動かした場所に作るキャッシュ
+.cloudflare/

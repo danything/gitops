@@ -1,0 +1,15 @@
+#!/bin/sh
+# 運用のコマンドを Docker で動かす。例: tools/t cf r2 bucket list / tools/t sops -d … / tools/t infisical login
+# 引数が無ければシェルに入る。Dockerfile を変えたら次の実行で作り直す(変わっていなければキャッシュで一瞬)。
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+for d in .config/cloudflare .config/sops .infisical infisical-keyring .kube .talos .pulumi; do
+  mkdir -p "$HOME/$d"
+done
+HOST_UID=$(id -u) HOST_GID=$(id -g)
+export HOST_UID HOST_GID
+# パイプやリダイレクトのときは TTY を付けない
+tty=""
+[ -t 0 ] && [ -t 1 ] || tty="-T"
+[ $# -gt 0 ] || set -- bash
+exec docker compose --progress quiet -f "$root/compose.yaml" run --rm --build --quiet-build $tty tools "$@"

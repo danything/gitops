@@ -16,6 +16,16 @@
     ],
     "customManagers": [
         {
+            "description": "手元のコマンドのイメージ(tools/Dockerfile)。`# renovate: datasource=… depName=…` の次の行の `ARG 名前=版` を見る。",
+            "customType": "regex",
+            "managerFilePatterns": [
+                "^tools/Dockerfile$"
+            ],
+            "matchStrings": [
+                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*ARG\\s+[A-Z_]+=(?<currentValue>\\S+)"
+            ]
+        },
+        {
             "description": "`# renovate: datasource=… depName=… [registryUrl=…]` の次の行にある version を見る。Talos の版も chart の版も、文章やコメントの中に散らばると Renovate が追えないので、`version.yaml` という 1 ファイルに出す約束にしてある。",
             "customType": "regex",
             "managerFilePatterns": [
@@ -39,7 +49,7 @@
             "allowedVersions": "<18"
         },
         {
-            "description": "Talos と Kubernetes と Gateway API の CRD は自動マージしない。ノードが 1 台なので、Talos を上げることは 唯一のノードの再起動、つまり全停止を意味する。PR は「新しい版が出た」という通知として使い、適用は talosctl upgrade で人がやる (talos/versions.yaml)。 needs-review ラベルを付けて Claude のレビューに乗せる (.github/workflows/claude-code-review.yml)。**depName で絞る。** 同じファイルには metrics-server の chart 版も入っていて、あちらはノードの再起動を伴わないので、この扱いに巻き込まない。Gateway API は再起動を伴わないが、**CRD の版が上がると Gateway も HTTPRoute も全部それに乗り換わる**ので、同じく人が見る。**talosctl のイメージ**(etcd スナップショットの CronJob)も同じ群に入れる ── ノードの版と一緒に上げたいので、片方だけ自動マージで先に進ませない。",
+            "description": "Talos と Kubernetes と Gateway API の CRD は自動マージしない。ノードが 1 台なので、Talos を上げることは 唯一のノードの再起動、つまり全停止を意味する。PR は「新しい版が出た」という通知として使い、適用は talosctl upgrade で人がやる (talos/versions.yaml)。 needs-review ラベルを付けて Claude のレビューに乗せる (.github/workflows/claude-code-review.yml)。**depName で絞る。** 同じファイルには metrics-server の chart 版も入っていて、あちらはノードの再起動を伴わないので、この扱いに巻き込まない。Gateway API は再起動を伴わないが、**CRD の版が上がると Gateway も HTTPRoute も全部それに乗り換わる**ので、同じく人が見る。**talosctl のイメージ**(etcd スナップショットの CronJob)と手元の talosctl(tools/Dockerfile の `siderolabs/talos`。kubectl は `kubernetes/kubernetes` で入る)も同じ群に入れる ── ノードの版と一緒に上げたいので、片方だけ自動マージで先に進ませない。",
             "groupName": "talos",
             "groupSlug": "talos",
             "automerge": false,
@@ -50,7 +60,8 @@
                 "factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302",
                 "kubernetes/kubernetes",
                 "kubernetes-sigs/gateway-api",
-                "ghcr.io/siderolabs/talosctl"
+                "ghcr.io/siderolabs/talosctl",
+                "siderolabs/talos"
             ]
         },
         {
