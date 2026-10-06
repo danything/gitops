@@ -141,6 +141,7 @@ data:
   DEFAULT_FROM_EMAIL: info@doany.io
   # 上流の既定は 1 GiB 未満にならない(limit の半分と 1024 MiB の大きい方)ので、limit 1 GiB だと
   # 入れ替え(新旧のワーカーが一瞬並ぶ)の前に OOM になる。limit の 4 割に固定する
+  # (単位は MiB。granian の --workers-max-rss)
   GRANIAN_WORKERS_MAX_RSS: "400"
   LOG_LEVEL: WARNING
 ---
