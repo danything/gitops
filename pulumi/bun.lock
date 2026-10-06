@@ -6,7 +6,7 @@
       "name": "r2-drift",
       "dependencies": {
         "@pulumi/azuread": "6.10.1",
-        "@pulumi/cloudflare": "6.21.0",
+        "@pulumi/cloudflare": "6.22.0",
         "@pulumi/pulumi": "3.267.0",
       },
       "devDependencies": {
@@ -203,7 +203,7 @@
 
     "@pulumi/azuread": ["@pulumi/azuread@6.10.1", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-DYGs1Bvz7x0FPowVAjWWi7R1q52c336BIcZHZ9QoNRodwnnMn22RTH6OJUfAlnf/JADX6EcHLlMJ65pk8Rhzxw=="],
 
-    "@pulumi/cloudflare": ["@pulumi/cloudflare@6.21.0", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-IW8oBur+LcdXt2/Gv29P8TNxI7ILL+ZC2LKo8QtDcmCjQL5KFuR1A9rh0OxGEn08zPWxpMfHT6o1wZ5s0q3DIw=="],
+    "@pulumi/cloudflare": ["@pulumi/cloudflare@6.22.0", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-ljJpS3vhIaTNzTvoNURkUfXnzDlBS0gx2nxvg84JmH6kuYoCmsLiQ1afOdhXly4+G/JIgYqjdxo2QNliVUWYDw=="],
 
     "@pulumi/pulumi": ["@pulumi/pulumi@3.267.0", "", { "dependencies": { "@grpc/grpc-js": "^1.10.1", "@logdna/tail-file": "^2.0.6", "@npmcli/arborist": "^9.0.0", "@opentelemetry/api": "^1.9", "@opentelemetry/core": "^2.9", "@opentelemetry/exporter-trace-otlp-grpc": "^0.220", "@opentelemetry/exporter-zipkin": "^2.9", "@opentelemetry/instrumentation": "^0.220", "@opentelemetry/instrumentation-grpc": "^0.220", "@opentelemetry/resources": "^2.9", "@opentelemetry/sdk-trace-base": "^2.9", "@opentelemetry/sdk-trace-node": "^2.9", "@opentelemetry/semantic-conventions": "^1.42", "@types/google-protobuf": "^3.15.5", "@types/semver": "^7.5.6", "execa": "^5.1.0", "google-protobuf": "^3.21.4", "ini": "^2.0.0", "js-yaml": "^4.3.2", "minimist": "^1.2.6", "normalize-package-data": "^6.0.0", "require-from-string": "^2.0.1", "semver": "^7.5.2", "source-map-support": "^0.5.6", "upath": "^1.1.0" }, "peerDependencies": { "ts-node": ">= 7.0.1 < 12", "typescript": ">= 3.8.3 < 7" }, "optionalPeers": ["ts-node", "typescript"] }, "sha512-dd/K3sxqNKqiYAvcg14TtEL7ZYqSyphMQMuqDeZvooX7jIKaa0t6QeNBnu6KeyH4bqKqNzmta07a/tgmUkw8/w=="],
 
