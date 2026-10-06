@@ -100,8 +100,12 @@ spec:
                       "display_icon": None,
                       "client_id": "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e",
                       "secret": get_secret("social_auth_oidc_secret"),
-                      # 取り込んだ Mattermost のユーザー(同じメールアドレス)にだけ入れる。新しい人は招待してから
-                      "auto_signup": False,
+                      # **Entra で入れた人はアカウントが無くても自動で作る**(本人、2026-10-06)。
+                      # 自分で登録する経路は無い ── パスワードのログインが無効なので、メールの登録フォームは
+                      # Zulip が拒む。誰が入れるかは Entra が決める(単一テナント。割り当て必須はオフなので、
+                      # doany.io のテナントのユーザーなら誰でも)。組織の「招待が必須」はオフにしておくこと
+                      # ── オンだと自動作成も招待を求められて弾かれる(post-import.py が揃える)
+                      "auto_signup": True,
                   },
               }
               # Entra の名前を正とする(ユーザーが Zulip 側で名前を変えられない)
