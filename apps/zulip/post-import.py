@@ -14,8 +14,6 @@
 # 名前は Zulip の既定どおり英語のまま(Zulip の日本語訳でも名前は訳さない)。説明は Zulip の日本語訳と同じ文。
 # 3 つとも「新しく入った人が自動で参加する」チャンネルにする(Zulip の既定と同じ)。
 
-from django.db import transaction
-
 from zerver.actions.default_streams import do_add_default_stream
 from zerver.actions.realm_settings import (
     do_set_realm_new_stream_announcements_stream,
@@ -42,27 +40,28 @@ def find(name: str) -> Stream | None:
     return Stream.objects.filter(realm=realm, name__iexact=name).first()
 
 
-with transaction.atomic():
-    made = {}
-    for old, new, description in CHANNELS:
-        stream = find(new)
-        for name in old if stream is None else ():
-            stream = find(name)
-            if stream is not None:
-                do_rename_stream(stream, new, owner)
-                print(f"改名: {name} → {new}")
-                break
-        if stream is None:
-            # 上の find() で無いと分かっているので、ここで必ず新しく作られる
-            stream = ensure_stream(realm, new, stream_description=description, acting_user=owner)
-            print(f"作成: {new}")
-        if stream.description != description:
-            do_change_stream_description(stream, description, acting_user=owner)
-        do_add_default_stream(stream)
-        made[new] = stream
+# 外側でトランザクションは張らない ── do_rename_stream などが自前で張る(durable)ので入れ子にできない。
+# 1 つずつ確定するが、何度流しても同じ結果になる書き方なので、途中で落ちても流し直せばよい
+made = {}
+for old, new, description in CHANNELS:
+    stream = find(new)
+    for name in old if stream is None else ():
+        stream = find(name)
+        if stream is not None:
+            do_rename_stream(stream, new, owner)
+            print(f"改名: {name} → {new}")
+            break
+    if stream is None:
+        # 上の find() で無いと分かっているので、ここで必ず新しく作られる
+        stream = ensure_stream(realm, new, stream_description=description, acting_user=owner)
+        print(f"作成: {new}")
+    if stream.description != description:
+        do_change_stream_description(stream, description, acting_user=owner)
+    do_add_default_stream(stream)
+    made[new] = stream
 
-    general = made["general"]
-    do_set_realm_new_stream_announcements_stream(realm, general, general.id, acting_user=owner)
-    do_set_realm_zulip_update_announcements_stream(realm, general, general.id, acting_user=owner)
+general = made["general"]
+do_set_realm_new_stream_announcements_stream(realm, general, general.id, acting_user=owner)
+do_set_realm_zulip_update_announcements_stream(realm, general, general.id, acting_user=owner)
 
 print("最初のチャンネル:", ", ".join(made))
