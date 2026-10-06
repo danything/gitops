@@ -23,6 +23,7 @@ const WEB_REDIRECTS: [string, string, string][] = [
   ["fj.doany.io", "/user/oauth2/entra/callback", "Forgejo"],
   ["h.doany.io", "/oidc-callback", "Headlamp"],
   ["hl.doany.io", "/oauth2/callback", "Hubble の前段(oauth2-proxy)"],
+  ["m.doany.io", "/_matrix/client/unstable/login/sso/callback/b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e", "Matrix(Tuwunel)"],
   ["nb.doany.io", "/oauth2/callback", "NetBird"],
   ["nb.doany.io", "/oauth2/logout/callback", "NetBird(ログアウト)"],
   ["yk.doany.io", "/admin/callback", "yosegaki の管理画面"],

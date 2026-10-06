@@ -1,0 +1,219 @@
+# Tuwunel(Matrix のサーバー。https://github.com/matrix-construct/tuwunel)。Zulip からの移行先(2026-10-06)。
+#
+# 最小構成。サーバーはこれ 1 つで、DB(RocksDB)も中にある。Postgres も MAS も要らない:
+#   - ログインは Tuwunel 自身の OAuth/OIDC サーバー(MSC3861/2965)が受け、Entra に回す。
+#     スマホの Element X は「OAuth か パスワード」しか受け付けないので、これが要る(Synapse だと MAS が要る)
+#   - ID は @<メールの @ の前>:doany.io。初回のログインで自動で作られ、最初の人が管理者になる
+#   - フェデレーションは無し(家の中だけ)。パスワードのログインも無し
+#
+# 日本語の検索は弱い(単語の区切りが記号と空白だけ)。承知のうえで選んだ(apps/matrix/README.md)。
+#
+# 設定は下の ConfigMap(秘密でないもの)と環境変数(秘密。TUWUNEL_<節>__<名前>)を重ねる。
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tuwunel
+  namespace: matrix
+data:
+  tuwunel.toml: |
+    [global]
+    # **変えられない**(変えると DB を作り直すことになる)
+    server_name = "doany.io"
+    address = ["0.0.0.0", "::"]
+    port = 8008
+
+    # PVC の中を 3 つに分ける。k8up が取るのは backups/ と media/ だけ(db/ は動いたまま写すと壊れうる)
+    database_path = "/var/lib/tuwunel/db"
+    database_backup_path = "/var/lib/tuwunel/backups"
+    database_backups_to_keep = 2
+    media_storage_providers = ["media"]
+
+    # SIGUSR2 を受けたらバックアップを作る。送るのは下の backup サイドカー(k8up のバックアップのとき)
+    admin_signal_execute = ["server backup-database"]
+
+    allow_federation = false
+    allow_registration = false
+    login_with_password = false
+    new_user_displayname_suffix = ""
+    # フェデレーションしないので鍵の取得先も要らない
+    trusted_servers = []
+
+    # Element X(Android)と app.element.io は、ログインのときの「このアプリを許可しますか」を出さない。
+    # iOS のリダイレクト先は未確認なので、iOS では一度だけ許可の画面が出る
+    oidc_registration_allowed_redirect_hosts = ["element.io", "io.element.android"]
+
+    [global.storage_provider.media.local]
+    base_path = "/var/lib/tuwunel/media"
+    create_if_missing = true
+
+    # クライアントの案内(/.well-known/matrix/client)と、OAuth の issuer を兼ねる。外から見える URL と完全に一致させること
+    [global.well_known]
+    client = "https://m.doany.io"
+
+    # Entra。auth / argocd / zulip などと共用のアプリ登録。リダイレクト URI は pulumi/entra.ts
+    [[global.identity_provider]]
+    brand = "Entra"
+    name = "Microsoft"
+    client_id = "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e"
+    client_secret_file = "/run/secrets/matrix/oidc-client-secret"
+    issuer_url = "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0"
+    callback_url = "https://m.doany.io/_matrix/client/unstable/login/sso/callback/b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e"
+    # Entra の userinfo には preferred_username が無いので、メールの @ の前を ID にする。
+    # メールの無いユーザーは、乱数の ID を作らずにエラーにする
+    userid_claims = ["email"]
+    unique_id_fallbacks = false
+
+    # hookshot(通知の受け口)。トークンは環境変数(TUWUNEL_APPSERVICE__HOOKSHOT__AS_TOKEN など)
+    [global.appservice.hookshot]
+    url = "http://hookshot.matrix.svc:9993"
+    sender_localpart = "hookshot"
+    receive_ephemeral = true
+
+    [[global.appservice.hookshot.users]]
+    exclusive = true
+    regex = "@_webhooks_.*:doany.io"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tuwunel
+  namespace: matrix
+spec:
+  selector:
+    app: tuwunel
+  ports:
+    - name: http
+      port: 8008
+      targetPort: 8008
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tuwunel-data
+  namespace: matrix
+  annotations:
+    # ファイルとしては取らない。下の backup サイドカーの backupcommand が、Tuwunel に作らせた
+    # 整合の取れたバックアップと media/ を tar で渡す
+    k8up.io/backup: "false"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tuwunel
+  namespace: matrix
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  serviceName: tuwunel
+  selector:
+    matchLabels:
+      app: tuwunel
+  template:
+    metadata:
+      labels:
+        app: tuwunel
+      annotations:
+        # 一番新しいバックアップの番号(backups/meta/<番号>)が増えるまで待ってから渡す。
+        # 保持は 2 世代なので、数を数えても増えたことは分からない。20 分で諦めて失敗にする
+        # (k8up の通知が拾う)。スクリプトに ' を入れないこと(k8up が注釈をシェル風に分けるため)
+        k8up.io/backupcommand: >-
+          sh -euc 'd=/var/lib/tuwunel/backups/meta; last() { ls $d 2>/dev/null | sort -n | tail -1; }; b=$(last); pkill -USR2 -x tuwunel; i=0; while [ "$(last)" = "$b" ] && [ $i -lt 1200 ]; do sleep 2; i=$((i+2)); done; [ "$(last)" != "$b" ] || { echo "backup timed out" >&2; exit 1; }; sleep 3; tar -C /var/lib/tuwunel -cf - backups media'
+        k8up.io/backupcommand-container: backup
+        k8up.io/file-extension: .tar
+    spec:
+      # バックアップのサイドカーが Tuwunel のプロセスにシグナルを送るため
+      shareProcessNamespace: true
+      # 移行(初回起動や版上げ)の途中で殺さない(docs/deploying/kubernetes.md)
+      terminationGracePeriodSeconds: 300
+      securityContext:
+        fsGroup: 65532
+      containers:
+        - name: tuwunel
+          image: ghcr.io/matrix-construct/tuwunel:v1.9.3
+          env:
+            - name: TUWUNEL_CONFIG
+              value: /etc/tuwunel/tuwunel.toml
+            - name: TUWUNEL_APPSERVICE__HOOKSHOT__AS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: matrix
+                  key: hookshot-as-token
+            - name: TUWUNEL_APPSERVICE__HOOKSHOT__HS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: matrix
+                  key: hookshot-hs-token
+          ports:
+            - containerPort: 8008
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          startupProbe:
+            exec: {command: [tuwunel, --health-check]}
+            periodSeconds: 10
+            failureThreshold: 180
+          livenessProbe:
+            exec: {command: [tuwunel, --health-check]}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec: {command: [tuwunel, --health-check]}
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/tuwunel
+            - name: config
+              mountPath: /etc/tuwunel
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets/matrix
+              readOnly: true
+        # k8up のバックアップのときにだけ働く(上の backupcommand)。Tuwunel に SIGUSR2 を送って
+        # 整合の取れたバックアップ(backups/)を作らせ、できたら backups/ と media/ を tar で渡す。
+        # ふだんは寝ているだけ。Tuwunel のイメージにはシェルが無いので別に置く
+        - name: backup
+          image: busybox:1.37
+          command: [sh, -c, "trap 'exit 0' TERM; sleep infinity & wait"]
+          securityContext:
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/tuwunel
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tuwunel-data
+        - name: config
+          configMap:
+            name: tuwunel
+        - name: secrets
+          secret:
+            secretName: matrix
+            items:
+              - key: oidc-client-secret
+                path: oidc-client-secret

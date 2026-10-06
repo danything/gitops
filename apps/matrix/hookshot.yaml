@@ -1,0 +1,158 @@
+# matrix-hookshot(通知の受け口。https://github.com/matrix-org/matrix-hookshot)。
+#
+# 使うのは汎用の webhook だけ。外から POST された JSON をルームに投稿する。
+#   - `{"text": …}`(Slack 互換の形)はそのまま Markdown として投稿される
+#   - それ以外(Slack の attachments、GitHub、Forgejo)は、変換のスクリプト(transformationFunction)で
+#     文章に直す。スクリプトは下の connections(静的な接続)に書く ── Argo CD で持てる形
+#   - webhook の URL は https://m.doany.io/webhook/<stateKey>
+#
+# Redis は使わない(キャッシュと暗号化のためのもので、どちらも要らない)。そのため、
+# **通知のルームは暗号化しないこと**(hookshot が暗号化したルームに書けない)。
+#
+# Tuwunel への登録(アプリサービス)は tuwunel.yaml の [global.appservice.hookshot] と対。
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hookshot
+  namespace: matrix
+data:
+  config.yml: |
+    bridge:
+      domain: doany.io
+      url: http://tuwunel.matrix.svc:8008
+      port: 9993
+      bindAddress: 0.0.0.0
+    passFile: /data/passkey.pem
+    logging:
+      level: info
+      colorize: false
+      json: false
+    listeners:
+      - port: 9000
+        bindAddress: 0.0.0.0
+        resources:
+          - webhooks
+    generic:
+      enabled: true
+      outbound: false
+      urlPrefix: https://m.doany.io/webhook/
+      # webhook ごとに送り手のユーザー(@_webhooks_<名前>:doany.io)を作る。名前で誰の通知か分かる
+      userIdPrefix: _webhooks_
+      # 変換のスクリプトを使う(下の connections)。書けるのは git に入れた人だけなので危なくない
+      allowJsTransformationFunctions: true
+      # 送り元に「ルームに書けたか」を返す(書けなかったら送り元にエラーが見える)
+      waitForComplete: true
+      enableHttpGet: false
+      # 受け取った JSON をイベントに丸ごと載せない(GitHub の本文は大きい)
+      includeHookBody: false
+    permissions:
+      - actor: doany.io
+        services:
+          - service: "*"
+            level: admin
+    # 通知のルームごとの webhook。ルームを作ってから足す(apps/matrix/README.md「通知のルーム」)
+    connections: []
+  registration.yml.tmpl: |
+    id: hookshot
+    as_token: ${AS_TOKEN}
+    hs_token: ${HS_TOKEN}
+    namespaces:
+      rooms: []
+      users:
+        - regex: "@_webhooks_.*:doany.io"
+          exclusive: true
+      aliases: []
+    sender_localpart: hookshot
+    url: http://hookshot.matrix.svc:9993
+    rate_limited: false
+    receive_ephemeral: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hookshot
+  namespace: matrix
+spec:
+  selector:
+    app: hookshot
+  ports:
+    # 外(Gateway の /webhook)から
+    - name: webhooks
+      port: 9000
+      targetPort: 9000
+    # Tuwunel から(アプリサービスの API)。外には出さない
+    - name: appservice
+      port: 9993
+      targetPort: 9993
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hookshot
+  namespace: matrix
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hookshot
+  template:
+    metadata:
+      labels:
+        app: hookshot
+    spec:
+      initContainers:
+        # 秘密を差し込んだ設定一式を /data に置く(hookshot は /data/config.yml と /data/registration.yml を読む)
+        - name: render
+          image: busybox:1.37
+          command:
+            - sh
+            - -euc
+            - |
+              cp /config/config.yml /data/config.yml
+              sed -e "s|\${AS_TOKEN}|$AS_TOKEN|" -e "s|\${HS_TOKEN}|$HS_TOKEN|" /config/registration.yml.tmpl > /data/registration.yml
+              echo "$PASSKEY_B64" | base64 -d > /data/passkey.pem
+              chmod 600 /data/passkey.pem /data/registration.yml
+          env:
+            - name: AS_TOKEN
+              valueFrom: {secretKeyRef: {name: matrix, key: hookshot-as-token}}
+            - name: HS_TOKEN
+              valueFrom: {secretKeyRef: {name: matrix, key: hookshot-hs-token}}
+            - name: PASSKEY_B64
+              valueFrom: {secretKeyRef: {name: matrix, key: hookshot-passkey-b64}}
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: data
+              mountPath: /data
+      containers:
+        - name: hookshot
+          image: ghcr.io/matrix-org/matrix-hookshot:7.5.0
+          ports:
+            - containerPort: 9000
+            - containerPort: 9993
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config
+          configMap:
+            name: hookshot
+        - name: data
+          emptyDir: {}

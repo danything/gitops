@@ -308,6 +308,31 @@ spec:
       keepMonthly: 6
       tags: [k8up]
 ---
+# matrix(m.doany.io)。Tuwunel の DB は動いたまま写すと壊れうるので、ファイルとしては取らない。
+# backup サイドカーの backupcommand が Tuwunel に整合の取れたバックアップを作らせ、それと media/ を tar で渡す
+# (apps/matrix/tuwunel.yaml)。14:00 以降は埋まっているので 13:30、prune は月曜 00:15 UTC
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: matrix
+  namespace: matrix
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  backup:
+    schedule: "30 13 * * *"
+    tags: [k8up]
+    podSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    failedJobsHistoryLimit: 2
+    successfulJobsHistoryLimit: 1
+  prune:
+    schedule: "15 0 * * 1"
+    retention:
+      keepDaily: 7
+      keepWeekly: 4
+      keepMonthly: 6
+      tags: [k8up]
+---
 # zulip(z.doany.io)。DB は postgres の backupcommand(pg_dump。PGroonga の索引も入る)、
 # 添付ファイル・アバターは PVC zulip-data をファイルとして。
 # 14:15〜17:45 UTC は埋まっているので 14:00。etcd のスナップショット(移行後。talos/after-migration/)は 13:45。
