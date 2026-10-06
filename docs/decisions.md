@@ -894,3 +894,26 @@ ArgoCD は「git から消えた + 自分が追跡している」ものを prune
 - **`bootstrap/` へ移すもの** — 引き取り手が居ないのでこの手が使えない。先に
   `argocd.argoproj.io/sync-options: Prune=false` を live に効かせておき、そのあと移す。
   移し終えたら live の tracking-id 注釈を剥がして、`Prune=false` も外す
+
+## DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける(2026-10-06)
+
+**社内用や通信量が多いアプリは直接つなぐ。SaaS のように外へ出すアプリは Cloudflare のプロキシを通す**(本人)。
+
+- 直接つなぐもの:`*.doany.io` のワイルドカード(proxied ではない CNAME → `doany.io`)で引ける。明示のレコードは持たない
+- Cloudflare を通すもの:アプリのリポジトリの HTTPRoute に `external-dns.kubernetes.io/cloudflare-proxied: "true"` を付け、
+  **ExternalDNS**(`apps/external-dns/`)が proxied の CNAME を作る
+
+**DNS もアプリのリポジトリで持つ(疎結合)。** それまでは Cloudflare を通すアプリの CNAME(`l`・`tk`・`ts`・`w`・`x`・`y`)を
+手で作っていた。中央の IaC(Pulumi・DNSControl・OctoDNS)に一覧を置く案もあったが、アプリを足すたびに gitops と
+アプリのリポジトリの 2 か所を直すことになる。ExternalDNS は HTTPRoute の注釈だけで決まり、自分が作ったレコード
+(所有の印の TXT 付き)にしか触れないので、メールや DDNS の apex と同居できる。
+
+比べたもの(2026-10-06 時点の GitHub のスター):ExternalDNS 9,104(kubernetes-sigs)/ DNSControl 3,961 / OctoDNS 3,772 /
+Cloudflare の Terraform provider 1,342 / cloudflare-operator 695(トンネルが主) / k8s_gateway 356(自前の DNS サーバーで、
+1 年以上止まっている) / Crossplane の Cloudflare provider 10。疎結合にできるのは ExternalDNS・cloudflare-operator・Crossplane だけで、
+その中で DNS が主役で利用者が多いのは ExternalDNS。
+
+**Entra のリダイレクト URI は中央(`pulumi/entra.ts`)のまま。** 共用のアプリ登録 1 つに全アプリの URI が入るので、
+そもそも中央に集まる性質のもの。アプリごとに分けるにはアプリ登録を分ける必要があり、それを Kubernetes から作る
+手軽な道具がまだ無い。
+

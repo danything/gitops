@@ -1,0 +1,9 @@
+# PSA は restricted で足りる(root も hostPath も無い。chart の既定が nonroot・読み取り専用のルート FS)。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-dns
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

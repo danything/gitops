@@ -73,6 +73,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | --- | --- |
 | [`adguardhome/`](apps/adguardhome/) | AdGuard Home (DNS フィルタ) |
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
+| [`external-dns/`](apps/external-dns/) | ExternalDNS。**Cloudflare を通すアプリの DNS を、アプリの HTTPRoute の注釈から作る**(gitops には書かない)。直接つなぐアプリはワイルドカードで引ける |
 | [`zulip/`](apps/zulip/) | Zulip(`z.doany.io`。Mattermost の移行先)+ PostgreSQL(PGroonga)+ RabbitMQ + memcached + Redis。**使い始めと移行の手順は [apps/zulip/README.md](apps/zulip/README.md)** |
 | [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
