@@ -198,7 +198,7 @@ spec:
         # 整合の取れたバックアップ(backups/)を作らせ、できたら backups/ と media/ を tar で渡す。
         # ふだんは寝ているだけ。Tuwunel のイメージにはシェルが無いので別に置く
         - name: backup
-          image: busybox:1.37
+          image: busybox:1.38
           command: [sh, -c, "trap 'exit 0' TERM; sleep infinity & wait"]
           securityContext:
             runAsUser: 0
