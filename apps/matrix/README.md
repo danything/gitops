@@ -56,8 +56,9 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 - **暗号化していない。** hookshot は暗号化したルームに書けない。暗号化を後から入れると戻せないので、入れないこと
 - webhook は [hookshot.yaml](hookshot.yaml) の `connections`。URL は `https://m.doany.io/webhook/<ID>` で、ID は
   Infisical `/matrix/matrix` の `hook-<部屋>`(公開のリポジトリなので git に置かない)
-- スマホに通知が来るのは worklog・denpa・forgejo だけ(m.text で投稿する)。ほかは m.notice で、Element の既定では
-  未読が付くだけで通知されない
+- **投稿は全部 m.notice(bot の発言)**(2026-10-07)。通知と音は Element の設定で決める:
+  グループの会話は「音あり」、bot のメッセージは「オン」(音無しで通知)、要らない部屋は部屋ごとに「メンションのみ」。
+  (以前は通知したい部屋だけ m.text で投稿していたが、グループの会話を音ありにすると bot まで鳴るのでやめた)
 
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |

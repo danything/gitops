@@ -59,9 +59,8 @@ data:
     # stateKey は推測されない乱数で、Infisical /matrix/matrix の hook-<部屋>(公開のリポジトリなので git に置かない)。
     # 下の render が HOOK_ で始まる変数(stateKey)を差し替える。送り手は @_webhooks_<name>:doany.io
     #
-    # スクリプトは 2 種類。slack(Slack 互換の {text, attachments})、slack-loud(同じで m.text。
-    # m.notice は Element の既定でスマホに通知されないので、通知したい部屋だけこちら)。
-    # slack と slack-loud は本体が同じ(違いは msgtype だけ)。直すときは両方を揃えて直す
+    # 投稿は全部 m.notice(bot の発言)。スマホに通知するかと音は、Element の「bot のメッセージ」の設定と
+    # 部屋ごとの通知の設定で決める(人の会話は音あり、bot は音無しで通知、要らない部屋はメンションのみ)
     connections:
       # 部屋 server: k8up の通知、ホストのバックアップ(backup/k3s-backup)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
@@ -110,46 +109,27 @@ data:
         state:
           name: todoroku
           transformationFunction: *slack
-      # 部屋 worklog: worklog(スマホに通知する)
+      # 部屋 worklog: worklog
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_WORKLOG}
         roomId: "!aAFRLm9zquKQuIO3X7L-PkvvWcPg7_dqu5WIgYQNhe0"
         state:
           name: worklog
-          transformationFunction: &loud |
-            // slack と同じ。ただし m.text(スマホに通知が来る。m.notice は既定で通知されない)
-            const EMOJI = { tada: "🎉", rotating_light: "🚨", bar_chart: "📊", white_check_mark: "✅", heavy_check_mark: "✔️", x: "❌", warning: "⚠️", fire: "🔥", rocket: "🚀", tv: "📺", movie_camera: "🎥", floppy_disk: "💾", wastebasket: "🗑️", hourglass: "⌛", bell: "🔔", information_source: "ℹ️", red_circle: "🔴", green_circle: "🟢", large_blue_circle: "🔵", sparkles: "✨", wave: "👋", bust_in_silhouette: "👤", moneybag: "💰", credit_card: "💳", email: "📧", lock: "🔒", key: "🔑", inbox_tray: "📥", outbox_tray: "📤", memo: "📝", package: "📦", construction: "🚧", stop_sign: "🛑", zap: "⚡", recycle: "♻️", calendar: "📅", clock3: "🕒", "+1": "👍" };
-            const md = (s) => String(s ?? "")
-              .replace(/<(https?:[^|>]+)\|([^>]+)>/g, "[$2]($1)")
-              .replace(/<(https?:[^>]+)>/g, "$1")
-              .replace(/:([a-z0-9_+-]+):/g, (m, k) => EMOJI[k] ?? m);
-            const parts = [];
-            if (data.text) parts.push(md(data.text));
-            for (const a of data.attachments ?? []) {
-              if (a.pretext) parts.push(md(a.pretext));
-              if (a.title) parts.push(a.title_link ? `**[${a.title}](${a.title_link})**` : `**${md(a.title)}**`);
-              if (a.text) parts.push(md(a.text));
-              const fields = (a.fields ?? []).map((f) => `- **${md(f.title)}**: ${md(f.value)}`);
-              if (fields.length) parts.push(fields.join("\n"));
-              if (!data.text && !a.title && !a.text && a.fallback) parts.push(md(a.fallback));
-            }
-            result = parts.length
-              ? { version: "v2", plain: parts.join("\n\n"), msgtype: "m.text" }
-              : { version: "v2", empty: true };
-      # 部屋 denpa: denpa(録画の節目。スマホに通知する)
+          transformationFunction: *slack
+      # 部屋 denpa: denpa(録画の節目)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_DENPA}
         roomId: "!CQd-N3QSuFJdX04nG7hg90kLuVi86uXrxOQXgva1oMs"
         state:
           name: denpa
-          transformationFunction: *loud
-      # 部屋 forgejo: Forgejo の組織 doa の webhook(種類は Slack。スマホに通知する。GitHub の通知を GitHub のアプリに寄せたので、Forgejo はここで受ける)
+          transformationFunction: *slack
+      # 部屋 forgejo: Forgejo の組織 doa の webhook(種類は Slack)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_FORGEJO}
         roomId: "!46KHKR8zfKiW1lpfzy5QvvoV4y41Hwy9UNmFpStxYHA"
         state:
           name: Forgejo
-          transformationFunction: *loud
+          transformationFunction: *slack
       # 部屋 server: Infisical の秘密の変更(プロジェクトの webhook。種類は general)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_INFISICAL}
