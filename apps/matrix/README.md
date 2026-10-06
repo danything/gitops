@@ -44,8 +44,30 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 ## 通知のルーム
 
-hookshot の webhook は、ルームを作ってから [hookshot.yaml](hookshot.yaml) の `connections` に足す。
-URL は `https://m.doany.io/webhook/<stateKey>`。
+`notify-*` の 8 つ(2026-10-06 に作った)。Zulip のメッセージは持ってきていない(ほとんどが bot の通知のため)。
+
+- 作ったのは hookshot(`@hookshot:doany.io`)。`@info:doany.io` も作成者(room version 12 の `additional_creators`)
+  なので、権限は最上位で外されない
+- **暗号化していない。** hookshot は暗号化したルームに書けない。暗号化を後から入れると戻せないので、入れないこと
+- webhook は [hookshot.yaml](hookshot.yaml) の `connections`。URL は `https://m.doany.io/webhook/<ID>` で、ID は
+  Infisical `/matrix/matrix` の `hook-<部屋>`(公開のリポジトリなので git に置かない)
+- スマホに通知が来るのは worklog・denpa・github だけ(m.text で投稿する)。ほかは m.notice で、Element の既定では
+  未読が付くだけで通知されない(Mattermost のときと同じ分け方)
+
+| ルーム | 送り元 | URL の在処 |
+| --- | --- | --- |
+| `notify-server` | k8up の通知 | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
+| 〃 | ホストのバックアップ | ホストの `/etc/k3s-backup/env` の `MATTERMOST_WEBHOOK`(**sed で書き換えない**。URL の `&` で壊れる) |
+| `notify-argocd` | Argo CD | `bootstrap/argocd/helmchart.yaml`(SOPS)の `service.webhook.mattermost` |
+| `notify-ashi` | ashi | Infisical `/ashi/ashi-secrets` の `notify-webhook-url` |
+| `notify-todoroku` | todoroku | Infisical `/todoroku/todoroku-secrets` の `mattermost-webhook-url` |
+| `notify-worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
+| `notify-denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
+| `notify-forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
+| `notify-github` | GitHub | GitHub の組織 `danything` の webhook |
+
+足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
+`connections` と render の env に足す。
 
 ## バックアップ
 
