@@ -56,7 +56,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 - **暗号化していない。** hookshot は暗号化したルームに書けない。暗号化を後から入れると戻せないので、入れないこと
 - webhook は [hookshot.yaml](hookshot.yaml) の `connections`。URL は `https://m.doany.io/webhook/<ID>` で、ID は
   Infisical `/matrix/matrix` の `hook-<部屋>`(公開のリポジトリなので git に置かない)
-- スマホに通知が来るのは worklog・denpa だけ(m.text で投稿する)。ほかは m.notice で、Element の既定では
+- スマホに通知が来るのは worklog・denpa・forgejo だけ(m.text で投稿する)。ほかは m.notice で、Element の既定では
   未読が付くだけで通知されない
 
 | ルーム | 送り元 | URL の在処 |
