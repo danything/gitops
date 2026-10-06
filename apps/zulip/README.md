@@ -114,15 +114,23 @@ https://z.doany.io/api/v1/external/slack_incoming?api_key=<bot の API キー>&s
 
 **どれも Slack 互換の形(`{"text": …}` や attachments)で送っている**ので、URL を替えるだけでよい。
 
-| Mattermost の webhook | 送り元 | URL の在処 |
+**2026-10-06 に全部切り替えた。** bot は 2 つ。「通知」(`notify-bot`、incoming webhook bot。API キーは
+Infisical `/zulip/zulip` の `notify-bot-api-key`)と、Mattermost から取り込んだ「GitHub」。
+
+| 送り元 | チャンネル / トピック | URL の在処 |
 | --- | --- | --- |
-| server | k8up の notify / ホストのバックアップ | Infisical `/k8up/k8up-global` の `mattermostWebhook` と、ホストの `/etc/k3s-backup/env`(`MATTERMOST_WEBHOOK`。`recovery/env.age` も作り直す) |
-| ArgoCD | Argo CD の通知 | `bootstrap/argocd/helmchart.yaml`(SOPS)の `service.webhook.mattermost` |
-| ashi | ashi | ashi の `NOTIFY_WEBHOOK_URL`(Infisical) |
-| shadai | todoroku | todoroku の `MATTERMOST_WEBHOOK_URL`(Infisical) |
-| worklog | worklog | worklog-cloud の `MATTERMOST_WEBHOOK_URL`(Infisical) |
-| denpa | denpa | denpa の設定(Infisical) |
-| Forgejo | Forgejo のリポジトリの webhook | Forgejo の画面。**Zulip の Gitea 用の受け口**(`/api/v1/external/gitea`)に向け、Forgejo 側の種類を Gitea にする |
+| k8up の通知 | `notify-server` / `k8up` | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
+| ホストのバックアップ | `notify-server` / `k3s-backup` | ホストの `/etc/k3s-backup/env` の `MATTERMOST_WEBHOOK`。**`recovery/env.age` はまだ古い URL**(作り直しはパスフレーズが要るので手で) |
+| Argo CD | `notify-argocd` / `argocd` | `bootstrap/argocd/helmchart.yaml`(SOPS)の `service.webhook.mattermost`(名前は据え置き) |
+| ashi | `notify-ashi` / `ashi` | Infisical `/ashi/ashi-secrets` の `notify-webhook-url` |
+| todoroku | `notify-todoroku` / `todoroku` | Infisical `/todoroku/todoroku-secrets` の `mattermost-webhook-url` |
+| worklog | `notify-worklog` / `worklog` | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
+| denpa | `notify-denpa` / `denpa` | denpa の DB(`webhooks` テーブル。画面の設定) |
+| Forgejo | `notify-forgejo` / `forgejo` | Forgejo の組織 `doa` の webhook(種類は Slack のまま。DB の `webhook` id 2) |
+| GitHub | `notify-github`(送り手は「GitHub」の bot) | GitHub の組織 `danything` の webhook(Zulip の GitHub 用の受け口。Mattermost では GitHub プラグインだった) |
+
+**ホストの env を `sed` で書き換えないこと。** URL の `&` が `sed` の置換では「一致した文字列」になって壊れる
+(2026-10-06 に踏んで 401 になった)。
 
 ### 6. Mattermost を畳む
 
@@ -130,6 +138,7 @@ https://z.doany.io/api/v1/external/slack_incoming?api_key=<bot の API キー>&s
 
 - `apps/mattermost/` を消す(Argo CD が prune する。PVC も消える ── 最後の pg_dump は R2 に残る)
 - ルーターの **8443(Calls)の転送**を消す
+- Mattermost の GitHub プラグインが使っていた GitHub 側の設定(OAuth アプリなど)があれば消す
 - Entra のリダイレクト URI から `https://mm.doany.io/signup/office365/complete` を消す
 - Infisical の `/mattermost/mattermost` を消す
 - k8up の通知が `mattermost/…` を「25 時間以上更新されていない」と言い出すので、
