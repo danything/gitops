@@ -53,10 +53,11 @@ data:
             level: admin
     # 通知のルームごとの webhook。URL は https://m.doany.io/webhook/<stateKey>。
     # stateKey は推測されない乱数で、Infisical /matrix/matrix の hook-<部屋>(公開のリポジトリなので git に置かない)。
-    # 下の render が ${HOOK_…} を差し替える。送り手は @_webhooks_<name>:doany.io
+    # 下の render が HOOK_ で始まる変数(stateKey)を差し替える。送り手は @_webhooks_<name>:doany.io
     #
     # スクリプトは 3 種類。slack(Slack 互換の {text, attachments})、slack-loud(同じで m.text。
-    # m.notice は Element の既定でスマホに通知されないので、通知したい部屋だけこちら)、github
+    # m.notice は Element の既定でスマホに通知されないので、通知したい部屋だけこちら)、github。
+    # slack と slack-loud は本体が同じ(違いは msgtype だけ)。直すときは両方を揃えて直す
     connections:
       # notify-server: k8up の通知、ホストのバックアップ(backup/k3s-backup)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
@@ -262,7 +263,7 @@ spec:
               cp /config/config.yml /data/config.yml
               # webhook の stateKey(HOOK_*)を差し込む。値は 16 進なので sed でそのまま置ける
               env | grep '^HOOK_' | while IFS='=' read -r k v; do sed -i "s|\${$k}|$v|g" /data/config.yml; done
-              if grep -q '\${HOOK_' /data/config.yml; then echo "差し込めていない HOOK_ がある" >&2; exit 1; fi
+              if grep -q '\${HOOK_[A-Z]*}' /data/config.yml; then echo "差し込めていない HOOK_ がある" >&2; exit 1; fi
               sed -e "s|\${AS_TOKEN}|$AS_TOKEN|" -e "s|\${HS_TOKEN}|$HS_TOKEN|" /config/registration.yml.tmpl > /data/registration.yml
               echo "$PASSKEY_B64" | base64 -d > /data/passkey.pem
               chmod 600 /data/passkey.pem /data/registration.yml
