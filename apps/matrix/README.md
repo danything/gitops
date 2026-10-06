@@ -68,7 +68,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | `notify-worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
 | `notify-denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
 | `notify-forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
-| `notify-github` | GitHub | hookshot の GitHub 連携(下の「GitHub 連携」)。ルームでコマンドでつなぐ。組織の webhook は 2026-10-06 に外した |
+| `notify-github` | (使っていない) | **GitHub の通知は GitHub のアプリで受ける**(2026-10-07)。ルームは残っているが何も流れない |
 
 足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
 `connections` と render の env に足す。
@@ -106,14 +106,12 @@ GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` と
 3. ルームで `!hookshot github repo https://github.com/danything/<リポジトリ>`
 4. 通知の種類はルームの設定から(`!gh help` でコマンドの一覧)
 
-**`notify-github` もこの連携で流す**(2026-10-06)。組織の webhook(汎用の受け口)はやめた。
-
-- **リポジトリはルームでコマンドを打ってつなぐ**(`!hookshot github repo https://github.com/danything/<repo>`)。
-  **設定ファイルの固定の接続には書けない**(`ConfigError: … does not support static configuration`。2026-10-06 に
-  書いて hookshot が起動しなくなった)。新しいリポジトリを作ったら、そのつど打つ
-- 流れるのは issue・PR(レビュー含む)・push・リリース・Actions。**コメントは流れない**ので、GitHub の通知
-  (GitHub のスマホのアプリ)で受ける(自分が関わっているものだけ)
-- 連携の投稿は m.notice(bot の発言)なので、Element の既定ではスマホに通知されない
+**GitHub の通知は Matrix に流さない**(2026-10-07)。hookshot の連携で `notify-github` に流してみたが、1 本の流れに
+なってスレッドにもできず読みにくかったので、GitHub のアプリ(issue や PR ごとにまとまり、その場で返信や承認ができる)
+に寄せた。danything と 5ym のリポジトリは Watch にしてある(5ym のフォークは参加しているものだけ)。
+連携そのもの(App とログイン)は残してあり、ルームで `!hookshot github repo` を打てば、そのリポジトリだけまた流せる。
+**設定ファイルの固定の接続には書けない**(`ConfigError: … does not support static configuration`。2026-10-06 に
+書いて hookshot が起動しなくなった)。
 
 ## RSS
 
