@@ -46,7 +46,10 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 ## 通知のルーム
 
-`notify-*` の 7 つ(2026-10-06 に 8 つ作り、`notify-github` は 2026-10-07 に畳んだ)。Zulip のメッセージは持ってきていない(ほとんどが bot の通知のため)。
+**スペース「通知」**にまとめてある(2026-10-07)。部屋の名前は接頭辞を付けず短く(`server`・`argocd`・`ashi`・
+`todoroku`・`worklog`・`denpa`・`forgejo`・`feed`)。Slack のような `notify-` の接頭辞の代わりにスペースで束ねる
+(名前は表示用で、hookshot も webhook も部屋の ID で動くので、変えても影響しない)。
+2026-10-06 に `notify-*` として 8 つ作り、`notify-github` は 2026-10-07 に畳んだ。Zulip のメッセージは持ってきていない(ほとんどが bot の通知のため)。
 
 - 作ったのは hookshot(`@hookshot:doany.io`)。`@info:doany.io` も作成者(room version 12 の `additional_creators`)
   なので、権限は最上位で外されない
@@ -58,16 +61,16 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |
-| `notify-server` | k8up の通知 | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
+| `server` | k8up の通知 | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
 | 〃 | Infisical(秘密の変更) | Infisical のプロジェクトの webhook(Project Settings → Webhooks。環境 prod、パス `/`) |
 | 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先([../../pulumi/notifications.ts](../../pulumi/notifications.ts)) |
 | 〃 | ホストのバックアップ | ホストの `/etc/k3s-backup/env` の `MATTERMOST_WEBHOOK`(**sed で書き換えない**。URL の `&` で壊れる) |
-| `notify-argocd` | Argo CD | `bootstrap/argocd/helmchart.yaml`(SOPS)の `service.webhook.mattermost` |
-| `notify-ashi` | ashi | Infisical `/ashi/ashi-secrets` の `notify-webhook-url` |
-| `notify-todoroku` | todoroku | Infisical `/todoroku/todoroku-secrets` の `mattermost-webhook-url` |
-| `notify-worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
-| `notify-denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
-| `notify-forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
+| `argocd` | Argo CD | `bootstrap/argocd/helmchart.yaml`(SOPS)の `service.webhook.mattermost` |
+| `ashi` | ashi | Infisical `/ashi/ashi-secrets` の `notify-webhook-url` |
+| `todoroku` | todoroku | Infisical `/todoroku/todoroku-secrets` の `mattermost-webhook-url` |
+| `worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
+| `denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
+| `forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
 
 足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
 `connections` と render の env に足す。
@@ -119,7 +122,7 @@ hookshot の feeds で RSS / Atom を購読する(10 分おき)。購読はル�
 ルームで `!hookshot feed <URL>` を打つか、hookshot の bot として state
 `uk.half-shot.matrix-hookshot.feed`(state key と本文の `url` に URL)を書く。
 
-流す先は **`notify-feed`**(2026-10-07 に作った。暗号化なし、`@info:doany.io` も作成者)。
+流す先はスペース「通知」の **`feed`**(2026-10-07 に作った。暗号化なし、`@info:doany.io` も作成者)。
 
 | 購読 | URL |
 | --- | --- |

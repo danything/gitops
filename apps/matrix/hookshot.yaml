@@ -79,7 +79,7 @@ data:
     # m.notice は Element の既定でスマホに通知されないので、通知したい部屋だけこちら)。
     # slack と slack-loud は本体が同じ(違いは msgtype だけ)。直すときは両方を揃えて直す
     connections:
-      # notify-server: k8up の通知、ホストのバックアップ(backup/k3s-backup)
+      # 部屋 server: k8up の通知、ホストのバックアップ(backup/k3s-backup)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_SERVER}
         roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
@@ -105,28 +105,28 @@ data:
             result = parts.length
               ? { version: "v2", plain: parts.join("\n\n"), msgtype: "m.notice" }
               : { version: "v2", empty: true };
-      # notify-argocd: Argo CD の通知(bootstrap/argocd/helmchart.yaml)
+      # 部屋 argocd: Argo CD の通知(bootstrap/argocd/helmchart.yaml)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_ARGOCD}
         roomId: "!BeZ3yus1s1E22DPYFauQjZ1AMGT2VkusuLzLk2r1cJk"
         state:
           name: argocd
           transformationFunction: *slack
-      # notify-ashi: ashi
+      # 部屋 ashi: ashi
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_ASHI}
         roomId: "!Ffdb9KuBulsduDwuX3ig_Mm_L58QUBd78rcfGOTWoNs"
         state:
           name: ashi
           transformationFunction: *slack
-      # notify-todoroku: todoroku
+      # 部屋 todoroku: todoroku
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_TODOROKU}
         roomId: "!6cY5BJsmPL_0_-t2q2E-veifDIO73fz2ABcZErJXkhQ"
         state:
           name: todoroku
           transformationFunction: *slack
-      # notify-worklog: worklog(スマホに通知する)
+      # 部屋 worklog: worklog(スマホに通知する)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_WORKLOG}
         roomId: "!aAFRLm9zquKQuIO3X7L-PkvvWcPg7_dqu5WIgYQNhe0"
@@ -152,21 +152,21 @@ data:
             result = parts.length
               ? { version: "v2", plain: parts.join("\n\n"), msgtype: "m.text" }
               : { version: "v2", empty: true };
-      # notify-denpa: denpa(録画の節目。スマホに通知する)
+      # 部屋 denpa: denpa(録画の節目。スマホに通知する)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_DENPA}
         roomId: "!CQd-N3QSuFJdX04nG7hg90kLuVi86uXrxOQXgva1oMs"
         state:
           name: denpa
           transformationFunction: *loud
-      # notify-forgejo: Forgejo の組織 doa の webhook(種類は Slack)
+      # 部屋 forgejo: Forgejo の組織 doa の webhook(種類は Slack)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_FORGEJO}
         roomId: "!46KHKR8zfKiW1lpfzy5QvvoV4y41Hwy9UNmFpStxYHA"
         state:
           name: Forgejo
           transformationFunction: *slack
-      # notify-server: Infisical の秘密の変更(プロジェクトの webhook。種類は general)
+      # 部屋 server: Infisical の秘密の変更(プロジェクトの webhook。種類は general)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_INFISICAL}
         roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
@@ -188,7 +188,7 @@ data:
             result = data.event
               ? { version: "v2", plain: `${what}: \`${where}\`${by}`, msgtype: "m.notice" }
               : { version: "v2", empty: true };
-      # notify-server: Cloudflare の通知(証明書・DDoS・オリジン不達など。pulumi/notifications.ts)。本文は text に来る
+      # 部屋 server: Cloudflare の通知(証明書・DDoS・オリジン不達など。pulumi/notifications.ts)。本文は text に来る
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_CLOUDFLARE}
         roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
