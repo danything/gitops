@@ -71,8 +71,8 @@ data:
     # stateKey は推測されない乱数で、Infisical /matrix/matrix の hook-<部屋>(公開のリポジトリなので git に置かない)。
     # 下の render が HOOK_ で始まる変数(stateKey)を差し替える。送り手は @_webhooks_<name>:doany.io
     #
-    # スクリプトは 3 種類。slack(Slack 互換の {text, attachments})、slack-loud(同じで m.text。
-    # m.notice は Element の既定でスマホに通知されないので、通知したい部屋だけこちら)、github。
+    # スクリプトは 2 種類。slack(Slack 互換の {text, attachments})、slack-loud(同じで m.text。
+    # m.notice は Element の既定でスマホに通知されないので、通知したい部屋だけこちら)。
     # slack と slack-loud は本体が同じ(違いは msgtype だけ)。直すときは両方を揃えて直す
     connections:
       # notify-server: k8up の通知、ホストのバックアップ(backup/k3s-backup)
@@ -162,144 +162,6 @@ data:
         state:
           name: Forgejo
           transformationFunction: *slack
-      # notify-github: GitHub の組織 danything の webhook。コメントとリポジトリの作成・削除だけ(スマホに通知する)
-      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
-        stateKey: ${HOOK_GITHUB}
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          name: GitHub
-          transformationFunction: &github |
-            // **組織の webhook の events を増やすときは、このスクリプトも見直す**(最後の分岐は action だけで
-            // 「リポジトリの作成」と見ているので、discussion などの created が紛れ込む)。
-            // GitHub の組織の webhook。hookshot の GitHub 連携(下の github.repository)が流さないものだけを拾う:
-            // issue と PR へのコメント、リポジトリの作成と削除(作られたら下の接続に足す合図)。ヘッダーの種類は来ないので中身で見分ける
-            const repo = data.repository ? `[${data.repository.full_name}](${data.repository.html_url})` : "";
-            const who = data.sender?.login ?? "";
-            const link = (t, u) => `[${String(t).replace(/[\[\]]/g, "")}](${u})`;
-            const quote = (s) => "> " + String(s ?? "").slice(0, 500).replace(/\n/g, "\n> ");
-            let out = null;
-            if (data.zen) {
-              out = `🏓 webhook がつながった(${data.hook?.type ?? ""} ${data.hook_id ?? ""})`;
-            } else if (data.comment && data.issue && data.action === "created") {
-              const kind = data.issue.pull_request ? "PR" : "issue";
-              out = `💬 ${repo} ${who} が ${kind} ${link(`#${data.issue.number} ${data.issue.title}`, data.comment.html_url)} にコメント\n\n${quote(data.comment.body)}`;
-            } else if (data.comment && data.pull_request && data.action === "created") {
-              out = `💬 ${repo} ${who} が PR ${link(`#${data.pull_request.number} ${data.pull_request.title}`, data.comment.html_url)} の差分にコメント\n\n${quote(data.comment.body)}`;
-            } else if (data.repository && !data.comment && ["created", "deleted", "archived"].includes(data.action) && !data.issue && !data.pull_request) {
-              const verb = { created: "作成", deleted: "削除", archived: "アーカイブ" }[data.action];
-              out = `📦 ${who} がリポジトリ ${repo} を${verb}。**apps/matrix/hookshot.yaml の GitHub の接続を${data.action === "created" ? "足す" : "外す"}こと**`;
-            }
-            result = out
-              ? { version: "v2", plain: out, msgtype: "m.text", hints: { showUrlPreviews: false } }
-              : { version: "v2", empty: true };
-      # notify-github: hookshot の GitHub 連携(GitHub App doa-hookshot)。組織の有効なリポジトリを全部つなぐ。
-      # **リポジトリを作ったら足す**(上の汎用の webhook が「作成」を知らせる)。流すのは issue・PR・push・リリース・Actions
-      # (コメントは流れないので上の汎用の webhook が拾う)。種類は enableHooks(apps/matrix/README.md「GitHub 連携」)
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/aizuchi
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: aizuchi
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/ashi
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: ashi
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/blog
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: blog
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/denpa
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: denpa
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/denpa-tv
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: denpa-tv
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/genkan
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: genkan
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/.github
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: .github
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/gitops
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: gitops
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/helm-mosp
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: helm-mosp
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/infisical-push-bridge
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: infisical-push-bridge
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/lgtm
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: lgtm
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/wslc-compose
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: wslc-compose
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/xool
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: xool
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/yosegaki
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: yosegaki
-          enableHooks: [issue, pull_request, push, release, workflow.run]
-      - connectionType: uk.half-shot.matrix-hookshot.github.repository
-        stateKey: danything/yuzuriha
-        roomId: "!XmjvSqzoJzIjFSIIS4fSALiksG6Afxivn1h7MQgbwwU"
-        state:
-          org: danything
-          repo: yuzuriha
-          enableHooks: [issue, pull_request, push, release, workflow.run]
   registration.yml.tmpl: |
     id: hookshot
     as_token: ${AS_TOKEN}
@@ -395,8 +257,6 @@ spec:
               valueFrom: {secretKeyRef: {name: matrix, key: hook-denpa}}
             - name: HOOK_FORGEJO
               valueFrom: {secretKeyRef: {name: matrix, key: hook-forgejo}}
-            - name: HOOK_GITHUB
-              valueFrom: {secretKeyRef: {name: matrix, key: hook-github}}
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
