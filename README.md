@@ -44,9 +44,9 @@ Argo CD が git を読む GitHub App 鍵、cert-manager の Cloudflare トーク
 鍵は [`recovery/sops-age.key.age`](recovery/)(バックアップの `env.age` と同じパスフレーズ)。
 
 ```shell
-mkdir -p ~/.config/sops/age
-age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age
-sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
+# 鍵はリポジトリの .home/(git に入らない)に置く。コマンドは tools/t で動かす(tools/README.md)
+tools/t sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
+tools/t sops -d bootstrap/infisical/secrets.yaml | tools/t kubectl apply -f -
 ```
 
 ## ホスト名の付け方

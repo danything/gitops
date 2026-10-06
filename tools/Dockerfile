@@ -48,9 +48,5 @@ RUN set -eux; a=$TARGETARCH; cd /tmp; \
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN npm install -g "cf@${CF_VERSION}" && npm cache clean --force
 
-# 手元のユーザーの uid で動かす(compose.yaml)。HOME はここに固定し、設定は compose が差し込む
-ENV HOME=/home/me
-# ~/.config も先に作っておく(無いと、差し込んだ ~/.config/cloudflare などの親を Docker が root で作り、
-# 横に別の設定を書くコマンドが権限で落ちる)
-RUN mkdir -m 777 /home/me /home/me/.config
+# 手元のユーザーの uid で動かす。HOME はリポジトリの .home/(compose.yaml)
 WORKDIR /repo
