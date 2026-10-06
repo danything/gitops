@@ -5,8 +5,20 @@
 # PGroonga の公式イメージには逆に Zulip の英語の辞書が無いので、application.yaml で
 # `postgresql.missing_dictionaries` を立てて辞書無しで DB を作らせている(PGroonga で探すなら使わない)。
 #
-# POSTGRES_USER の zulip はこのクラスタの superuser になる。Zulip の初回の migrate が
-# `CREATE EXTENSION pgroonga` を打つのに要る(PGroonga は trusted な extension ではない)。
+# **PGroonga の拡張は Zulip のマイグレーションは作らない**(2026-10-06 に踏んだ)。Zulip の通常の
+# インストーラは DB の外から `CREATE EXTENSION` しておく前提で、無いまま migrate すると
+# `access method "pgroonga" does not exist` で落ちる。下の ConfigMap を initdb の置き場に入れて、
+# DB を作るときに一緒に作る(initdb は空の PGDATA のときだけ走る。最初の 1 回は手で作った)。
+# pg_dump は拡張を含むので、戻すときは作り直さなくてよい。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: zulip
+data:
+  pgroonga.sql: |
+    CREATE EXTENSION IF NOT EXISTS pgroonga;
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -91,7 +103,13 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: postgres-data
+        - name: initdb
+          configMap:
+            name: postgres-initdb

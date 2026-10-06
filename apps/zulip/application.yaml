@@ -66,7 +66,7 @@ spec:
             CERTIFICATES: ""
             LOADBALANCER_IPS: "10.42.0.0/16,fd42::/64"
 
-            # **日本語の全文検索は PGroonga**(postgres.yaml)。初回の migrate から有効にしておく ──
+            # **日本語の全文検索は PGroonga**(postgres.yaml。拡張は Postgres の初期化で作る)。初回の migrate から有効にしておく ──
             # 後から立てると `manage.py migrate pgroonga` を手で流すことになる。
             # 英語の辞書は PGroonga のイメージに無いので、辞書無しで DB を作らせる(初回だけ効く)
             SETTING_USING_PGROONGA: "True"
