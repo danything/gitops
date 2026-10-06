@@ -101,8 +101,16 @@ GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` と
 3. ルームで `!hookshot github repo https://github.com/danything/<リポジトリ>`
 4. 通知の種類はルームの設定から(`!gh help` でコマンドの一覧)
 
-`notify-github`(組織全体の流しっぱなし)はそのまま残す。全リポジトリを 1 か所で見る用で、こちらは
-よく触るリポジトリをルームごとに深く見る用。要らなくなったら組織の webhook と `connections` から外す。
+**`notify-github` もこの連携で流す**(2026-10-06 に切り替えた)。[hookshot.yaml](hookshot.yaml) の `connections` に
+組織の有効なリポジトリを全部 `github.repository` として書いてある(コマンドで足したものと違い、git で持てる)。
+
+- 流すのは issue・PR(レビュー含む)・push・リリース・Actions(`enableHooks`)。Actions を失敗だけにするなら
+  `workflow.run.failure` などに絞る(hookshot の docs/usage/room_configuration/github_repo.md)
+- **コメントは連携では流れない**ので、組織の webhook(汎用の受け口)がコメントだけを拾って同じルームに流す。
+  スレッドにはできない(変換のスクリプトは返信先を指定できない)
+- **リポジトリを作ったら `connections` に足す。** 組織の webhook が作成を知らせる
+- 連携の投稿は m.notice(bot の発言)なので、Element の既定ではスマホに通知されない。通知したいなら Element の
+  通知の設定で「bot の発言」をオンにする(そのぶん notify-server などの通知も来るので、そちらはルームごとに切る)
 
 ## 通話(LiveKit)
 
