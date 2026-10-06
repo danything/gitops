@@ -14,7 +14,7 @@ if (!url) throw new Error("CLOUDFLARE_NOTIFY_WEBHOOK_URL が要る");
 
 const matrix = new cloudflare.NotificationPolicyWebhooks("matrix-notify-server", {
   accountId,
-  name: "Matrix notify-server (hookshot)",
+  name: "Matrix server (hookshot)",
   url: pulumi.secret(url),
 });
 
