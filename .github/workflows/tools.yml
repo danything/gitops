@@ -1,0 +1,28 @@
+# **手元のコマンドのイメージ(tools/)が作れるかの見張り。**
+#
+# 版は Renovate が上げて、パッチは自動でマージされる。ダウンロードの URL の形が版で変わると
+# (ファイル名の付け方が変わるなど)、マージされたあと手元の tools/t で初めて 404 に気づくことになる。
+# PR の時点でイメージを作り、全部のコマンドが動くことを見る。
+name: tools
+
+on:
+  pull_request:
+    paths:
+      - tools/**
+      - compose.yaml
+      - .github/workflows/tools.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t tools tools
+      - run: >-
+          docker run --rm tools sh -euc '
+          kubectl version --client; talosctl version --client --short; helm version --short;
+          sops --version; age --version; infisical --version; restic version; jq --version;
+          pulumi version; bun --version; cf --version'
