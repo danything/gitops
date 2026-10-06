@@ -107,7 +107,7 @@ App のページで:
 - **Generate a private key**(.pem がダウンロードされる)→ base64 で 1 行にして `github-private-key-b64`
 
 ```sh
-tools/t sh -c 'base64 -w0 /repo/doa-hookshot.*.private-key.pem'   # pem をリポジトリの直下に置いた場合。終わったら pem は消す
+base64 -w0 ~/Downloads/doa-hookshot.*.private-key.pem   # 出た 1 行を Infisical に貼る。終わったら pem は消す
 ```
 
 どちらも Infisical の画面で `/matrix/matrix` に足す(値を端末やチャットに貼らないこと)。
