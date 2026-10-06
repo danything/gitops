@@ -10,6 +10,8 @@ import * as cloudflare from "@pulumi/cloudflare";
 
 // Entra のアプリ登録のリダイレクト URI(entra.ts)
 import "./entra.ts";
+// Cloudflare の通知を Matrix に(notifications.ts)
+import "./notifications.ts";
 
 // アカウント ID は git に置かない(endpoint と同じ扱い。apps/k8up/README.md)。CI は secrets から渡す
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;

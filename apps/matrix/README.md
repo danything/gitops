@@ -60,7 +60,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | --- | --- | --- |
 | `notify-server` | k8up の通知 | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
 | 〃 | Infisical(秘密の変更) | Infisical のプロジェクトの webhook(Project Settings → Webhooks。環境 prod、パス `/`) |
-| 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先(**まだ無い**。Pulumi で入れる予定。CI のトークンに通知の権限を足してから) |
+| 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先([../../pulumi/notifications.ts](../../pulumi/notifications.ts)) |
 | 〃 | ホストのバックアップ | ホストの `/etc/k3s-backup/env` の `MATTERMOST_WEBHOOK`(**sed で書き換えない**。URL の `&` で壊れる) |
 | `notify-argocd` | Argo CD | `bootstrap/argocd/helmchart.yaml`(SOPS)の `service.webhook.mattermost` |
 | `notify-ashi` | ashi | Infisical `/ashi/ashi-secrets` の `notify-webhook-url` |

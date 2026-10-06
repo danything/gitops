@@ -51,6 +51,8 @@ env:
   PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
   PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  # Cloudflare の通知の送り先(notifications.ts)。hookshot の受け口の ID を含むので secrets に
+  CLOUDFLARE_NOTIFY_WEBHOOK_URL: ${{ secrets.CLOUDFLARE_NOTIFY_WEBHOOK_URL }}
   # cf / Pulumi のテレメトリを切る
   DO_NOT_TRACK: "1"
   PULUMI_SKIP_UPDATE_CHECK: "true"
