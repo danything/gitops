@@ -130,6 +130,9 @@ spec:
         k8up.io/backupcommand-container: backup
         k8up.io/file-extension: .tar
     spec:
+      # Service の自動の環境変数(TUWUNEL_PORT=tcp://… など)を入れない。Service の名前が tuwunel なので、
+      # Tuwunel が自分の設定(TUWUNEL_*)として読んで起動に失敗する(2026-10-06 に踏んだ)
+      enableServiceLinks: false
       # バックアップのサイドカーが Tuwunel のプロセスにシグナルを送るため
       shareProcessNamespace: true
       # 移行(初回起動や版上げ)の途中で殺さない(docs/deploying/kubernetes.md)
