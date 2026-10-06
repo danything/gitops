@@ -9,6 +9,7 @@ Zulip の最後のバックアップ(pg_dump と添付ファイル)は R2 に `f
 | **Element** | 使うアプリ。スマホは **Element X**、PC は Element Desktop か **https://e.doany.io** | Web 版だけ動かす([element-web.yaml](element-web.yaml))|
 | **Tuwunel** | Matrix のサーバー([tuwunel.yaml](tuwunel.yaml))。DB(RocksDB)も中にある | 動かす |
 | **hookshot** | 外からの通知をルームに流す([hookshot.yaml](hookshot.yaml)) | 動かす |
+| **LiveKit** | 通話(Element Call)の音声と映像の中継([../livekit/](../livekit/)) | 動かす |
 
 ## 最小構成にした理由
 

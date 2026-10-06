@@ -36,6 +36,9 @@ data:
       "integrations_rest_url": null,
       "integrations_widgets_urls": null,
       "show_labs_settings": false,
+      "element_call": {
+        "use_exclusively": true
+      },
       "setting_defaults": {
         "UIFeature.registration": false,
         "UIFeature.passwordReset": false,

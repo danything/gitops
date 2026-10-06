@@ -1,0 +1,69 @@
+# lk-jwt-service(https://github.com/element-hq/lk-jwt-service)。通話に入るための LiveKit のトークンを出す。
+#
+# 客(Element)は Tuwunel から OpenID のトークンをもらってここに出す。ここはそれを Tuwunel に確かめて
+# (doany.io/.well-known/matrix/server → m.doany.io の /_matrix/federation/v1/openid/userinfo。
+# フェデレーションを切っていてもこの口は開いている)、LiveKit のトークンを返す。
+# 部屋を作れるのは doany.io のユーザーだけ(LIVEKIT_FULL_ACCESS_HOMESERVERS)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: lk-jwt-service
+  namespace: livekit
+spec:
+  selector:
+    app: lk-jwt-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lk-jwt-service
+  namespace: livekit
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lk-jwt-service
+  template:
+    metadata:
+      labels:
+        app: lk-jwt-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: lk-jwt-service
+          image: ghcr.io/element-hq/lk-jwt-service:0.7.0
+          env:
+            - name: LIVEKIT_URL
+              value: wss://lk.doany.io
+            - name: LIVEKIT_KEY
+              value: matrix
+            - name: LIVEKIT_SECRET
+              valueFrom: {secretKeyRef: {name: livekit, key: livekit-secret}}
+            - name: LIVEKIT_FULL_ACCESS_HOMESERVERS
+              value: doany.io
+            - name: LIVEKIT_JWT_BIND
+              value: ":8080"
+          ports:
+            - containerPort: 8080
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 128Mi
