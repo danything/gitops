@@ -134,6 +134,13 @@ Infisical `/zulip/zulip` の `notify-bot-api-key`)と、Mattermost から取り�
 
 ### 6. Mattermost を畳む
 
+**2026-10-06 に畳んだ。** 最後のバックアップ(`--tag final`。pg_dump 25MiB と mattermost-data 291MiB)を
+取ってから `apps/mattermost/` と k8up の Schedule を消し、Entra のリダイレクト URI と Infisical の
+`/mattermost` を消して、R2 のスナップショットに `retired` を付けた(26 本。中身は残っていて、
+Schedule が無いので forget も prune もされない)。**ルーターの 8443 の転送と、GitHub プラグインの
+OAuth アプリ(GitHub の設定)は手で消す。** 以下はそのときの手順の控え。
+
+
 しばらく並べて動かし、通知が全部 Zulip に来るのを確かめてから:
 
 - `apps/mattermost/` を消す(Argo CD が prune する。PVC も消える ── 最後の pg_dump は R2 に残る)

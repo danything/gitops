@@ -54,7 +54,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 
 | アプリ名 | 規則 | 結果 |
 | --- | --- | --- |
-| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`、NetBird(Net + Bird)→ `nb`、GlitchTip(Glitch + Tip)→ `gt`、Argo CD → `ac`、AdGuard Home → `ah` |
+| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`(どちらも今は無い)、NetBird(Net + Bird)→ `nb`、GlitchTip(Glitch + Tip)→ `gt`、Argo CD → `ac`、AdGuard Home → `ah` |
 | 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
@@ -73,7 +73,6 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | --- | --- |
 | [`adguardhome/`](apps/adguardhome/) | AdGuard Home (DNS フィルタ) |
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
-| [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL。**Zulip へ移行中**(畳み方は [apps/zulip/README.md](apps/zulip/README.md) の 6) |
 | [`zulip/`](apps/zulip/) | Zulip(`z.doany.io`。Mattermost の移行先)+ PostgreSQL(PGroonga)+ RabbitMQ + memcached + Redis。**使い始めと移行の手順は [apps/zulip/README.md](apps/zulip/README.md)** |
 | [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
