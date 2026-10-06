@@ -59,7 +59,7 @@ sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
 | 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
-`h`(headlamp)・`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)は 1 文字で置いてある。
+`h`(headlamp)・`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)・`z`(zulip)は 1 文字で置いてある。
 新しく足すときは上の規則で 2 文字にする(1 文字はもう埋まっているものが多い)。
 headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble の 1 語読みでも `hl` に
 なってぶつかるため。
@@ -75,7 +75,8 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`adguardhome/`](apps/adguardhome/) | AdGuard Home (DNS フィルタ) |
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
 | [`erpnext/`](apps/erpnext/) | ERPNext (Helm chart + OIDC セットアップ) |
-| [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL |
+| [`mattermost/`](apps/mattermost/) | Mattermost + PostgreSQL。**Zulip へ移行中**(畳み方は [apps/zulip/README.md](apps/zulip/README.md) の 6) |
+| [`zulip/`](apps/zulip/) | Zulip(`z.doany.io`。Mattermost の移行先)+ PostgreSQL(PGroonga)+ RabbitMQ + memcached + Redis。**使い始めと移行の手順は [apps/zulip/README.md](apps/zulip/README.md)** |
 | [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |

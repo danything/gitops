@@ -32,9 +32,9 @@ metadata:
   name: etcd-snapshot
   namespace: k8up
 spec:
-  # 14:30〜17:45 UTC は k8up の Schedule で埋まっているので、その手前。
+  # 14:00〜17:45 UTC は k8up の Schedule で埋まっているので、その手前(ashi が 14:15、zulip が 14:00)。
   # forget はリポジトリをロックするので、動かすときは schedules.yaml と突き合わせること。
-  schedule: "15 14 * * *"
+  schedule: "45 13 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
