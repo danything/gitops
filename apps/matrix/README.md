@@ -77,49 +77,19 @@ hookshot の GitHub 連携を使う。`notify-github`(組織の webhook を変�
 **リポジトリごとにルームへつなぎ、通知の種類を選び、ルームから issue を作ったりできる**。
 GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` としてルームに出る。
 
-### 1. GitHub App を作る(ブラウザで。あなた)
-
-https://github.com/organizations/danything/settings/apps/new
+**GitHub App `doa-hookshot`**(App ID 5211519、組織 `danything`)。2026-10-06 にマニフェストから作った
+(名前・webhook・権限・通知の種類を入れた状態で GitHub の作成画面を開き、本人が「作成」を押す。鍵は自動で受け取った)。
 
 | 項目 | 値 |
 | --- | --- |
-| GitHub App name | `doa-hookshot`(ほかの `doa-argocd`・`doa-renovate` に揃える) |
-| Homepage URL | `https://e.doany.io` |
-| Callback URL | `https://m.doany.io/github/oauth` |
-| Request user authorization (OAuth) during installation | オフ |
-| Webhook → Active | オン |
 | Webhook URL | `https://m.doany.io/github/webhook` |
-| Webhook secret | Infisical `/matrix/matrix` の `github-webhook-secret`(作成済み)をコピーして貼る |
-| Where can this GitHub App be installed? | Only on this account |
+| Callback URL(OAuth) | `https://m.doany.io/github/oauth` |
+| 権限(Repository) | Actions・Contents・Metadata = Read、Discussions・Issues・Pull requests = Read & write |
+| 通知の種類 | Create・Delete・Discussion・Discussion comment・Issue comment・Issues・Pull request・Pull request review・Pull request review comment・Push・Release・Repository・Workflow run |
+| 秘密 | Infisical `/matrix/matrix` の `github-webhook-secret`・`github-client-secret`・`github-private-key-b64`(秘密鍵の PEM を base64 で 1 行に) |
 
-**Permissions**(Repository):Actions = Read、Contents = Read、Discussions = Read & write、
-Issues = Read & write、Metadata = Read、Pull requests = Read & write
-(hookshot の docs/setup/github.md。Projects と Team Discussions は使わないので付けない)
-
-**Subscribe to events**:Create、Delete、Discussion、Discussion comment、Issue comment、Issues、
-Pull request、Pull request review、Pull request review comment、Push、Release、Repository、Workflow run
-
-### 2. 鍵を作って Infisical に入れる(あなた)
-
-App のページで:
-
-- **Generate a new client secret** → `github-client-secret`
-- **Generate a private key**(.pem がダウンロードされる)→ base64 で 1 行にして `github-private-key-b64`
-
-```sh
-base64 -w0 ~/Downloads/doa-hookshot.*.private-key.pem   # 出た 1 行を Infisical に貼る。終わったら pem は消す
-```
-
-どちらも Infisical の画面で `/matrix/matrix` に足す(値を端末やチャットに貼らないこと)。
-
-### 3. 組織に入れる(あなた)
-
-App のページの **Install App** → `danything` → All repositories(か、つなぐリポジトリだけ)。
-
-### 4. 設定を入れる(Claude)
-
-**App ID と Client ID**(どちらも秘密ではない。App のページの上のほう)を Claude に伝える。
-hookshot.yaml の `GITHUB_APP_ID_TBD` と `GITHUB_CLIENT_ID_TBD` を埋めてマージする。
+鍵を作り直すときは App のページ(https://github.com/organizations/danything/settings/apps/doa-hookshot)で
+作って Infisical を書き換える。
 
 ### 5. 使う(Element で)
 

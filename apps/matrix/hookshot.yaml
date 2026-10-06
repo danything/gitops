@@ -50,12 +50,12 @@ data:
     # 秘密(webhook の secret、OAuth の client secret、App の秘密鍵)は render が差し込む
     github:
       auth:
-        id: GITHUB_APP_ID_TBD
+        id: 5211519
         privateKeyFile: /data/github-key.pem
       webhook:
         secret: ${GITHUB_WEBHOOK_SECRET}
       oauth:
-        client_id: GITHUB_CLIENT_ID_TBD
+        client_id: Iv23libp5S8aJaOkWq5j
         client_secret: ${GITHUB_CLIENT_SECRET}
         redirect_uri: https://m.doany.io/github/oauth
       defaultOptions:
