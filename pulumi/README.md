@@ -1,7 +1,10 @@
 # pulumi
 
-Cloudflare の設定を [Pulumi](https://www.pulumi.com/) で持つ。**いまは R2 の `doany-restic`(restic の置き場)だけ**(2026-10-05)。
-あるべき姿は [index.ts](index.ts)。
+Cloudflare と Entra ID の設定を [Pulumi](https://www.pulumi.com/) で持つ。いまは 2 つ:
+
+- **R2 の `doany-restic`**(restic の置き場。2026-10-05)── [index.ts](index.ts)
+- **Entra のアプリ登録(共用の 1 つ)のリダイレクト URI**(2026-10-06)── [entra.ts](entra.ts)。
+  **アプリを足す・消すときは、そのアプリのマニフェストと同じ PR で entra.ts も直す**
 
 | いつ | 何が起きるか | 鍵 |
 | --- | --- | --- |
@@ -56,6 +59,27 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 | --- | --- |
 | `gitops pulumi preview (R2 read + state)` | Workers R2 Storage Metadata Read(アカウント)+ Bucket Item Write(`doany-pulumi` だけ。state のロックに要る) |
 | `gitops pulumi apply (R2 write + state)` | Workers R2 Storage Write(アカウント)+ Bucket Item Write(`doany-pulumi` だけ) |
+
+## Entra
+
+**鍵を置いていない。** GitHub Actions の OIDC トークンを、Entra のワークロード ID のフェデレーションで受ける。
+CI 用のアプリ登録を 2 つに分けてある(R2 の preview / apply と同じ考え方)。
+
+| アプリ登録 | 権限 | 入れる GitHub の実行 | ID の置き場 |
+| --- | --- | --- | --- |
+| `gitops pulumi preview (Entra read)` | Microsoft Graph の `Application.Read.All`(読むだけ) | PR、main(週次・手動実行) | リポジトリの Variables `PREVIEW_AZURE_CLIENT_ID` |
+| `gitops pulumi apply (Entra write)` | `Application.ReadWrite.OwnedBy` + **共用のアプリ登録の所有者** | Environment `pulumi-apply` だけ | Environment の Variables `AZURE_CLIENT_ID` |
+
+**フェデレーションの subject は番号入りの形**(`repo:danything@143234231/gitops@1311609465:pull_request` など)。
+このリポジトリは「変わらない subject」(`use_immutable_subject`)を使っていて、組織やリポジトリの名前が変わっても
+信頼が崩れない。`repo:danything/gitops:…` で登録すると `AADSTS700213` で入れない(2026-10-06 に踏んだ)。
+今の形は `gh api repos/danything/gitops/actions/oidc/customization/sub` の `sub_claim_prefix`。
+
+apply 用は「自分が所有者のアプリ登録」しか書けないので、触れるのは共用のアプリ登録(`b0fa498f-…`)1 つだけ。
+テナント ID はリポジトリの Variables `AZURE_TENANT_ID`。
+
+持っているのは**リダイレクト URI の一覧だけ**(`ApplicationRedirectUris`)。クライアントシークレット・アプリロール・
+割り当ては Pulumi の外(`docs/entra.md`)。手元で流すときは `az login` のログインがそのまま使われる。
 
 ## 手元で流す
 

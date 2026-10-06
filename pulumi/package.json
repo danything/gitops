@@ -14,6 +14,7 @@
   },
   "main": "index.ts",
   "dependencies": {
+    "@pulumi/azuread": "6.10.1",
     "@pulumi/cloudflare": "6.21.0",
     "@pulumi/pulumi": "3.267.0"
   }
