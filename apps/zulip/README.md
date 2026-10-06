@@ -136,6 +136,6 @@ https://z.doany.io/api/v1/external/slack_incoming?api_key=<bot の API キー>&s
 - **Helm chart の同梱サービスは使わない。** Bitnami のイメージが更新されないため。chart は外部のサービスの
   パスワードを Secret の参照で受けられるので、秘密を values に書かずに済む
 - **PGroonga。** Zulip の標準の全文検索は英語だけ。PGroonga の公式イメージには Zulip の英語の辞書が無いので、
-  `postgresql.missing_dictionaries` で辞書無しで DB を作る(初回だけ効く。**後から PGroonga に替えるのは手間**なので最初から)
+  `postgresql.missing_dictionaries` で辞書無しで DB を作る(初回だけ効く。**後から PGroonga に替えるのは手間**なので最初から)。**拡張(`CREATE EXTENSION pgroonga`)は Zulip のマイグレーションは作らない**ので、Postgres の初期化(`postgres.yaml` の initdb)で作る ── 無いと初回の migrate が `access method "pgroonga" does not exist` で落ちる(2026-10-06 に踏んだ)
 - **汎用 OIDC で Entra に繋ぐ。** Zulip の AzureAD 用のバックエンドはテナント共通の口を叩くので、単一テナントのアプリ登録では通らない
 - **通話は meet.jit.si。** 自前の通話サーバーは持たない(Mattermost Calls の hostPort とルーターの転送が不要になる)
