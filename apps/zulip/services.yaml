@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
         - name: rabbitmq
-          image: rabbitmq:4.2.9-alpine
+          image: rabbitmq:4.3.6-alpine
           ports:
             - containerPort: 5672
           env:
