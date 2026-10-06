@@ -78,6 +78,11 @@ data:
     [[global.appservice.hookshot.users]]
     exclusive = true
     regex = "@_webhooks_.*:doany.io"
+
+    # GitHub の人(issue やコメントの書き手)をルームに出すときのユーザー
+    [[global.appservice.hookshot.users]]
+    exclusive = true
+    regex = "@_github_.*:doany.io"
 ---
 apiVersion: v1
 kind: Service
