@@ -303,7 +303,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 | --- | --- |
 | Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(2026-09-08 実測。`bootstrap/cilium/values.yaml` の `nodePort`)。手で当てた 80/443 は今も要る |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
-| mattermost(calls) | 8443 UDP・8443 TCP |
+| livekit(Element Call。Mattermost Calls の番号を引き継いだ) | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
 
 **詰まった点 3 つ:**

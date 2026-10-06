@@ -156,7 +156,7 @@ kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged
 | `netbird` | hostPort 3478(内蔵 STUN。UDP なのでゲートウェイを通せない) |
 | `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`) |
 | `adguardhome` | hostPort 53 / 853 |
-| `mattermost` | hostPort 8443(calls の WebRTC) |
+| `livekit` | hostPort 8443(Element Call の音声と映像。2026-10-06 に Mattermost Calls から同じ番号を引き継いだ) |
 | `3proxy` | hostPort 8444(TLS 終端サイドカー) |
 | `cloudflare-ddns` | hostNetwork |
 | `erpnext` | `CAP_CHOWN` の追加(baseline が足せるのは `NET_BIND_SERVICE` だけ) |

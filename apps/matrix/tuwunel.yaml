@@ -50,6 +50,11 @@ data:
     # クライアントの案内(/.well-known/matrix/client)と、OAuth の issuer を兼ねる。外から見える URL と完全に一致させること
     [global.well_known]
     client = "https://m.doany.io"
+    # /.well-known/matrix/server。フェデレーションはしないが、lk-jwt-service が OpenID のトークンを確かめに
+    # m.doany.io の /_matrix/federation/v1/openid/userinfo を叩くための案内(無いと doany.io:8448 を探して失敗する)
+    server = "m.doany.io:443"
+    # 通話(Element Call)の LiveKit。apps/livekit/。.well-known と rtc/transports の両方に出る
+    livekit_url = "https://lk.doany.io"
 
     # Entra。auth / argocd などと共用のアプリ登録。リダイレクト URI は pulumi/entra.ts
     [[global.identity_provider]]

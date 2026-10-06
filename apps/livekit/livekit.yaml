@@ -1,0 +1,118 @@
+# LiveKit(通話の音声と映像を中継するサーバー = SFU。https://github.com/livekit/livekit)。
+# Element Call(Element X と Element Web の通話)が使う。手順は Tuwunel の docs/calls/matrix_rtc.md。
+#
+# 通り道は 2 つ:
+#   - 合図(WebSocket)は lk.doany.io の Gateway 経由(httproute.yaml)
+#   - 音声と映像は **hostPort 8443(UDP、つながらないとき TCP)** でノードに直接。Gateway も Cloudflare も通らない。
+#     ルーターで 8443 の UDP と TCP をノードに転送しておくこと(Mattermost Calls のときと同じ番号・同じ転送)
+#
+# 外から見える IP は STUN で調べて客に教える(use_external_ip)。家の中の端末も外の IP に向けて送るので、
+# ルーターの「NAT ループバック(ヘアピン)」が要る(Mattermost Calls と同じ条件)。
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: livekit
+  namespace: livekit
+data:
+  livekit.yaml: |
+    port: 7880
+    bind_addresses: [""]
+    rtc:
+      tcp_port: 8443
+      # 1 つの UDP ポートに全部の通話をまとめる(ルーターの転送が 1 つで済む)
+      udp_port: 8443
+      use_external_ip: true
+      # Pod の IP(外から届かない)は候補に出さない
+      external_ip_only: true
+      enable_loopback_candidate: false
+    room:
+      # 部屋を作れるのは lk-jwt-service が許した人(doany.io のユーザー)だけ。LiveKit 自身は勝手に作らない
+      auto_create: false
+    # 抜けた人の検知を lk-jwt-service に知らせる(MSC4140 の退出の代行)。鍵の名前は LIVEKIT_KEYS と同じ
+    webhook:
+      api_key: matrix
+      urls:
+        - http://lk-jwt-service.livekit.svc:8080/sfu_webhook
+    logging:
+      level: info
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: livekit
+  namespace: livekit
+spec:
+  selector:
+    app: livekit
+  ports:
+    - name: http
+      port: 7880
+      targetPort: 7880
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: livekit
+  namespace: livekit
+  annotations:
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  replicas: 1
+  # hostPort を持つので新旧の Pod が同じポートを奪い合わないように Recreate にする
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: livekit
+  template:
+    metadata:
+      labels:
+        app: livekit
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: livekit
+          image: livekit/livekit-server:v1.13.8
+          args: [--config, /etc/livekit/livekit.yaml]
+          env:
+            - name: LIVEKIT_SECRET
+              valueFrom: {secretKeyRef: {name: livekit, key: livekit-secret}}
+            # 「鍵の名前: 秘密」。名前は秘密ではない(秘密が無いと使えない)
+            - name: LIVEKIT_KEYS
+              value: "matrix: $(LIVEKIT_SECRET)"
+          ports:
+            - name: http
+              containerPort: 7880
+            - name: rtc-udp
+              containerPort: 8443
+              hostPort: 8443
+              protocol: UDP
+            - name: rtc-tcp
+              containerPort: 8443
+              hostPort: 8443
+              protocol: TCP
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 7880
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/livekit
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: livekit
