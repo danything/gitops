@@ -82,8 +82,11 @@ spec:
           # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
           # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
           # `_` で始まるディレクトリも外す。用意はしたが動かしていないアプリを、置き場を変えずに
-          # 寝かせておくため (例: apps/_glitchtip/)。動かすときは `_` を外して git mv するだけ
-          exclude: '{**/argocd.yaml,bootstrap/**,**/_*/**}'
+          # 寝かせておくため (例: apps/_glitchtip/)。動かすときは `_` を外して git mv するだけ。
+          # 照らすのは sourcePath からの相対パスで、gobwas/glob を区切り無しで使う (`*` も `/` を
+          # 跨ぐ) ので、`**/_*/**` は頭に `/` が要り、いちばん上の `_glitchtip/…` には当たらない。
+          # そのために `_*/**` も並べる
+          exclude: '{**/argocd.yaml,bootstrap/**,_*/**,**/_*/**}'
       destination:
         server: https://kubernetes.default.svc
         # Empty for a repo whose manifests span several namespaces, which is
@@ -187,8 +190,11 @@ spec:
           # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
           # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
           # `_` で始まるディレクトリも外す。用意はしたが動かしていないアプリを、置き場を変えずに
-          # 寝かせておくため (例: apps/_glitchtip/)。動かすときは `_` を外して git mv するだけ
-          exclude: '{**/argocd.yaml,bootstrap/**,**/_*/**}'
+          # 寝かせておくため (例: apps/_glitchtip/)。動かすときは `_` を外して git mv するだけ。
+          # 照らすのは sourcePath からの相対パスで、gobwas/glob を区切り無しで使う (`*` も `/` を
+          # 跨ぐ) ので、`**/_*/**` は頭に `/` が要り、いちばん上の `_glitchtip/…` には当たらない。
+          # そのために `_*/**` も並べる
+          exclude: '{**/argocd.yaml,bootstrap/**,_*/**,**/_*/**}'
       destination:
         server: https://kubernetes.default.svc
         # Empty for a repo whose manifests span several namespaces, which is
