@@ -184,12 +184,13 @@ sudo k3s kubectl -n k8up logs -f job/k8up-retire
 ```
 
 **2026-10-06 に mattermost と erpnext も `retired` にした**(Mattermost は Zulip に移して畳んだ。ERPNext は消した)。
+**同じ日に zulip も `retired` にした**(Matrix に移して畳んだ。最後のバックアップは `final` のタグ付き)。
 どちらも最後のスナップショットは残っている。Schedule を消したので forget も prune もされず、**消すまで R2 に残り続ける**。
 
 ## 何をどう取っているか
 
-`Schedule` は [schedules.yaml](schedules.yaml) に 14 本まとめてある(時刻と決まりごともあちら)。
-13 本が namespace ごとの backup + prune で、**残り 1 本はリポジトリ全体の `check`**。
+`Schedule` は [schedules.yaml](schedules.yaml) に 15 本まとめてある(時刻と決まりごともあちら)。
+14 本が namespace ごとの backup + prune で、**残り 1 本はリポジトリ全体の `check`**。
 **注釈だけでは動かない** ── その namespace に `Schedule` が無いとジョブが作られない。
 **取る中身を決めているのは Pod 側の注釈**で、それがどこにあるかがここ。
 

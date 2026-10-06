@@ -1,6 +1,7 @@
 # matrix
 
-Matrix のサーバー一式(`m.doany.io`)。**Zulip からの移行先**(2026-10-06)。
+Matrix のサーバー一式(`m.doany.io`)。**Zulip からの移行先**(2026-10-06 に移して、Zulip は畳んだ)。
+Zulip の最後のバックアップ(pg_dump と添付ファイル)は R2 に `final` / `retired` のタグで残っている。
 
 | 名前 | 何か | ここで動くか |
 | --- | --- | --- |

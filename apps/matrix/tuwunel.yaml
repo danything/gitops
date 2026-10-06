@@ -51,7 +51,7 @@ data:
     [global.well_known]
     client = "https://m.doany.io"
 
-    # Entra。auth / argocd / zulip などと共用のアプリ登録。リダイレクト URI は pulumi/entra.ts
+    # Entra。auth / argocd などと共用のアプリ登録。リダイレクト URI は pulumi/entra.ts
     [[global.identity_provider]]
     brand = "Entra"
     name = "Microsoft"
