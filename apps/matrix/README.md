@@ -91,7 +91,7 @@ GitHub の issue やコメントの書き手は `@_github_<名前>:doany.io` と
 鍵を作り直すときは App のページ(https://github.com/organizations/danything/settings/apps/doa-hookshot)で
 作って Infisical を書き換える。
 
-### 5. 使う(Element で)
+### 使う(Element で)
 
 1. hookshot と DM を始めて `github login` → 出たリンクで GitHub にログイン(誰がつないだかの確認に使う)
 2. つなぎたいルーム(暗号化なし)に `@hookshot:doany.io` を招待し、権限をモデレーター(50)以上にする
