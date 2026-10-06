@@ -159,13 +159,13 @@ data:
         state:
           name: denpa
           transformationFunction: *loud
-      # 部屋 forgejo: Forgejo の組織 doa の webhook(種類は Slack)
+      # 部屋 forgejo: Forgejo の組織 doa の webhook(種類は Slack。スマホに通知する。GitHub の通知を GitHub のアプリに寄せたので、Forgejo はここで受ける)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_FORGEJO}
         roomId: "!46KHKR8zfKiW1lpfzy5QvvoV4y41Hwy9UNmFpStxYHA"
         state:
           name: Forgejo
-          transformationFunction: *slack
+          transformationFunction: *loud
       # 部屋 server: Infisical の秘密の変更(プロジェクトの webhook。種類は general)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_INFISICAL}
