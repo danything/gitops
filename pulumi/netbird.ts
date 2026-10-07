@@ -2,7 +2,7 @@
 //
 // 持っているのは DNS (ネームサーバー・ゾーン・レコード)、ネットワーク (自宅の LAN への経路)、exit ノードのルート、
 // アクセスのポリシー。**持っていないもの:** グループ (所属するピアはセットアップキーやログインで変わるので、
-// ここでは ID で指すだけ)、ピア、ユーザー、セットアップキー、トークン。アカウントの設定と Entra の IdP は持つ (下)。
+// ここでは ID で指すだけ)、ピア、ユーザー、セットアップキー、トークン、Entra の IdP (下に理由)。アカウントの設定は持つ。
 //
 // 鍵は state に入れない。provider は環境変数 NB_PAT を読む (PR は PREVIEW_NB_PAT = Auditor、main は NB_PAT = Admin。
 // どちらもサービスユーザーのトークン。README.md「NetBird」)。
@@ -176,17 +176,6 @@ new netbird.AccountSettings(
   opts(ACCOUNT),
 );
 
-// 内蔵 IdP (Dex) につないだ Entra。アプリ登録は共用の b0fa498f-… (entra.ts のリダイレクト URI の nb.doany.io)。
-// **消すと誰もログインできなくなる**ので protect。クライアントシークレットは API から読めず、書くと置き換わるので
-// ここでは持たない (ignoreChanges。差し替えるときは画面で)
-new netbird.IdentityProvider(
-  "entra",
-  {
-    name: "Microsoft Entra ID",
-    type: "entra",
-    issuer: "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0",
-    clientId: "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e",
-    clientSecret: "managed-outside-pulumi",
-  },
-  { ...opts("entra-daf87u713kb0009ahs4g"), protect: true, ignoreChanges: ["clientSecret"] },
-);
+// 内蔵 IdP (Dex) につないだ Entra の IdP (`entra-daf87u713kb0009ahs4g`、アプリ登録は共用の b0fa498f-…) は**持たない**。
+// provider がクライアントシークレットを必須にしていて (API からは読めない)、持つには共用のアプリ登録のシークレットを
+// GitHub に置くことになる。漏れたときの範囲 (全部の SSO) に見合わない。画面で持つ (2026-10-07 に取り込みを試して外した)
