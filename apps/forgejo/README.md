@@ -110,7 +110,11 @@
 CI から Forgejo の API・git・レジストリに**長く生きる秘密なしで**入る仕組み。外から来た JWT のクレームを、ユーザーごとに
 登録したルールで確かめ、合えばそのユーザーとして(登録したスコープとリポジトリの範囲で)通す。
 [ドキュメント](https://forgejo.org/docs/latest/user/api/authorized-integrations/)。設定(app.ini)は要らない
-(`[authorized_integration]` の既定で外の発行者に取りに行ける)。
+(`[authorized_integration]` の既定で外の発行者に取りに行ける)。既定では取りに行けるのは外のホストだけで、
+クラスタの中・プライベートの IP・ループバックには行かない(`ALLOW_LOCALNETWORKS` が false。`services/auth/authorized_integration.go`
+の `initAuthorizedIntegrationHTTPClient`)。リダイレクトも追わず、`jwks_uri` は発行者と同じホストに限る。
+もっと絞るなら `FORGEJO__authorized_integration__ALLOWED_DOMAINS: token.actions.githubusercontent.com`
+(Forgejo Actions の JWT は中で確かめるので、この一覧に要らない)。
 
 - **誰として動くか**: インテグレーションの持ち主。push・PR・マージの予約も持ち主がしたことになるので、
   付属の actions トークンと違って**ワークフローも起きる**(`services/actions/notifier_helper.go` は `IsActions()` のときだけ止める)
@@ -120,7 +124,10 @@ CI から Forgejo の API・git・レジストリに**長く生きる秘密な�
 - **リポジトリを絞ると**、スコープは repository / issue しか選べず、管理者の権限は効かない(`services/authz/access_token.go`)。
   レジストリ(package)と組織の操作は「すべて」で作る
 - **Forgejo Actions のジョブは `enable-openid-connect: true`** で JWT を取る。fork からの PR では取れない。
+  JWT の `workflow` は `name:` ではなく**ファイル名**(`run.WorkflowID`。2026-10-07 に実ジョブの JWT で確かめた。GitHub とは違う)。
   再利用ワークフロー(`uses: ./...`)のジョブは、**呼ばれる側**のファイルの設定が効き、JWT の `workflow` は**呼ぶ側**のファイル名になる
+- **境界は main に書ける人**: main のワークフローを書き換えられる人は、その JWT で持ち主として書ける(シークレットのときと同じ)。
+  doa の main に書けるのは bots と Owners だけ(members は読み取り)
 
 | 持ち主 | 名前 | 発行者 | クレームのルール | 範囲・スコープ | aud の置き場 |
 | --- | --- | --- | --- | --- | --- |
@@ -129,10 +136,13 @@ CI から Forgejo の API・git・レジストリに**長く生きる秘密な�
 | yui | repo-config | GitHub Actions | GitHub の 5ym/repo-config、`refs/heads/main`、`forgejo-settings.yml`、push / schedule / workflow_dispatch | すべて・`write:organization` `write:repository` | GitHub の 5ym/repo-config の変数 `FORGEJO_AUDIENCE` |
 
 aud はインテグレーションを作ると決まる(`u:<ユーザー ID>:<UUID>`)。秘密ではないので変数に置く。
+**doa にイメージを出すリポジトリを足したら、doa-registry のリポジトリ ID も足す**(変更の CLI が無いので作り直し。aud が変わる)。
 
 **forgejo-bot は画面にログインできない**(`ENABLE_INTERNAL_SIGNIN: "false"`)ので、forgejo-bot のものは本番の CLI で作る。
-一覧・変更・削除の CLI と API は無い(16.0.5)。止めたいときは、forgejo-bot を `prohibit_login` にすると API と git は
-全部断られる(トークンも巻き込む)。消すのは DB の `authorized_integration`(と `authorized_integ_resource_repo`)の行。
+一覧・変更・削除の CLI と API は無い(16.0.5)。急いで止めるなら、forgejo-bot を組織 doa の bots チームから外す
+(パッケージもリポジトリも書けなくなる。トークンも巻き込む)。`prohibit_login` は API と git は止めるが、
+レジストリは止めない(`routers/api/packages` は見ていない)。消すのは DB の `authorized_integration`
+(と `authorized_integ_resource_repo`)の行。
 
 ```shell
 # doa-registry(リポジトリ ID は 1 = todoroku、3 = tamasagashi、4 = worklog-cloud。組織 doa の ID は 2)
