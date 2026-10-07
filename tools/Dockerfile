@@ -23,8 +23,6 @@ ARG SOPS_VERSION=v3.13.3
 ARG INFISICAL_VERSION=v0.43.139
 # renovate: datasource=github-releases depName=restic/restic
 ARG RESTIC_VERSION=v0.19.1
-# renovate: datasource=github-releases depName=jqlang/jq
-ARG JQ_VERSION=jq-1.8.2
 # renovate: datasource=github-releases depName=pulumi/pulumi
 ARG PULUMI_VERSION=v3.268.0
 # renovate: datasource=npm depName=cf
@@ -55,8 +53,6 @@ RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     ok "$gh/Infisical/cli/releases/download/${INFISICAL_VERSION}/checksums.txt" "cli_${INFISICAL_VERSION#v}_linux_$a.tar.gz"; \
     get "$gh/restic/restic/releases/download/${RESTIC_VERSION}/restic_${RESTIC_VERSION#v}_linux_$a.bz2"; \
     ok "$gh/restic/restic/releases/download/${RESTIC_VERSION}/SHA256SUMS" "restic_${RESTIC_VERSION#v}_linux_$a.bz2"; \
-    get "$gh/jqlang/jq/releases/download/${JQ_VERSION}/jq-linux-$a"; \
-    ok "$gh/jqlang/jq/releases/download/${JQ_VERSION}/sha256sum.txt" "jq-linux-$a"; \
     get "$gh/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION}-linux-$p.tar.gz"; \
     ok "$gh/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION#v}-checksums.txt" "pulumi-${PULUMI_VERSION}-linux-$p.tar.gz"; \
     install -m 755 kubectl /usr/local/bin/kubectl; \
@@ -65,7 +61,6 @@ RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     install -m 755 "sops-${SOPS_VERSION}.linux.$a" /usr/local/bin/sops; \
     tar -xzf "cli_${INFISICAL_VERSION#v}_linux_$a.tar.gz" -C /usr/local/bin infisical; \
     bunzip2 -c "restic_${RESTIC_VERSION#v}_linux_$a.bz2" > /usr/local/bin/restic; \
-    install -m 755 "jq-linux-$a" /usr/local/bin/jq; \
     # Pulumi は本体と bun・Node.js の言語ホストだけ。ほかの言語のぶんは 200MB 近いので入れない。
     # bun の言語ホストが無いと runtime: bun のプロジェクトで SDK を作れない (pulumi install。2026-10-07 まで抜けていた)
     tar -xzf "pulumi-${PULUMI_VERSION}-linux-$p.tar.gz" --strip-components=1 -C /usr/local/bin pulumi/pulumi pulumi/pulumi-language-bun pulumi/pulumi-language-nodejs; \

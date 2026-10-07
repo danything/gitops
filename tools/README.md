@@ -20,7 +20,9 @@ tools/t.ps1        # 引数なしならシェルに入る
 | kubectl / talosctl / helm | クラスタ(Talos の移行後は手元から直接) |
 | restic | R2 のバックアップの中身を見る・戻す |
 | pulumi / bun | `pulumi/`(ふだんは CI が流す) |
-| jq | 上の出力の加工 |
+
+**jq はここに入れず、手元に置く**(dotfiles の `init.ps1` が winget で入れる。2026-10-07)。上の出力の加工は
+`tools/t.ps1 … | jq …` のようにコンテナの外でする(コンテナを起こすほどではなく、パイプの先で使うことが多いため)。
 
 ## 仕組み
 
@@ -34,7 +36,7 @@ tools/t.ps1        # 引数なしならシェルに入る
   (README「Infisical より下の層」)、ほかはログインし直せば戻る
 - Dockerfile を変えると、次の `tools/t.ps1` でイメージを作り直す(変わっていなければキャッシュで一瞬)
 - パイプやリダイレクトのときは TTY を付けない(`tools/t.ps1` が見分ける)
-- PowerShell でパイプしたもの(`'{"a":1}' | tools/t.ps1 jq .`)は、`t.ps1` がコンテナの標準入力に流し直す。
+- PowerShell でパイプしたもの(`tools/t.ps1 sops -d … | tools/t.ps1 kubectl apply -f -`)は、`t.ps1` がコンテナの標準入力に流し直す。
   行を LF でつないだ UTF-8 にして渡す(PowerShell のまま流すと CRLF になり、5.1 では日本語が `?` に化けるため、
   base64 で包んでコンテナの中で戻す)。PowerShell のパイプは行(文字列)単位なので、バイナリは通らない。
   バイナリはファイルに書いてリポジトリの中から読ませる
@@ -55,7 +57,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 **全部、公式が出しているチェックサムと照らし合わせてから入れる**(2026-10-07)。sops は age 鍵を、infisical は秘密を扱うので、
 取得元やミラーで差し替えられても気づけるようにする。一致しなければ組み立てごと止まる。
 
-- kubectl・talosctl・helm・sops・infisical・restic・jq・pulumi: 各リリースのチェックサムのファイル
+- kubectl・talosctl・helm・sops・infisical・restic・pulumi: 各リリースのチェックサムのファイル
 - age: チェックサムのファイルを出していない(sigsum の証明だけ)ので、Go のモジュールとして `go install` し、
   Go の公開のチェックサムの台帳(sum.golang.org)で確かめる
 - cf: npm の integrity
@@ -65,4 +67,4 @@ tools/t.ps1        # 引数なしならシェルに入る
 `# renovate: datasource=… depName=…` の次の `ARG` を Renovate が上げる([../renovate.json](../renovate.json))。
 **kubectl と talosctl は talos の群**(自動マージしない)── ノードの版と揃えて上げる。
 
-`gh` と `git` は手元のまま(このリポジトリに限らず使うため)。
+`gh`・`git`・`jq` は手元のまま(このリポジトリに限らず使うため。dotfiles の `init.ps1` が winget で入れる)。
