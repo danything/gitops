@@ -1,7 +1,7 @@
 # **手元のコマンドのイメージ(tools/)が作れるかの見張り。**
 #
 # 版は Renovate が上げて、パッチは自動でマージされる。ダウンロードの URL の形が版で変わると
-# (ファイル名の付け方が変わるなど)、マージされたあと手元の tools/t で初めて 404 に気づくことになる。
+# (ファイル名の付け方が変わるなど)、マージされたあと手元の tools/t.ps1 で初めて 404 に気づくことになる。
 # PR の時点でイメージを作り、全部のコマンドが動くことを見る。
 name: tools
 
@@ -9,7 +9,6 @@ on:
   pull_request:
     paths:
       - tools/**
-      - compose.yaml
       - .github/workflows/tools.yml
 
 permissions:

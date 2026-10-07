@@ -15,7 +15,7 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 | `todoroku-pulumi (state)` | アカウント | R2 バケット `todoroku-pulumi` だけの Object Read & Write | Forgejo `doa/todoroku` の secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`(ID と値の SHA-256) | todoroku の `infra/`(Pulumi の state) |
 | `gitops pulumi apply` / `preview` | アカウント | pulumi/README.md「鍵と state」 | GitHub の secrets | gitops の Pulumi |
 
-アカウントのトークンは `tools/t cf accounts tokens list`、ユーザーのトークンは画面の **My Profile → API Tokens** で見る。
+アカウントのトークンは `tools/t.ps1 cf accounts tokens list`、ユーザーのトークンは画面の **My Profile → API Tokens** で見る。
 **どれも期限を付けていない。** 期限の監視(`.github/workflows/expiry.yml`)が見るのは Pulumi 用だけ。
 
 ## 作り直す
@@ -25,7 +25,7 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 - **external-dns / cloudflare-ddns:** Infisical の値を差し替える。operator が Secret を書き換え、
   push-bridge が同期させる。Deployment の `secrets.infisical.com/auto-reload` 注釈で入れ替わる。
 - **todoroku-pulumi (state):** Forgejo の 2 つの secrets を差し替える(S3 の鍵の導き方は下の doany-restic と同じ)。
-- **cert-manager:** `tools/t sops bootstrap/cert-manager/cloudflare-secret.yaml` で書き換えてコミットする。
+- **cert-manager:** `tools/t.ps1 sops bootstrap/cert-manager/cloudflare-secret.yaml` で書き換えてコミットする。
 - **doany-restic(R2):** S3 の鍵はトークンから導く。アクセスキー ID はトークンの ID、シークレットはトークンの値の
   SHA-256(16 進)。**3 か所を全部変える**。どれかが古いとバックアップが落ちる(落ちれば k8up の通知で気づく)。
   1. Infisical `/k8up/k8up-global` の `accessKeyId` / `secretAccessKey`

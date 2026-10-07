@@ -1,9 +1,9 @@
-# tools/t の Windows 版。docker の代わりに wslc (WSL コンテナ) で動かす。例:
+# 運用のコマンドを wslc (WSL コンテナ) で動かす。例:
 #   tools/t.ps1 infisical login --domain https://il.doany.io/api
 #   tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml
 # 引数が無ければシェルに入る。Dockerfile を変えたら次の実行で作り直す (変わっていなければキャッシュで一瞬)。
 #
-# tools/t との違い (wslc の制限):
+# wslc の制限:
 # - ネットワークは host にできない。ブラウザのログインは手元の localhost:<ポート> に結果を送ってくるので、
 #   infisical login のときだけ、そのポートで待ち受けてコンテナの中の CLI に渡す (下の Start-LoginRelay)。
 #   cf auth login には対応していない

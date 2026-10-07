@@ -26,7 +26,7 @@ CI を待たずに走りはじめる**のはこのため。CI の `bootstrap-app
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
 | [`talos/`](talos/) | Talos への移行用 machine config(**v1.14 の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**Talos では `bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
-| [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)は Docker で動かす**。`tools/t <コマンド>`。手元に入れるのは Docker だけ |
+| [`tools/`](tools/) | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)はコンテナで動かす**。`tools/t.ps1 <コマンド>`(Windows の WSL コンテナ)。手元にコマンドは入れない |
 | [`docs/`](docs/) | **[移行当日の手順](docs/migration-day.md)**、[決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos の実機検証](docs/talos.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
 | [`ROADMAP.md`](ROADMAP.md) | 暫定構成から Talos までの道筋と進捗(なぜそうしたかは `docs/decisions.md`) |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
@@ -44,9 +44,9 @@ Argo CD が git を読む GitHub App 鍵、cert-manager の Cloudflare トーク
 鍵は [`recovery/sops-age.key.age`](recovery/)(バックアップの `env.age` と同じパスフレーズ)。
 
 ```shell
-# 鍵はリポジトリの .home/(git に入らない)に置く。コマンドは tools/t で動かす(tools/README.md)
-tools/t sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
-tools/t sops -d bootstrap/infisical/secrets.yaml | tools/t kubectl apply -f -
+# 鍵はリポジトリの .home/(git に入らない)に置く。コマンドは tools/t.ps1 で動かす(tools/README.md)
+tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
+tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml | tools/t.ps1 kubectl apply -f -
 ```
 
 ## ホスト名の付け方
