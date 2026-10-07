@@ -108,9 +108,12 @@ function Start-LoginRelay($name, $origin) {
 }
 
 # ボリューム・作業場所・環境変数は compose.yaml の tools に書いてある (wslc-compose run で動かす)。
-# 標準入力はつなぐ。パイプやリダイレクトのときは TTY を付けない (-T)
+# 標準入力はつなぐ。パイプやリダイレクトのときは TTY を付けない (-T)。
+# PowerShell でこのスクリプトにパイプしたもの (`x | tools/t.ps1 jq .`) は標準入力ではなく $input に来るので、
+# 下で wslc-compose の標準入力に流し直す (流さないとコンテナには何も届かない)
+$piped = $MyInvocation.ExpectingInput
 $opts = @('--rm')
-if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $opts += '-T' }
+if ($piped -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $opts += '-T' }
 $cmd = if ($args.Count) { $args } else { @('bash') }
 
 $relay = $null
@@ -129,7 +132,9 @@ if ($browserLogin) {
     $relay = Start-LoginRelay $name $origin
 }
 try {
-    wslc-compose --file (Join-Path $root 'compose.yaml') run @opts tools @cmd
+    $compose = Join-Path $root 'compose.yaml'
+    if ($piped) { $input | wslc-compose --file $compose run @opts tools @cmd }
+    else { wslc-compose --file $compose run @opts tools @cmd }
     $code = $LASTEXITCODE
 } finally {
     if ($relay) {
