@@ -68,7 +68,7 @@
                 "pulumi/package.json",
                 "pulumi/Pulumi.yaml"
             ],
-            "updateLockFiles": false,
+            "skipArtifactsUpdate": true,
             "postUpgradeTasks": {
                 "commands": [
                     "bash pulumi/renovate-post-upgrade.sh"

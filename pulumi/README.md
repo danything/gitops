@@ -112,7 +112,7 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
   clone したら最初に `pulumi install`。版は Renovate が上げる (自動マージしない)
 - **Renovate は `bun.lock` を自分では作らない。** `package.json` は SDK を `file:sdks/netbird` で指していて、SDK を作れない
   Renovate の `bun install` は落ちる(#304 で「Artifact update failure」になった)。renovate.json で pulumi/ の lock の更新を
-  止め(`updateLockFiles: false`)、代わりに Renovate の `postUpgradeTasks` が [renovate-post-upgrade.sh](renovate-post-upgrade.sh)
+  止め(`skipArtifactsUpdate: true`)、代わりに Renovate の `postUpgradeTasks` が [renovate-post-upgrade.sh](renovate-post-upgrade.sh)
   を流す。Pulumi の CLI(`.pulumi-version`、公式のチェックサムと照らす)と bun(`.bun-version`)を入れて `pulumi install --no-plugins`
   し、作り直した bun.lock を同じ枝にコミットさせる。手元・CI と同じ `pulumi install` で作るので、CI の lock の確認とずれない。
   実行の許可は 5ym/repo-config の renovate.yml の `RENOVATE_ALLOWED_COMMANDS`(2026-10-08。#306 の SDK の package.json の写しはやめた)

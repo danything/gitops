@@ -3,7 +3,7 @@
 #
 # Renovate は bun のプロジェクトでは自分で `bun install` して lock を直すが、ここの package.json は NetBird の SDK を
 # `file:sdks/netbird` で指していて、SDK は `pulumi install` でしか作れない(git には入れない。pulumi/README.md)。
-# Renovate の `bun install` は SDK が無くて落ちるので、renovate.json でそれを止め(updateLockFiles: false)、ここで作る。
+# Renovate の `bun install` は SDK が無くて落ちるので、renovate.json でそれを止め(skipArtifactsUpdate: true)、ここで作る。
 #
 # 動くのは Renovate のコンテナ(ghcr.io/renovatebot/renovate、5ym/repo-config の renovate.yml)の中、リポジトリの直下。
 # Pulumi の CLI は入っていないので、.pulumi-version の版を公式のチェックサムと照らしてから入れる。bun は containerbase の
