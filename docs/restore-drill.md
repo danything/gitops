@@ -6,14 +6,14 @@ Hyper-V は WSL から管理者権限で触れないので、本番サーバ(46 
 ## 副作用を出さないための遮断(VM の中で最初にやる)
 
 復元されたクラスタは本物と同じ設定で立ち上がるので、そのままだと cloudflare-ddns が DNS を書き換え、cert-manager が ACME を叩き、
-ArgoCD が Mattermost に通知し、Infisical がメールを出す。raw テーブルで先に落とす(k3s が後から入れる FORWARD のルールより先に評価される)。
+ArgoCD が通知を投げ、Infisical がメールを出す。raw テーブルで先に落とす(k3s が後から入れる FORWARD のルールより先に評価される)。
 
 **SMTP だけは DROP ではなく REJECT。** Infisical は起動時の SMTP 接続検証が通るまで HTTP を listen しないので、
 DROP にすると永遠に上がってこない(2026-09-06 の 1 回目で踏んだ)。そして **raw テーブルには REJECT ターゲットが無い**ので、
 SMTP のぶんだけは filter テーブル(`OUTPUT` と `FORWARD`)に入れる。
 
 ```shell
-# api.cloudflare.com / acme-v02.api.letsencrypt.org / 本番の公開 IP(mm.doany.io, il.doany.io)。IP は VM の中で getent で引き直す
+# api.cloudflare.com / acme-v02.api.letsencrypt.org / 本番の公開 IP。IP は VM の中で getent で引き直す
 for ip in 104.19.192.174 104.19.192.175 104.19.192.176 104.19.192.177 104.19.192.29 104.19.193.29 172.65.32.248 59.140.229.91; do
   sudo iptables -t raw -I PREROUTING -d $ip -j DROP; sudo iptables -t raw -I OUTPUT -d $ip -j DROP
   sudo iptables -I FORWARD -d $ip -j DROP
@@ -35,7 +35,7 @@ sudo ip6tables -t raw -I OUTPUT -d 2000::/3 -j DROP; sudo ip6tables -t raw -I PR
 
 ### **k8up: R2 の本番リポジトリに書かせない**
 
-復元したクラスタには k8up の `Schedule`(mattermost / erpnext / infisical)が戻ってくる。
+復元したクラスタには k8up の `Schedule` が戻ってくる。
 向き先は **本番の restic リポジトリ**なので、放っておくとリハーサルのスナップショットが本番に混ざる。
 `restore.sh` 自体は R2 の読みが要るため、最初から R2 を塞ぐことはできない。
 
@@ -60,8 +60,8 @@ sudo ip6tables -t raw -I OUTPUT -d 2000::/3 -j DROP; sudo ip6tables -t raw -I PR
    sudo k3s kubectl delete schedules.k8up.io --all -A
    ```
 
-4. **operator の資格情報(`k8up-global` Secret)は git に無い**(手で作るもの。`apps/k8up/README.md`)。
-   スナップショットにそれが入っていなければ operator は `CreateContainerConfigError` で起動すらできない。
+4. **operator の資格情報(`k8up-global` Secret)を消す。** `restore.sh` はリハーサルモードではこれを作らないので、
+   スナップショットに入っていなければ operator は `CreateContainerConfigError` で起動しない。
    入っている(=新しいスナップショットから戻した)なら、`kubectl -n k8up delete secret k8up-global` で同じ状態にできる。
 
 5. **終わったらホスト側で数え直す。** 増えていなければ本番は無傷。
@@ -152,7 +152,7 @@ LB-IPAM の `10.10.0.53` も 15 本のルートも戻った。全 Application �
 | --- | --- |
 | `denpa/tuner-agent` | PT3 が無い。VM では毎回こうなる |
 | `netbird/*` | **9/6 の時点で NetBird は存在しない。** git だけが先に進んでいるので Pod は作られるが、Infisical 側に Secret が無く `CreateContainerConfigError` |
-| `erpnext` の socketio と worker | `ENOTFOUND erpnext-dragonfly-queue`。git の chart が valkey → dragonfly に進んでいて、スナップショットの Service 名と食い違う |
+| `erpnext`(いまは撤去)の socketio と worker | `ENOTFOUND erpnext-dragonfly-queue`。chart の版と、スナップショットの Service 名が食い違っていた |
 | `k8up` | リハーサルの手当てで `k8up-global` を消しているため。意図どおり |
 
 **「git がバックアップより進んでいる」状態は復元では普通に起きる**、を改めて確認した形になった。
@@ -184,13 +184,10 @@ LB-IPAM の `10.10.0.53` も 15 本のルートも戻った。全 Application �
   `wireguard/wg-easy`(PostStartHook がカーネルの wireguard モジュールを見つけられない)。
 - PVC 23 件すべて Bound。PV 25 件の `nodeAffinity` はすべて `main`。
 - `InfisicalSecret` 13 件すべて OK(本番も同時点で 13 件)。Infisical 本体も上がった。
-- データも戻っている。Mattermost の `posts` が 9832 行(本番はこの時点で 10593 行。スナップショットが 11 時間前なので妥当)。
-  ERPNext の DB `_6c86c449f75045ef` も居る。
+- データも戻っている(当時の Mattermost の `posts` が 9832 行。本番は 10593 行で、スナップショットが 11 時間前なので妥当)。
 - 遮断は全部効いた(上の「Cilium にしても〜」)。
 
-### 新しく見つかったこと: **Argo CD の app-of-apps が CRD 待ちで丸ごと止まる**
-
-復元直後、`apps/` を見る app-of-apps(Application `gitops`)の同期が**まるごと失敗していた**。
+### 新しく見つかったこと: **Argo CD の app-of-apps が CRD 待ちで丸ごと止まる**(対処済み)
 
 ```
 Failed | one or more synchronization tasks are not valid:
@@ -198,30 +195,21 @@ Failed | one or more synchronization tasks are not valid:
   the server could not find the requested resource (retried 5 times)
 ```
 
-git には `k8up.io/v1` の `Schedule`(いまは `apps/k8up/schedules.yaml`)があるのに、
-復元したクラスタに k8up の CRD が無い。**CRD を入れる当の Application(`apps/k8up/`)が同じ同期に含まれている**ので抜けられない。
-Argo CD は同期前に全マニフェストを検証し、1 つでも通らなければ**何も適用しない**ため、
-`apps/` の下は丸ごと止まる。子 Application が 5 つ(cloudflare-ddns / erpnext / infisical-operator /
-infisical-push-bridge / k8up)作られないまま **11 個**(本番は 16 個)。
+git には `k8up.io/v1` の `Schedule` があるのに、復元したクラスタに k8up の CRD が無い。CRD を入れる当の
+Application(`apps/k8up/`)が同じ同期に含まれているので抜けられず、子 Application が 5 つ作られないまま
+**11 個**(本番は 16 個)で止まった。戻したスナップショット(09-06 19:11)が k8up の導入(09-07 02:30 ごろ)より
+古かったせいでもあるが、**「git がバックアップより進んでいる」状態は復元では普通に起きる。**
+対処(`SkipDryRunOnMissingResource=true`)と理由は [../apps/k8up/README.md](../apps/k8up/README.md)
+「CRD がまだ無いクラスタで apps を止めないこと」。
 
-- 手で CRD を入れて(`k8up-crd.yaml`)同期をかけ直すと `successfully synced (all tasks run)` になり、
-  子 Application 5 つが揃った。**原因はこれで確定。**
-- ただし **CRD を入れただけでは自動同期は再開しない**。Argo CD は API リソース一覧をキャッシュしており、
-  application-controller の再起動でも戻らなかった。`Application` に `operation` を書いて同期を起こす必要があった。
-- **今回はスナップショットが古かったせいでもある。** k8up を入れたのが 2026-09-07 02:30 ごろ、
-  戻したスナップショットは 2026-09-06 19:11。新しいスナップショットなら CRD も state.db に入っているので当たらない。
-  それでも「git が先に進んでいて CRD がまだ無い」状態は復元では普通に起こるので、対処はしておくべき。
-- 対処案: 3 つの `Schedule` に `argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true` を付ける。
-  あるいは sync-wave で k8up の Application を先に回す。**未対応(ROADMAP の積み残し)。**
+- 手で CRD を入れて同期をかけ直すと `successfully synced (all tasks run)` になった。**原因はこれで確定**
+- **CRD を入れただけでは自動同期は再開しない。** Argo CD は API リソース一覧をキャッシュしていて、
+  application-controller の再起動でも戻らなかった。`Application` に `operation` を書いて同期を起こす必要があった
+- 同期を通したあと、operator が `Error: secret "k8up-global" not found` で止まった(git に無いため)。
+  いまは `restore.sh` が作り直す(リハーサルモードでは作らない)
 
-もう 1 つ、同期を通したあとに分かったこと: **k8up の operator は復元だけでは起動できない。**
-`k8up-global` Secret(R2 の endpoint と鍵)は手で作るもので git に無いため、
-`Error: secret "k8up-global" not found` で `CreateContainerConfigError` のまま止まる。
-新しいスナップショットなら state.db から戻るが、**git だけからは再建できない**ことは覚えておく
-(作り方は `apps/k8up/README.md`。`/etc/k3s-backup/env` から割って入れる 1 コマンド)。
-
-なお、このリハーサルでは **`Schedule` を消し、R2 を iptables で塞ぎ、operator が起動できない**の 3 段構えにした。
-本番の restic リポジトリは**開始前と完全に同一**(7 スナップショット、`k3s-host` 4 + `k8up` 3、ID もサイズも一致)で終わった。
+このリハーサルは **`Schedule` を消し、R2 を iptables で塞ぎ、operator が起動できない**の 3 段構えにした。
+本番の restic リポジトリは**開始前と完全に同一**(7 スナップショット、ID もサイズも一致)で終わった。
 
 ### 細かい差分(どれも問題ではない)
 
@@ -229,14 +217,11 @@ infisical-push-bridge / k8up)作られないまま **11 個**(本番は 16 個)�
   復元したクラスタでは Traefik が hostPort 80/443 を掴んだ。Gateway は LoadBalancer(`10.10.0.53`)なので衝突しない。
   本番ではその後に消してある。
 - `3proxy` の TLS サイドカーはスナップショット時点で hostPort 8443、いまの git は 3129。同期を通せば追いつく。
-- 同期を強制したあと erpnext の worker が一時的に CrashLoop した(`erpnext-dragonfly-queue` が引けない)。
-  Helm リリースを git の版に巻き直した最中のもので、復元そのものの問題ではない。
 
 ## 結果(2026-09-06、flannel + kube-proxy + ServiceLB + Traefik の頃)
 
-**過去の記録。**この 2 回はどちらも CNI が flannel、入口が Traefik、LoadBalancer が ServiceLB(klipper)だった頃のもの。
-サーバ上の QEMU/KVM(Ubuntu 26.04 cloud image、4 vCPU / 8 GB、hostname は `main`)で 2 回実施し、
-**2 回目で全項目クリア。** 復元は 7 GiB を 2 分弱、k3s は同じバージョンで起動し、PV も Node 名もそのまま戻った。
+**過去の記録。** CNI が flannel、入口が Traefik の頃に 2 回実施し、**2 回目で全項目クリア。**
+復元は 7 GiB を 2 分弱、k3s は同じバージョンで起動し、PV も Node 名もそのまま戻った。
 
 1 回目で見つかった 4 件と、その対処:
 
@@ -256,8 +241,7 @@ kube-proxy が Cilium の kubeProxyReplacement に替わっても同じことが
 
 ## 片付け
 
-VM の中で `k3s kubectl` を叩けば本物と同じ構成が動いているので、データの中身(Mattermost の投稿数、
-ERPNext の DB 一覧など)を確かめたいときはここで。終わったら落とす。
+VM の中で `k3s kubectl` を叩けば本物と同じ構成が動いているので、データの中身を確かめたいときはここで。終わったら落とす。
 
 ```shell
 sudo kill $(sudo cat /var/tmp/restore-drill/qemu.pid); sudo rm -rf /var/tmp/restore-drill

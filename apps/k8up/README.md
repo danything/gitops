@@ -49,19 +49,20 @@ Infisical を戻すための `infisical-postgresql.sql` もその R2 にある�
 
 `mattermostWebhook` は [notify.yaml](notify.yaml) が使う。**新しい秘密を増やさないために
 `k8up-global` に相乗りさせている** ── 値は同じ env ファイルの `MATTERMOST_WEBHOOK` で、
-ホストの `backup/k3s-backup` が使っているものと同じ。
+ホストの `backup/k3s-backup` が使っているものと同じ。名前は据え置きで、中身はいま Matrix の部屋 `server`
+の webhook([../matrix/README.md](../matrix/README.md)「通知のルーム」)。
 
 ## 失敗したときに気づけるようにする
 
 **k8up には通知が無い。** ホストの `backup/k3s-backup` には最初からあるので
-(`notify()` が Mattermost に投げる)、**バックアップを全部 k8up に移した時点で穴になった。**
+(`notify()` が webhook に投げる)、**バックアップを全部 k8up に移した時点で穴になった。**
 [notify.yaml](notify.yaml) の CronJob が日次(18:00 UTC)でそれを埋める。
 
 その 30 分後に [denpa-encoded-forget.yaml](denpa-encoded-forget.yaml) が走る。
 録画データだけ世代を持たないための forget で、理由は
 [../../docs/decisions.md](../../docs/decisions.md)「バックアップに何を含めるか」。
 
-**ArgoCD の通知は使えない。** Mattermost に繋がってはいるが(`bootstrap/argocd/helmchart.yaml`)、
+**ArgoCD の通知は使えない。** 通知の部屋に繋がってはいるが(`bootstrap/argocd/helmchart.yaml`)、
 **あれは Application しか見ない**ので k8up の `Backup` CR の失敗は拾えない。
 
 **見るのは restic の中身**であって、k8up のオブジェクトではない。**オブジェクトは掃除される** ──
@@ -71,31 +72,14 @@ Infisical を戻すための `infisical-postgresql.sql` もその R2 にある�
 なので init コンテナで `restic snapshots --json` を取ってきて、それを数える。
 k8up のイメージに restic が入っている(`/usr/local/bin/restic`)ので、余計なものを持ち込まなくてよい。
 
-**何が取れているべきかは履歴から学ぶ。** 過去 8 日に出てきた `(host, path)` の組を「あるべきもの」と
-みなし、それぞれの最新が 25 時間以内かを見る。**一覧を人が書き写す必要がなく**、PVC や namespace が
-増えても勝手に追いつく。ホストのスクリプト(`host=main`)のぶんも同じ物差しで見られる。
+見張りは 4 つ重ねてある。どれか 1 つでは穴が残るため:
 
-**履歴だけには頼らない。** 学習は 8 日で忘れるので、止まったまま 8 日を過ぎた経路は追跡対象から
-落ちて無音に戻る。そこで**クラスタ側から見た「あるべき姿」**も突き合わせる ── `backup` を持つ
-`Schedule` の namespace には、その namespace 名のホストのスナップショットが 25 時間以内にあるはず。
-**こちらは時間で減衰しない。**
-
-**「新しい」だけでは足りない。** スナップショットは新しいのに**中身が 0 バイト**、が実際に
-起きていた(下の「空のスナップショット」)。`summary.total_bytes_processed` も見る。
-
-**「あるはずのものが来ない」だけでは足りない。** 上の 2 つはどちらも過去に来ていたものを
-見張るので、**最初から一度も来ていないもの**には何も言わない。PVC や Pod に注釈を付けても
-その namespace に `Schedule` が無ければ**ジョブ自体が作られず、エラーも出ない** ──
-2026-09-08 に `yuzuriha-data` がこの穴に落ちていた。注釈側からも突き合わせる。
-**ファイルの `k8up.io/backup` と DB の `k8up.io/backupcommand` の両方**を見る
-(穴は同じ形で両方に開く)。
-
-| | 何を捕まえる | 減衰 |
-| --- | --- | --- |
-| 履歴(過去 8 日の `(host, path)`) | **経路ごと**の退行(PVC 1 本だけ落ちた、など) | 8 日 |
-| `Schedule`(クラスタの意図) | namespace が**丸ごと**無音になった | しない |
-| `summary.total_bytes_processed` | 走ってはいるが**何も読めていない** | しない |
-| PVC / Pod の注釈 × `Schedule` の namespace | **一度も取られたことがない** PVC・Pod | しない |
+| | 何を捕まえる | 減衰 | なぜ要るか |
+| --- | --- | --- | --- |
+| 履歴(過去 8 日に出てきた `(host, path)`。最新が 25 時間以内か) | **経路ごと**の退行(PVC 1 本だけ落ちた、など) | 8 日 | 一覧を人が書き写さなくても、PVC や namespace が増えれば勝手に追いつく。ホストの `host=main` も同じ物差しで見られる |
+| `Schedule`(`backup` を持つ namespace には、その名前のホストのスナップショットが 25 時間以内にあるはず) | namespace が**丸ごと**無音になった | しない | 履歴は 8 日で忘れるので、止まったまま 8 日を過ぎた経路は無音に戻る |
+| `summary.total_bytes_processed` | 走ってはいるが**何も読めていない** | しない | 新しいのに中身が 0 バイト、が実際に起きていた(下の「空のスナップショット」) |
+| PVC / Pod の注釈(`k8up.io/backup` と `k8up.io/backupcommand` の両方)× `Schedule` の namespace | **一度も取られたことがない** PVC・Pod | しない | 注釈を付けても `Schedule` が無ければ**ジョブ自体が作られず、エラーも出ない**(2026-09-08 に `yuzuriha-data` が落ちていた) |
 
 **残る割り切り**: 経路を複数持つ namespace で**そのうち 1 本だけ**が 8 日を超えて止まった場合は、
 履歴からは落ち、namespace 単位では他の経路が新しいので無音に戻る。**その 8 日間は毎日
@@ -183,9 +167,9 @@ JOB
 sudo k3s kubectl -n k8up logs -f job/k8up-retire
 ```
 
-**2026-10-06 に mattermost と erpnext も `retired` にした**(Mattermost は Zulip に移して畳んだ。ERPNext は消した)。
-**同じ日に zulip も `retired` にした**(Matrix に移して畳んだ。最後のバックアップは `final` のタグ付き)。
-どちらも最後のスナップショットは残っている。Schedule を消したので forget も prune もされず、**消すまで R2 に残り続ける**。
+**2026-10-06 に mattermost・erpnext・zulip も `retired` にした**(チャットは Mattermost → Zulip → Matrix と移して畳み、
+ERPNext は消した。zulip の最後のバックアップは `final` のタグ付き)。最後のスナップショットは残っている。
+Schedule を消したので forget も prune もされず、**消すまで R2 に残り続ける**。
 
 ## 何をどう取っているか
 
@@ -196,10 +180,8 @@ sudo k3s kubectl -n k8up logs -f job/k8up-retire
 
 | namespace | 中身 | `k8up.io/backupcommand` の在処 |
 | --- | --- | --- |
-| mattermost | postgres の `pg_dump` | [../mattermost/postgres.yaml](../mattermost/postgres.yaml) |
 | forgejo | postgres の `pg_dump` + リポジトリの PVC(ファイル) | [../forgejo/postgres.yaml](../forgejo/postgres.yaml) |
 | rybbit | postgres の `pg_dump` + ClickHouse の PVC(ファイル。パートは追記だけなので動いたまま取る) | [../rybbit/postgres.yaml](../rybbit/postgres.yaml) / [../rybbit/clickhouse.yaml](../rybbit/clickhouse.yaml) |
-| erpnext | mariadb の `mariadb-dump` | 上流 chart の `worker.gunicorn.podAnnotations`([application.yaml](../erpnext/application.yaml)) |
 | infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
 | lgtm / xool / worklog / denpa / blog / todoroku | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
 | netbird | `store.db` / `idp.db` / `events.db` を tar 1 本に | [../netbird/deployment.yaml](../netbird/deployment.yaml) |
@@ -213,11 +195,6 @@ PVC のファイルは `k8up.io/backup: "true"` を付けたものだけ取る�
 いまホストの `backup/k3s-backup` と二重に取っているが、restic は内容で重複を除くので
 実際に増えるのはメタデータだけ。**Talos に移る時点でホスト側を畳む**。
 
-erpnext だけ形が違う。**chart の `mariadb-sts` の StatefulSet テンプレートに `podAnnotations` が無い**
-ので、MariaDB の Pod には注釈を付けられない。代わりに gunicorn の Pod から `mariadb-dump` を打っている。
-あちらには `site_config.json`(`db_host` / `db_name` / `db_password`)と `mariadb-dump` が入っていて、
-root のパスワードも要らない。
-
 Infisical の Postgres は**クラスタで一番失えないデータ**(全アプリの秘密)。DB そのものは
 `ENCRYPTION_KEY` で暗号化されているのでダンプだけ手に入っても読めない ── **復元にはその鍵も要る**。
 Infisical 本体は `bootstrap/` に居るが、Schedule は `apps/` に置いて Argo CD に見てもらっている
@@ -230,7 +207,7 @@ Infisical 本体は `bootstrap/` に居るが、Schedule は `apps/` に置い�
   実際に `Fatal: Please specify repository location` で落ちた。
   グローバル設定に寄せる(`backend` を書かない)のが正解。
 - `backend` を持たない `Backup` が R2 へ書けることを、使い捨ての PVC で確認済み(確認後に削除)。
-- **ホストのスクリプトとは衝突しない。** 実測したスナップショットの内訳:
+- **ホストのスクリプトとは衝突しない。** 実測したスナップショットの内訳(当時。erpnext と mattermost はもう無い):
 
   ```
      1  host=erpnext      tags=['k8up']      path=/erpnext-gunicorn.sql
@@ -432,7 +409,7 @@ rows=108
 ロールが無いクラスタに流すと**そこだけ全部落ちる** ── データは入るが、所有者が
 postgres のままになる。
 
-mattermost のダンプ(10.7 MB)を捨てクラスタに流して数えた:
+当時の mattermost のダンプ(10.7 MB)を捨てクラスタに流して数えた:
 
 ```
 == ロールを作らずに流したとき
@@ -447,13 +424,12 @@ mattermost のダンプ(10.7 MB)を捨てクラスタに流して数えた:
 なので順番は **ロール → データベース(`OWNER` 付き) → ダンプ**:
 
 ```shell
-psql -U postgres -c 'CREATE ROLE mattermost LOGIN'
-psql -U postgres -c 'CREATE DATABASE mattermost OWNER mattermost'
-psql -U postgres -d mattermost -f /restore/mattermost-postgres.sql
+psql -U postgres -c 'CREATE ROLE <ロール> LOGIN'
+psql -U postgres -c 'CREATE DATABASE <DB> OWNER <ロール>'
+psql -U postgres -d <DB> -f /restore/<namespace>-postgres.sql
 ```
 
-**infisical も同じ**(`pg_dump -U infisical -d infisicalDB`)。erpnext は MariaDB
-(`mysqldump`)なので事情が違う ── あちらは chart が作ったユーザーがそのままいる。
+infisical なら `pg_dump -U infisical -d infisicalDB` なので、ロール `infisical`・DB `infisicalDB`。
 
 **アプリを普通に起動してから流すのが一番早い。** chart が Postgres を初期化して
 ロールもデータベースも作るので、その中身をダンプで上書きするだけで済む。
@@ -462,19 +438,17 @@ psql -U postgres -d mattermost -f /restore/mattermost-postgres.sql
 `Succeeded` で、ログだけが `Restored 0 files/dirs (0 B)` と言っていた。
 **戻したあとは必ず中身を見ること。**
 
-## ファイルの PVC をどう移すか(Talos で外す時)
+## ファイルの PVC の扱い
 
-ホストの `backup/k3s-backup` が見ているぶんを k8up に寄せる(ROADMAP の Phase 2)。
-SQLite は上で片付いたので、残りは注釈を足すだけ。
-
-**全部済んだ(2026-09-08)。** 残っているのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。
+ホストの `backup/k3s-backup` が見ていたぶんを k8up に寄せた(2026-09-08 に全部済んだ)。
+残っているのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `adguardhome-*` `erpnext-sites` `mattermost-data` `netbird-routing-peer-data` `forgejo-repos` | ファイル | gitops にあるのでここで `"true"` |
-| `denpa-encoded`(旧 `denpa-library`) `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `noren-assets` `noren-files` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
-| `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` `noren-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
+| `adguardhome-*` `netbird-routing-peer-data` `forgejo-repos` | ファイル | gitops にあるのでここで `"true"` |
+| `denpa-encoded`(旧 `denpa-library`) `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
+| `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
 | `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`。DB は `backupcommand` で取っているので**ファイルとしては除外**し、`logos/` だけを取る。**この注釈は JSON でパースされる**(`backupcommand` の `qsplit` とは別の経路。`operator/backupcontroller/executor.go`)。**パースに失敗すると `continue` でその PVC が黙って飛ばされる**ので、変えたら実物を見ること |
 | `netbird-data` | SQLite + 再取得できるファイル | `"false"`。DB はサイドカーの `backupcommand` で取る。同居している GeoLite2-City(65 MB)と geonames(7 MB)は起動時に落とし直せる |
-| `data-erpnext-mariadb-sts-0` `data-postgresql-0` `postgres-data` | RDBMS | もう論理バックアップがある。mattermost の 2 本には `k8up.io/backup: "false"` を明示してある(注釈が無ければ既に対象外だが、意図して外していると分かるように) |
+| `data-postgresql-0`(infisical) `postgres-data`(forgejo / rybbit) | RDBMS | もう論理バックアップがある。`postgres-data` には `k8up.io/backup: "false"` を明示してある(注釈が無ければ既に対象外だが、意図して外していると分かるように) |
 | `denpa-raw`(旧 `denpa-recorded`) | 生 TS の作業領域 | 取らない(容量。docs/decisions.md「バックアップに何を含めるか」) |

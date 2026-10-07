@@ -181,19 +181,9 @@ machine config の中の Cilium を、人が手で合わせるのか。** 合わ
 
 ### `gen config` のときに描く
 
-`helm template` の出力を `KubeInlineManifestConfig` に包んで、ただの `--config-patch` として渡す。
-**Cilium の値がリポジトリに二度書かれることが無くなる。**
-
-```shell
-{
-  echo "apiVersion: v1alpha1"; echo "kind: KubeInlineManifestConfig"; echo "name: cilium"
-  echo "manifest: |-"
-  helm template cilium cilium/cilium --version "$(sed -n 's/^version: //p' bootstrap/cilium/version.yaml)" \
-    -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$K8S" | sed 's/^/    /'
-} > /tmp/cilium-inline.yaml
-```
-
-実際に作って確かめた(2026-09-08): 2329 行の manifest が埋まり、`talosctl validate --mode metal` を通る。
+`helm template` の出力を `KubeInlineManifestConfig` に包んで、ただの `--config-patch` として渡す
+([talos/render.sh](../talos/render.sh) がやる)。**Cilium の値がリポジトリに二度書かれることが無くなる。**
+2026-09-08 に確かめた: 2329 行の manifest が埋まり、`talosctl validate --mode metal` を通る。
 生成物では 1 行のエスケープ文字列になるので、machine config 自体は 450 行のまま読める。
 
 **Renovate は `bootstrap/cilium/version.yaml` を見ている**ので、版が上がれば PR が来る。
@@ -211,8 +201,9 @@ machine config は毎回そこから描き直されるだけで、追従の作�
 
 Cilium の更新経路は「`values.yaml` を直す → machine config を描き直す → `upgrade-k8s`」になる。
 **`bootstrap/cilium/values.yaml` が正本なのは変わらない**が、当てる道具が替わる。
-[cilium-drift.yml](../.github/workflows/cilium-drift.yml) のズレ検出は k3s 期のもので、
-Talos では `upgrade-k8s` 自身が差分を出す(`< configured ...` と diff)ので役目を終える。
+`upgrade-k8s` 自身も差分を出す(`< configured ...` と diff)。
+[cilium-drift.yml](../.github/workflows/cilium-drift.yml) は Talos でも続ける(2026-10-05 から、サーバの版で
+k3s / Talos を見分けて `talos/cilium-values.yaml` を重ねる)。
 
 ### 採らなかった案
 
@@ -260,11 +251,12 @@ Cookie に載せる方式は 4096 バイトの壁に当たる。oauth2-proxy な
 **詰まった点**: Cilium 1.20 は **Gateway API v1.6.1** の CRD を要求する。v1.4.0 を入れていると
 operator が `Required GatewayAPI resources are not found` を出して GatewayClass が `Waiting for controller` のまま止まる。
 必要なのは gatewayclasses / gateways / httproutes / referencegrants / grpcroutes / **backendtlspolicies** / **tlsroutes**
-(v1.6.1 では TLSRoute が standard チャネルに入っている)。
+(v1.6.1 では TLSRoute が standard チャネルに入っている)。本番では k3s の Traefik が v1.5.1 を入れていたので
+`--server-side --force-conflicts` で上書きし、**cilium-operator の再起動**も要った。
 
 **メモの訂正**: 引き継ぎメモには「Cilium は TLSRoute のみ。TCPRoute / UDPRoute は非対応」とあったが、
 **1.20 のドキュメントは TCPRoute / UDPRoute を optional but supported として挙げていて、CRD も適用できた**。
-3proxy の TCP ルートは TCPRoute で移せる見込み(実際の疎通は未確認)。
+(ただし 3proxy は TCPRoute では移せなかった。下の「3proxy(TLS 終端 + 素の TCP)」)
 
 ### 本番での実施結果(段階 1、2026-09-06)
 
@@ -303,7 +295,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 | --- | --- |
 | Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(2026-09-08 実測。`bootstrap/cilium/values.yaml` の `nodePort`)。手で当てた 80/443 は今も要る |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
-| matrix の LiveKit(Element Call。Mattermost Calls の番号を引き継いだ) | 8443 UDP・8443 TCP |
+| matrix の LiveKit(Element Call。もとは Mattermost Calls の番号) | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
 
 **詰まった点 3 つ:**
@@ -317,9 +309,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 
 ### Gateway API の土台で分かったこと(2026-09-06)
 
-- **Cilium 1.20 は Gateway API v1.6.1 の CRD を要求する。** k3s の Traefik が v1.5.1 を入れているので
-  `--server-side --force-conflicts` で上書きが要る。バージョンが合わないと GatewayClass が
-  `Waiting for controller` のまま無言で止まる。CRD を入れ替えたあと **cilium-operator の再起動**も要る。
+- CRD の版は上の「検証結果」の詰まった点を参照(v1.6.1 が要る)。
 - **Gateway はアドレスが付くまで `Programmed=False` のまま**で、Envoy にリスナーが載らない。
   当初は LB-IPAM + L2 アナウンスでアドレスを払い出していたが、**`gatewayAPI.hostNetwork` に
   したらノードの IP がそのまま `status.addresses` に入った**ので、どちらも外した(2026-09-07)。
@@ -335,8 +325,6 @@ Traefik では `IngressRouteTCP` が `HostSNI(px.doany.io)` で受けて **TLS �
   (`No matching listener protocol; route requires one of: [TCP]`)
 - Cilium はそのリスナーに **TLSRoute しか許さず**、TLSRoute は本来 passthrough 用
   (`Listener not valid. None of the Allowed Route Kinds are supported.`)
-
-取りうる形は 3 つ。
 
 **なぜ Traefik では 443 のまま両立できていたのか。** Traefik は 443 のエントリポイントが 1 つあり、
 接続ごとに TLS の ClientHello を覗いて **SNI で HTTP ルーターと TCP ルーターに振り分けて**いた。
@@ -419,7 +407,7 @@ Gateway API の OIDC が無い**。トークンの大きさ以前に機能が無
 したがって forward-auth が要るルートは、**oauth2-proxy を「前段のプロキシ」として置く**
 (HTTPRoute → oauth2-proxy → アプリ)か、そのルートだけ Traefik か Envoy Gateway に残す。
 幸い forward-auth を使っているのは Traefik ダッシュボードと `sub` の 2 本だけで、
-アプリ側(ArgoCD、ERPNext、Mattermost、denpa、NetBird)はそれぞれ自前で OIDC を持っている。
+アプリ側(ArgoCD、denpa、NetBird など)はそれぞれ自前で OIDC を持っている。
 
 **Entra 側でトークンを小さくすること自体は独立して価値がある。** グループクレームを全部載せるのをやめて
 **アプリロール**に切り替えると `roles: ["admin"]` の数十バイトで済む。将来 Envoy Gateway の内蔵 OIDC を
@@ -434,7 +422,7 @@ Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**�
 **詰まった点 2 つ:**
 
 1. **Cilium は nodePort の範囲に入っている hostPort を張らない。** nodePort の範囲を `80-32767` に広げたら、
-   AdGuard の 853 と Mattermost calls の 8443、3proxy の TLS ポートが一斉に落ちた。範囲を `80,443` の
+   AdGuard の 853 と当時の Mattermost calls の 8443、3proxy の TLS ポートが一斉に落ちた。範囲を `80,443` の
    2 つだけに絞る(`nodePort.range`)ことで両立する。
 2. **Traefik を消したあとも Service に残った `externalIPs: [10.10.0.4]` が 10.10.0.4:80/443 を黒穴にする。**
    DaemonSet を消しても Service は残り、Cilium はそのまま宛先無しの転送先を作り続ける。
@@ -529,14 +517,14 @@ chart が悪いのではなく、**入れ方**が合わなくなった。
   CRD を `templates/` に置く chart だと CRD ごと消えて CR が巻き添えになる
 - **ArgoCD と二重管理になる。** 同じリソースを 2 つのリコンサイラが見ることになり、
   差分も同期状態も prune の制御も ArgoCD 側から見えない
-- **Job で走るので chart 側の事情が漏れる。** erpnext は Job 名に描き出した時刻を入れるので、
-  同期のたびに作り直される
+- **Job で走るので chart 側の事情が漏れる。** erpnext(2026-10-06 に撤去)は Job 名に描き出した時刻を入れるので、
+  同期のたびに作り直された
 
 ArgoCD が居ない k3s 単体なら悪い選択ではない。**居るなら重複でしかない。**
 
 ### 配る chart で気を付けること
 
-**このセッションで実際に踏んだものだけ**を挙げる。自分の chart(denpa / yosegaki)は
+**実際に踏んだものだけ**を挙げる(例の erpnext は 2026-10-06 に撤去したが、教訓は残す)。自分の chart(denpa / yosegaki)は
 どれも該当していない(CRD 無し、名前は固定、`podAnnotations` と `resources` を出せる)。
 
 | やらないこと | 踏んだ例 |
@@ -595,7 +583,7 @@ kubectl -n kube-system delete helmchart <name>
 | infisical-secrets-operator | 移行済み | `apps/infisical-operator/` |
 | infisical-push-bridge | 移行済み | `apps/infisical-push-bridge/` |
 | yosegaki | 移行済み | blog リポジトリの `deploy/yosegaki-application.yaml`。PVC 持ちなので上の手順で移した |
-| erpnext | 移行済み | `apps/erpnext/application.yaml`。**サイト作成と conf-bench の Job は止めてある**(下記) |
+| erpnext | 移行済み(2026-10-06 に撤去) | Job 名に時刻が入る chart だったので、`jobs.createSite` と `jobs.configure` を止めて移した(描き出しの差はその 2 つの Job だけで、Pod は入れ替わらなかった) |
 | infisical | **移さない**(2026-09-08 に確定) | chart が DB と Redis のパスワードを **Deployment の平文 env に焼き込む**ので、値を git に置けない。理由は下記 |
 | argocd | 移さない | 自分自身。Talos では machine config の `inlineManifests` に載せる |
 
@@ -632,29 +620,6 @@ REDIS_URL          redis://default:<パスワード>@redis-master:6379
 `inlineManifests` に載せる ── [talos/render.sh](../talos/render.sh) は age の鍵を持っている
 ので、SOPS 済みの値を復号して `helm template` に渡せる。**生成物は machine config の中に
 しか出ないので、git には平文が残らない。**
-
-### erpnext だけは素直に移せない
-
-chart が **Job の名前に描き出した時刻を入れる**(`erpnext-new-site-20260907103337`、
-`erpnext-conf-bench-20260907103337`)。ArgoCD は同期のたびに描き直すので、そのまま Application にすると
-**毎回名前の違う Job を作っては前のを prune する**。サイト作成ジョブがそれをやるので受け入れられない。
-
-取りうる形は 2 つ。
-
-1. **ジョブを止める。** サイトはもう出来ているので `jobs.createSite.enabled: false` と
-   `jobs.configure.enabled: false`(既定は true)にする。まっさらから入れ直すときだけ 1 回有効にして、
-   終わったら戻す。**Talos で作り直すときの手順に書いておくこと。**
-2. **`jobs.<name>.jobName` で名前を固定する**(chart に値がある)。ただし Job の spec は不変なので、
-   中身が変わったときに `Replace=true` が要る。Application 全体に付けると StatefulSet まで
-   置き換わるので、そこは慎重に。
-
-**1 の形で移した(2026-09-07)。** `jobs.createSite` と `jobs.configure` を `false` にして
-ArgoCD の Application にした。描き出しを突き合わせると**消えるのはその 2 つの Job だけ**で、
-残り 25 個は同一だった。引き取っても Pod は入れ替わっていない。
-
-**まっさらから入れ直すときは 1 回だけ `true` にする。** `jobs.configure` は
-`common_site_config.json`(DB と Redis の宛先)を書くので、chart を大きく上げて
-その宛先が変わるときも 1 回有効にして戻すこと(8.0.78 の Dragonfly → Valkey が実例)。
 
 ## ghcr の pull 認証
 
@@ -701,7 +666,7 @@ Infisical から作って `imagePullSecrets` で参照していた(tamasagashi�
 
 Renovate は共有プリセット(`5ym/renovate`)を使っていて、**全部を 1 つの PR にまとめて自動マージ**する
 設定だった。`separateMajorMinor: false` も付いていたので、**postgres 17 → 18 が nginx のパッチと
-同じ PR に入り、自動マージの対象になっていた**(danything/gitops#7)。そのまま入っていたら Mattermost が落ちる。
+同じ PR に入り、自動マージの対象になっていた**(danything/gitops#7)。そのまま入っていたら当時の Mattermost が落ちていた。
 
 **直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/renovate#2)。
 パッチとマイナーはこれまでどおり 1 つにまとめて自動マージする。小さくて頻繁で、タグを戻せば済むため。
@@ -714,21 +679,19 @@ Renovate は共有プリセット(`5ym/renovate`)を使っていて、**全部�
 | `major dependencies` | しない |
 | `helm charts`(更新の種類を問わない) | しない |
 
-**PostgreSQL は 17 の線に固定した**(`renovate.json` の `allowedVersions: "<18"`)。理由は 2 つ:
-
-- Mattermost が公表しているのは**下限(14.0+)だけ**で、18 を検証したとは書いていない
-- PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れる。イメージのタグを差し替えると
-  `database files are incompatible with server` で起動を拒否する。上げるには dump と restore が要る
-  (この DB は 89 MB なので作業自体は短いが、Mattermost を止める必要がある)
-
-17 のサポートは 2029-11 まであるので急がない。Mattermost が 18 を明記したらそのとき外す。
+**PostgreSQL は 17 の線に固定した**(`renovate.json` の `allowedVersions: "<18"`)。きっかけは Mattermost
+(公表しているのが下限の 14.0+ だけだった。2026-10-06 に撤去)だが、規則は `postgres` のイメージ全部に効いている。
+外さない理由はもう 1 つのほう ── **PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れる。**
+イメージのタグを差し替えると `database files are incompatible with server` で起動を拒否する。上げるには
+dump と restore が要る。17 のサポートは 2029-11 まであるので急がない。
 
 ### メジャーを分けるだけでは足りない(2026-09-07 実例)
 
 プリセットを直した直後に Renovate が #7 を作り直し、**自分でマージした**。残ったのは
-postgres 17.10 → 17.11(パッチ、無害)と **erpnext 8.0.15 → 8.0.78**。後者は版の付け方が
-パッチなので、メジャーを分ける設定では止まらない。中身は下記のとおり Dragonfly → Valkey の
-入れ替えで、values に書いてあったチューニングが丸ごと無効になった。
+postgres 17.10 → 17.11(パッチ、無害)と **erpnext の chart 8.0.15 → 8.0.78**。後者は版の付け方が
+パッチなので、メジャーを分ける設定では止まらない。中身はキャッシュとキューの Dragonfly → Valkey の
+入れ替え(Service 名も `erpnext-dragonfly-*` → `erpnext-valkey-*` に変わる)で、values に書いてあった
+Dragonfly のチューニングが丸ごと無効になり、valkey は `resources: {}` で上限も無かった。
 
 **版の番号は中身の大きさを表さない。** chart の場合はとくにそうで、自動マージに任せる範囲を
 決めるときは「メジャーかどうか」だけでは足りない。
@@ -737,17 +700,6 @@ postgres 17.10 → 17.11(パッチ、無害)と **erpnext 8.0.15 → 8.0.78**。
 (5ym/renovate#3)。chart は更新の種類を問わず人が見る。`helm charts` という別の
 グループにしてあるのは、chart を止めることで `all dependencies` の PR まで自動マージ
 されなくなるのを避けるため。
-
-### erpnext 8.0.78 は Dragonfly をやめて Valkey になる
-
-chart の 8.0.15 → 8.0.78 は patch に見えるが、**キャッシュとキューが Dragonfly から Valkey に入れ替わる**。
-`erpnext-dragonfly-cache` / `-queue` が消えて `erpnext-valkey-cache` / `-queue` になり、
-worker の接続先も変わる。いまの values にある Dragonfly のチューニング
-(`--proactor_threads=4` と `--maxmemory=1gb`、2026-08 の事故対応)は**丸ごと効かなくなる**。
-
-Valkey は Redis 系なので io_uring の RLIMIT_MEMLOCK 問題は無く、`proactor_threads` は要らない。
-ただし chart の既定は `resources: {}` で上限が無いので、**メモリの上限は自分で入れる**こと。
-mariadb は `mariadb:10.6` のままなので DB のメジャーは動かない。
 
 ## PVC を守る仕掛けをやめた(2026-09-07)
 
@@ -758,7 +710,7 @@ mariadb は `mariadb:10.6` のままなので DB のメジャーは動かない�
 | PVC の `argocd.argoproj.io/sync-options: Prune=false,Delete=false` | **これが本丸。** これがある限り git から消しても PVC は残る。GitOps の一貫性を損なう |
 | StorageClass `local-path-retain`(`reclaimPolicy: Retain`) | **追われない状態を作る。** 実際、35 日と 44 日放置された Released の PV が 3 本あった(2026-09-07 の掃除で発見) |
 
-**代わりの後ろ盾はバックアップ。** 日次の restic(R2)に加えて、DB 3 つは k8up が論理バックアップを取る。
+**代わりの後ろ盾はバックアップ。** 日次の restic(R2)に加えて、DB は k8up が論理バックアップを取る。
 誤って消したときの最大損失は 24 時間ぶん。**この判断は復元リハーサルが Cilium 構成で通ってから**行った
 ([docs/restore-drill.md](restore-drill.md))。通らなければ守りを外す根拠が無かった。
 
@@ -781,7 +733,7 @@ R2 の無料枠は 10 GB。**もう超えている。**
 | 2026-09-07 | 13.92 GiB | `denpa-recorded` が 14 GB まで育っていた → 除外した |
 | **2026-09-08** | **23.2 GiB** | **`denpa-library` が 972 MB → 7.9 GB に育った**(圧縮後 10.1 GiB) |
 | 2026-09-10 | 33.5 GiB | R2 の表示は 36.05 GB(GiB との差)。うち 18.15 GiB が `denpa-library` の 3 世代 |
-| 2026-10-05 | 88.6 GiB | ライブラリが 39.66 GiB に育ち、ホストのスクリプトの 10 世代がそれを掴んでいた → ホスト側から外した(上の表の「録画データ」) |
+| 2026-10-05 | 88.6 GiB | ライブラリが 39.66 GiB に育ち、ホストのスクリプトの 10 世代がそれを掴んでいた → ホスト側から外した(下の表の「録画データ」) |
 | 2026-10-05 | **37.3 GiB** | ホストの 10 本から録画を抜き(`restic rewrite`)、改名前のパスの 1 本を消して prune。録画はエンコード済みの 1 世代(約 35 GiB)だけ |
 
 **除外では解決しない。** `denpa-recorded` を外した効果は保持世代が回れば出るが、
@@ -871,7 +823,7 @@ ArgoCD は `sourcePath` 配下を `recurse` で拾い、追跡は `argocd.argopr
 
 | 行き先 | 対象 |
 | --- | --- |
-| このリポジトリの `apps/<name>/httproute.yaml` | adguardhome / erpnext / forgejo / headlamp / infisical / mattermost / netbird |
+| このリポジトリの `apps/<name>/httproute.yaml` | adguardhome / forgejo / headlamp / infisical / matrix / mta-sts / netbird / rybbit など(当時は erpnext と mattermost も) |
 | 各アプリのリポジトリの `deploy/httproute.yaml` | blog / yosegaki / lgtm / tamasagashi / worklog / xool / yuzuriha |
 | `bootstrap/` | argocd / auth ×3 / redirect-https |
 
