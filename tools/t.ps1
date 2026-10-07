@@ -115,7 +115,9 @@ function Start-LoginRelay($name, $origin) {
 $piped = $MyInvocation.ExpectingInput
 $opts = @('--rm')
 if ($piped -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $opts += '-T' }
-$cmd = if ($args.Count) { $args } else { @('bash') }
+# 引数が 1 つのときも配列にする (if の値は 1 要素の配列が中身に展開され、$cmd[0] が 1 文字目になる。
+# 2026-10-07 まで `'x' | tools/t.ps1 cat` が `c: not found` で落ちていた)
+$cmd = @(if ($args.Count) { $args } else { 'bash' })
 
 $relay = $null
 $browserLogin = $cmd.Count -ge 2 -and $cmd[0] -eq 'infisical' -and $cmd[1] -eq 'login' -and
@@ -143,6 +145,11 @@ try {
         $wrap = 'base64 -d -i | "$@"'
         if ($PSVersionTable.PSVersion -lt [version]'7.3') { $wrap = $wrap.Replace('"', '\"') }
         $b64 | wslc-compose --file $compose run @opts tools sh -c $wrap sh @cmd
+    } elseif ([Console]::IsInputRedirected) {
+        # 標準入力が端末でもパイプでもないところ (Claude Code のツールなど) では、wslc-compose run がつなぐ標準入力が
+        # 無効なハンドルになり、1 秒ほど以上かかるコマンドの出力が落ちて ERROR_INVALID_HANDLE で終わる (2026-10-07)。
+        # 空のパイプを渡せば落ちない
+        @() | wslc-compose --file $compose run @opts tools @cmd
     } else {
         wslc-compose --file $compose run @opts tools @cmd
     }
