@@ -22,7 +22,7 @@
 2. Entra のアプリ登録 Main のリダイレクト URI(Web)に `https://fj.doany.io/user/oauth2/entra/callback` ── **2026-09-15 に `az ad app update` で追加済み**
 3. main にマージ → ArgoCD が同期
 4. **管理者を作る**(1 度だけ)。Entra のメールと同じにしておくと、Entra でログインしたときに自動で紐づいて管理者になる。
-   パスワードは捨てる(表示させない)。組織 `danything` とチーム `members`(読み取り・すべてのリポジトリ)も作る
+   パスワードは捨てる(表示させない)。組織 `doa` とチーム `members`(読み取り・すべてのリポジトリ)も作る
 
    ```shell
    kubectl -n forgejo exec deploy/forgejo-web -c forgejo -- \
@@ -43,7 +43,7 @@
 
 先に 1 回だけ:
 
-1. Forgejo に組織 `danything` を作る
+1. Forgejo に組織 `doa` を作る
 2. ArgoCD 用のアクセストークンを作り(`read:repository` と `read:organization`)、Infisical `/argocd/forgejo-repo-creds` に
    `url` = `https://fj.doany.io/doa` / `username` / `password` = トークン で入れる([argocd-creds.yaml](argocd-creds.yaml))。
    **スコープは repository・organization・issue の読み取り。** issue が無いと、非公開リポジトリができた時点で
@@ -56,7 +56,7 @@
 
 リポジトリごとに:
 
-1. Forgejo の「新しい移行」で組織 `danything` の下に取り込む(Issue / PR / リリースも)。非公開のまま入り、チーム members が読める
+1. Forgejo の「新しい移行」で組織 `doa` の下に取り込む(Issue / PR / リリースも)。非公開のまま入り、チーム members が読める
 2. ワークフローを Forgejo 向けに直す(`.github/workflows/` のままで読まれる)
    - イメージは `ghcr.io/danything/<name>` → `fj.doany.io/doa/<name>`。push はワークフローの `secrets.GITHUB_TOKEN`(Forgejo のトークン)で通る
    - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンを Infisical から `kubernetes.io/dockerconfigjson` で)
@@ -88,7 +88,7 @@
 - dind のイメージ置き場は `emptyDir`。Pod が入れ替わると次のジョブで pull し直す
 - Cilium は vxlan なので dind の MTU を 1400 にしてある。1500 に戻すと大きい pull が途中で止まる
 
-## 組織 danything は「ログインユーザーのみ」(limited)
+## 組織 doa は「ログインユーザーのみ」(limited)
 
 **公開にしてはいけない。** パッケージ(コンテナイメージ)の読み取り権限はリポジトリではなく**組織の公開範囲**で決まり、
 公開の組織だと非公開リポジトリのイメージでも匿名で pull できる(`services/packages/perm.go` の
@@ -114,7 +114,7 @@
 ```shell
 curl -X PATCH -H "Authorization: token $T" -H 'Content-Type: application/json' \
   -d '{"allow_merge_commits":false,"allow_rebase":false,"allow_rebase_explicit":false,"allow_fast_forward_only_merge":false,"allow_squash_merge":true,"default_merge_style":"squash","default_delete_branch_after_merge":true}' \
-  https://fj.doany.io/api/v1/repos/danything/<name>
+  https://fj.doany.io/api/v1/repos/doa/<name>
 ```
 
 2026-09-15 に shadai / renovate / tamasagashi / worklog-cloud へ当てた。

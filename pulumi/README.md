@@ -48,7 +48,7 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 
 | どこ | 何 |
 | --- | --- |
-| Actions secrets | `PULUMI_BACKEND_URL` / `PULUMI_CONFIG_PASSPHRASE` / `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_NOTIFY_WEBHOOK_URL`(notifications.ts の送り先)/ `CLOUDFLARE_ZONE_ID`(dns.ts)/ `PREVIEW_CLOUDFLARE_API_TOKEN` / `PREVIEW_AWS_ACCESS_KEY_ID` / `PREVIEW_AWS_SECRET_ACCESS_KEY` |
+| Actions secrets | `PULUMI_BACKEND_URL` / `PULUMI_CONFIG_PASSPHRASE` / `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_NOTIFY_WEBHOOK_URL`(notifications.ts の送り先)/ `MATRIX_SERVER_WEBHOOK_URL`(expiry.yml の送り先)/ `CLOUDFLARE_ZONE_ID`(dns.ts)/ `PREVIEW_CLOUDFLARE_API_TOKEN` / `PREVIEW_AWS_ACCESS_KEY_ID` / `PREVIEW_AWS_SECRET_ACCESS_KEY` |
 | Environment `pulumi-apply` | `CLOUDFLARE_API_TOKEN` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
 | 手元 | パスフレーズの写し `~/.config/doany/pulumi-passphrase` |
 

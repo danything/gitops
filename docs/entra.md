@@ -173,7 +173,7 @@ Forgejo の members に入る ── [apps/forgejo/README.md](../apps/forgejo/RE
 | Matrix・Element、Forgejo(チーム members)、denpa・ashi・yosegaki など | 入れる・使える | 割り当て必須が `false`。初回のログインでアカウントが自動で作られる |
 | NetBird(VPN) | 入れる・家の LAN に届く | 方針が All の組(pulumi/netbird.ts) |
 | Argo CD・Kubernetes(Headlamp)・Hubble | 見るだけ | Argo CD は `policy.default: role:readonly`、Kubernetes は `entra:viewer`、Hubble は前段でロールを見ない |
-| AdGuard Home・`*.s.doany.io`・noren の管理画面 | 入れない | 前段(oauth2-proxy)やアプリが `admin` のロールを求める |
+| AdGuard Home・`*.s.doany.io` | 入れない | 前段(oauth2-proxy)やアプリが `admin` のロールを求める |
 
 Matrix の ID はメールの @ の前から作るので、前半が同じ人が 2 人居ると 2 人目は入れない(apps/matrix/README.md)。
 

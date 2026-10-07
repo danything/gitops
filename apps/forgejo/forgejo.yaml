@@ -71,7 +71,7 @@ data:
     # 3. DB を作る / 上げる。postgres が上がるまで待つ
     until gitea migrate; do echo "DB を待っている"; sleep 5; done
     # 4. Entra のログイン。name で探して、無ければ足し、あれば上書きする
-    #    テナントの人は tid で組織 danything のチーム members(全リポジトリ読み取り)に入る。
+    #    テナントの人は tid で組織 doa のチーム members(全リポジトリ読み取り)に入る。
     #    Forgejo はグループのクレームを 1 つしか取れないので、Entra のロール admin は使っていない。
     #    サイトの管理者は Pod の中で作る(README「使い始め」)。
     #    tid は ID トークンに入っていて、goth が RawData に載せる(providers/openidConnect の FetchUser)
@@ -83,7 +83,7 @@ data:
       --auto-discover-url https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0/.well-known/openid-configuration \
       --scopes "openid profile email" \
       --group-claim-name tid \
-      --group-team-map '{"22ac977d-b140-4dc8-8150-90d645d3475b": {"danything": ["members"]}}'
+      --group-team-map '{"22ac977d-b140-4dc8-8150-90d645d3475b": {"doa": ["members"]}}'
     # 一覧はタブ区切り(ID Name Type Enabled)。--vertical-bars の出力は空白の入り方が一定でなく、
     # grep で拾えずに 2 回目の起動で add-oauth が「already exists」で落ちた(2026-09-15)
     id=$(gitea admin auth list | awk '$2 == "entra" {print $1}')
