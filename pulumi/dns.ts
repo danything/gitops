@@ -25,9 +25,13 @@ record("caa-issuewild", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 
 // --- メール(Exchange Online)----------------------------------------------------------------------
 record("mx", { name: "doany.io", type: "MX", content: "doany-io.mail.protection.outlook.com", priority: 0, ttl: 3600 }, "6c7e6af1e5665b444b03f40253df2090");
 record("autodiscover", { name: "autodiscover.doany.io", type: "CNAME", content: "autodiscover.outlook.com", proxied: false, ttl: 3600 }, "93eb5f05c05d9ca6ae8239cad26089e2");
-// **取り込んだときの値のまま。** import は今の値と一致していないと失敗するので、直すのは次の PR(DKIM と一緒):
-//   SPF の a:b.doany.io はワイルドカード経由で家の IP を許しているので外し、-all にする。DMARC は p=reject へ
-record("spf", { name: "doany.io", type: "TXT", content: "v=spf1 a:b.doany.io include:spf.protection.outlook.com ~all", ttl: 3600 }, "05522a739cbd45b787b93f1a700b8916");
+// 送るのは Exchange だけ(アプリも smtp.office365.com 経由)。以前あった a:b.doany.io は、ワイルドカード経由で
+// 家の IP を許していたので外した。DKIM が効くので -all(2026-10-07)
+record("spf", { name: "doany.io", type: "TXT", content: "v=spf1 include:spf.protection.outlook.com -all", ttl: 3600 }, "05522a739cbd45b787b93f1a700b8916");
+// DKIM(Exchange Online)。行き先は Get-DkimSigningConfig の Selector1CNAME / Selector2CNAME。
+// **明示しないとワイルドカードに吸われて doany.io の TXT(SPF)が返る**(2026-10-07 まではそうだった)
+record("dkim-selector1", { name: "selector1._domainkey.doany.io", type: "CNAME", content: "selector1-doany-io._domainkey.doany.q-v1.dkim.mail.microsoft", proxied: false, ttl: 3600 });
+record("dkim-selector2", { name: "selector2._domainkey.doany.io", type: "CNAME", content: "selector2-doany-io._domainkey.doany.q-v1.dkim.mail.microsoft", proxied: false, ttl: 3600 });
 record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: "v=DMARC1; p=none; rua=mailto:info@doany.io", ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
 
 // --- ドメインの確認 ---------------------------------------------------------------------------------
