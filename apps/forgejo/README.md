@@ -101,9 +101,9 @@
 
 **ワークフローの自動トークン(`GITHUB_TOKEN`)ではパッケージに書けない**(Forgejo 15。`services/packages/perm.go` に
 `TODO: ActionUser permission check` とあり、Actions のユーザーは組織のメンバー扱いにならない)。
-**秘密は置かない。** 下の承認済みインテグレーションで、ジョブの JWT を bot ユーザー `forgejo-bot` として通し、
-`docker login fj.doany.io -u forgejo-bot`(パスワードに JWT)する。前は組織の Actions のシークレット `REGISTRY_TOKEN`
-(forgejo-bot の `write:package` だけのトークン)だった。
+組織 doa の Actions のシークレット `REGISTRY_TOKEN`(bot ユーザー `forgejo-bot` の `write:package` だけのトークン)で
+`docker login fj.doany.io -u forgejo-bot` する。下の承認済みインテグレーションで秘密を無くせることは確かめたが、
+forgejo-bot のものは管理の手段が無いので見送っている(下の表)。
 
 ## 承認済みインテグレーション(Authorized Integrations、Forgejo 16)
 
@@ -129,11 +129,16 @@ CI から Forgejo の API・git・レジストリに**長く生きる秘密な�
 - **境界は main に書ける人**: main のワークフローを書き換えられる人は、その JWT で持ち主として書ける(シークレットのときと同じ)。
   doa の main に書けるのは bots と Owners だけ(members は読み取り)
 
-| 持ち主 | 名前 | 発行者 | クレームのルール | 範囲・スコープ | aud の置き場 |
-| --- | --- | --- | --- | --- | --- |
-| forgejo-bot | doa-registry | Forgejo Actions | doa の todoroku・tamasagashi・worklog-cloud、`refs/heads/main`、`publish.yml` / `fetch-latest.yml`、push / workflow_dispatch / schedule | すべて・`write:package` | 組織 doa の変数 `REGISTRY_AUDIENCE` |
-| forgejo-bot | todoroku-deploy | Forgejo Actions | todoroku、`refs/heads/main`、`publish.yml`、push / workflow_dispatch | todoroku だけ・`write:repository` | todoroku の変数 `DEPLOY_AUDIENCE` |
-| yui | repo-config | GitHub Actions | GitHub の 5ym/repo-config、`refs/heads/main`、`forgejo-settings.yml`、push / schedule / workflow_dispatch | すべて・`write:organization` `write:repository` | GitHub の 5ym/repo-config の変数 `FORGEJO_AUDIENCE` |
+| 状態 | 持ち主 | 名前 | 発行者 | クレームのルール | 範囲・スコープ | aud の置き場 | 代わりに消したもの |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **使っている**(2026-10-07) | yui | repo-config | GitHub Actions | GitHub の 5ym/repo-config、`refs/heads/main`、`forgejo-settings.yml`、push / schedule / workflow_dispatch | すべて・`write:organization` `write:repository` | GitHub の 5ym/repo-config の変数 `FORGEJO_AUDIENCE` | repo-config の secrets `FORGEJO_TOKEN` と yui のトークン `repo-config-settings` |
+| 見送り | forgejo-bot | doa-registry | Forgejo Actions | doa の todoroku・tamasagashi・worklog-cloud、`refs/heads/main`、`publish.yml` / `fetch-latest.yml`、push / workflow_dispatch / schedule | すべて・`write:package` | 組織 doa の変数 `REGISTRY_AUDIENCE` | (今は組織の `REGISTRY_TOKEN`) |
+| 見送り | forgejo-bot | todoroku-deploy | Forgejo Actions | todoroku、`refs/heads/main`、`publish.yml`、push / workflow_dispatch | todoroku だけ・`write:repository` | todoroku の変数 `DEPLOY_AUDIENCE` | (今は todoroku の `DEPLOY_TOKEN`) |
+
+**forgejo-bot の 2 つは見送った**(2026-10-07)。下のとおり forgejo-bot のものは 16.0.5 では画面にも CLI・API にも
+管理の手段が無く、止める・作り直すには DB を直接触ることになる。秘密を減らす効果より、後から手で扱えない設定を本番に
+増やす損が大きい。v17 以降で管理の手段が揃ったら、下のコマンドで作り、ワークフローの PR(doa/tamasagashi#106・
+doa/todoroku#368・doa/worklog-cloud#148。閉じてある)を出し直す。
 
 aud はインテグレーションを作ると決まる(`u:<ユーザー ID>:<UUID>`)。秘密ではないので変数に置く。
 **doa にイメージを出すリポジトリを足したら、doa-registry のリポジトリ ID も足す**(変更の CLI が無いので作り直し。aud が変わる)。
@@ -145,6 +150,7 @@ aud はインテグレーションを作ると決まる(`u:<ユーザー ID>:<UU
 (と `authorized_integ_resource_repo`)の行。
 
 ```shell
+# (見送り中。作るときのため)
 # doa-registry(リポジトリ ID は 1 = todoroku、3 = tamasagashi、4 = worklog-cloud。組織 doa の ID は 2)
 kubectl -n forgejo exec deploy/forgejo-web -c forgejo -- forgejo admin user create-authorized-integration \
   --username forgejo-bot --name doa-registry \
