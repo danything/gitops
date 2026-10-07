@@ -37,7 +37,7 @@
             ]
         },
         {
-            "description": "Pulumi が Terraform の provider を包んで使う版 (pulumi/Pulumi.yaml の packages)。2 つある: 包む側のプラグイン (`source: terraform-provider` の次の `version:`) と、包まれる provider (`parameters:` の 2 つ目)。SDK は CI の `pulumi install` が毎回作るので、版の行を変えるだけで PR が完結する。provider の版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。",
+            "description": "Pulumi が Terraform の provider を包んで使う版 (pulumi/Pulumi.yaml の packages)。2 つある: 包む側のプラグイン (`source: terraform-provider` の次の `version:`) と、包まれる provider (`parameters:` の 2 つ目)。SDK は CI の `pulumi install` が毎回作るが、git に入れてある SDK の package.json (pulumi/sdks/netbird/package.json) は下の 2 つの版 (provider の版は base64 にした値でも) を含むので Renovate では書き換えられない。CI が食い違いで落ちるので、手元で pulumi install してコミットする (pulumi/README.md)。provider の版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^pulumi/Pulumi\\.yaml$/"

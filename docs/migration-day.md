@@ -24,7 +24,8 @@
       | `talosctl` | 3〜5。版はクラスタに合わせなくてよい |
       | `kubectl` | 5〜9。**クラスタと同じ v1.36.2** |
       | `restic` | 8 でスナップショット ID を選ぶ |
-      | `helm` / `sops` / `age` / `jq` | 3(`render.sh`)と調べもの |
+      | `helm` / `sops` / `age` | 3(`render.sh`)と調べもの |
+      | `jq` | 調べもの(手元に winget で入れてある。tools のコンテナには無い) |
 
       2026-09-10 に全部そろえた(`~/.local/bin`)。
 
