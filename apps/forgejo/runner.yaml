@@ -14,9 +14,33 @@
 # ラベル: GitHub のワークフローの `runs-on: ubuntu-latest` をそのまま拾う。
 # catthehacker/ubuntu:act-* は GitHub のランナーに近い道具入りのイメージ(docker CLI・git・node など)。
 #
-# ネットワークは host(dind の中のジョブが Pod のネットワークをそのまま使う)。
-# ジョブの中から docker を使う(イメージを作る)ときは DOCKER_HOST と証明書が要るので、envs と valid_volumes で渡す。
+# ネットワークは**ジョブごとに別**(container.network: "")。Runner がジョブごとに dind の中に bridge の
+# ネットワーク(WORKFLOW-…)を作り、ジョブ(と services)のコンテナをそこに置き、終わったら消す。
+# 前は host(全ジョブが Pod のネットワークを分け合う)だった。それだと、どれかのジョブが dind でコンテナを
+# 起こすたびに、全ジョブから見えるところに veth(IPv6 のリンクローカル付き)が出入りし、Chromium が
+# ERR_NETWORK_CHANGED で読み込みを切って e2e が落ちた(doa/todoroku#366)。同じ番号のポート(4173 など)も取り合っていた。
+#
+# ジョブの中から docker を使う(イメージを作る・docker run)ときは、forgejo の docs の「docker-access」の DIND の形:
+#   - ジョブには `--add-host=dind.docker.internal:host-gateway` を足す。host-gateway は dind の docker0 の
+#     住所(172.17.0.1。dind 自身 = Pod のネットワーク名前空間の住所)で、dockerd は 0.0.0.0:2376 で待っている。
+#     ジョブのネットワークからでも、宛先が dind 自身なので届く(別のネットワークのコンテナへの転送とは違い、遮られない)
+#   - ジョブの DOCKER_HOST は tcp://dind.docker.internal:2376。TLS はそのまま(証明書は valid_volumes で渡す)。
+#     dind のサーバー証明書の SAN にこの名前を足す(DOCKER_TLS_SAN)
+# 渡しているのは今までと同じ「dind を丸ごと操れる鍵」なので、できることは host のときと変わらない
+# (capacity が 2 以上なので、ジョブは docker の CLI で同時に走っているほかのジョブのコンテナも見える。前から同じ)。
+# Runner 自身は今までどおり localhost:2376(Pod の中)で dind に話す。
+# キャッシュ(ACTIONS_CACHE_URL)は Runner が自分の Pod の IP で出す。ジョブのネットワークから見ても dind の
+# 自分の IP なので届く。
+#
+# **ジョブのネットワークにも IPv6 を付ける(enable_ipv6)。** 無いと fj.doany.io に届かない。
+# fj.doany.io は AAAA(ノード)と A(家の外向きの IPv4)を返し、Pod からは IPv4 の方はヘアピンで届かない
+# (curl -4 は時間切れ)。host の頃は Pod の IPv6 で届いていた。checkout・API・upload-artifact・OIDC は
+# ジョブの中から fj.doany.io に行くので、IPv4 だけのネットワークでは全部止まる。
+# enable_ipv6 にすると dind がネットワークごとに ULA の /64 を割り当て、外へは NAT66(Pod の IPv6)で出るので、
+# 外向きは host の頃と同じ形になる(2026-10-07 に本番の dind で確かめた)。
+# docker login / push は dind(Pod のネットワーク)が自分で名前を引くので、これまでどおり。
 # Cilium は vxlan なので Pod の MTU は 1500 より小さい。dind の既定 1500 のままだと大きいパケットが落ちる。
+# --mtu は既定の bridge(docker0)にしか効かないので、ジョブのネットワークの分は --default-network-opt で揃える。
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -58,15 +82,18 @@ data:
         - ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04
         - docker:docker://node:22-bookworm
       envs:
-        DOCKER_HOST: tcp://localhost:2376
+        DOCKER_HOST: tcp://dind.docker.internal:2376
         DOCKER_TLS_VERIFY: "1"
         DOCKER_CERT_PATH: /certs/client
     cache:
       enabled: true
       dir: /cache
     container:
-      network: host
-      options: -v /certs/client:/certs/client
+      # 空 = ジョブごとにネットワークを作る(上の説明)
+      network: ""
+      # fj.doany.io へは IPv6 でしか届かない(上の説明)
+      enable_ipv6: true
+      options: --add-host=dind.docker.internal:host-gateway -v /certs/client:/certs/client
       valid_volumes:
         - /certs/client
     server:
@@ -144,10 +171,17 @@ spec:
               mountPath: /cache
         - name: docker
           image: docker.io/library/docker:29.8.2-dind
-          args: [--mtu=1400]
+          # --mtu は docker0 だけ。Runner がジョブごとに作るネットワークは --default-network-opt で揃える
+          args:
+            - --mtu=1400
+            - --default-network-opt=bridge=com.docker.network.driver.mtu=1400
           env:
             - name: DOCKER_TLS_CERTDIR
               value: /certs
+            # ジョブは dind.docker.internal(host-gateway)で来るので、サーバー証明書の SAN に入れる。
+            # 証明書は起動のたびに作り直される(entrypoint)ので、Pod が替われば入る
+            - name: DOCKER_TLS_SAN
+              value: DNS:dind.docker.internal
           resources:
             requests:
               cpu: 100m
