@@ -12,9 +12,9 @@ FROM node:26.10.0-trixie-slim
 ARG TARGETARCH
 
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
-ARG KUBECTL_VERSION=v1.36.2
+ARG KUBECTL_VERSION=v1.37.1
 # renovate: datasource=github-releases depName=siderolabs/talos
-ARG TALOSCTL_VERSION=v1.14.0
+ARG TALOSCTL_VERSION=v1.14.2
 # renovate: datasource=github-releases depName=helm/helm
 ARG HELM_VERSION=v4.3.0
 # renovate: datasource=github-releases depName=getsops/sops
