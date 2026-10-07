@@ -48,7 +48,7 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 
 | どこ | 何 |
 | --- | --- |
-| Actions secrets | `PULUMI_BACKEND_URL` / `PULUMI_CONFIG_PASSPHRASE` / `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_NOTIFY_WEBHOOK_URL`(notifications.ts の送り先)/ `PREVIEW_CLOUDFLARE_API_TOKEN` / `PREVIEW_AWS_ACCESS_KEY_ID` / `PREVIEW_AWS_SECRET_ACCESS_KEY` |
+| Actions secrets | `PULUMI_BACKEND_URL` / `PULUMI_CONFIG_PASSPHRASE` / `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_NOTIFY_WEBHOOK_URL`(notifications.ts の送り先)/ `CLOUDFLARE_ZONE_ID`(dns.ts)/ `PREVIEW_CLOUDFLARE_API_TOKEN` / `PREVIEW_AWS_ACCESS_KEY_ID` / `PREVIEW_AWS_SECRET_ACCESS_KEY` |
 | Environment `pulumi-apply` | `CLOUDFLARE_API_TOKEN` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
 | 手元 | パスフレーズの写し `~/.config/doany/pulumi-passphrase` |
 
@@ -57,8 +57,17 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 
 | トークン(Cloudflare での名前) | 権限 |
 | --- | --- |
-| `gitops pulumi preview (R2 read + state)` | Workers R2 Storage Metadata Read(アカウント)+ Bucket Item Write(`doany-pulumi` だけ。state のロックに要る)+ Notifications Read |
-| `gitops pulumi apply (R2 write + state)` | Workers R2 Storage Write(アカウント)+ Bucket Item Write(`doany-pulumi` だけ)+ Notifications Write |
+| `gitops pulumi preview (R2 read + state)` | Workers R2 Storage Metadata Read(アカウント)+ Bucket Item Write(`doany-pulumi` だけ。state のロックに要る)+ Notifications Read + doany.io の Zone / DNS / Zone Settings の Read |
+| `gitops pulumi apply (R2 write + state)` | Workers R2 Storage Write(アカウント)+ Bucket Item Write(`doany-pulumi` だけ)+ Notifications Write + doany.io の Zone Read / DNS Write / Zone Settings Write |
+
+## DNS とゾーンの設定
+
+[dns.ts](dns.ts)。doany.io の DNS のうち **ExternalDNS が作らないもの**(ワイルドカード・メール・CAA・ドメインの確認)と、
+ゾーンの設定(SSL・常に HTTPS・最低の TLS の版・HSTS)。2026-10-07 に手で作ってあったものを import で取り込んだ。
+
+- アプリごとの名前は ExternalDNS(アプリの HTTPRoute から)。apex の A / AAAA は cloudflare-ddns(家の IP が変わる)。
+  **どちらもここには書かない**(二重に持つと取り合いになる)
+- **ワイルドカードは `_` で始まる名前も拾う。** DKIM(`selector1._domainkey`)などを足すときは、明示のレコードで上書きする
 
 ## Cloudflare の通知
 
