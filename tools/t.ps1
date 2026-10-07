@@ -1,4 +1,4 @@
-# 運用のコマンドを wslc (WSL コンテナ) で動かす。中身は compose.yaml の tools を wslc-compose run する。例:
+﻿# 運用のコマンドを wslc (WSL コンテナ) で動かす。中身は compose.yaml の tools を wslc-compose run する。例:
 #   tools/t.ps1 infisical login --domain https://il.doany.io/api
 #   tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml
 # 引数が無ければシェルに入る。Dockerfile を変えたら次の実行で作り直す (変わっていなければキャッシュで一瞬)。
@@ -8,7 +8,8 @@
 #   infisical login のときだけ、そのポートで待ち受けてコンテナの中の CLI に渡す (下の Start-LoginRelay)。
 #   cf auth login には対応していない
 # - uid の指定はしない (Windows のファイルに持ち主の uid は無い)
-# 5.1 でも読めるように、このファイルの文字列は ASCII だけにする
+# 5.1 でも読めるように、このファイルは BOM 付きの UTF-8 にする (BOM が無いと 5.1 は Shift_JIS として読み、
+# 日本語のコメントで構文が壊れる)。文字列は ASCII だけにする
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $image = 'gitops-tools:latest'
@@ -109,8 +110,8 @@ function Start-LoginRelay($name, $origin) {
 
 # ボリューム・作業場所・環境変数は compose.yaml の tools に書いてある (wslc-compose run で動かす)。
 # 標準入力はつなぐ。パイプやリダイレクトのときは TTY を付けない (-T)。
-# PowerShell でこのスクリプトにパイプしたもの (`x | tools/t.ps1 jq .`) は標準入力ではなく $input に来るので、
-# 下で wslc-compose の標準入力に流し直す (流さないとコンテナには何も届かない)
+# このスクリプトにパイプしたもの (`x | tools/t.ps1 jq .`) は標準入力ではなく $input に来るので、下で流し直す
+# (流さないとコンテナには何も届かない)
 $piped = $MyInvocation.ExpectingInput
 $opts = @('--rm')
 if ($piped -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $opts += '-T' }
@@ -133,8 +134,18 @@ if ($browserLogin) {
 }
 try {
     $compose = Join-Path $root 'compose.yaml'
-    if ($piped) { $input | wslc-compose --file $compose run @opts tools @cmd }
-    else { wslc-compose --file $compose run @opts tools @cmd }
+    if ($piped) {
+        # PowerShell からネイティブのコマンドに流すと、改行が CRLF になり、5.1 では日本語が ? に化ける。
+        # 行を LF でつないだ UTF-8 を base64 (ASCII だけ) にして渡し、コンテナの中で戻してからコマンドに渡す
+        $text = (@($input) -join "`n") + "`n"
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        # 7.3 より前 (5.1 も) は引数の中の " をネイティブのコマンドに渡すときにエスケープしないので、自分でする
+        $wrap = 'base64 -d -i | "$@"'
+        if ($PSVersionTable.PSVersion -lt [version]'7.3') { $wrap = $wrap.Replace('"', '\"') }
+        $b64 | wslc-compose --file $compose run @opts tools sh -c $wrap sh @cmd
+    } else {
+        wslc-compose --file $compose run @opts tools @cmd
+    }
     $code = $LASTEXITCODE
 } finally {
     if ($relay) {
