@@ -19,7 +19,5 @@
     "@pulumi/netbird": "file:sdks/netbird",
     "@pulumi/pulumi": "3.267.0"
   },
-  "trustedDependencies": [
-    "@pulumi/netbird"
-  ]
+  "trustedDependencies": ["@pulumi/netbird"]
 }
