@@ -114,7 +114,8 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
   `file:sdks/netbird` で指していて、bun.lock を作るにはその package.json が要る。これが無いと SDK を作れない Renovate が
   bun.lock を更新できず、`@pulumi/*` などの PR が毎回「Artifact update failure」で止まっていた(#304)。
   lock に入るのは SDK の依存だけなので、中身が生成したものと同じなら lock も同じになる(2026-10-07 に確かめた)。
-  **NetBird の版を上げる PR では**、この package.json(版と、版を base64 にした値を含む)を Renovate は書き換えられないので、
+  **`Pulumi.yaml` の `packages` の版(NetBird の provider と、包む側の terraform-provider プラグイン)を上げる PR では**、
+  この package.json(両方の版と、provider の版を base64 にした値を含む)を Renovate は書き換えられないので、
   CI が食い違いで落ちる。手元で `pulumi install` して、変わった `sdks/netbird/package.json` をコミットする
 - `*.doany.io` を家の 10.0.0.2 に向けているのは、exit ノード越しに家の外向きの IPv4 を引くと折り返しで届かないため。
   `nb.doany.io` だけは外向きのアドレスで例外にしている。アドレスは書かず、2 段の名前 `nb.origin.doany.io` (ゾーンのワイルドカードに当たらず Cloudflare で引かれ、cloudflare-ddns が追従させる) に CNAME で向ける

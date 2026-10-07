@@ -97,7 +97,8 @@ jobs:
           pulumi-version-file: pulumi/.pulumi-version
       # SDK (Pulumi.yaml の packages) を作って bun install まで済ませる。lock がずれたら落とす (--frozen-lockfile の代わり)。
       # SDK の package.json だけは git に入れてある (.gitignore。Renovate が bun.lock を作れるように)。
-      # NetBird の版を上げた PR では作り直したものと食い違うので、手元で pulumi install してコミットする
+      # Pulumi.yaml の packages の版 (provider・包むプラグイン) を上げた PR では作り直したものと食い違うので、
+      # 手元で pulumi install してコミットする
       - run: |
           pulumi install
           git diff --exit-code -- package.json bun.lock sdks/netbird/package.json || {
@@ -156,7 +157,12 @@ jobs:
       - uses: pulumi/actions@v7
         with:
           pulumi-version-file: pulumi/.pulumi-version
-      - run: pulumi install && git diff --exit-code -- package.json bun.lock sdks/netbird/package.json
+      - run: |
+          pulumi install
+          git diff --exit-code -- package.json bun.lock sdks/netbird/package.json || {
+            echo "::error::pulumi install で package.json / bun.lock / sdks/netbird/package.json が変わった。手元で pulumi install してコミットする"
+            exit 1
+          }
         working-directory: pulumi
       - run: bun run typecheck
         working-directory: pulumi
