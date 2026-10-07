@@ -1,0 +1,78 @@
+# **鍵の期限切れを Matrix の部屋 server に知らせる。** 毎週月曜 9:00 (JST)。
+#
+# 期限を API から読めるものだけを見る。日付を手で書くファイルは置かない (書き忘れと書き換え忘れが起きる)。
+#   - NetBird のサービスユーザーのトークン (pulumi/README.md「NetBird」)。preview 用 (Auditor) で全員ぶん読める
+#   - Cloudflare の preview 用トークン (期限が付いていれば。apply 用は main の Environment にしか無いので見ない)
+# 期限の無いもの (WINGET_TOKEN など) は対象外。
+#
+# 30 日を切ったか切れていたら投稿する。PR では投稿せずにログに出すだけ。手動実行で `report` を付けると全部を投稿する。
+#
+# 秘密 (Actions secrets):
+#   MATRIX_SERVER_WEBHOOK_URL  hookshot の部屋 server の受け口 (https://m.doany.io/webhook/<Infisical /matrix/matrix の hook-server>)
+#   PREVIEW_NB_PAT / PREVIEW_CLOUDFLARE_API_TOKEN  pulumi.yml と同じ
+name: expiry
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+    inputs:
+      report:
+        description: 期限が遠いものも含めて全部を投稿する (動作確認用)
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/expiry.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      NB_PAT: ${{ secrets.PREVIEW_NB_PAT }}
+      CF_TOKEN: ${{ secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
+      WEBHOOK: ${{ secrets.MATRIX_SERVER_WEBHOOK_URL }}
+      DRY_RUN: ${{ github.event_name == 'pull_request' }}
+      REPORT_ALL: ${{ inputs.report == true }}
+      WARN_DAYS: "30"
+    steps:
+      - run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          items=$(mktemp)   # 1 行 1 件: 残り日数<TAB>名前<TAB>期限
+
+          add() { # $1 名前 $2 期限 (ISO 8601)
+            local exp; exp=$(date -u -d "$2" +%s)
+            printf '%s\t%s\t%s\n' "$(( (exp - now) / 86400 ))" "$1" "$(date -u -d "$2" +%Y-%m-%d)" >> "$items"
+          }
+
+          # NetBird: サービスユーザーごとのトークン
+          nb() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "https://nb.doany.io/api/$1"; }
+          nb "users?service_user=true" | jq -r '.[] | [.id, .name] | @tsv' | while IFS=$'\t' read -r u uname; do
+            nb "users/$u/tokens" | jq -r '.[] | [.name, .expiration_date] | @tsv' | while IFS=$'\t' read -r tname exp; do
+              add "NetBird $uname / $tname" "$exp"
+            done
+          done
+
+          # Cloudflare: preview 用トークン自身 (期限が無ければ null)
+          cf_exp=$(curl -fsS -H "Authorization: Bearer $CF_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -r '.result.expires_on // empty')
+          [ -n "$cf_exp" ] && add "Cloudflare gitops pulumi preview" "$cf_exp"
+
+          sort -n "$items" | tee /dev/stderr > "$items.sorted"
+          if [ "$REPORT_ALL" = true ]; then
+            due=$(cat "$items.sorted")
+          else
+            due=$(awk -F'\t' -v w="$WARN_DAYS" '$1 <= w' "$items.sorted")
+          fi
+          if [ -z "$due" ]; then echo "期限が近いものは無い"; exit 0; fi
+
+          lines=$(printf '%s\n' "$due" | awk -F'\t' '{ s = ($1 < 0) ? "切れている" : "あと " $1 " 日"; printf "- **%s**: %s (%s)\n", $2, $3, s }')
+          text=$(printf ':key: 鍵の期限 (%s 日以内)\n\n%s\n\n作り直して差し替える。手順は gitops の pulumi/README.md' "$WARN_DAYS" "$lines")
+          [ "$REPORT_ALL" = true ] && text=$(printf ':key: 鍵の期限 (全部)\n\n%s' "$lines")
+          if [ "$DRY_RUN" = true ]; then
+            echo "--- 投稿する内容 (PR なので投稿しない)"; echo "$text"; exit 0
+          fi
+          jq -n --arg text "$text" '{text: $text}' | curl -fsS -X POST -H "Content-Type: application/json" --data-binary @- "$WEBHOOK"
