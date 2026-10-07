@@ -41,7 +41,7 @@ record("dkim-selector2", { name: "selector2._domainkey.doany.io", type: "CNAME",
 record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: "v=DMARC1; p=reject; rua=mailto:info@doany.io", ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
 
 // MTA-STS(RFC 8461)。方針ファイルは apps/mta-sts/。**方針を変えたら id も変える**(送り手は id で取り直す)
-record("mta-sts", { name: "_mta-sts.doany.io", type: "TXT", content: "v=STSv1; id=20261007T0515", ttl: 3600 });
+record("mta-sts", { name: "_mta-sts.doany.io", type: "TXT", content: "v=STSv1; id=20261007T0530", ttl: 3600 });
 // TLS-RPT(RFC 8460)。送り手が MTA-STS / DANE で失敗したら、毎日の集計が info@ に届く
 record("tls-rpt", { name: "_smtp._tls.doany.io", type: "TXT", content: "v=TLSRPTv1; rua=mailto:info@doany.io", ttl: 3600 });
 
