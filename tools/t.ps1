@@ -112,10 +112,23 @@ function Start-LoginRelay($name, $origin) {
 # 標準入力はつなぐ。パイプやリダイレクトのときは TTY を付けない (-T)。
 # このスクリプトにパイプしたもの (`x | tools/t.ps1 kubectl apply -f -`) は標準入力ではなく $input に来るので、下で流し直す
 # (流さないとコンテナには何も届かない)
+# 標準入力が NUL か (リダイレクトされた文字デバイス = FILE_TYPE_CHAR)。ファイル (FILE_TYPE_DISK) や
+# パイプ (FILE_TYPE_PIPE) からの入力は中身があるので NUL とは扱わない。端末はリダイレクトされていないので見ない
+function Test-NulStdin {
+    if (-not [Console]::IsInputRedirected) { return $false }
+    if (-not ('GitopsTools.Kernel32' -as [type])) {
+        Add-Type -Namespace GitopsTools -Name Kernel32 -MemberDefinition (
+            '[DllImport("kernel32.dll")] public static extern System.IntPtr GetStdHandle(int n);' +
+            '[DllImport("kernel32.dll")] public static extern int GetFileType(System.IntPtr h);')
+    }
+    return [GitopsTools.Kernel32]::GetFileType([GitopsTools.Kernel32]::GetStdHandle(-10)) -eq 2
+}
 $piped = $MyInvocation.ExpectingInput
 $opts = @('--rm')
 if ($piped -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $opts += '-T' }
-$cmd = if ($args.Count) { $args } else { @('bash') }
+# 引数が 1 つのときも配列にする (if の値は 1 要素の配列が中身に展開され、$cmd[0] が 1 文字目になる。
+# 2026-10-07 まで `'x' | tools/t.ps1 cat` が `c: not found` で落ちていた)
+$cmd = @(if ($args.Count) { $args } else { 'bash' })
 
 $relay = $null
 $browserLogin = $cmd.Count -ge 2 -and $cmd[0] -eq 'infisical' -and $cmd[1] -eq 'login' -and
@@ -143,6 +156,12 @@ try {
         $wrap = 'base64 -d -i | "$@"'
         if ($PSVersionTable.PSVersion -lt [version]'7.3') { $wrap = $wrap.Replace('"', '\"') }
         $b64 | wslc-compose --file $compose run @opts tools sh -c $wrap sh @cmd
+    } elseif (Test-NulStdin) {
+        # 標準入力が NUL のところ (Claude Code のツールなど) では、wslc-compose run がつなぐ標準入力が無効なハンドルになり、
+        # 1 秒ほど以上かかるコマンドの出力が落ちて ERROR_INVALID_HANDLE で終わる (2026-10-07)。NUL は中身が無いので、
+        # 空のパイプに置き換えても失うものは無い。ファイルや外のパイプからの入力 (`echo x | pwsh -File tools/t.ps1 cat`) は
+        # NUL ではないので、下で今までどおりつなぐ
+        @() | wslc-compose --file $compose run @opts tools @cmd
     } else {
         wslc-compose --file $compose run @opts tools @cmd
     }

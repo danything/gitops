@@ -49,6 +49,9 @@ tools/t.ps1        # 引数なしならシェルに入る
   `infisical login` のときだけ t.ps1 が同じポートで待ち受けて、`wslc exec` の curl でコンテナの中の CLI に渡す。
   `cf auth login` には対応していない
 - uid は指定しない(Windows のファイルに持ち主の uid は無い)
+- **標準入力が NUL のところ(Claude Code のツールなど)では、`wslc-compose run` がつなぐ標準入力が無効なハンドルになる。**
+  1 秒ほど以上かかるコマンドの出力が落ちて `ERROR_INVALID_HANDLE` で終わるので、`t.ps1` はそのときだけ空のパイプを渡す(2026-10-07)。
+  NUL かどうかは標準入力の種類(`GetFileType`)で見分けるので、ファイルや外のパイプからの入力は今までどおり届く
 - NetBird の exit ノード越しだと `*.doany.io` を外向きの IPv4 で引いたときに届かないので、NetBird の DNS ゾーンで
   内部の 10.0.0.2 に向けている(`nb.doany.io` だけは例外)
 
