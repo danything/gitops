@@ -157,10 +157,11 @@ az rest --method POST   --url "https://graph.microsoft.com/v1.0/servicePrincipal
 (`[AuthSuccess] ... groups:[admin]`)、Entra のグループ要求を消して
 (`groupMembershipClaims: null`)、redis を落とし、各アプリから GUID を落とした。
 
-**`appRoleAssignmentRequired` は `false` のままにしてある。** `はい` にすると
-ロールを割り当てていない人がこの登録の後ろにあるアプリ全部から締め出される。
-当時は ERPNext をテナントのゲストも使っていたので開けておいた(ERPNext は 2026-10-06 に撤去。
-ゲストは Forgejo の members にも入る ── [apps/forgejo/README.md](../apps/forgejo/README.md)「誰が何をできるか」)。
+**`appRoleAssignmentRequired` は `false` のままにする(2026-10-07 に本人が決めた)。** `はい` にすると
+ロールを割り当てていない人がこの登録の後ろにあるアプリ全部から締め出され、人を足すたびに割り当てが要る。
+誰が入れるかはテナントに居るかどうかで決め、何ができるかは各アプリ側で絞る(Admins のロールなど)。
+もとは ERPNext をテナントのゲストが使うために開けていた(ERPNext は 2026-10-06 に撤去)。ゲストは今も
+Forgejo の members に入る ── [apps/forgejo/README.md](../apps/forgejo/README.md)「誰が何をできるか」。
 
 **`admins` グループも削除した(2026-09-07)。** ディレクトリロールもライセンスも条件付きアクセスも
 このグループを使っておらず、メールも有効でなかった(セキュリティグループなので Teams や
