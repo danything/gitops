@@ -1,15 +1,17 @@
 # **鍵の期限切れを Matrix の部屋 server に知らせる。** 毎週月曜 9:00 (JST)。
 #
 # 期限を API から読めるものだけを見る。日付を手で書くファイルは置かない (書き忘れと書き換え忘れが起きる)。
-#   - NetBird のサービスユーザーのトークン (pulumi/README.md「NetBird」)。preview 用 (Auditor) で全員ぶん読める
-#   - Cloudflare の preview 用トークン (期限が付いていれば。apply 用は main の Environment にしか無いので見ない)
+# **鍵は自分の期限だけを読む。** NetBird の Auditor は利用者の一覧は読めても他人のトークンは読めない (403) ので、
+# preview 用と apply 用をそれぞれのジョブで使う。apply 用は Environment `pulumi-apply` (main だけ) にあるので PR では見ない。
+#   - NetBird のサービスユーザーのトークン (pulumi/README.md「NetBird」)
+#   - Cloudflare の API トークン (期限が付いていれば)
 # 期限の無いもの (WINGET_TOKEN など) は対象外。
 #
 # 30 日を切ったか切れていたら投稿する。PR では投稿せずにログに出すだけ。手動実行で `report` を付けると全部を投稿する。
 #
-# 秘密 (Actions secrets):
+# 秘密:
 #   MATRIX_SERVER_WEBHOOK_URL  hookshot の部屋 server の受け口 (https://m.doany.io/webhook/<Infisical /matrix/matrix の hook-server>)
-#   PREVIEW_NB_PAT / PREVIEW_CLOUDFLARE_API_TOKEN  pulumi.yml と同じ
+#   PREVIEW_NB_PAT / PREVIEW_CLOUDFLARE_API_TOKEN、NB_PAT / CLOUDFLARE_API_TOKEN (pulumi-apply)  pulumi.yml と同じ
 name: expiry
 
 on:
@@ -30,10 +32,16 @@ permissions:
 
 jobs:
   check:
+    strategy:
+      fail-fast: false
+      matrix:
+        key: ${{ github.event_name == 'pull_request' && fromJSON('["preview"]') || fromJSON('["preview", "apply"]') }}
     runs-on: ubuntu-latest
+    environment: ${{ matrix.key == 'apply' && 'pulumi-apply' || '' }}
     env:
-      NB_PAT: ${{ secrets.PREVIEW_NB_PAT }}
-      CF_TOKEN: ${{ secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
+      KEY: ${{ matrix.key }}
+      NB_PAT: ${{ matrix.key == 'apply' && secrets.NB_PAT || secrets.PREVIEW_NB_PAT }}
+      CF_TOKEN: ${{ matrix.key == 'apply' && secrets.CLOUDFLARE_API_TOKEN || secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
       WEBHOOK: ${{ secrets.MATRIX_SERVER_WEBHOOK_URL }}
       DRY_RUN: ${{ github.event_name == 'pull_request' }}
       REPORT_ALL: ${{ inputs.report == true }}
@@ -49,17 +57,16 @@ jobs:
             printf '%s\t%s\t%s\n' "$(( (exp - now) / 86400 ))" "$1" "$(date -u -d "$2" +%Y-%m-%d)" >> "$items"
           }
 
-          # NetBird: サービスユーザーごとのトークン
+          # NetBird: この鍵のサービスユーザーのトークン
           nb() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "https://nb.doany.io/api/$1" || { echo "NetBird の $1 が読めない" >&2; return 1; }; }
-          nb "users?service_user=true" | jq -r '.[] | [.id, .name] | @tsv' | while IFS=$'\t' read -r u uname; do
-            nb "users/$u/tokens" | jq -r '.[] | [.name, .expiration_date] | @tsv' | while IFS=$'\t' read -r tname exp; do
-              add "NetBird $uname / $tname" "$exp"
-            done
+          read -r u uname < <(nb users/current | jq -r '[.id, .name] | @tsv')
+          nb "users/$u/tokens" | jq -r '.[] | [.name, .expiration_date] | @tsv' | while IFS=$'\t' read -r tname exp; do
+            add "NetBird $uname / $tname" "$exp"
           done
 
-          # Cloudflare: preview 用トークン自身 (期限が無ければ null)
+          # Cloudflare: この鍵自身 (期限が無ければ null)
           cf_exp=$(curl -fsS -H "Authorization: Bearer $CF_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -r '.result.expires_on // empty')
-          [ -n "$cf_exp" ] && add "Cloudflare gitops pulumi preview" "$cf_exp"
+          [ -n "$cf_exp" ] && add "Cloudflare ($KEY 用)" "$cf_exp"
 
           sort -n "$items" | tee /dev/stderr > "$items.sorted"
           if [ "$REPORT_ALL" = true ]; then
@@ -71,7 +78,7 @@ jobs:
 
           lines=$(printf '%s\n' "$due" | awk -F'\t' '{ s = ($1 < 0) ? "切れている" : "あと " $1 " 日"; printf "- **%s**: %s (%s)\n", $2, $3, s }')
           text=$(printf ':key: 鍵の期限 (%s 日以内)\n\n%s\n\n作り直して差し替える。手順は gitops の pulumi/README.md' "$WARN_DAYS" "$lines")
-          [ "$REPORT_ALL" = true ] && text=$(printf ':key: 鍵の期限 (全部)\n\n%s' "$lines")
+          [ "$REPORT_ALL" = true ] && text=$(printf ':key: 鍵の期限 (%s 用、全部)\n\n%s' "$KEY" "$lines")
           if [ "$DRY_RUN" = true ]; then
             echo "--- 投稿する内容 (PR なので投稿しない)"; echo "$text"; exit 0
           fi
