@@ -53,6 +53,16 @@ tools/t.ps1 infisical secrets --env prod --path /matrix/matrix
 - NetBird の exit ノード越しだと `*.doany.io` を外向きの IPv4 で引いたときに届かないので、NetBird の DNS ゾーンで
   内部の 10.0.0.2 に向けている(`nb.doany.io` だけは例外)
 
+## 入れるものの確かめ方
+
+**全部、公式が出しているチェックサムと照らし合わせてから入れる**(2026-10-07)。sops は age 鍵を、infisical は秘密を扱うので、
+取得元やミラーで差し替えられても気づけるようにする。一致しなければ組み立てごと止まる。
+
+- kubectl・talosctl・helm・sops・infisical・restic・jq・pulumi: 各リリースのチェックサムのファイル
+- age: チェックサムのファイルを出していない(sigsum の証明だけ)ので、Go のモジュールとして `go install` し、
+  Go の公開のチェックサムの台帳(sum.golang.org)で確かめる
+- cf: npm の integrity
+
 ## 版
 
 `# renovate: datasource=… depName=…` の次の `ARG` を Renovate が上げる([../renovate.json](../renovate.json))。
