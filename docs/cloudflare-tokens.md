@@ -12,7 +12,7 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 | `doany-restic` | アカウント | R2 バケット `doany-restic` だけの Object Read & Write | Infisical `/k8up/k8up-global`、ホストの `/etc/k3s-backup/env`、`recovery/env.age` | k8up、ホストの restic、復元 |
 | cloudflare-ddns | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | Infisical `/cloudflare-ddns/cloudflare-ddns-secrets` の `CLOUDFLARE_API_TOKEN` | apps/cloudflare-ddns |
 | cert-manager | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | SOPS の `bootstrap/cert-manager/cloudflare-secret.yaml` | cert-manager(DNS-01) |
-| `gitops pulumi apply` / `preview` | アカウント | pulumi/README.md「Cloudflare」 | GitHub の secrets | gitops の Pulumi |
+| `gitops pulumi apply` / `preview` | アカウント | pulumi/README.md「鍵と state」 | GitHub の secrets | gitops の Pulumi |
 
 アカウントのトークンは `tools/t cf accounts tokens list`、ユーザーのトークンは画面の **My Profile → API Tokens** で見る。
 **どれも期限を付けていない。** 期限の監視(`.github/workflows/expiry.yml`)が見るのは Pulumi 用だけ。
