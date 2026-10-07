@@ -30,9 +30,12 @@
    ```
 
    **members を作る前にログインした人は、次のログインで入る**
-5. **Runner を登録**: 管理画面 `/admin/actions/runners` →「Create new runner」。
-   出た UUID と Token を Infisical `/forgejo/forgejo-runner` に `uuid` / `token` で入れる。
-   Pod が入れ替わり、一覧に Runner が「Idle」で出れば済み
+5. **Runner の秘密を入れる**: Infisical `/forgejo/forgejo-runner` に `runner-secret` = 16 進 40 文字のランダム。
+   値は画面に出さずに作って貼る(WSL なら `openssl rand -hex 20 | tr -d '\n' | clip.exe`。貼ったらクリップボードは消す)。
+   管理画面での操作は要らない。Forgejo と Runner の Pod が入れ替わり、Forgejo の init が同じ秘密で Runner を登録し
+   ([forgejo.yaml](forgejo.yaml) の setup.sh の 5)、Runner は同じ秘密から uuid / token を出して繋ぐ([runner.yaml](runner.yaml))。
+   `/admin/actions/runners` に `forgejo-runner` が「Idle」で出れば済み。
+   **秘密を変えると別の Runner として登録される**(UUID は秘密の先頭 16 文字から作る)。古い方は一覧で消す
 
 ## プライベートのリポジトリを移す(1 本ずつ)
 

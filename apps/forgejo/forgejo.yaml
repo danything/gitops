@@ -92,6 +92,17 @@ data:
     else
       gitea admin auth update-oauth --id "$id" "$@"
     fi
+    # 5. Runner を登録する(共有の秘密。runner.yaml)。同じ秘密なら同じ Runner を上書きするだけ。
+    #    ラベルは Runner が繋いだときに申告して上書きするので、ここでは触らない(--keep-labels)。
+    #    秘密が無い・形が違うときは飛ばす(Runner のために Forgejo を止めない)。
+    #    出力の UUID は秘密の先頭 16 文字そのものなので捨てる
+    s=/runner/runner-secret
+    if [ -s "$s" ]; then
+      gitea forgejo-cli actions register --secret "$(cat "$s")" --name forgejo-runner --keep-labels >/dev/null ||
+        echo "Runner の登録に失敗した。Forgejo はこのまま上げる"
+    else
+      echo "Infisical の /forgejo/forgejo-runner に runner-secret が無いので Runner の登録は飛ばす"
+    fi
   start.sh: |
     #!/bin/sh
     set -a; . /var/lib/gitea/custom/conf/generated.env; set +a
@@ -145,13 +156,17 @@ spec:
                 secretKeyRef:
                   name: forgejo-oauth
                   key: secret
-          volumeMounts: &mounts
+          # 本体と同じ 3 つ + Runner の登録の秘密(init にだけ見せる)
+          volumeMounts:
             - name: data
               mountPath: /var/lib/gitea
             - name: scripts
               mountPath: /scripts
             - name: tmp
               mountPath: /tmp
+            - name: runner-secret
+              mountPath: /runner
+              readOnly: true
       containers:
         - name: forgejo
           image: code.forgejo.org/forgejo/forgejo:16.0.5-rootless
@@ -179,7 +194,13 @@ spec:
               memory: 256Mi
             limits:
               memory: 1Gi
-          volumeMounts: *mounts
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/gitea
+            - name: scripts
+              mountPath: /scripts
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -189,6 +210,15 @@ spec:
             name: forgejo-setup
         - name: tmp
           emptyDir: {}
+        # Infisical の operator はボリュームの Secret も見るので、変わると Pod が入れ替わって登録し直す。
+        # 環境変数にしないのは、operator が init の env を見ないため
+        - name: runner-secret
+          secret:
+            secretName: forgejo-runner
+            optional: true
+            items:
+              - key: runner-secret
+                path: runner-secret
 ---
 # app.ini の中身。秘密でないものだけ(DB のパスワードと OAuth は上の Deployment が Secret から)
 apiVersion: v1
