@@ -25,12 +25,9 @@ record("caa-issue", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 0, t
 record("caa-issuewild", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 0, tag: "issuewild", value: "letsencrypt.org" } });
 
 // --- メール(Exchange Online)----------------------------------------------------------------------
-// DANE のために MX を新しい形式(…mx.microsoft)へ移している途中(apps/mta-sts/README.md「DANE」)。
-// Microsoft の手順どおり、切り替えのあいだは TTL を最小(Cloudflare は 60 秒)にしておく
-// 古い MX。切り替えのあいだの予備(優先度 30)。新しい MX で受けられるのを確かめたら消す
-record("mx", { name: "doany.io", type: "MX", content: "doany-io.mail.protection.outlook.com", priority: 30, ttl: 60 }, "6c7e6af1e5665b444b03f40253df2090");
-// DNSSEC に対応した新しい MX(Enable-DnssecForVerifiedDomain で払い出された。2026-10-07)。DANE はこちらで効く
-record("mx-dnssec", { name: "doany.io", type: "MX", content: "doany-io.o-v1.mx.microsoft", priority: 0, ttl: 60 });
+// DNSSEC に対応した MX(Enable-DnssecForVerifiedDomain で払い出された。2026-10-07)。DANE はこれで効く。
+// 以前の doany-io.mail.protection.outlook.com は切り替えのあと消した(apps/mta-sts/README.md「DANE への切り替え」)
+record("mx-dnssec", { name: "doany.io", type: "MX", content: "doany-io.o-v1.mx.microsoft", priority: 0, ttl: 3600 });
 record("autodiscover", { name: "autodiscover.doany.io", type: "CNAME", content: "autodiscover.outlook.com", proxied: false, ttl: 3600 }, "93eb5f05c05d9ca6ae8239cad26089e2");
 // 送るのは Exchange だけ(アプリも smtp.office365.com 経由)。以前あった a:b.doany.io は、ワイルドカード経由で
 // 家の IP を許していたので外した。送り元は Exchange だけなので -all(2026-10-07)
