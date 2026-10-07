@@ -88,16 +88,15 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.PREVIEW_AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v7
-      # NetBird の SDK が generate.sh の版で作ってあるか。Renovate の PR は版の行だけを変えるので、作り直すまでここで落ちる
-      - run: |
-          want=$(sed -n 's/^VERSION=//p' sdks/generate.sh)
-          have=$(jq -r .pulumi.parameterization.version sdks/netbird/package.json)
-          [ "$want" = "$have" ] || { echo "::error::SDK は $have、generate.sh は $want。tools/t sh pulumi/sdks/generate.sh で作り直す"; exit 1; }
-        working-directory: pulumi
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: pulumi/.bun-version
-      - run: bun install --frozen-lockfile
+      # CLI だけを入れる (command なし)
+      - uses: pulumi/actions@v7
+        with:
+          pulumi-version-file: pulumi/.pulumi-version
+      # SDK (Pulumi.yaml の packages) を作って bun install まで済ませる。lock がずれたら落とす (--frozen-lockfile の代わり)
+      - run: pulumi install && git diff --exit-code -- package.json bun.lock
         working-directory: pulumi
       # bun は .ts を走らせるだけで型は見ない
       - run: bun run typecheck
@@ -147,7 +146,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: pulumi/.bun-version
-      - run: bun install --frozen-lockfile
+      - uses: pulumi/actions@v7
+        with:
+          pulumi-version-file: pulumi/.pulumi-version
+      - run: pulumi install && git diff --exit-code -- package.json bun.lock
         working-directory: pulumi
       - run: bun run typecheck
         working-directory: pulumi
