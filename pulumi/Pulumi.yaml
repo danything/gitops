@@ -3,3 +3,11 @@
 name: doany-cloudflare
 description: doany の Cloudflare の設定(いまは R2 だけ)
 runtime: bun
+# Terraform の provider を包んで使うもの。SDK (sdks/) は `pulumi install` が作る (git には入れない。README.md「NetBird」)
+packages:
+  netbird:
+    source: terraform-provider
+    version: 1.4.0
+    parameters:
+      - netbirdio/netbird
+      - 0.0.10

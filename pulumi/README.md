@@ -107,11 +107,9 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
 - **持っていないもの:** グループの中身 (ピアはセットアップキーやログインで入る。ID で指すだけ)、ピア、ユーザー、
   セットアップキー、アカウントの設定
 - provider は Terraform の [netbirdio/netbird](https://github.com/netbirdio/terraform-provider-netbird) を Pulumi で包んだもの
-  (`pulumi package add terraform-provider netbirdio/netbird <版>`)。生成した SDK は [sdks/netbird](sdks/netbird) に置き
-  (**生成物だが git に入れる**)、`bun install` のときにビルドする (`trustedDependencies`)。作り直すのは
-  `tools/t sh pulumi/sdks/generate.sh`。runtime が bun だと Pulumi が SDK を生成できず `pulumi install` に任せられないので、
-  使い捨ての `runtime: nodejs` のプロジェクトで作って写す (理由と版は [generate.sh](sdks/generate.sh))。
-  新しい版は Renovate が generate.sh の `VERSION` を上げる PR で知らせ、作り直すまで CI が落ちる
+  (`pulumi package add terraform-provider netbirdio/netbird <版>`)。版は [Pulumi.yaml](Pulumi.yaml) の `packages` に書き、
+  SDK (`sdks/`) は **`pulumi install` が作る** (git には入れない。CI も毎回作る)。`bun install` だけでは SDK が無いので、
+  clone したら最初に `pulumi install`。版は Renovate が上げる (自動マージしない)
 - `*.doany.io` を家の 10.0.0.2 に向けているのは、exit ノード越しに家の外向きの IPv4 を引くと折り返しで届かないため。
   `nb.doany.io` だけは外向きのアドレスで例外にしている。アドレスは書かず、2 段の名前 `nb.origin.doany.io` (ゾーンのワイルドカードに当たらず Cloudflare で引かれ、cloudflare-ddns が追従させる) に CNAME で向ける
 
@@ -126,7 +124,7 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
 ## 手元で流す
 
 ```shell
-cd pulumi && bun install
+cd pulumi && pulumi install    # NetBird の SDK を作って bun install まで (tools/t なら tools/t sh -c 'cd pulumi && pulumi install')
 bun run typecheck
 export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…
 export PULUMI_CONFIG_PASSPHRASE_FILE=~/.config/doany/pulumi-passphrase
@@ -148,7 +146,7 @@ node を探しに行く)。**`cf` の出力は API の封筒を外した `result
 | --- | --- | --- |
 | Pulumi の CLI | [.pulumi-version](.pulumi-version) | 手で上げる(SDK の `@pulumi/pulumi` と揃える) |
 | SDK・provider・`cf` | [bun.lock](bun.lock) | Renovate |
-| NetBird の provider | [sdks/generate.sh](sdks/generate.sh) の `VERSION` | Renovate が知らせ、SDK は人が作り直す |
+| NetBird の provider と包むプラグイン | [Pulumi.yaml](Pulumi.yaml) の `packages` | Renovate (自動マージしない) |
 | bun | [.bun-version](.bun-version) | Renovate |
 
 ## 経緯

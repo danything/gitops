@@ -41,8 +41,9 @@ RUN set -eux; a=$TARGETARCH; cd /tmp; \
     curl -fsSL "https://github.com/restic/restic/releases/download/${RESTIC_VERSION}/restic_${RESTIC_VERSION#v}_linux_$a.bz2" | bunzip2 > /usr/local/bin/restic; \
     curl -fsSLo /usr/local/bin/jq "https://github.com/jqlang/jq/releases/download/${JQ_VERSION}/jq-linux-$a"; \
     p=$a; [ "$a" = amd64 ] && p=x64; [ "$a" = arm64 ] && p=arm64; \
-    # Pulumi は本体と Node.js の言語ホスト(runtime: bun もこれが動かす)だけ。ほかの言語のぶんは 200MB 近いので入れない
-    curl -fsSL "https://get.pulumi.com/releases/sdk/pulumi-${PULUMI_VERSION}-linux-$p.tar.gz" | tar -xz --strip-components=1 -C /usr/local/bin pulumi/pulumi pulumi/pulumi-language-nodejs; \
+    # Pulumi は本体と bun・Node.js の言語ホストだけ。ほかの言語のぶんは 200MB 近いので入れない。
+    # bun の言語ホストが無いと runtime: bun のプロジェクトで SDK を作れない (pulumi install。2026-10-07 まで抜けていた)
+    curl -fsSL "https://get.pulumi.com/releases/sdk/pulumi-${PULUMI_VERSION}-linux-$p.tar.gz" | tar -xz --strip-components=1 -C /usr/local/bin pulumi/pulumi pulumi/pulumi-language-bun pulumi/pulumi-language-nodejs; \
     chmod +x /usr/local/bin/*
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
