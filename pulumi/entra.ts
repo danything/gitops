@@ -1,6 +1,6 @@
 // Entra ID のアプリ登録(`b0fa498f-…`、auth / argocd / headlamp / … が共用する 1 つ)の
-// **リダイレクト URI だけ**を持つ(2026-10-06)。アプリ登録のほかの設定(クライアントシークレット、
-// アプリロール、割り当て)には触れない ── `ApplicationRedirectUris` はこの一覧だけを持つリソース。
+// リダイレクト URI(2026-10-06)とアプリロール(2026-10-07)を持つ。アプリ登録のほかの設定(クライアントシークレット、
+// ロールの割り当て)には触れない ── `ApplicationRedirectUris` / `ApplicationAppRole` はそれぞれ自分の分だけを持つリソース。
 //
 // **アプリを足す・消すときは、そのアプリのマニフェストと同じ PR でここも直す。** 以前は手で足し引きしていて、
 // ERPNext と Mattermost を消したあとも URI だけが残っていた。
@@ -38,4 +38,20 @@ new azuread.ApplicationRedirectUris(
   },
   // 2026-10-06 に手で持っていた 12 本を取り込んだ(取り込み済みなら何もしない)
   { import: `/applications/${APPLICATION_OBJECT_ID}/redirectUris/Web` },
+);
+
+// アプリロール「Admins」(value `admin`)。各アプリはトークンの `roles` に admin があれば管理者にする(docs/entra.md)。
+// **ID を変えると割り当てが外れる**(割り当てはロールの ID を指す)。割り当て自体は Pulumi の外で、画面で持つ
+new azuread.ApplicationAppRole(
+  "doany-web-admins",
+  {
+    applicationId: `/applications/${APPLICATION_OBJECT_ID}`,
+    roleId: "fd51fd21-182f-4eb1-971e-c545c5862667",
+    value: "admin",
+    displayName: "Admins",
+    description: "この登録の後ろにあるセルフホストのアプリの管理者",
+    allowedMemberTypes: ["User"],
+  },
+  // 2026-10-07 に画面で作ってあったものを取り込んだ
+  { import: `/applications/${APPLICATION_OBJECT_ID}/appRoles/fd51fd21-182f-4eb1-971e-c545c5862667` },
 );
