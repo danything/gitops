@@ -119,7 +119,7 @@
             "sourceUrl": "https://github.com/mattermost/mattermost"
         },
         {
-            "description": "netbird は 3 つのイメージが同じリポジトリから出ている (netbird = クライアント、netbird-server = combined サーバ、どちらも netbirdio/netbird)。dashboard だけは別リポジトリで、そちらは OCI ラベルを持っているので書かない。",
+            "description": "netbird は 3 つのイメージが同じリポジトリから出ている (netbird = クライアント、netbird-server = combined サーバ、どちらも netbirdio/netbird)。dashboard だけは別リポジトリで、そちらは OCI ラベルを持っているので書かない。 イメージの更新も自動マージしない (サーバとクライアントは版を揃えて上げる。下の netbird provider の規則を Pulumi.yaml だけに絞ったので、こちらで持つ)。",
             "matchDatasources": [
                 "docker"
             ],
@@ -127,7 +127,11 @@
                 "netbirdio/netbird",
                 "netbirdio/netbird-server"
             ],
-            "sourceUrl": "https://github.com/netbirdio/netbird"
+            "sourceUrl": "https://github.com/netbirdio/netbird",
+            "automerge": false,
+            "addLabels": [
+                "needs-review"
+            ]
         },
         {
             "matchDatasources": [
@@ -154,7 +158,10 @@
             ]
         },
         {
-            "description": "NetBird の provider と、それを包む Pulumi のプラグインは自動マージしない。0.0.x で API が動くうえ、マージは NetBird の実物への up になる。PR の preview の差分を人が見る。",
+            "description": "NetBird の provider と、それを包む Pulumi のプラグインは自動マージしない。0.0.x で API が動くうえ、マージは NetBird の実物への up になる。PR の preview の差分を人が見る。**pulumi/Pulumi.yaml の分だけに当てる。** netbirdio/netbird は Docker のイメージ (apps/netbird/) と名前が同じで、絞らないとイメージの更新もこの枝に入る。そうなると枝の全部の更新が pulumi/ の規則 (skipArtifactsUpdate) に当たらなくなり、bun.lock を作る postUpgradeTasks が効かない (#315 のレビュー)。この枝の更新は全部 pulumi/ の規則にも当たる。",
+            "matchFileNames": [
+                "pulumi/Pulumi.yaml"
+            ],
             "matchPackageNames": [
                 "netbirdio/netbird",
                 "pulumi/pulumi-terraform-provider"
