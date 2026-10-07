@@ -23,7 +23,9 @@ record("caa-issue", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 0, t
 record("caa-issuewild", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 0, tag: "issuewild", value: "letsencrypt.org" } });
 
 // --- メール(Exchange Online)----------------------------------------------------------------------
-record("mx", { name: "doany.io", type: "MX", content: "doany-io.mail.protection.outlook.com", priority: 0, ttl: 3600 }, "6c7e6af1e5665b444b03f40253df2090");
+// DANE のために MX を新しい形式(…mx.microsoft)へ移している途中(apps/mta-sts/README.md「DANE」)。
+// Microsoft の手順どおり、切り替えのあいだは TTL を最小(Cloudflare は 60 秒)にしておく
+record("mx", { name: "doany.io", type: "MX", content: "doany-io.mail.protection.outlook.com", priority: 0, ttl: 60 }, "6c7e6af1e5665b444b03f40253df2090");
 record("autodiscover", { name: "autodiscover.doany.io", type: "CNAME", content: "autodiscover.outlook.com", proxied: false, ttl: 3600 }, "93eb5f05c05d9ca6ae8239cad26089e2");
 // 送るのは Exchange だけ(アプリも smtp.office365.com 経由)。以前あった a:b.doany.io は、ワイルドカード経由で
 // 家の IP を許していたので外した。送り元は Exchange だけなので -all(2026-10-07)
@@ -35,6 +37,11 @@ record("dkim-selector2", { name: "selector2._domainkey.doany.io", type: "CNAME",
 // なりすましを受け取り側で弾かせる。DKIM(selector1)と SPF が通るのを確かめてから reject にした(2026-10-07。
 // Gmail で dkim=pass / spf=pass / dmarc=pass)。集計の報告(rua)は info@ に来る
 record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: "v=DMARC1; p=reject; rua=mailto:info@doany.io", ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
+
+// MTA-STS(RFC 8461)。方針ファイルは apps/mta-sts/。**方針を変えたら id も変える**(送り手は id で取り直す)
+record("mta-sts", { name: "_mta-sts.doany.io", type: "TXT", content: "v=STSv1; id=20261007T0400", ttl: 3600 });
+// TLS-RPT(RFC 8460)。送り手が MTA-STS / DANE で失敗したら、毎日の集計が info@ に届く
+record("tls-rpt", { name: "_smtp._tls.doany.io", type: "TXT", content: "v=TLSRPTv1; rua=mailto:info@doany.io", ttl: 3600 });
 
 // --- ドメインの確認 ---------------------------------------------------------------------------------
 // Google Search Console(2 つとも確認に使われている。消すと確認が外れる)

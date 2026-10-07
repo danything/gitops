@@ -1,0 +1,111 @@
+# MTA-STS の方針ファイル(RFC 8461)。https://mta-sts.doany.io/.well-known/mta-sts.txt
+#
+# doany.io 宛てのメールを送ってくるサーバーに「Exchange Online の MX に、正しい証明書の TLS で送ること」と伝える。
+# DNS の _mta-sts.doany.io(pulumi/dns.ts)の id を、この中身を変えるたびに変えること(送り手は id で取り直す)。
+# 家が落ちていても、送り手は max_age のあいだ前の方針を使い続ける。
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mta-sts
+  namespace: mta-sts
+data:
+  # mode: testing のあいだは、守れなくても配送する(失敗は TLS-RPT で info@ に報告が来る)。
+  # MX を DANE 用の新しい形式(…mx.microsoft)に替えている途中なので testing(Microsoft の手順。apps/mta-sts/README.md)
+  mta-sts.txt: |
+    version: STSv1
+    mode: testing
+    mx: doany-io.mail.protection.outlook.com
+    max_age: 86400
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mta-sts
+  namespace: mta-sts
+spec:
+  selector:
+    app: mta-sts
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mta-sts
+  namespace: mta-sts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mta-sts
+  template:
+    metadata:
+      labels:
+        app: mta-sts
+      annotations:
+        # 方針を変えたら Pod を作り直す(busybox の httpd はファイルを毎回読むので本当は要らないが、ConfigMap の
+        # 反映待ちを避ける)。中身を変えたらこの値も変える
+        mta-sts/policy-rev: "1"
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: httpd
+          image: busybox:1.37
+          command: [httpd, -f, -v, -p, "8080", -h, /www]
+          ports:
+            - containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            httpGet:
+              path: /.well-known/mta-sts.txt
+              port: 8080
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 1m
+              memory: 4Mi
+            limits:
+              memory: 32Mi
+          volumeMounts:
+            - name: policy
+              mountPath: /www/.well-known
+              readOnly: true
+      volumes:
+        - name: policy
+          configMap:
+            name: mta-sts
+---
+# mta-sts.doany.io はワイルドカードで家に来る(直接つなぐ。証明書は Gateway のワイルドカード)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mta-sts
+  namespace: mta-sts
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["mta-sts.doany.io"]
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /.well-known/mta-sts.txt
+      backendRefs:
+        - name: mta-sts
+          port: 8080
