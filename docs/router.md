@@ -14,6 +14,7 @@ docs/talos.md に散らばっていたものを 1 つにまとめた(2026-10-07)
 | 回線・接続方式(PPPoE / IPoE など) | 要記入 |
 | 外向きの IPv4 | 固定ではない。cloudflare-ddns が `doany.io` と `nb.origin.doany.io` を追従させる(apps/cloudflare-ddns/) |
 | IPv6 | プレフィックス `240f:6d:842b:1::/64`(RA で配られる。**変わりうる**ので、どこにも固定で書かない) |
+| IPv6 の受信のフィルタ | 要記入(DMZ は IPv4 の話。ノードの `240f:6d:842b:1::2` に外から何が届くかは、ルーターの IPv6 のファイアウォールで決まる) |
 
 ## LAN
 
@@ -50,7 +51,8 @@ DMZ で 53 番まで外に出ていると、**誰の問い合わせにも答え�
 回線側で 53 番の受信が止められていることもあるので、**家の外から**確かめる(家の中からはヘアピンで届いてしまう):
 
 ```shell
-dig @<外向きの IPv4> example.com +time=3 +tries=1   # 答えが返ったら開いている
+dig @<外向きの IPv4> example.com +time=3 +tries=1      # 答えが返ったら開いている
+dig @240f:6d:842b:1::2 example.com +time=3 +tries=1    # IPv6 も (ルーターの IPv6 のフィルタ次第)
 ```
 
 開いていたら、ルーターで 53 番の受信を止める(DMZ をやめて個別の転送にする)か、AdGuard の `allowed_clients` に
