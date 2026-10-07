@@ -60,7 +60,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: httpd
-          image: busybox:1.37
+          image: busybox:1.38
           command: [httpd, -f, -v, -p, "8080", -h, /www]
           ports:
             - containerPort: 8080
