@@ -91,10 +91,11 @@ CI 用のアプリ登録を 2 つに分けてある(R2 の preview / apply と�
 信頼が崩れない。`repo:danything/gitops:…` で登録すると `AADSTS700213` で入れない(2026-10-06 に踏んだ)。
 今の形は `gh api repos/danything/gitops/actions/oidc/customization/sub` の `sub_claim_prefix`。
 
-apply 用は「自分が所有者のアプリ登録」しか書けないので、触れるのは共用のアプリ登録(`b0fa498f-…`)1 つだけ。
+apply 用は「自分が所有者のアプリ登録」しか書けない。所有者になっているのは、共用のアプリ登録(`b0fa498f-…`)と CI 用の 2 つ。
 テナント ID はリポジトリの Variables `AZURE_TENANT_ID`。
 
-持っているのは**リダイレクト URI の一覧だけ**(`ApplicationRedirectUris`)。クライアントシークレット・アプリロール・
+持っているのは**リダイレクト URI の一覧**(entra.ts)と、**CI 用のアプリ登録 2 つの信頼の設定**(entra-ci.ts。
+2026-10-07 に取り込んだ。apply のサービスプリンシパルを 2 つの所有者にして書けるようにした。消せないよう protect)。クライアントシークレット・アプリロール・
 割り当ては Pulumi の外(`docs/entra.md`)。手元で流すときは `az login` のログインがそのまま使われる。
 
 ## NetBird
