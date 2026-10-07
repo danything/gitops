@@ -59,12 +59,9 @@ record("wildcard-s", "*.s.doany.io", "A", "10.0.0.2", "db2rsg74p630008pv8ag");
 // 2 段なのでこのゾーンのワイルドカードには当たらず、上のネームサーバー (AdGuard → Cloudflare) で引かれる。
 // Cloudflare では *.doany.io が doany.io への CNAME (プロキシなし) で、doany.io は cloudflare-ddns が家の IP に
 // 書き換えるので、家の IP が変わっても追従する (IPv4 / IPv6 とも。2026-10-07)。
-//
-// 2026-10-07 までは nb に A / AAAA を直接書いていた。NetBird は同じ名前に CNAME と A / AAAA を並べられないので、
-// AAAA を使っていない名前に移してから (nb-retired) A を CNAME に書き換える。どちらもその場の更新で、消える瞬間は無い。
-// nb-retired は次の PR で消す
-const nbRetired = record("nb-aaaa", "nb-retired.origin.doany.io", "AAAA", "240f:6d:842b:1::2", "db2rtr74p630008pva2g");
-record("nb-a", "nb.doany.io", "CNAME", "nb.origin.doany.io", "db2rtjf4p630008pv9s0", { dependsOn: [nbRetired] });
+// NetBird は同じ名前に CNAME と A / AAAA を並べられない (A / AAAA に戻すときは、先にこれを消す)
+// 以前のキーは nb-a (A だったころ)。alias で同じリソースとして扱い、作り直さない
+record("nb", "nb.doany.io", "CNAME", "nb.origin.doany.io", "db2rtjf4p630008pv9s0", { aliases: [{ name: "nb-a" }] });
 
 // --- 自宅の LAN への経路 -------------------------------------------------------------------------------
 const NETWORK = "daf7f7n13kb0009ahci0";
