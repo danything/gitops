@@ -134,5 +134,6 @@ allow("to-routing-peers", "daf7f7n13kb0009ahcqg", "Users to Routing Peers", "All
 allow("to-lan-10-10", "daf86qf13kb0009ahrh0", "Users to 10.10.0.0/24", "もう一方の LAN(FAX 複合機・Gateway の LB IP)", {
   sources: [USERS, ALL],
   destinationResource: { id: lan1010.id, type: "subnet" },
-  description: "",
+  // このルールだけ説明が空 (provider は空文字を「無し」として読む)
+  description: undefined,
 });
