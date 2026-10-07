@@ -3,7 +3,7 @@
 # kubectl と talosctl はノードの版と揃えたいので、Renovate では talos の群(自動マージしない)。
 FROM oven/bun:1.4.2 AS bun
 
-FROM golang:1.26-trixie AS age
+FROM golang:1.27-trixie AS age
 # renovate: datasource=github-releases depName=FiloSottile/age
 ARG AGE_VERSION=v1.3.2
 RUN CGO_ENABLED=0 go install "filippo.io/age/cmd/...@${AGE_VERSION}"
