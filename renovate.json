@@ -93,6 +93,22 @@
                 "frappe/erpnext"
             ],
             "sourceUrl": "https://github.com/frappe/erpnext"
+        },
+        {
+            "description": "AdGuard Home は自動マージしない。上げると起動時に設定を移行する(schema_version)が、設定の正本は git(apps/adguardhome/config.yaml)で起動のたびに書き戻すので、移行後の設定を config.yaml に入れ直すまでが 1 つの作業になる。",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "adguard/adguardhome"
+            ],
+            "groupName": "adguardhome",
+            "groupSlug": "adguardhome",
+            "automerge": false,
+            "addLabels": [
+                "needs-review"
+            ],
+            "sourceUrl": "https://github.com/AdguardTeam/AdGuardHome"
         }
     ]
 }
