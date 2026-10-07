@@ -110,7 +110,7 @@ apply 用は「自分が所有者のアプリ登録」しか書けないので�
   `bun install` のときにビルドする (`trustedDependencies`)。**版を上げるときは SDK を作り直す** (runtime が bun だと
   `pulumi package add` が通らないので、`runtime: nodejs` の空のプロジェクトで作ってコピーする)
 - `*.doany.io` を家の 10.0.0.2 に向けているのは、exit ノード越しに家の外向きの IPv4 を引くと折り返しで届かないため。
-  `nb.doany.io` だけは外向きのアドレスで例外にしている (家の IP が変わったら netbird.ts も直す)
+  `nb.doany.io` だけは外向きのアドレスで例外にしている。アドレスは書かず、2 段の名前 `nb.origin.doany.io` (ゾーンのワイルドカードに当たらず Cloudflare で引かれ、cloudflare-ddns が追従させる) に CNAME で向ける
 
 | 鍵 | どこ | NetBird のサービスユーザー |
 | --- | --- | --- |

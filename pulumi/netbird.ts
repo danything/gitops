@@ -41,21 +41,30 @@ new netbird.DnsSettings("settings", { disabledManagementGroups: [] }, { provider
 // *.doany.io を家の Gateway (10.0.0.2) に向ける。exit ノード越しに家の外向きの IPv4 を引くと、家のルーターで
 // 折り返しになって届かないため (2026-10-07)。ゾーンに無い名前 (apex など) は上のネームサーバーに流れる。
 // **nb.doany.io だけは外向きのまま。** 内部に向けると、管理サーバーとリレーへの接続が NetBird のトンネル頼みになり、
-// 切れたときに戻ってこられない。家の IP が変わったら (cloudflare-ddns が apex を書き換える) ここも変える
+// 切れたときに戻ってこられない
 const zone = new netbird.DnsZone(
   "doany-io",
   { name: "doany.io", domain: "doany.io", enabled: true, enableSearchDomain: false, distributionGroups: [ALL] },
   opts("db2rqbn4p630008pv62g"),
 );
 
-const record = (key: string, name: string, type: "A" | "AAAA", content: string, id: string) =>
-  new netbird.DnsRecord(key, { zoneId: zone.id, name, type, content, ttl: 300 }, opts(`db2rqbn4p630008pv62g:${id}`));
+const record = (key: string, name: string, type: "A" | "AAAA" | "CNAME", content: string, id: string, extra = {}) =>
+  new netbird.DnsRecord(key, { zoneId: zone.id, name, type, content, ttl: 300 }, { ...opts(`db2rqbn4p630008pv62g:${id}`), ...extra });
 
 record("wildcard", "*.doany.io", "A", "10.0.0.2", "db2rtin4p630008pv9qg");
 // ワイルドカードは 1 段ぶんしか拾わない (x.s.doany.io は *.doany.io に当たらない)
 record("wildcard-s", "*.s.doany.io", "A", "10.0.0.2", "db2rsg74p630008pv8ag");
-record("nb-a", "nb.doany.io", "A", "59.140.229.91", "db2rtjf4p630008pv9s0");
-record("nb-aaaa", "nb.doany.io", "AAAA", "240f:6d:842b:1::2", "db2rtr74p630008pva2g");
+
+// nb.doany.io は家の外向きのアドレスを返したい。アドレスは書かず、**2 段の名前 nb.origin.doany.io に CNAME で向ける。**
+// 2 段なのでこのゾーンのワイルドカードには当たらず、上のネームサーバー (AdGuard → Cloudflare) で引かれる。
+// Cloudflare では *.doany.io が doany.io への CNAME (プロキシなし) で、doany.io は cloudflare-ddns が家の IP に
+// 書き換えるので、家の IP が変わっても追従する (IPv4 / IPv6 とも。2026-10-07)。
+//
+// 2026-10-07 までは nb に A / AAAA を直接書いていた。NetBird は同じ名前に CNAME と A / AAAA を並べられないので、
+// AAAA を使っていない名前に移してから (nb-retired) A を CNAME に書き換える。どちらもその場の更新で、消える瞬間は無い。
+// nb-retired は次の PR で消す
+const nbRetired = record("nb-aaaa", "nb-retired.origin.doany.io", "AAAA", "240f:6d:842b:1::2", "db2rtr74p630008pva2g");
+record("nb-a", "nb.doany.io", "CNAME", "nb.origin.doany.io", "db2rtjf4p630008pv9s0", { dependsOn: [nbRetired] });
 
 // --- 自宅の LAN への経路 -------------------------------------------------------------------------------
 const NETWORK = "daf7f7n13kb0009ahci0";
