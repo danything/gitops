@@ -107,8 +107,7 @@
             "automerge": false,
             "addLabels": [
                 "needs-review"
-            ],
-            "sourceUrl": "https://github.com/AdguardTeam/AdGuardHome"
+            ]
         }
     ]
 }
