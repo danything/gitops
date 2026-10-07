@@ -63,9 +63,10 @@
     ],
     "packageRules": [
         {
-            "description": "pulumi/ の bun.lock は Renovate に作らせず、postUpgradeTasks の pulumi install で作る。package.json が NetBird の SDK を file:sdks/netbird で指していて、SDK は pulumi install でしか作れないので、Renovate 自身の bun install は落ちる (#304)。renovate-post-upgrade.sh が Pulumi の CLI と bun を入れて pulumi install し、作り直した bun.lock を同じ枝にコミットさせる。実行の許可は自前の Renovate (5ym/repo-config の renovate.yml) の RENOVATE_ALLOWED_COMMANDS。Pulumi.yaml の packages の版 (customManagers) を上げたときも同じく作り直す。",
+            "description": "pulumi/ の bun.lock は Renovate に作らせず、postUpgradeTasks の pulumi install で作る。package.json が NetBird の SDK を file:sdks/netbird で指していて、SDK は pulumi install でしか作れないので、Renovate 自身の bun install は落ちる (#304)。renovate-post-upgrade.sh が Pulumi の CLI と bun を入れて pulumi install し、作り直した bun.lock を同じ枝にコミットさせる。実行の許可は自前の Renovate (5ym/repo-config の renovate.yml) の RENOVATE_ALLOWED_COMMANDS。Pulumi.yaml の packages の版 (customManagers) を上げたときも同じく作り直す。 matchFileNames に bun.lock も入れる: bun の manager は bun.lock を package file として扱うので、package.json だけだと当たらず、Renovate 自身の bun install が走ってしまった (2026-10-08)。",
             "matchFileNames": [
                 "pulumi/package.json",
+                "pulumi/bun.lock",
                 "pulumi/Pulumi.yaml"
             ],
             "skipArtifactsUpdate": true,
