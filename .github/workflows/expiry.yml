@@ -1,0 +1,104 @@
+# **鍵の期限切れを Matrix の部屋 server に知らせる。** 毎週月曜 9:00 (JST)。
+#
+# 期限を API から読めるものだけを見る。日付を手で書くファイルは置かない (書き忘れと書き換え忘れが起きる)。
+# **鍵は自分の期限だけを読む。** NetBird の Auditor は利用者の一覧は読めても他人のトークンは読めない (403) ので、
+# preview 用と apply 用をそれぞれのジョブで使う。apply 用は Environment `pulumi-apply` (main だけ) にあるので PR では見ない。
+#   - NetBird のサービスユーザーのトークン (pulumi/README.md「NetBird」)
+#   - Cloudflare の API トークン (期限が付いていれば)
+# 期限の無いもの (WINGET_TOKEN など) は対象外。
+#
+# 30 日を切ったか切れていたら投稿する。PR では投稿せずにログに出すだけ。手動実行で `report` を付けると全部を投稿する。
+#
+# 秘密:
+#   MATRIX_SERVER_WEBHOOK_URL  hookshot の部屋 server の受け口 (https://m.doany.io/webhook/<Infisical /matrix/matrix の hook-server>)
+#   PREVIEW_NB_PAT / PREVIEW_CLOUDFLARE_API_TOKEN、NB_PAT / CLOUDFLARE_API_TOKEN (pulumi-apply)  pulumi.yml と同じ
+name: expiry
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+    inputs:
+      report:
+        description: 期限が遠いものも含めて全部を投稿する (動作確認用)
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/expiry.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        key: ${{ github.event_name == 'pull_request' && fromJSON('["preview"]') || fromJSON('["preview", "apply"]') }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.key == 'apply' && 'pulumi-apply' || '' }}
+    env:
+      KEY: ${{ matrix.key }}
+      NB_PAT: ${{ matrix.key == 'apply' && secrets.NB_PAT || secrets.PREVIEW_NB_PAT }}
+      CF_TOKEN: ${{ matrix.key == 'apply' && secrets.CLOUDFLARE_API_TOKEN || secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WEBHOOK: ${{ secrets.MATRIX_SERVER_WEBHOOK_URL }}
+      DRY_RUN: ${{ github.event_name == 'pull_request' }}
+      REPORT_ALL: ${{ inputs.report == true }}
+      WARN_DAYS: "30"
+    steps:
+      - run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          items=$(mktemp)   # 1 行 1 件: 残り日数<TAB>名前<TAB>期限
+
+          add() { # $1 名前 $2 期限 (ISO 8601)
+            local exp; exp=$(date -u -d "$2" +%s)
+            # 切り捨てを負の側にも効かせる (切れて 1 日未満を「あと 0 日」にしない)
+            local d=$(( exp - now )); d=$(( d < 0 ? -((-d + 86399) / 86400) : d / 86400 ))
+            printf '%s\t%s\t%s\n' "$d" "$1" "$(date -u -d "$2" +%Y-%m-%d)" >> "$items"
+          }
+
+          # NetBird: この鍵のサービスユーザー (gitops-pulumi-<preview|apply>) のトークン。名前で選ぶ:
+          # サービスユーザーは users/current が 403 で自分を引けず、apply 用 (Admin) は他人のトークンも読めて二重に数えてしまう
+          nb() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "https://nb.doany.io/api/$1"; }
+          u=$(nb "users?service_user=true" | jq -r --arg n "gitops-pulumi-$KEY" '.[] | select(.name == $n) | .id')
+          [ -n "$u" ] || { echo "NetBird: サービスユーザー gitops-pulumi-$KEY が無い" >&2; exit 1; }
+          # 先に変数へ受ける (`< <(…)` だと失敗しても落ちない)
+          tokens=$(nb "users/$u/tokens" | jq -r '.[] | select(.expiration_date) | [.name, .expiration_date] | @tsv')
+          while IFS=$'\t' read -r tname exp; do
+            if [ -n "$tname" ]; then add "NetBird gitops-pulumi-$KEY / $tname" "$exp"; fi
+          done <<< "$tokens"
+
+          # Cloudflare: この鍵自身 (期限が無ければ null)。アカウントのトークンは accounts/<ID>/tokens/verify でしか確かめられない
+          cf() { curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/$1/tokens/verify"; }
+          cf_exp=$( { cf user 2>/dev/null || cf "accounts/$CF_ACCOUNT"; } | jq -r '.result.expires_on // empty')
+          [ -n "$cf_exp" ] && add "Cloudflare ($KEY 用)" "$cf_exp"
+
+          sort -n "$items" | tee /dev/stderr > "$items.sorted"
+          if [ "$REPORT_ALL" = true ]; then
+            due=$(cat "$items.sorted")
+          else
+            due=$(awk -F'\t' -v w="$WARN_DAYS" '$1 <= w' "$items.sorted")
+          fi
+          if [ -z "$due" ]; then echo "期限が近いものは無い"; exit 0; fi
+
+          lines=$(printf '%s\n' "$due" | awk -F'\t' '{ s = ($1 < 0) ? "切れている" : "あと " $1 " 日"; printf "- **%s**: %s (%s)\n", $2, $3, s }')
+          if [ "$REPORT_ALL" = true ]; then
+            text=$(printf ':key: 鍵の期限 (%s 用、全部)\n\n%s' "$KEY" "$lines")
+          else
+            text=$(printf ':key: 鍵の期限 (%s 用、%s 日以内)\n\n%s\n\n作り直して差し替える。手順は gitops の pulumi/README.md' "$KEY" "$WARN_DAYS" "$lines")
+          fi
+          if [ "$DRY_RUN" = true ]; then
+            echo "--- 投稿する内容 (PR なので投稿しない)"; echo "$text"; exit 0
+          fi
+          jq -n --arg text "$text" '{text: $text}' | curl -fsS -X POST -H "Content-Type: application/json" --data-binary @- "$WEBHOOK"
+
+      # 確かめられなかったことも知らせる (鍵が切れて 401 になったときなど。黙って落ちると気づかない)
+      - if: failure() && github.event_name != 'pull_request'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg text ":warning: 鍵の期限を確かめられなかった ($KEY 用)。鍵が切れているかもしれない: $RUN_URL" '{text: $text}' |
+            curl -fsS -X POST -H "Content-Type: application/json" --data-binary @- "$WEBHOOK"
