@@ -163,6 +163,20 @@ az rest --method POST   --url "https://graph.microsoft.com/v1.0/servicePrincipal
 もとは ERPNext をテナントのゲストが使うために開けていた(ERPNext は 2026-10-06 に撤去)。ゲストは今も
 Forgejo の members に入る ── [apps/forgejo/README.md](../apps/forgejo/README.md)「誰が何をできるか」。
 
+### ゲストを足したときに使えるもの
+
+方針は「**使うものは全部使える、管理は `admin` のロールを持つ人(info@)だけ**」(2026-10-07 に本人が決めた)。
+ゲストを Entra に招くだけで、割り当てなどは要らない。
+
+| 種類 | ゲスト | 決めているところ |
+| --- | --- | --- |
+| Matrix・Element、Forgejo(チーム members)、denpa・ashi・yosegaki など | 入れる・使える | 割り当て必須が `false`。初回のログインでアカウントが自動で作られる |
+| NetBird(VPN) | 入れる・家の LAN に届く | 方針が All の組(pulumi/netbird.ts) |
+| Argo CD・Kubernetes(Headlamp)・Hubble | 見るだけ | Argo CD は `policy.default: role:readonly`、Kubernetes は `entra:viewer`、Hubble は前段でロールを見ない |
+| AdGuard Home・`*.s.doany.io`・noren の管理画面 | 入れない | 前段(oauth2-proxy)やアプリが `admin` のロールを求める |
+
+Matrix の ID はメールの @ の前から作るので、前半が同じ人が 2 人居ると 2 人目は入れない(apps/matrix/README.md)。
+
 **`admins` グループも削除した(2026-09-07)。** ディレクトリロールもライセンスも条件付きアクセスも
 このグループを使っておらず、メールも有効でなかった(セキュリティグループなので Teams や
 SharePoint も付いていない)。唯一残っていた参照は別のアプリ登録 `wg-easy` への割り当てだったが、
