@@ -40,7 +40,7 @@ metricsServer:
   # inlineManifest として載せる(../talos/render.sh)。
   # いま k3s に入っているのは rancher/mirrored-metrics-server:v0.8.1。
   # renovate: datasource=helm depName=metrics-server registryUrl=https://kubernetes-sigs.github.io/metrics-server/
-  version: 3.13.0
+  version: 3.14.0
 
 gatewayAPI:
   # Gateway API の CRD は誰も入れていなかった。k3s のいまは、消したはずの
