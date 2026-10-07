@@ -71,9 +71,14 @@ new netbird.NetworkRouter(
   opts(`${NETWORK}/daf80r713kb0009ahkrg`),
 );
 
+// リソースは必ず 1 つ以上のグループに入れる (provider の制約。2026-10-07 まではどこにも入っていなかった)。
+// アクセスの許可は下のポリシーがリソースを直接指しているので、このグループは今は何にも使っていない。
+// peers / resources は書かない (省略すると管理画面の値をそのまま保つ。中身はリソースの側の groups で決まる)
+const homeLan = new netbird.Group("home-lan", { name: "Home LAN" }, { provider });
+
 const lan = new netbird.NetworkResource(
   "lan-10-0",
-  { networkId: network.id, name: "My Subnet", address: "10.0.0.0/24", description: "Created during onboarding", enabled: true, groups: [] },
+  { networkId: network.id, name: "My Subnet", address: "10.0.0.0/24", description: "Created during onboarding", enabled: true, groups: [homeLan.id] },
   opts(`${NETWORK}/daf7f7n13kb0009ahcjg`),
 );
 const lan1010 = new netbird.NetworkResource(
@@ -84,7 +89,7 @@ const lan1010 = new netbird.NetworkResource(
     address: "10.10.0.0/24",
     description: "もう一方の LAN(eno4)。FAX 複合機 10.10.0.33、Gateway の LB IP 10.10.0.50-55",
     enabled: true,
-    groups: [],
+    groups: [homeLan.id],
   },
   opts(`${NETWORK}/daf86nf13kb0009ahrdg`),
 );
