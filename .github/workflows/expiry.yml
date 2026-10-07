@@ -50,7 +50,7 @@ jobs:
           }
 
           # NetBird: サービスユーザーごとのトークン
-          nb() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "https://nb.doany.io/api/$1"; }
+          nb() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "https://nb.doany.io/api/$1" || { echo "NetBird の $1 が読めない" >&2; return 1; }; }
           nb "users?service_user=true" | jq -r '.[] | [.id, .name] | @tsv' | while IFS=$'\t' read -r u uname; do
             nb "users/$u/tokens" | jq -r '.[] | [.name, .expiration_date] | @tsv' | while IFS=$'\t' read -r tname exp; do
               add "NetBird $uname / $tname" "$exp"
