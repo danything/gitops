@@ -37,7 +37,7 @@
 | Argo CD | `policy.csv` の `g, <Object ID>, role:admin` と `scopes: '[groups, email]'` | `scopes` と `policy.csv` の書き換えが要る |
 | yosegaki | `groups` **と** `roles` の両方を見る(`src/lib/server/oidc.ts`) | 値を `admin` にするだけ |
 | denpa | **`groups` だけ**(`src/lib/server/oidc.ts`) | **コードの修正が要る**。yosegaki と同じく `roles` も見るようにする |
-| ERPNext | ソーシャルログイン。グループでは絞っていない | 影響なし |
+| ERPNext(2026-10-06 に撤去) | ソーシャルログイン。グループでは絞っていない | 影響なし |
 
 ## どちらを採るか
 
@@ -159,8 +159,8 @@ az rest --method POST   --url "https://graph.microsoft.com/v1.0/servicePrincipal
 
 **`appRoleAssignmentRequired` は `false` のままにしてある。** `はい` にすると
 ロールを割り当てていない人がこの登録の後ろにあるアプリ全部から締め出される。
-ERPNext はテナントのゲストも使うので、そこは開けておく
-(ERPNext は OIDC のスコープが `openid profile email` だけで、グループもロールも見ていない)。
+当時は ERPNext をテナントのゲストも使っていたので開けておいた(ERPNext は 2026-10-06 に撤去。
+ゲストは Forgejo の members にも入る ── [apps/forgejo/README.md](../apps/forgejo/README.md)「誰が何をできるか」)。
 
 **`admins` グループも削除した(2026-09-07)。** ディレクトリロールもライセンスも条件付きアクセスも
 このグループを使っておらず、メールも有効でなかった(セキュリティグループなので Teams や

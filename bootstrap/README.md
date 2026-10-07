@@ -11,7 +11,8 @@
 
 いま動いているのは Ubuntu 26.04(NetworkManager、netplan バックエンド、TZ は UTC)の暫定構成で、
 最終形は Talos Linux。進捗は [ROADMAP.md](../ROADMAP.md)、なぜそうしたかは [docs/decisions.md](../docs/decisions.md)。
-Talos では**この層は machine config の `inlineManifests` に載る**ので、手で apply する工程自体が無くなる。
+Talos では**この層のほぼ全部が machine config の `inlineManifests` に載る**(平文の残りは引き続き GitHub Actions。
+[docs/decisions.md](../docs/decisions.md)「層の分け方」)。
 
 ## Helm で入れるもの
 
@@ -36,8 +37,7 @@ infisical-standalone 1.10.0)。それまでは `HelmChart` CR に `version:` が
 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、
 再現性(固定されていること)を取っている** ── 新しい版は人が見る。
 
-**中を触るときは平文で書き足さないこと** ── MAC は暗号化していない値も含めて計算されるので、
-1 行足すだけで `sops -d` が壊れる。位置を選びたいので `sops set` ではなくこの順でやった:
+**中を触るときは平文で書き足さないこと**(上の MAC の話)。位置を選びたいので `sops set` ではなくこの順でやった:
 
 ```shell
 f=bootstrap/argocd/helmchart.yaml
@@ -52,11 +52,12 @@ rm -f /tmp/before.yaml
 **`git diff` では代用できない** ── `mac` と `lastmodified` は中身が変わらなくても
 毎回書き換わるので、暗号文の差分を見ても何も分からない。**復号した中身どうしを比べる。**
 
-## git と live がずれていないか(2026-09-08 に確認)
+## git と live がずれていないか
 
 **machine config は git の値で描く**ので、git と実機がずれていると、移行した瞬間に
 別物が入る。cilium は [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が
-毎日見ているが、**残りは見ていない**ので手で突き合わせた。
+毎日見ているが、**残りは見ていない**ので手で突き合わせる。2026-09-08 に cert-manager / argocd(88 行)/
+infisical(51 行)の 3 つとも**一致**を確認した。
 
 ```shell
 helm get values <release> -n <ns>     # ← 実機
@@ -64,21 +65,15 @@ helm get values <release> -n <ns>     # ← 実機
 #   HelmChart CR の spec.values(argocd / infisical)を比べる
 ```
 
-| | 結果 |
-| --- | --- |
-| cert-manager | **一致**(`config.enableGatewayAPI: true` / `crds.enabled: true`) |
-| argocd | **一致**(88 行、秘密を伏せて比較) |
-| infisical | **一致**(51 行、同上) |
+**比べるときは値を伏せること。** `helm get values` は平文を吐く。
+秘密のキー(`password` / `githubAppPrivateKey` / `service.webhook.mattermost` など)を
+`<SECRET>` に置き換えてから diff する ── **画面に出した時点で漏れたのと同じ。**
 
 **CI では自動化できない。** helm の値は**リリースの Secret の中**にあり、
 `bootstrap-applier` の ClusterRole には**意図的に Secret の権限が無い**
 ([apiserver/rbac.yaml](apiserver/rbac.yaml))。cilium が自動化できているのは、
 値が `cilium-config` という **ConfigMap** に出ているから。
 **権限を広げるより、移行前に手で見るほうが安い**と判断した。
-
-**比べるときは値を伏せること。** `helm get values` は平文を吐く。
-秘密のキー(`password` / `githubAppPrivateKey` / `service.webhook.mattermost` など)を
-`<SECRET>` に置き換えてから diff する ── **画面に出した時点で漏れたのと同じ。**
 
 ## Secret
 
@@ -139,16 +134,10 @@ sops -d infisical/secrets.yaml | kubectl apply -f -
 
 ### 公開経路(HTTPRoute)もここにある
 
-**`httproute.yaml` は ArgoCD が同期しない。** 変更したら手で apply すること。
-
-`argocd` と `auth` の HTTPRoute は元は `apps/gateway-routes/` にあり、ArgoCD が同期していた。
-**が、それは「ArgoCD が ArgoCD 自身を公開している経路を握っている」状態で、層が逆**だった
-(ArgoCD が壊れているときに、その経路を ArgoCD 経由でしか直せない)。2026-09-07 に、
-公開される当のものと同じ場所へ移した。`gateway/redirect-https.yaml` も Gateway そのものの
-設定なのでここ。
-
-アプリ側の経路は逆に**アプリと同じ場所**に置いてある(`apps/<name>/httproute.yaml`、
-または各アプリのリポジトリの `deploy/httproute.yaml`)。
+**`httproute.yaml` は ArgoCD が同期しない**(GitHub Actions が当てる)。`argocd` と `auth` の HTTPRoute と
+`gateway/redirect-https.yaml` がここにある理由(ArgoCD が自分自身の公開経路を握る層の逆転を解いた。2026-09-07)は
+[docs/decisions.md](../docs/decisions.md)「公開経路(HTTPRoute)をどこに置くか」。アプリ側の経路はアプリと同じ場所
+(`apps/<name>/httproute.yaml`、または各アプリのリポジトリの `deploy/httproute.yaml`)。
 
 ### Infisical の中の構成
 
@@ -160,7 +149,7 @@ sops -d infisical/secrets.yaml | kubectl apply -f -
 | Machine Identity | `infisical-operator`(Kubernetes auth、許可 SA は `infisical/infisical-auth`、project の viewer) |
 | 管理者 | 個人アカウント。資格情報はリポジトリに置かない。復旧手順は `infisical/README.md` |
 | 共有値 | `/shared/entra`(Entra 共用アプリの client-id / client-secret / issuer / admins-group)と `/shared/smtp`(info@doany.io)。各アプリのフォルダは `${prod.shared.entra.client-secret}` のような参照で、ローテーションは shared 側の 1 回で済む(operator が展開する) |
-| SMTP | info@doany.io(Exchange Online、mattermost/erpnext と同じ)。パスワードだけ Infisical の `/infisical/infisical-smtp` に置き、`infisical/smtp-secret.yaml` が Secret にする |
+| SMTP | info@doany.io(Exchange Online)。パスワードだけ Infisical の `/infisical/infisical-smtp` に置き、`infisical/smtp-secret.yaml` が Secret にする |
 
 ### `InfisicalSecret` には sync-options を 2 つ付けること
 

@@ -161,9 +161,9 @@ kubectl -n argocd patch application <名前> --type=merge \
   -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'
 ```
 
-**Helm の chart から入れているもの(erpnext など)は `HEAD` が通らない。** `revision` は
-chart の版として読まれ、`improper constraint: HEAD` で落ちる(2026-10-05 に踏んだ)。
-`spec.source.targetRevision` の値(`8.0.78` など)を渡す。
+**Helm の chart から入れているものは `HEAD` が通らない。** `revision` は
+chart の版として読まれ、`improper constraint: HEAD` で落ちる(2026-10-05 に erpnext で踏んだ)。
+`spec.source.targetRevision` の値(chart の版)を渡す。
 
 ## 8. PV データを戻す
 
@@ -191,11 +191,12 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
     done
 ```
 
-移行前(2026-09-09)に流したときの答え。**同じ形になれば通っている**:
+移行前(2026-09-09)に流したときの答え。**同じ形になれば通っている**
+(その後 `en` `mm` は畳み、`m` `e` `lk` `fj` `rt` などが増えた。見るのは 302 / 401 / ERR の形):
 
 | | |
 | --- | --- |
-| 200 | 大半(`doany.io` `ac` `en` `h` `il` `l` `mm` `nb` `ts` `w` `x` `y` `yk`) |
+| 200 | 大半(`doany.io` `ac` `h` `il` `l` `nb` `ts` `w` `x` `y` `yk` など) |
 | **302** | `a` / `ah` / `hl` ── oauth2-proxy が Entra へ飛ばしている |
 | **401** | `dp` ── **これが正しい。** 公開側から来た通信を denpa が弾いている。200 が返ったら X-Forwarded-For が壊れていて、住所判定が効いていない |
 | ERR | `dp.l.doany.io` ── 宅内専用の名前。AdGuard を引く端末からしか通らない |
@@ -237,7 +238,7 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 | | |
 | --- | --- |
 | ノードが上がらない | コンソール(iLO)。ダッシュボードに版と健全性が出る |
-| Pod が Pending | **PSA のラベル**([talos.md](talos.md)「Pod Security Admission」)か、control-plane の taint |
+| Pod が Pending | **PSA のラベル**([talos.md](talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | local-path の ConfigMap に `setup`/`teardown` があるか |
 | private イメージが引けない | `talos/registries.yaml` が machine config に入っているか |
 | inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**。順番が要る |

@@ -79,31 +79,16 @@ DVD ドライブに ISO を接続、ネットワークは外部スイッチ(LAN 
 ## 3. 起動したあと
 
 ISO から起動すると Talos は **maintenance mode** で立ち上がり、コンソールに IP が出る。まだ何もインストールされていない。
-ここから先は手元の PC の `talosctl` で行う(ホストには一切ログインしない)。
-
-```shell
-# 1) 手元で秘密と設定を作る(secrets.yaml は age で暗号化して repo に置く。ROADMAP 参照)
-talosctl gen secrets -o secrets.yaml
-talosctl gen config doany https://10.0.0.2:6443 --with-secrets secrets.yaml \
-  --install-image factory.talos.dev/installer/2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8:v1.14.0 \
-  --config-patch @patches/doany.yaml      # bond0 / eno4 / dual-stack / allowSchedulingOnControlPlanes などのパッチ
-
-# 2) maintenance mode のノードに流し込む(この時点でディスクに書かれ、再起動する)
-talosctl apply-config --insecure -n <コンソールに出た IP> -f controlplane.yaml
-
-# 3) 再起動後、etcd を初期化(単一ノードなので 1 回だけ)
-talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig talosconfig bootstrap
-talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig talosconfig kubeconfig
-```
-
-バックアップからの復元なら 3) の `bootstrap` に `--recover-from=etcd.snapshot` を付ける。
+ここから先は手元の PC の `talosctl` で行う(ホストには一切ログインしない)。手順は
+[../talos/README.md](../talos/README.md)(`render.sh` → `apply-config` → `bootstrap` → `kubeconfig`)、
+当日の順番は [migration-day.md](migration-day.md)。
+バックアップからの復元なら `bootstrap` に `--recover-from=etcd.snapshot` を付ける(下の「etcd スナップショットからの復旧」)。
 
 ## 4. この箱で先に潰しておくこと
 
-- **PT3(Earthsoft、`earth_pt3`)が Talos のカーネルに入っていない。** `siderolabs/pkgs` の `kernel/build/config-amd64` は
-  `CONFIG_DVB_PT3 is not set`。`siderolabs/extensions` の dvb 配下にあるのは cx23885 と m88ds3103 だけで、PT3 の extension は無い。
+- **PT3(Earthsoft、`earth_pt3`)が Talos のカーネルに入っていない**(`CONFIG_DVB_PT3 is not set`、extension も無い)。
   denpa の tuner-agent は `/dev/dvb` と `/dev/bus`(B-CAS リーダー)を hostDevices で掴むので、今のままだと Talos 上では動かない。
-  選択肢は ROADMAP の未決事項を参照。
+  算段は [decisions.md](decisions.md)「PT3 チューナー」。
 - Secure Boot を切る(上記)。
 - iLO の IP(10.0.0.3)と管理者パスワードを手元に。ISO 起動も再インストールも全部ここからできる。
 
@@ -132,7 +117,7 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig talosconfig kubeconfig
 k3s はこれを許していたので、**移行時に `fd43::/108` へ変更が要る**(ClusterIP が振り直しになる)。
 pod 側の `fd42::/64` はそのままでよい。検証では `10.43.0.10` と `fd43::a` の両方が付いた。
 
-### Pod Security Admission が既定で `baseline`
+### PSA のラベル(Pod Security Admission が既定で `baseline`)
 
 `KubeAdmissionControlConfig` に `enforce: baseline`(例外は `kube-system` のみ)が入っている。k3s には無かった制限で、
 **`hostPath` / `privileged` / `hostNetwork` を使う workload は namespace にラベルが要る**。
@@ -142,26 +127,27 @@ kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged
 ```
 
 実際に local-path-provisioner はこれで詰まった(ヘルパー Pod が `hostPath` を使うため PVC が Pending のまま)。
-ラベルを付けたら PVC が Bound になり、Pod から書いた内容がディスク上の
-`/var/local-path-provisioner/pvc-…_<ns>_<pvc>` に残ることまで確認した
-(**当時のパス。いまは user volume の `/var/mnt/local-path`**。下の「ブートドリル 3 回目」)。
+ラベルを付けたら PVC が Bound になり、Pod から書いた内容がディスクに残ることまで確認した。
 
-**baseline は hostPort も弾く。** ここを見落としやすい。実際に走っている Pod を数えると、
-ラベルが要る namespace は次のとおり(2026-09-07 時点。`namespace.yaml` に書き込み済み):
+**baseline は hostPort も弾く。** ここを見落としやすい。走っている Pod を全部数えて(2026-09-07、09-08 に数え直し)、
+ラベルが要る namespace は次のとおり。どれも `namespace.yaml` に `enforce: privileged` が入っていて、実機でも確認した:
 
 | namespace | baseline に通らない理由 |
 | --- | --- |
-| `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort 4244/9234/9879/9963/9964)。Talos は既定でラベル済み |
-| `local-path-storage` | ヘルパー Pod の hostPath。**Talos で local-path-provisioner を入れるなら必須** |
-| `netbird` | hostPort 3478(内蔵 STUN。UDP なのでゲートウェイを通せない) |
-| `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`) |
+| `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort)。**Talos の側で例外にしてある**(下の設定) |
+| `local-path-storage` | ヘルパー Pod の hostPath。[`talos/manifests/local-path.yaml`](../talos/manifests/local-path.yaml) がラベルを付ける |
+| `netbird` | hostPort 3478(内蔵 STUN。UDP なのでゲートウェイを通せない)・51822、NET_ADMIN 等、hostPath |
+| `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)。**ラベルは denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops だけを grep すると抜けて見える |
 | `adguardhome` | hostPort 53 / 853 |
-| `matrix` | hostPort 8443(LiveKit。Element Call の音声と映像。2026-10-06 に Mattermost Calls から同じ番号を引き継いだ) |
-| `3proxy` | hostPort 8444(TLS 終端サイドカー) |
+| `matrix` | hostPort 8443(LiveKit。2026-10-06 に Mattermost Calls から同じ番号を引き継いだ) |
+| `3proxy` | hostPort 3129(TLS 終端サイドカー) |
 | `cloudflare-ddns` | hostNetwork |
-| `erpnext` | `CAP_CHOWN` の追加(baseline が足せるのは `NET_BIND_SERVICE` だけ) |
+| `forgejo` | Runner の docker(dind)が privileged |
 
-残りの namespace は baseline のままでよい。洗い出しは Pod の spec を直接数えて出す:
+(当時は `erpnext` の `CAP_CHOWN`(**baseline が足せる capability は `NET_BIND_SERVICE` だけ**)と `mattermost` の hostPort 8443 もあった。どちらも 2026-10-06 に撤去)
+
+残りの namespace は baseline のままでよい。**argocd / cert-manager / infisical はラベル無しで上がった**(ドリル 4 回目)。
+洗い出しは Pod の spec を直接数えて出す:
 
 ```shell
 kubectl get pods -A -o json | jq -r '.items[] | . as $p | [$p.metadata.namespace] +
@@ -172,27 +158,7 @@ kubectl get pods -A -o json | jq -r '.items[] | . as $p | [$p.metadata.namespace
   (($p.spec.volumes // []) | map(select(.hostPath)) | map("hostPath")) | @tsv' | sort -u
 ```
 
-### 全 Pod で数え直した(2026-09-08)
-
-移行前にもう一度、**走っている Pod を全部見て baseline を破るものを洗い出し**、
-namespace のラベルと突き合わせた。
-
-```
-3proxy           hostPort=3129
-adguardhome      hostPort=53,853
-cloudflare-ddns  hostNetwork
-denpa            hostPath, privileged（denpa / tuner-agent）
-erpnext          caps=CAP_CHOWN（7 Pod）
-mattermost       hostPort=8443
-netbird          caps=NET_ADMIN,SYS_ADMIN,SYS_RESOURCE, hostPath, hostPort=3478,51822
-kube-system      cilium 一式（hostNetwork / hostPath / privileged / caps）
-```
-
-**7 つとも `enforce: privileged` が付いている**(実機で確認)。`denpa` のラベルだけは
-**denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops には無い ── gitops だけを
-grep すると抜けて見えるので注意。
-
-**`kube-system` は Talos の側で例外にしてある**ので cilium は素通りする:
+`kube-system` の例外は Talos の設定:
 
 ```yaml
 kind: KubeAdmissionControlConfig
@@ -202,11 +168,6 @@ configuration:
   exemptions:
     namespaces: [kube-system]
 ```
-
-**argocd / cert-manager / infisical はラベル無しのまま上がった**(ドリル 4 回目)ので、
-baseline に収まっている。**`local-path-storage` は別** ── ヘルパー Pod が hostPath を
-使うので、[`talos/manifests/local-path.yaml`](../talos/manifests/local-path.yaml) が
-namespace に privileged を付けている。
 
 ### 動いたこと
 
@@ -297,7 +258,7 @@ sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
 - **ISO ではなく `metal-amd64.raw.zst` を焼く。** ISO 経由だと「ISO で起動 →
   `apply-config` → 再起動 → **ISO 側がインストール** → 再起動 → ディスク」という段取りに
   なり、外す時機を間違えると PXE ブートに落ちる。raw なら最初から maintenance mode で上がる。
-  **実機は iLO の仮想メディアで ISO**(上の「メディアに載せる」)── ここだけ実機と違う
+  **実機は USB で ISO**(上の「メディアに載せる」)── ここだけ実機と違う
 - **`NETDEV WATCHDOG: transmit queue 0 timed out` は QEMU 側のミス。** bond の 2 本目を
   **何も繋がっていないハブ**に挿していた。QEMU 自身が
   `warning: hub 3 is not connected to host network` と言うので、**`qemu.log` を必ず読む**。
@@ -665,9 +626,7 @@ Talos の既定になる**。移行当日に意図せず 1.36 → 1.37 の飛び
 README の手順と `talos-validate` のワークフローに `--kubernetes-version` を足し、
 **生成物に宣言どおりの版が入っているかも CI で見る**ようにした。
 
-**VM 側の読み替え**: NIC は `enp0s2`/`enp0s3`(bond)と `enp0s4`。1 回目の記録は
-`enp0s3`/`enp0s4`/`enp0s5` になっているが、**起動ごとに変わりうる**ので毎回 `talosctl get links` で見ること。
-KVM を使うので **qemu は sudo で起動する**(前回の記録に抜けていた)。
+VM 側の読み替え(NIC 名は起動ごとに変わる、qemu は sudo)は上の「VM の組み方」。
 
 ## VM ブートドリル(2026-09-07、`talos/patches/` をそのまま起動した)
 
@@ -764,18 +723,7 @@ talosctl read /sys/module/wireguard/version -n 10.0.0.2 -e …   # => 1.0.0
 ```
 
 実際に privileged + hostNetwork の Pod(namespace に `pod-security.kubernetes.io/enforce=privileged`)から
-`wg-quick up wg0` を通した:
-
-```
-[#] ip link add dev wg0 type wireguard
-[#] wg setconf wg0 /dev/fd/63
-[#] ip -4 address add 10.99.99.1/24 dev wg0
-[#] ip link set mtu 1420 up dev wg0
-interface: wg0 / listening port: 51820
-UNCONN 0 0 0.0.0.0:51820 0.0.0.0:*
-UNCONN 0 0    [::]:51820    [::]:*
-```
-
+`wg-quick up wg0` を通した(`ip link add dev wg0 type wireguard` が通り、UDP 51820 を v4 / v6 で LISTEN)。
 ホスト側の `talosctl get links` にも `wg0 … KIND wireguard` が現れる。
 **Ubuntu で必要だった AppArmor プロファイルの無効化は Talos には存在しない**(そもそも LSM が SELinux)。
 
@@ -801,44 +749,18 @@ UNCONN 0 0    [::]:51820    [::]:*
   ISP のルータの RA(MTU オプション、RDNSS、valid/preferred lifetime)は別物
 - carrier の**復旧**方向、PT3 の vfio パススルー本体
 
-## ネットワークまわりの前提(移行前に押さえておくこと)
+## ネットワークまわりの前提
 
-### 既定は Flannel + kube-proxy のまま
+Talos 1.14.0 の既定は Flannel 0.28.9 + kube-proxy(1.13 から Flannel も NetworkPolicy に対応。L3/L4 まで)。
+**このクラスタは Cilium に替える**(decisions.md「ルーティングの選定」。CNI の交換は構築時にやる ──
+稼働中の差し替えは全 Pod 再起動が前提で、後からだとコストが一桁変わる)。Talos 側の止め方は
+[../talos/patches/cni.yaml](../talos/patches/cni.yaml)(**v1alpha1 の `cni.name: none` はもう書けない**)、
+Cilium 側の Talos 固有の値は [../talos/cilium-values.yaml](../talos/cilium-values.yaml)。
 
-Talos 1.14.0 のイメージにも Flannel 0.28.9 と kube-proxy が入っている。**CNI を替える必然性は無い。**
-
-- kube-proxy は Kubernetes 1.31 以降 **nftables バックエンドが既定**。「iptables で遅い」という話はもう当てはまらない
-- **Talos 1.13 から Flannel が NetworkPolicy に対応**(実体は上流の `kube-network-policies`)。machine config で有効にする:
-
-  ```yaml
-  cluster:
-    network:
-      cni:
-        name: flannel
-        flannel:
-          kubeNetworkPoliciesEnabled: true
-  ```
-
-  ただし L3/L4 まで。FQDN ベースの egress 制御はできない。
-
-Cilium に替える場合は machine config 側で CNI と kube-proxy を止める(`cni.name: none`、`proxy.disabled: true`)。
-Cilium 側は `kubeProxyReplacement: true`、`k8sServiceHost: localhost`、`k8sServicePort: 7445`(KubePrism)、
-`cgroup.autoMount.enabled: false` + `hostRoot: /sys/fs/cgroup` が Talos 固有。
-**CNI の交換は構築時にやる。** 稼働中クラスタでの差し替えは全 Pod 再起動が前提で、後からやるとコストが一桁変わる。
-
-### LoadBalancer の実体が無い
-
-k3s の ServiceLB(Klipper)に相当するものは Talos に無い。**MetalLB か Cilium の LB-IPAM が要る**。
-単一ノードなら、Envoy Gateway を `EnvoyProxy` CRD で hostNetwork にして LB コントローラ自体を省く手もある。
-
-### クライアント IP の保持を先に決める
-
-`externalTrafficPolicy: Cluster` だと SNAT されて送信元 IP が消え、レート制限や IP 制限が壊れる。
-`Local` にするか PROXY protocol を使うかを**最初に**決める。後から変えると挙動が変わる。
-
-### Ingress Firewall
-
-`NetworkDefaultActionConfig: block` を使うなら、`NetworkRuleConfig` で必要なポートを明示的に開ける。
+- **LoadBalancer の実体は無い**(k3s の ServiceLB 相当が無い)。hostPort と Gateway の hostNetwork で済ませた
+  (decisions.md「LoadBalancer をどう置き換えるか」)
+- **クライアント IP**: 単一ノードなので `externalTrafficPolicy: Cluster` のままで保たれる(decisions.md「クライアント IP」)
+- `NetworkDefaultActionConfig: block` を使うなら、`NetworkRuleConfig` で要るポートを明示的に開ける
 
 ## 管理モデル(3 つのレイヤーを混同しない)
 
