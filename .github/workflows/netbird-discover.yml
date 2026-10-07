@@ -18,6 +18,7 @@ jobs:
       API: https://nb.doany.io/api
     steps:
       - run: |
+          set +e
           get() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "$API/$1"; }
           echo "== groups";            get groups | jq -c '.[] | {id, name, issued, peers_count, resources_count}'
           echo "== peers";             get peers | jq -c '.[] | {id, name, groups: [.groups[].name]}'
@@ -30,10 +31,10 @@ jobs:
           echo "== networks";          get networks | jq -c '.[] | {id, name, description, routers, resources, policies}'
           for n in $(get networks | jq -r '.[].id'); do
             echo "== network routers $n";   get "networks/$n/routers" | jq -c '.[]'
-            echo "== network resources $n"; get "networks/$n/resources" | jq -c '.[] | del(.groups) + {groups: [.groups[].id]}'
+            echo "== network resources $n"; get "networks/$n/resources" | jq -c '.[]'
           done
           echo "== routes";            get routes | jq -c '.[]'
-          echo "== policies";          get policies | jq -c '.[] | {id, name, description, enabled, source_posture_checks, rules: [.rules[] | {id, name, enabled, action, bidirectional, protocol, ports, port_ranges, sources: [.sources[]?.id], destinations: [.destinations[]?.id], destinationResource, sourceResource}]}'
+          echo "== policies";          get policies | jq -c '.[]'
           echo "== posture checks";    get posture-checks | jq -c '.[]'
           echo "== setup keys";        get setup-keys | jq -c '.[] | {id, name, type, auto_groups, ephemeral, reusable, expires, revoked, usage_limit}'
           echo "== account settings";  get accounts | jq -c '.[] | {id, settings}'
