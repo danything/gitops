@@ -154,7 +154,10 @@
             ]
         },
         {
-            "description": "NetBird の provider と、それを包む Pulumi のプラグインは自動マージしない。0.0.x で API が動くうえ、マージは NetBird の実物への up になる。PR の preview の差分を人が見る。",
+            "description": "NetBird の provider と、それを包む Pulumi のプラグインは自動マージしない。0.0.x で API が動くうえ、マージは NetBird の実物への up になる。PR の preview の差分を人が見る。**pulumi/Pulumi.yaml の分だけに当てる。** netbirdio/netbird は Docker のイメージ (apps/netbird/) と名前が同じで、絞らないとイメージの更新もこの枝に入る。そうなると枝の全部の更新が pulumi/ の規則 (skipArtifactsUpdate) に当たらなくなり、bun.lock を作る postUpgradeTasks が効かない (#315 のレビュー)。この枝の更新は全部 pulumi/ の規則にも当たる。",
+            "matchFileNames": [
+                "pulumi/Pulumi.yaml"
+            ],
             "matchPackageNames": [
                 "netbirdio/netbird",
                 "pulumi/pulumi-terraform-provider"
