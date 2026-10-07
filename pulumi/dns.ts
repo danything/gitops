@@ -32,7 +32,9 @@ record("spf", { name: "doany.io", type: "TXT", content: "v=spf1 include:spf.prot
 // **明示しないとワイルドカードに吸われて doany.io の TXT(SPF)が返る**(2026-10-07 まではそうだった)
 record("dkim-selector1", { name: "selector1._domainkey.doany.io", type: "CNAME", content: "selector1-doany-io._domainkey.doany.q-v1.dkim.mail.microsoft", proxied: false, ttl: 3600 });
 record("dkim-selector2", { name: "selector2._domainkey.doany.io", type: "CNAME", content: "selector2-doany-io._domainkey.doany.q-v1.dkim.mail.microsoft", proxied: false, ttl: 3600 });
-record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: "v=DMARC1; p=none; rua=mailto:info@doany.io", ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
+// なりすましを受け取り側で弾かせる。DKIM(selector1)と SPF が通るのを確かめてから reject にした(2026-10-07。
+// Gmail で dkim=pass / spf=pass / dmarc=pass)。集計の報告(rua)は info@ に来る
+record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: "v=DMARC1; p=reject; rua=mailto:info@doany.io", ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
 
 // --- ドメインの確認 ---------------------------------------------------------------------------------
 // Google Search Console(2 つとも確認に使われている。消すと確認が外れる)
