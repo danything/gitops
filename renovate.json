@@ -9,10 +9,11 @@
             "**/*.yaml"
         ]
     },
-    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。",
+    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。 **pulumi/sdks/netbird も触らせない。** 生成物 (pulumi/sdks/generate.sh) で、中の package.json を上げても作り直すと戻る。typescript などが古いのは Pulumi の生成がわざと下限を書くためで、ビルドにしか使わない。provider の版は generate.sh の VERSION で追う (下の customManagers)。",
     "ignorePaths": [
         "bootstrap/argocd/helmchart.yaml",
-        "bootstrap/infisical/helmchart.yaml"
+        "bootstrap/infisical/helmchart.yaml",
+        "pulumi/sdks/netbird/**"
     ],
     "customManagers": [
         {
@@ -34,6 +35,16 @@
             ],
             "matchStrings": [
                 "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
+            ]
+        },
+        {
+            "description": "NetBird の Terraform provider の版 (pulumi/sdks/generate.sh の VERSION)。PR は版の行を変えるだけで SDK は作り直さないので、CI (pulumi.yml) の照合で落ちる。その枝で generate.sh を流してから入れる。",
+            "customType": "regex",
+            "managerFilePatterns": [
+                "^pulumi/sdks/generate\\.sh$"
+            ],
+            "matchStrings": [
+                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s+registryUrl=(?<registryUrl>\\S+)\\s*\\nVERSION=(?<currentValue>\\S+)"
             ]
         }
     ],
@@ -104,6 +115,21 @@
             ],
             "groupName": "adguardhome",
             "groupSlug": "adguardhome",
+            "automerge": false,
+            "addLabels": [
+                "needs-review"
+            ]
+        },
+        {
+            "description": "NetBird の provider は自動マージしない。SDK を作り直す手が要る (customManagers の generate.sh)。",
+            "matchDatasources": [
+                "terraform-provider"
+            ],
+            "matchPackageNames": [
+                "netbirdio/netbird"
+            ],
+            "groupName": "netbird provider",
+            "groupSlug": "netbird-provider",
             "automerge": false,
             "addLabels": [
                 "needs-review"
