@@ -108,11 +108,11 @@ new netbird.Route(
 );
 
 // --- ポリシー -------------------------------------------------------------------------------------------
-// どれも双方向・全プロトコルの許可で、ルールは 1 本 (ルールの ID はポリシーの ID と同じ)
+// どれも双方向・全プロトコルの許可で、ルールは 1 本 (ルールの id は provider が持つ読み取り専用の値なので書かない)
 const allow = (key: string, id: string, name: string, description: string, rule: Partial<netbird.types.input.PolicyRule>) =>
   new netbird.Policy(
     key,
-    { name, description, enabled: true, rules: [{ id, name, description, action: "accept", bidirectional: true, protocol: "all", enabled: true, ...rule }] },
+    { name, description, enabled: true, rules: [{ name, description, action: "accept", bidirectional: true, protocol: "all", enabled: true, ...rule }] },
     opts(id),
   );
 
