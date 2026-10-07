@@ -97,7 +97,8 @@
 
 **画面が英語のときの表記を括弧に添えてある。**
 
-1. **アプリの登録**(*App registrations*)→ 対象のアプリ → **アプリ ロール**(*App roles*)
+1. (共用のアプリ登録 `b0fa498f-…` の `Admins` は済み。**Pulumi が持つ**(`pulumi/entra.ts`)。別のアプリ登録に作るときだけ)
+   **アプリの登録**(*App registrations*)→ 対象のアプリ → **アプリ ロール**(*App roles*)
    → **アプリ ロールの作成**(*Create app role*)
    - 表示名(*Display name*): `Admins`
    - 許可されたメンバーの種類(*Allowed member types*): **ユーザーまたはグループ**(*Users/Groups*)
