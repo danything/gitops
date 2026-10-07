@@ -110,7 +110,7 @@ function Start-LoginRelay($name, $origin) {
 
 # ボリューム・作業場所・環境変数は compose.yaml の tools に書いてある (wslc-compose run で動かす)。
 # 標準入力はつなぐ。パイプやリダイレクトのときは TTY を付けない (-T)。
-# このスクリプトにパイプしたもの (`x | tools/t.ps1 jq .`) は標準入力ではなく $input に来るので、下で流し直す
+# このスクリプトにパイプしたもの (`x | tools/t.ps1 kubectl apply -f -`) は標準入力ではなく $input に来るので、下で流し直す
 # (流さないとコンテナには何も届かない)
 $piped = $MyInvocation.ExpectingInput
 $opts = @('--rm')
