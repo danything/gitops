@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
-    "cf": "1.0.0-beta.12",
+    "cf": "1.0.0-beta.13",
     "typescript": "7.0.2"
   },
   "main": "index.ts",
