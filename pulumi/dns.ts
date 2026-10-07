@@ -26,7 +26,7 @@ record("caa-issuewild", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 
 record("mx", { name: "doany.io", type: "MX", content: "doany-io.mail.protection.outlook.com", priority: 0, ttl: 3600 }, "6c7e6af1e5665b444b03f40253df2090");
 record("autodiscover", { name: "autodiscover.doany.io", type: "CNAME", content: "autodiscover.outlook.com", proxied: false, ttl: 3600 }, "93eb5f05c05d9ca6ae8239cad26089e2");
 // 送るのは Exchange だけ(アプリも smtp.office365.com 経由)。以前あった a:b.doany.io は、ワイルドカード経由で
-// 家の IP を許していたので外した。DKIM が効くので -all(2026-10-07)
+// 家の IP を許していたので外した。送り元は Exchange だけなので -all(2026-10-07)
 record("spf", { name: "doany.io", type: "TXT", content: "v=spf1 include:spf.protection.outlook.com -all", ttl: 3600 }, "05522a739cbd45b787b93f1a700b8916");
 // DKIM(Exchange Online)。行き先は Get-DkimSigningConfig の Selector1CNAME / Selector2CNAME。
 // **明示しないとワイルドカードに吸われて doany.io の TXT(SPF)が返る**(2026-10-07 まではそうだった)
