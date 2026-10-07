@@ -10,13 +10,13 @@ metadata:
   name: mta-sts
   namespace: mta-sts
 data:
-  # mode: testing のあいだは、守れなくても配送する(失敗は TLS-RPT で info@ に報告が来る)。
-  # MX を DANE 用の新しい形式(…mx.microsoft)に替えている途中なので testing(Microsoft の手順。apps/mta-sts/README.md)
+  # enforce: 守れない(TLS で送れない・証明書が合わない・MX が違う)ときは送らない。失敗は TLS-RPT で info@ に届く。
+  # MX を変えるときは、先に testing に戻して id を変え、max_age(1 週間)待ってから(apps/mta-sts/README.md)
   mta-sts.txt: |
     version: STSv1
-    mode: testing
+    mode: enforce
     mx: doany-io.o-v1.mx.microsoft
-    max_age: 86400
+    max_age: 604800
 ---
 apiVersion: v1
 kind: Service
@@ -48,7 +48,7 @@ spec:
       annotations:
         # 方針を変えたら Pod を作り直す(busybox の httpd はファイルを毎回読むので本当は要らないが、ConfigMap の
         # 反映待ちを避ける)。中身を変えたらこの値も変える
-        mta-sts/policy-rev: "2"
+        mta-sts/policy-rev: "3"
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false

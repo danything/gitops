@@ -11,6 +11,10 @@ doany.io 宛てのメールの、**サーバーどうしの通信を守る** 2 �
 
 ## 方針を変えるとき
 
+今は **enforce**(max_age 1 週間)。**MX を変えるときは、先に testing に戻して id を変え、1 週間待つ**(enforce のまま
+MX を替えると、古い方針を覚えている送り手が新しい MX に送らなくなる)。
+
+
 1. [mta-sts.yaml](mta-sts.yaml) の `mta-sts.txt` を直し、`mta-sts/policy-rev` を上げる
 2. dns.ts の `_mta-sts` の `id` を変える(今の UTC の時刻など)。**変えないと送り手は古い方針を使い続ける**
 
