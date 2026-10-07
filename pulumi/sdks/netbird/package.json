@@ -1,0 +1,26 @@
+{
+    "name": "@pulumi/netbird",
+    "version": "0.0.10",
+    "description": "A Pulumi provider dynamically bridged from netbird.",
+    "repository": "https://github.com/netbirdio/terraform-provider-netbird",
+    "main": "bin/index.js",
+    "scripts": {
+        "build": "tsc",
+        "postinstall": "node ./scripts/postinstall.js"
+    },
+    "dependencies": {
+        "@pulumi/pulumi": "^3.238.0",
+        "@types/node": "^20",
+        "typescript": "^4.7.0"
+    },
+    "pulumi": {
+        "resource": true,
+        "name": "terraform-provider",
+        "version": "1.4.0",
+        "parameterization": {
+            "name": "netbird",
+            "version": "0.0.10",
+            "value": "eyJyZW1vdGUiOnsidXJsIjoicmVnaXN0cnkub3BlbnRvZnUub3JnL25ldGJpcmRpby9uZXRiaXJkIiwidmVyc2lvbiI6IjAuMC4xMCJ9fQ=="
+        }
+    }
+}
