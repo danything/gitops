@@ -664,14 +664,14 @@ Infisical から作って `imagePullSecrets` で参照していた(tamasagashi�
 
 ## 依存の更新をどこまで自動で入れるか(2026-09-07)
 
-Renovate は共有プリセット(`5ym/renovate`)を使っていて、**全部を 1 つの PR にまとめて自動マージ**する
+Renovate は共有プリセット(`5ym/repo-config`。2026-10-07 に `5ym/renovate` から改名)を使っていて、**全部を 1 つの PR にまとめて自動マージ**する
 設定だった。`separateMajorMinor: false` も付いていたので、**postgres 17 → 18 が nginx のパッチと
 同じ PR に入り、自動マージの対象になっていた**(danything/gitops#7)。そのまま入っていたら当時の Mattermost が落ちていた。
 
 **直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/renovate#2)。
 パッチとマイナーはこれまでどおり 1 つにまとめて自動マージする。小さくて頻繁で、タグを戻せば済むため。
 
-いまの自動マージの範囲(プリセット `5ym/renovate`):
+いまの自動マージの範囲(プリセット `5ym/repo-config`):
 
 | まとまり | 自動マージ |
 | --- | --- |
