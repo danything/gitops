@@ -15,7 +15,7 @@ data:
   mta-sts.txt: |
     version: STSv1
     mode: testing
-    mx: doany-io.mail.protection.outlook.com
+    mx: doany-io.o-v1.mx.microsoft
     max_age: 86400
 ---
 apiVersion: v1
@@ -48,7 +48,7 @@ spec:
       annotations:
         # 方針を変えたら Pod を作り直す(busybox の httpd はファイルを毎回読むので本当は要らないが、ConfigMap の
         # 反映待ちを避ける)。中身を変えたらこの値も変える
-        mta-sts/policy-rev: "1"
+        mta-sts/policy-rev: "2"
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false
