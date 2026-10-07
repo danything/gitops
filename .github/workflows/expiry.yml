@@ -65,9 +65,11 @@ jobs:
           nb() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "https://nb.doany.io/api/$1"; }
           u=$(nb "users?service_user=true" | jq -r --arg n "gitops-pulumi-$KEY" '.[] | select(.name == $n) | .id')
           [ -n "$u" ] || { echo "NetBird: サービスユーザー gitops-pulumi-$KEY が無い" >&2; exit 1; }
+          # 先に変数へ受ける (`< <(…)` だと失敗しても落ちない)
+          tokens=$(nb "users/$u/tokens" | jq -r '.[] | select(.expiration_date) | [.name, .expiration_date] | @tsv')
           while IFS=$'\t' read -r tname exp; do
-            add "NetBird gitops-pulumi-$KEY / $tname" "$exp"
-          done < <(nb "users/$u/tokens" | jq -r '.[] | select(.expiration_date) | [.name, .expiration_date] | @tsv')
+            if [ -n "$tname" ]; then add "NetBird gitops-pulumi-$KEY / $tname" "$exp"; fi
+          done <<< "$tokens"
 
           # Cloudflare: この鍵自身 (期限が無ければ null)。アカウントのトークンは accounts/<ID>/tokens/verify でしか確かめられない
           cf() { curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/$1/tokens/verify"; }
