@@ -1,7 +1,7 @@
 # 平文の秘密を SOPS(age)で暗号化する規則。鍵は recovery/sops-age.key.age
 # (env.age と同じパスフレーズ)。復号は
-#   tools/t sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
-# のあと `tools/t sops -d`(tools/t の中の ~ はリポジトリの .home/)。
+#   tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
+# のあと `tools/t.ps1 sops -d`(tools/t.ps1 の中の ~ はリポジトリの .home/)。
 creation_rules:
   # bootstrap/ は「そのキーだけ」を暗号化する。マニフェストの構造は git で読めたほうが
   # レビューできるため。

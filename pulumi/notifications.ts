@@ -18,7 +18,7 @@ const matrix = new cloudflare.NotificationPolicyWebhooks("matrix-notify-server",
   url: pulumi.secret(url),
 });
 
-// 自宅のサーバーに関係するものだけ。種類の一覧は `tools/t cf alerting available-alerts list`
+// 自宅のサーバーに関係するものだけ。種類の一覧は `tools/t.ps1 cf alerting available-alerts list`
 const alerts: [type: string, name: string][] = [
   ["universal_ssl_event_type", "証明書(Universal SSL)の発行・更新の問題"],
   ["dos_attack_l7", "HTTP の DDoS を止めた"],

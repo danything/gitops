@@ -1,11 +1,10 @@
-# 手元の運用のコマンドを Docker で動かす(tools/README.md)。直接ではなく tools/t から使う
+# 手元の運用のコマンドをコンテナで動かす(tools/README.md)。直接ではなく tools/t.ps1 から使う(wslc-compose)
 services:
   tools:
     build: tools
-    # 手元のユーザーのまま(作ったファイルの持ち主が root にならないように)。tools/t が入れる
-    user: "${HOST_UID:?tools/t から動かすこと}:${HOST_GID:?}"
-    # cf のログイン(ブラウザから localhost に戻ってくる)と、kubectl / talosctl の接続のため
-    network_mode: host
+    image: gitops-tools:latest
+    # wslc は host ネットワークに対応していない。ブラウザのログインは t.ps1 が中継する(tools/README.md)。
+    # uid は指定しない(Windows のファイルに持ち主の uid は無い)
     working_dir: /repo
     environment:
       # **ログインと鍵はリポジトリの .home/ に置く**(.gitignore 済み)。手元のホームは汚さない

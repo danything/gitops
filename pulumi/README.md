@@ -124,7 +124,7 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
 ## 手元で流す
 
 ```shell
-cd pulumi && pulumi install    # NetBird の SDK を作って bun install まで (tools/t なら tools/t sh -c 'cd pulumi && pulumi install')
+cd pulumi && pulumi install    # NetBird の SDK を作って bun install まで (tools/t.ps1 なら tools/t.ps1 sh -c 'cd pulumi && pulumi install')
 bun run typecheck
 export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…
 export PULUMI_CONFIG_PASSPHRASE_FILE=~/.config/doany/pulumi-passphrase
