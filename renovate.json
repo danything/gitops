@@ -81,7 +81,6 @@
                 "needs-review"
             ],
             "matchDepNames": [
-                "factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302",
                 "kubernetes/kubernetes",
                 "kubernetes-sigs/gateway-api",
                 "ghcr.io/siderolabs/talosctl",
