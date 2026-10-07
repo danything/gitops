@@ -37,6 +37,7 @@ for (const [name, objectId, credentialId, displayName, subject, description] of 
       audiences: AUDIENCES,
       subject: `${SUBJECT_PREFIX}:${subject}`,
     },
-    { protect: true, import: `/applications/${objectId}/federatedIdentityCredential/${credentialId}` },
+    // 取り込みの ID は `<オブジェクト ID>/federatedIdentityCredential/<ID>`(先頭に /applications/ を付けると見つからない)
+    { protect: true, import: `${objectId}/federatedIdentityCredential/${credentialId}` },
   );
 }
