@@ -11,11 +11,11 @@ ARG KUBECTL_VERSION=v1.36.2
 # renovate: datasource=github-releases depName=siderolabs/talos
 ARG TALOSCTL_VERSION=v1.14.0
 # renovate: datasource=github-releases depName=helm/helm
-ARG HELM_VERSION=v3.19.0
+ARG HELM_VERSION=v3.22.0
 # renovate: datasource=github-releases depName=getsops/sops
 ARG SOPS_VERSION=v3.13.3
 # renovate: datasource=github-releases depName=FiloSottile/age
-ARG AGE_VERSION=v1.3.1
+ARG AGE_VERSION=v1.3.2
 # renovate: datasource=github-releases depName=Infisical/cli
 ARG INFISICAL_VERSION=v0.43.139
 # renovate: datasource=github-releases depName=restic/restic
