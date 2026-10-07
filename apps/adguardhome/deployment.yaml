@@ -47,7 +47,9 @@ spec:
               mountPath: /opt/adguardhome/conf
       containers:
         - name: adguardhome
-          image: adguard/adguardhome:latest
+          # 版を固定する (2026-10-07 まで latest)。上げると起動時に設定を移行する (schema_version) ので、
+          # Renovate の PR は自動マージしない (renovate.json)。上げたら移行後の設定を config.yaml に入れ直す
+          image: adguard/adguardhome:v0.107.79
           # ServiceLB(k3s 組み込み)をやめたので、ノードの全アドレスで受けるために hostPort を持つ。
           # Talos には ServiceLB 相当が無いので、この形がそのまま移行先でも使える。
           # hostPort は送信元 IP を保つので、AdGuard のクライアント別統計も従来どおり。
