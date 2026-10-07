@@ -25,21 +25,23 @@ record("caa-issuewild", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 
 // --- メール(Exchange Online)----------------------------------------------------------------------
 record("mx", { name: "doany.io", type: "MX", content: "doany-io.mail.protection.outlook.com", priority: 0, ttl: 3600 }, "6c7e6af1e5665b444b03f40253df2090");
 record("autodiscover", { name: "autodiscover.doany.io", type: "CNAME", content: "autodiscover.outlook.com", proxied: false, ttl: 3600 }, "93eb5f05c05d9ca6ae8239cad26089e2");
-// 送るのは Exchange だけ(アプリも smtp.office365.com 経由)。以前あった a:b.doany.io は、ワイルドカード経由で
-// 家の IP を許していたので外した(2026-10-07)
-record("spf", { name: "doany.io", type: "TXT", content: '"v=spf1 include:spf.protection.outlook.com -all"', ttl: 3600 }, "05522a739cbd45b787b93f1a700b8916");
-record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: '"v=DMARC1; p=none; rua=mailto:info@doany.io"', ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
+// **取り込んだときの値のまま。** import は今の値と一致していないと失敗するので、直すのは次の PR(DKIM と一緒):
+//   SPF の a:b.doany.io はワイルドカード経由で家の IP を許しているので外し、-all にする。DMARC は p=reject へ
+record("spf", { name: "doany.io", type: "TXT", content: "v=spf1 a:b.doany.io include:spf.protection.outlook.com ~all", ttl: 3600 }, "05522a739cbd45b787b93f1a700b8916");
+record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: "v=DMARC1; p=none; rua=mailto:info@doany.io", ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
 
 // --- ドメインの確認 ---------------------------------------------------------------------------------
 // Google Search Console(2 つとも確認に使われている。消すと確認が外れる)
 record("google-site-verification-1", { name: "doany.io", type: "TXT", content: '"google-site-verification=WTZR-5D4XdnLy2p52RkTh37Qq6FhUf0XpPV01g6xTew"', ttl: 3600 }, "118ba3db9a2ea182ad55d806268be3cd");
-record("google-site-verification-2", { name: "doany.io", type: "TXT", content: '"google-site-verification=py7V3FVpxDREahHV8QWIHKhJMU8hVUGVwHznj-HRiCU"', ttl: 3600 }, "4465983a89e131cf6be2170696ac44f8");
+record("google-site-verification-2", { name: "doany.io", type: "TXT", content: "google-site-verification=py7V3FVpxDREahHV8QWIHKhJMU8hVUGVwHznj-HRiCU", ttl: 3600 }, "4465983a89e131cf6be2170696ac44f8");
 // GitHub の組織 danything のドメインの確認
 record("github-verification", { name: "_gh-danything-o.doany.io", type: "TXT", content: '"f39e74c26c"', ttl: 1 }, "71200b09aa051711661e46f5f2e95b60");
 
 // --- ゾーンの設定(Cloudflare を通す名前にだけ効く)-----------------------------------------------
+// 設定は「取り込み」ではなく「書く」(PATCH なので、取り込まなくても同じ)。security_header を import すると
+// プロバイダー(cloudflare 6.22)が nil pointer で落ちる(2026-10-07)
 const setting = (settingId: string, value: unknown) =>
-  new cloudflare.ZoneSetting(`setting-${settingId}`, { zoneId, settingId, value }, { import: `${zoneId}/${settingId}` });
+  new cloudflare.ZoneSetting(`setting-${settingId}`, { zoneId, settingId, value });
 
 setting("ssl", "strict");
 setting("always_use_https", "on");
