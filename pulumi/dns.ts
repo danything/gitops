@@ -15,6 +15,8 @@ const record = (key: string, args: Omit<cloudflare.DnsRecordArgs, "zoneId">, imp
 // --- Web ---------------------------------------------------------------------------------------
 // 直接つなぐアプリ(社内用・重いもの)は全部これで家に来る。Cloudflare を通すアプリは ExternalDNS が
 // 個別の名前を作って上書きする(docs/decisions.md「DNS: 直接つなぐアプリと Cloudflare を通すアプリ」)
+// **NetBird の nb.doany.io もこれに頼っている。** NetBird のゾーンでは nb を nb.origin.doany.io への CNAME にしていて、
+// その答え(家の IP)はこのワイルドカードから来る(netbird.ts)。ここを変えると NetBird の管理サーバーが引けなくなる
 record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 }, "22d196005f64645eca6bccefd4e3fdee");
 
 // 証明書を出してよい認証局。cert-manager が使う Let's Encrypt だけ。Cloudflare の Universal SSL の認証局は
