@@ -10,6 +10,8 @@ import * as cloudflare from "@pulumi/cloudflare";
 
 // Entra のアプリ登録のリダイレクト URI(entra.ts)
 import "./entra.ts";
+// この Pulumi の CI が Entra に入るための信頼の設定(entra-ci.ts)
+import "./entra-ci.ts";
 // Cloudflare の通知を Matrix に(notifications.ts)
 import "./notifications.ts";
 // doany.io の DNS(ExternalDNS が作らないもの)とゾーンの設定(dns.ts)
