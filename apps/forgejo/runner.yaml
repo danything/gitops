@@ -1,11 +1,13 @@
 # Forgejo Actions の Runner。ジョブは同じ Pod の docker(dind)の中のコンテナで動く。
 # 形は forgejo/runner の examples/kubernetes/dind-docker.yaml に寄せてある。
 #
-# 登録(uuid / token)は Forgejo の管理画面で作る(v13 の方式。`register` コマンドは使わない):
-#   1. https://fj.doany.io/admin/actions/runners →「Create new runner」
-#   2. 出た UUID と Token を Infisical の /forgejo/forgejo-runner に uuid / token で入れる
-#   3. push-bridge → operator が Secret を作り、auto-reload で Pod が入れ替わる
-# キーが入るまで runner コンテナは「待っている」とログに出して止まっている(落ちない)。
+# 登録は共有の秘密(16 進 40 文字)1 つで済ませる。管理画面での操作は要らない:
+#   - Forgejo 側: forgejo.yaml の init が `forgejo-cli actions register --secret` で登録する(何度走っても同じ Runner)
+#   - Runner 側: 下の start.sh が同じ秘密から uuid / token を出す。uuid は秘密の先頭 16 文字のバイト列を
+#     そのまま UUID にしたもの、token は秘密そのもの(Forgejo の models/actions/forgejo.go の RegisterRunner、
+#     runner の create-runner-file.go の uuidFromSecret と同じ。create-runner-file は v13 で非推奨)
+# 秘密は Infisical の /forgejo/forgejo-runner に runner-secret で入れる(forgejo-secrets.yaml)。
+# 入るまで runner コンテナは「待っている」とログに出して止まっている(落ちない)。
 #
 # 設定ファイルは起動のたびに作る。Pod は状態を持たない(.runner ファイルも PVC も要らない)。
 #
@@ -24,10 +26,17 @@ data:
   start.sh: |
     #!/bin/sh
     set -eu
-    while [ -z "${RUNNER_UUID:-}" ] || [ -z "${RUNNER_TOKEN:-}" ]; do
-      echo "Infisical の /forgejo/forgejo-runner に uuid と token が入るのを待っている"
+    while [ -z "${RUNNER_SECRET:-}" ]; do
+      echo "Infisical の /forgejo/forgejo-runner に runner-secret が入るのを待っている"
       sleep 60
     done
+    # 形が違うと Forgejo 側の登録も飛ぶ。落ちて再起動を繰り返さないよう、ここで止まっておく。値は出さない
+    if ! printf %s "$RUNNER_SECRET" | grep -Eq '^[0-9a-fA-F]{40}$'; then
+      echo "runner-secret は 16 進 40 文字にする(openssl rand -hex 20)。直すまで止まっている"
+      while :; do sleep 3600; done
+    fi
+    RUNNER_UUID=$(printf %s "$RUNNER_SECRET" | head -c 16 | od -An -tx1 | tr -d ' \n' |
+      sed -E 's/^(.{8})(.{4})(.{4})(.{4})(.{12})$/\1-\2-\3-\4-\5/')
     while ! nc -z localhost 2376 </dev/null; do
       echo "docker を待っている"
       sleep 5
@@ -63,7 +72,7 @@ data:
         forgejo:
           url: https://fj.doany.io/
           uuid: ${RUNNER_UUID}
-          token: ${RUNNER_TOKEN}
+          token: ${RUNNER_SECRET}
     EOF
     exec forgejo-runner --config /tmp/config.yml daemon
 ---
@@ -95,17 +104,11 @@ spec:
             # ルートは読み取り専用。uses: のアクションの取り置き($HOME/.cache/act)を /tmp に置く
             - name: HOME
               value: /tmp
-            - name: RUNNER_UUID
+            - name: RUNNER_SECRET
               valueFrom:
                 secretKeyRef:
                   name: forgejo-runner
-                  key: uuid
-                  optional: true
-            - name: RUNNER_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: forgejo-runner
-                  key: token
+                  key: runner-secret
                   optional: true
             - name: DOCKER_HOST
               value: tcp://localhost:2376
