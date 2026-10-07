@@ -10,12 +10,12 @@ metadata:
     # 2020 年から open のままなので、認証を 1 か所(Entra)に寄せた。
     # Web の口はクラスタ内からは無認証になる。外からは Gateway 経由だけで、その手前に SSO がある。
     #
-    # `users:` を戻すときは Pod を止めてから編集すること。AdGuard は停止時に設定ファイルを
-    # 書き直すので、動いたまま書き換えると消える。
+    # AdGuard の設定の正本は config.yaml (ConfigMap)。起動時に initContainer が PVC の
+    # AdGuardHome.yaml に書き戻すので、UI で変えた設定は Pod が作り直されると戻る (2026-10-07 から)。
+    # 変えるときは config.yaml を直し、下の `doany.io/config-sha256` も変える。
     #
-    # AdGuard の設定は PVC の中 (AdGuardHome.yaml) にあり git では管理していない。
     # クエリログの保持は 90d だと querylog.json だけで 2 GB に育ち、毎日のバックアップに乗るので
-    # 7d に縮めた (2026-09-06)。変えるときは UI の 設定 > 一般設定 > クエリログの保存期間 から。
+    # 7d に縮めた (2026-09-06。config.yaml の querylog.interval)。
 spec:
   replicas: 1
   # hostPort を持つので同じポートを 2 つの Pod が同時に掴めない。RollingUpdate だと
@@ -29,7 +29,22 @@ spec:
     metadata:
       labels:
         app: adguardhome
+      annotations:
+        # config.yaml の sha256 (`sha256sum apps/adguardhome/config.yaml`)。ConfigMap が変わっても
+        # Pod は作り直されないので、ここを変えて作り直させる。ずれていると CI (adguard-config) が落ちる
+        doany.io/config-sha256: 5e3bc965c8f5cfd2c2dcd2bba1e58e9ababe80dc49c508b5ed0626ce8b068fbe
     spec:
+      # git の設定 (config.yaml) を PVC に書き戻してから AdGuard を起動する。AdGuard は設定ファイルを
+      # 書き換えるので、ConfigMap を直接マウントせずにコピーする
+      initContainers:
+        - name: config
+          image: busybox:1.38
+          command: ["cp", "/config/AdGuardHome.yaml", "/opt/adguardhome/conf/AdGuardHome.yaml"]
+          volumeMounts:
+            - name: adguardhome-config
+              mountPath: /config
+            - name: adguardhome-conf
+              mountPath: /opt/adguardhome/conf
       containers:
         - name: adguardhome
           image: adguard/adguardhome:latest
@@ -80,6 +95,9 @@ spec:
         - name: doh-proxy-config
           configMap:
             name: doh-proxy
+        - name: adguardhome-config
+          configMap:
+            name: adguardhome-config
         # DoT(853)用の証明書。cert-manager が ah.doany.io で発行した Secret を、
         # AdGuard の設定が見ているファイル名(server.crt / server.key)に読み替えて渡す。
         # 以前は Traefik の acme.json を監視する acme-watcher が PVC に書き出していた。

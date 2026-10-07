@@ -1,0 +1,27 @@
+# **AdGuard Home の設定 (apps/adguardhome/config.yaml) を変えたのに Pod が作り直されない、を防ぐ。**
+#
+# ConfigMap が変わっても Deployment は変わらないので、Pod は古い設定のまま動き続ける。
+# deployment.yaml の `doany.io/config-sha256` が config.yaml の sha256 と一致しているかを PR で見る。
+name: adguard-config
+
+on:
+  pull_request:
+    paths:
+      - apps/adguardhome/**
+      - .github/workflows/adguard-config.yml
+
+permissions:
+  contents: read
+
+jobs:
+  hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          want=$(sha256sum apps/adguardhome/config.yaml | cut -d' ' -f1)
+          got=$(sed -n 's/^ *doany.io\/config-sha256: *//p' apps/adguardhome/deployment.yaml)
+          if [ "$want" != "$got" ]; then
+            echo "::error file=apps/adguardhome/deployment.yaml::doany.io/config-sha256 を $want にする (今は $got)"
+            exit 1
+          fi
