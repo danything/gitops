@@ -9,11 +9,10 @@
             "**/*.yaml"
         ]
     },
-    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。 **pulumi/sdks/netbird も触らせない。** 生成物 (pulumi/sdks/generate.sh) で、中の package.json を上げても作り直すと戻る。typescript などが古いのは Pulumi の生成がわざと下限を書くためで、ビルドにしか使わない。provider の版は generate.sh の VERSION で追う (下の customManagers)。",
+    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。",
     "ignorePaths": [
         "bootstrap/argocd/helmchart.yaml",
-        "bootstrap/infisical/helmchart.yaml",
-        "pulumi/sdks/netbird/**"
+        "bootstrap/infisical/helmchart.yaml"
     ],
     "customManagers": [
         {
@@ -38,14 +37,28 @@
             ]
         },
         {
-            "description": "NetBird の Terraform provider の版 (pulumi/sdks/generate.sh の VERSION)。版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。PR は版の行を変えるだけで SDK は作り直さないので、CI (pulumi.yml) の照合で落ちる。その枝で generate.sh を流してから入れる。",
+            "description": "Pulumi が Terraform の provider を包んで使う版 (pulumi/Pulumi.yaml の packages)。2 つある: 包む側のプラグイン (`source: terraform-provider` の次の `version:`) と、包まれる provider (`parameters:` の 2 つ目)。SDK は CI の `pulumi install` が毎回作るので、版の行を変えるだけで PR が完結する。provider の版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。",
             "customType": "regex",
             "managerFilePatterns": [
-                "/^pulumi/sdks/generate\\.sh$/"
+                "/^pulumi/Pulumi\\.yaml$/"
             ],
             "matchStrings": [
-                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\nVERSION=(?<currentValue>\\S+)"
-            ]
+                "parameters:\\s*\\n\\s*-\\s*(?<depName>[\\w-]+/[\\w-]+)\\s*\\n\\s*-\\s*(?<currentValue>\\S+)"
+            ],
+            "datasourceTemplate": "terraform-provider"
+        },
+        {
+            "description": "上の包む側のプラグイン (pulumi/pulumi-terraform-provider)。タグは v 付き、Pulumi.yaml は v なし。",
+            "customType": "regex",
+            "managerFilePatterns": [
+                "/^pulumi/Pulumi\\.yaml$/"
+            ],
+            "matchStrings": [
+                "source:\\s*terraform-provider\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
+            ],
+            "datasourceTemplate": "github-releases",
+            "depNameTemplate": "pulumi/pulumi-terraform-provider",
+            "extractVersionTemplate": "^v(?<version>.+)$"
         }
     ],
     "packageRules": [
@@ -121,12 +134,10 @@
             ]
         },
         {
-            "description": "NetBird の provider は自動マージしない。SDK を作り直す手が要る (customManagers の generate.sh)。",
-            "matchDatasources": [
-                "terraform-provider"
-            ],
+            "description": "NetBird の provider と、それを包む Pulumi のプラグインは自動マージしない。0.0.x で API が動くうえ、マージは NetBird の実物への up になる。PR の preview の差分を人が見る。",
             "matchPackageNames": [
-                "netbirdio/netbird"
+                "netbirdio/netbird",
+                "pulumi/pulumi-terraform-provider"
             ],
             "groupName": "netbird provider",
             "groupSlug": "netbird-provider",
