@@ -5,6 +5,8 @@
 # preview 用と apply 用をそれぞれのジョブで使う。apply 用は Environment `pulumi-apply` (main だけ) にあるので PR では見ない。
 #   - NetBird のサービスユーザーのトークン (pulumi/README.md「NetBird」)
 #   - Cloudflare の API トークン (期限が付いていれば)
+#   - Entra のアプリ登録のクライアントシークレットと証明書 (テナントの全部。共用の Main が切れると SSO が全部止まる)。
+#     preview の ID (Application.Read.All) で GitHub の OIDC から入るので鍵は要らない。preview のジョブだけで見る
 # 期限の無いもの (WINGET_TOKEN など) は対象外。
 #
 # 30 日を切ったか切れていたら投稿する。PR では投稿せずにログに出すだけ。手動実行で `report` を付けると全部を投稿する。
@@ -29,6 +31,8 @@ on:
 
 permissions:
   contents: read
+  # Entra へ OIDC で入る (preview のジョブだけ)
+  id-token: write
 
 jobs:
   check:
@@ -48,6 +52,12 @@ jobs:
       REPORT_ALL: ${{ inputs.report == true }}
       WARN_DAYS: "30"
     steps:
+      - if: matrix.key == 'preview'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.PREVIEW_AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
       - run: |
           set -euo pipefail
           now=$(date -u +%s)
@@ -75,6 +85,15 @@ jobs:
           cf() { curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/$1/tokens/verify"; }
           cf_exp=$( { cf user 2>/dev/null || cf "accounts/$CF_ACCOUNT"; } | jq -r '.result.expires_on // empty')
           [ -n "$cf_exp" ] && add "Cloudflare ($KEY 用)" "$cf_exp"
+
+          # Entra: テナントの全アプリ登録のシークレットと証明書 (preview のジョブだけ。apply と二重に数えない)
+          if [ "$KEY" = preview ]; then
+            creds=$(az rest --method GET --url 'https://graph.microsoft.com/v1.0/applications?$select=displayName,passwordCredentials,keyCredentials&$top=999' |
+              jq -r '.value[] | .displayName as $app | ((.passwordCredentials // []) + (.keyCredentials // []))[] | select(.endDateTime) | [$app, (.displayName // .keyId), .endDateTime] | @tsv')
+            while IFS=$'\t' read -r app cname exp; do
+              if [ -n "$app" ]; then add "Entra $app / $cname" "$exp"; fi
+            done <<< "$creds"
+          fi
 
           sort -n "$items" | tee /dev/stderr > "$items.sorted"
           if [ "$REPORT_ALL" = true ]; then
