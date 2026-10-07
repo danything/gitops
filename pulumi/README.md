@@ -1,6 +1,6 @@
 # pulumi
 
-Cloudflare と Entra ID の設定を [Pulumi](https://www.pulumi.com/) で持つ。いまは 2 つ:
+Cloudflare・Entra ID・NetBird の設定を [Pulumi](https://www.pulumi.com/) で持つ。主なもの:
 
 - **R2 の `doany-restic`**(restic の置き場。2026-10-05)── [index.ts](index.ts)
 - **Entra のアプリ登録(共用の 1 つ)のリダイレクト URI**(2026-10-06)── [entra.ts](entra.ts)。
@@ -96,6 +96,29 @@ apply 用は「自分が所有者のアプリ登録」しか書けないので�
 
 持っているのは**リダイレクト URI の一覧だけ**(`ApplicationRedirectUris`)。クライアントシークレット・アプリロール・
 割り当ては Pulumi の外(`docs/entra.md`)。手元で流すときは `az login` のログインがそのまま使われる。
+
+## NetBird
+
+[netbird.ts](netbird.ts)。NetBird (https://nb.doany.io) の **DNS (ネームサーバー・ゾーン・レコード)、自宅の LAN への経路
+(ネットワーク・ルーター・リソース)、exit ノードのルート、アクセスのポリシー**。2026-10-07 に画面で作ってあったものを import で取り込んだ。
+**画面で変えると、次の週次の preview (--refresh) がずれとして落ちる。**
+
+- **持っていないもの:** グループの中身 (ピアはセットアップキーやログインで入る。ID で指すだけ)、ピア、ユーザー、
+  セットアップキー、アカウントの設定
+- provider は Terraform の [netbirdio/netbird](https://github.com/netbirdio/terraform-provider-netbird) を Pulumi で包んだもの
+  (`pulumi package add terraform-provider netbirdio/netbird <版>`)。生成した SDK は [sdks/netbird](sdks/netbird) に置き、
+  `bun install` のときにビルドする (`trustedDependencies`)。**版を上げるときは SDK を作り直す** (runtime が bun だと
+  `pulumi package add` が通らないので、`runtime: nodejs` の空のプロジェクトで作ってコピーする)
+- `*.doany.io` を家の 10.0.0.2 に向けているのは、exit ノード越しに家の外向きの IPv4 を引くと折り返しで届かないため。
+  `nb.doany.io` だけは外向きのアドレスで例外にしている (家の IP が変わったら netbird.ts も直す)
+
+| 鍵 | どこ | NetBird のサービスユーザー |
+| --- | --- | --- |
+| `PREVIEW_NB_PAT` | Actions secrets | `gitops-pulumi-preview`(Auditor = 読み取りだけ) |
+| `NB_PAT` | Environment `pulumi-apply` | `gitops-pulumi-apply`(Admin) |
+
+トークンの期限は 365 日 (2026-10-07 に作った)。切れる前に作り直して差し替える。provider は環境変数 `NB_PAT` を読むので、
+**トークンは state に入らない。**
 
 ## 手元で流す
 
