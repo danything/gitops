@@ -1,4 +1,4 @@
-# 運用のコマンドを wslc (WSL コンテナ) で動かす。例:
+# 運用のコマンドを wslc (WSL コンテナ) で動かす。中身は compose.yaml の tools を wslc-compose run する。例:
 #   tools/t.ps1 infisical login --domain https://il.doany.io/api
 #   tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml
 # 引数が無ければシェルに入る。Dockerfile を変えたら次の実行で作り直す (変わっていなければキャッシュで一瞬)。
@@ -107,10 +107,10 @@ function Start-LoginRelay($name, $origin) {
     }
 }
 
-# 標準入力はつなぐ。パイプやリダイレクトのときは TTY を付けない
-$opts = @('--rm', '--interactive', '--volume', "${root}:/repo", '--workdir', '/repo', '--env', 'HOME=/repo/.home')
-if (-not ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected)) { $opts += '--tty' }
-if ($env:INFISICAL_PROFILE) { $opts += '--env', "INFISICAL_PROFILE=$env:INFISICAL_PROFILE" }
+# ボリューム・作業場所・環境変数は compose.yaml の tools に書いてある (wslc-compose run で動かす)。
+# 標準入力はつなぐ。パイプやリダイレクトのときは TTY を付けない (-T)
+$opts = @('--rm')
+if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $opts += '-T' }
 $cmd = if ($args.Count) { $args } else { @('bash') }
 
 $relay = $null
@@ -129,7 +129,7 @@ if ($browserLogin) {
     $relay = Start-LoginRelay $name $origin
 }
 try {
-    wslc run @opts $image @cmd
+    wslc-compose --file (Join-Path $root 'compose.yaml') run @opts tools @cmd
     $code = $LASTEXITCODE
 } finally {
     if ($relay) {

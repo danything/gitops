@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - tools/**
+      - compose.yaml
       - .github/workflows/tools.yml
 
 permissions:

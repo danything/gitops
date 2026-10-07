@@ -79,5 +79,5 @@ COPY --from=age /go/bin/age /go/bin/age-keygen /usr/local/bin/
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN npm install -g "cf@${CF_VERSION}" && npm cache clean --force
 
-# HOME はリポジトリの .home/(t.ps1 が渡す)
+# HOME はリポジトリの .home/(compose.yaml)
 WORKDIR /repo

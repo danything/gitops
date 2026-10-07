@@ -1,7 +1,8 @@
 # tools
 
-手元で使う運用のコマンドを **コンテナで動かす**(2026-10-06 から)。手元の Windows から WSL コンテナ(`wslc`)で
-[t.ps1](t.ps1) を通して使う。版は [Dockerfile](Dockerfile) で固定し、Renovate が上げる。
+手元で使う運用のコマンドを **コンテナで動かす**(2026-10-06 から)。手元の Windows から WSL コンテナで、
+[t.ps1](t.ps1) を通して使う(中身は [../compose.yaml](../compose.yaml) の `tools` を `wslc-compose run`)。
+版は [Dockerfile](Dockerfile) で固定し、Renovate が上げる。
 Linux 用の `tools/t`(docker compose)は、手元が Windows に移ったので消した(2026-10-07)。
 
 ```powershell
@@ -23,7 +24,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 
 ## 仕組み
 
-- [Dockerfile](Dockerfile) のイメージを `wslc run` で動かす。リポジトリは `/repo` に置く
+- [../compose.yaml](../compose.yaml) の `tools` を `wslc-compose run` で動かす(`winget` で入る wslc-compose)。リポジトリは `/repo` に置く
 - **ログインと鍵はリポジトリの `.home/` に置く**(コンテナの中の `HOME`。`.gitignore` 済み)。手元のホームは汚さない。
   cf のログイン(`.config/cloudflare`)、sops の age 鍵(`.config/sops/age/keys.txt`)、infisical のログイン
   (`.infisical` と `infisical-keyring`)、pulumi(`.pulumi`)、kubectl / talosctl(`.kube` / `.talos`)がここに入る。

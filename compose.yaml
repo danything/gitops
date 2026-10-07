@@ -1,0 +1,15 @@
+# 手元の運用のコマンドをコンテナで動かす(tools/README.md)。直接ではなく tools/t.ps1 から使う(wslc-compose)
+services:
+  tools:
+    build: tools
+    image: gitops-tools:latest
+    # wslc は host ネットワークに対応していない。ブラウザのログインは t.ps1 が中継する(tools/README.md)。
+    # uid は指定しない(Windows のファイルに持ち主の uid は無い)
+    working_dir: /repo
+    environment:
+      # **ログインと鍵はリポジトリの .home/ に置く**(.gitignore 済み)。手元のホームは汚さない
+      - HOME=/repo/.home
+      # 手元で設定しているときだけ渡す
+      - INFISICAL_PROFILE
+    volumes:
+      - .:/repo
