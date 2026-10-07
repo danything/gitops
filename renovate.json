@@ -17,10 +17,10 @@
     ],
     "customManagers": [
         {
-            "description": "手元のコマンドのイメージ(tools/Dockerfile)。`# renovate: datasource=… depName=…` の次の行の `ARG 名前=版` を見る。",
+            "description": "手元のコマンドのイメージ(tools/Dockerfile)。`# renovate: datasource=… depName=…` の次の行の `ARG 名前=版` を見る。**managerFilePatterns の正規表現は `/…/` で囲む。** 囲まないと glob と読まれて何にも当たらない (2026-10-07 まで customManagers は 3 つとも空振りで、kubectl・talosctl・Talos・chart の版は追われていなかった)。",
             "customType": "regex",
             "managerFilePatterns": [
-                "^tools/Dockerfile$"
+                "/^tools/Dockerfile$/"
             ],
             "matchStrings": [
                 "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*ARG\\s+[A-Z_]+=(?<currentValue>\\S+)"
@@ -30,21 +30,21 @@
             "description": "`# renovate: datasource=… depName=… [registryUrl=…]` の次の行にある version を見る。Talos の版も chart の版も、文章やコメントの中に散らばると Renovate が追えないので、`version.yaml` という 1 ファイルに出す約束にしてある。",
             "customType": "regex",
             "managerFilePatterns": [
-                "^talos/versions\\.yaml$",
-                "^bootstrap/[^/]+/version\\.yaml$"
+                "/^talos/versions\\.yaml$/",
+                "/^bootstrap/[^/]+/version\\.yaml$/"
             ],
             "matchStrings": [
                 "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
             ]
         },
         {
-            "description": "NetBird の Terraform provider の版 (pulumi/sdks/generate.sh の VERSION)。PR は版の行を変えるだけで SDK は作り直さないので、CI (pulumi.yml) の照合で落ちる。その枝で generate.sh を流してから入れる。",
+            "description": "NetBird の Terraform provider の版 (pulumi/sdks/generate.sh の VERSION)。版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。PR は版の行を変えるだけで SDK は作り直さないので、CI (pulumi.yml) の照合で落ちる。その枝で generate.sh を流してから入れる。",
             "customType": "regex",
             "managerFilePatterns": [
-                "^pulumi/sdks/generate\\.sh$"
+                "/^pulumi/sdks/generate\\.sh$/"
             ],
             "matchStrings": [
-                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s+registryUrl=(?<registryUrl>\\S+)\\s*\\nVERSION=(?<currentValue>\\S+)"
+                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\nVERSION=(?<currentValue>\\S+)"
             ]
         }
     ],

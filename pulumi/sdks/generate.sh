@@ -11,7 +11,7 @@
 # ビルド (bun install のとき) にしか使わないので追わない
 set -eu
 
-# renovate: datasource=terraform-provider depName=netbirdio/netbird registryUrl=https://registry.opentofu.org
+# renovate: datasource=terraform-provider depName=netbirdio/netbird
 VERSION=0.0.10
 
 here=$(cd "$(dirname "$0")" && pwd)
