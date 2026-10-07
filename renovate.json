@@ -9,17 +9,18 @@
             "**/*.yaml"
         ]
     },
-    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。",
+    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。 **pulumi/sdks/netbird も触らせない。** 生成物 (pulumi/sdks/generate.sh) で、中の package.json を上げても作り直すと戻る。typescript などが古いのは Pulumi の生成がわざと下限を書くためで、ビルドにしか使わない。provider の版は generate.sh の VERSION で追う (下の customManagers)。",
     "ignorePaths": [
         "bootstrap/argocd/helmchart.yaml",
-        "bootstrap/infisical/helmchart.yaml"
+        "bootstrap/infisical/helmchart.yaml",
+        "pulumi/sdks/netbird/**"
     ],
     "customManagers": [
         {
-            "description": "手元のコマンドのイメージ(tools/Dockerfile)。`# renovate: datasource=… depName=…` の次の行の `ARG 名前=版` を見る。",
+            "description": "手元のコマンドのイメージ(tools/Dockerfile)。`# renovate: datasource=… depName=…` の次の行の `ARG 名前=版` を見る。**managerFilePatterns の正規表現は `/…/` で囲む。** 囲まないと glob と読まれて何にも当たらない (2026-10-07 まで customManagers は 3 つとも空振りで、kubectl・talosctl・Talos・chart の版は追われていなかった)。",
             "customType": "regex",
             "managerFilePatterns": [
-                "^tools/Dockerfile$"
+                "/^tools/Dockerfile$/"
             ],
             "matchStrings": [
                 "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*ARG\\s+[A-Z_]+=(?<currentValue>\\S+)"
@@ -29,11 +30,21 @@
             "description": "`# renovate: datasource=… depName=… [registryUrl=…]` の次の行にある version を見る。Talos の版も chart の版も、文章やコメントの中に散らばると Renovate が追えないので、`version.yaml` という 1 ファイルに出す約束にしてある。",
             "customType": "regex",
             "managerFilePatterns": [
-                "^talos/versions\\.yaml$",
-                "^bootstrap/[^/]+/version\\.yaml$"
+                "/^talos/versions\\.yaml$/",
+                "/^bootstrap/[^/]+/version\\.yaml$/"
             ],
             "matchStrings": [
                 "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
+            ]
+        },
+        {
+            "description": "NetBird の Terraform provider の版 (pulumi/sdks/generate.sh の VERSION)。版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。PR は版の行を変えるだけで SDK は作り直さないので、CI (pulumi.yml) の照合で落ちる。その枝で generate.sh を流してから入れる。",
+            "customType": "regex",
+            "managerFilePatterns": [
+                "/^pulumi/sdks/generate\\.sh$/"
+            ],
+            "matchStrings": [
+                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\nVERSION=(?<currentValue>\\S+)"
             ]
         }
     ],
@@ -104,6 +115,21 @@
             ],
             "groupName": "adguardhome",
             "groupSlug": "adguardhome",
+            "automerge": false,
+            "addLabels": [
+                "needs-review"
+            ]
+        },
+        {
+            "description": "NetBird の provider は自動マージしない。SDK を作り直す手が要る (customManagers の generate.sh)。",
+            "matchDatasources": [
+                "terraform-provider"
+            ],
+            "matchPackageNames": [
+                "netbirdio/netbird"
+            ],
+            "groupName": "netbird provider",
+            "groupSlug": "netbird-provider",
             "automerge": false,
             "addLabels": [
                 "needs-review"
