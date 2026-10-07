@@ -22,7 +22,7 @@ talos:
   # ので、installer イメージを docker で追う形では Renovate が版を引けなかった (2026-10-07 まで)。
   # 手元の talosctl (tools/Dockerfile) と同じ depName なので、同じ PR で上がる。
   # renovate: datasource=github-releases depName=siderolabs/talos
-  version: v1.14.0
+  version: v1.14.2
   # 拡張(intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ ID。
   # 中身を変えたら Image Factory で作り直して、この値を差し替える。
   schematic: 32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
@@ -34,7 +34,7 @@ kubernetes:
   # 1.36 → 1.37 の飛び級をするところだった。
   # いまの k3s は v1.36.2+k3s1。
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
-  version: v1.36.2
+  version: v1.37.1
 
 metricsServer:
   # Talos には metrics-server が無い。k3s では組み込みのアドオンとして動いていて、
@@ -59,4 +59,4 @@ gatewayAPI:
   # いまクラスタにあるものの上位集合なので、これで失うものは無い(2026-09-08 に中身を確認)。
   #
   # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-  version: v1.6.1
+  version: v1.6.3
