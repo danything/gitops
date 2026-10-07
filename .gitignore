@@ -6,8 +6,13 @@ talos/registries.plain.yaml
 
 # pulumi/ の道具(bun.lock で固定してある)
 pulumi/node_modules/
-# pulumi install が作る SDK (pulumi/Pulumi.yaml の packages)
-pulumi/sdks/
+# pulumi install が作る SDK (pulumi/Pulumi.yaml の packages)。**package.json だけは git に入れる。**
+# package.json は SDK を file:sdks/netbird で指していて、bun.lock を作るには SDK の package.json が要る。
+# これが無いと、SDK を作れない Renovate が bun.lock を更新できず、@pulumi/* の PR が毎回止まる(#304)
+pulumi/sdks/*
+!pulumi/sdks/netbird/
+pulumi/sdks/netbird/*
+!pulumi/sdks/netbird/package.json
 
 # cf(Cloudflare の CLI)が動かした場所に作るキャッシュ
 .cloudflare/
