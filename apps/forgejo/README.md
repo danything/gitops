@@ -101,7 +101,75 @@
 
 **ワークフローの自動トークン(`GITHUB_TOKEN`)ではパッケージに書けない**(Forgejo 15。`services/packages/perm.go` に
 `TODO: ActionUser permission check` とあり、Actions のユーザーは組織のメンバー扱いにならない)。
-組織の Actions のシークレット `REGISTRY_TOKEN`(info の `write:package` だけのトークン)で `docker login` する。
+**秘密は置かない。** 下の承認済みインテグレーションで、ジョブの JWT を bot ユーザー `forgejo-bot` として通し、
+`docker login fj.doany.io -u forgejo-bot`(パスワードに JWT)する。前は組織の Actions のシークレット `REGISTRY_TOKEN`
+(forgejo-bot の `write:package` だけのトークン)だった。
+
+## 承認済みインテグレーション(Authorized Integrations、Forgejo 16)
+
+CI から Forgejo の API・git・レジストリに**長く生きる秘密なしで**入る仕組み。外から来た JWT のクレームを、ユーザーごとに
+登録したルールで確かめ、合えばそのユーザーとして(登録したスコープとリポジトリの範囲で)通す。
+[ドキュメント](https://forgejo.org/docs/latest/user/api/authorized-integrations/)。設定(app.ini)は要らない
+(`[authorized_integration]` の既定で外の発行者に取りに行ける)。
+
+- **誰として動くか**: インテグレーションの持ち主。push・PR・マージの予約も持ち主がしたことになるので、
+  付属の actions トークンと違って**ワークフローも起きる**(`services/actions/notifier_helper.go` は `IsActions()` のときだけ止める)
+- **渡し方**: API は `Authorization: Bearer <JWT>`(`token <JWT>` でも通る)。git とレジストリは Basic のパスワードに JWT
+  (ユーザー名は見ない。`routers/web/web.go` の `buildGitAuthGroup`、`routers/api/packages/api.go` の `ContainerRoutes`)
+- **JWT の寿命**: Forgejo Actions のものは 1 時間(`[actions].ID_TOKEN_EXPIRATION_TIME`)。レジストリのトークンもそれに縛られる
+- **リポジトリを絞ると**、スコープは repository / issue しか選べず、管理者の権限は効かない(`services/authz/access_token.go`)。
+  レジストリ(package)と組織の操作は「すべて」で作る
+- **Forgejo Actions のジョブは `enable-openid-connect: true`** で JWT を取る。fork からの PR では取れない。
+  再利用ワークフロー(`uses: ./...`)のジョブは、**呼ばれる側**のファイルの設定が効き、JWT の `workflow` は**呼ぶ側**のファイル名になる
+
+| 持ち主 | 名前 | 発行者 | クレームのルール | 範囲・スコープ | aud の置き場 |
+| --- | --- | --- | --- | --- | --- |
+| forgejo-bot | doa-registry | Forgejo Actions | doa の todoroku・tamasagashi・worklog-cloud、`refs/heads/main`、`publish.yml` / `fetch-latest.yml`、push / workflow_dispatch / schedule | すべて・`write:package` | 組織 doa の変数 `REGISTRY_AUDIENCE` |
+| forgejo-bot | todoroku-deploy | Forgejo Actions | todoroku、`refs/heads/main`、`publish.yml`、push / workflow_dispatch | todoroku だけ・`write:repository` | todoroku の変数 `DEPLOY_AUDIENCE` |
+| yui | repo-config | GitHub Actions | GitHub の 5ym/repo-config、`refs/heads/main`、`forgejo-settings.yml`、push / schedule / workflow_dispatch | すべて・`write:organization` `write:repository` | GitHub の 5ym/repo-config の変数 `FORGEJO_AUDIENCE` |
+
+aud はインテグレーションを作ると決まる(`u:<ユーザー ID>:<UUID>`)。秘密ではないので変数に置く。
+
+**forgejo-bot は画面にログインできない**(`ENABLE_INTERNAL_SIGNIN: "false"`)ので、forgejo-bot のものは本番の CLI で作る。
+一覧・変更・削除の CLI と API は無い(16.0.5)。止めたいときは、forgejo-bot を `prohibit_login` にすると API と git は
+全部断られる(トークンも巻き込む)。消すのは DB の `authorized_integration`(と `authorized_integ_resource_repo`)の行。
+
+```shell
+# doa-registry(リポジトリ ID は 1 = todoroku、3 = tamasagashi、4 = worklog-cloud。組織 doa の ID は 2)
+kubectl -n forgejo exec deploy/forgejo-web -c forgejo -- forgejo admin user create-authorized-integration \
+  --username forgejo-bot --name doa-registry \
+  --description "doa の main の publish がイメージを push する" \
+  --issuer urn:forgejo:authorized-integrations:actions \
+  --claim-eq repository_owner_id=2 --claim-eq ref=refs/heads/main \
+  --claim-in repository_id=1,3,4 --claim-in workflow=publish.yml,fetch-latest.yml \
+  --claim-in event_name=push,workflow_dispatch,schedule \
+  --scope write:package --repo all
+
+# todoroku-deploy
+kubectl -n forgejo exec deploy/forgejo-web -c forgejo -- forgejo admin user create-authorized-integration \
+  --username forgejo-bot --name todoroku-deploy \
+  --description "todoroku の publish が deploy-bump を push して PR を作り、マージを予約する" \
+  --issuer urn:forgejo:authorized-integrations:actions \
+  --claim-eq repository_id=1 --claim-eq ref=refs/heads/main --claim-eq workflow=publish.yml \
+  --claim-in event_name=push,workflow_dispatch \
+  --scope write:repository --repo doa/todoroku
+```
+
+出力の `audience` を変数に入れる(`POST /api/v1/orgs/doa/actions/variables/REGISTRY_AUDIENCE`、
+`POST /api/v1/repos/doa/todoroku/actions/variables/DEPLOY_AUDIENCE`。本文は `{"value": "<audience>"}`)。
+yui のもの(repo-config)は画面(設定 → 承認済みインテグレーション → 汎用 JWT)で作る。発行者は
+`https://token.actions.githubusercontent.com`、範囲は「すべて」、スコープは organization と repository を「読み取りと書き込み」。
+ルール(GitHub の 5ym/repo-config の ID は 1315588536、5ym は 13718335。クレームの値は文字列):
+
+```json
+{"rules": [
+  {"claim": "repository_id", "compare": "eq", "value": "1315588536"},
+  {"claim": "repository_owner_id", "compare": "eq", "value": "13718335"},
+  {"claim": "ref", "compare": "eq", "value": "refs/heads/main"},
+  {"claim": "workflow_ref", "compare": "eq", "value": "5ym/repo-config/.github/workflows/forgejo-settings.yml@refs/heads/main"},
+  {"claim": "event_name", "compare": "in", "values": ["push", "schedule", "workflow_dispatch"]}
+]}
+```
 
 ## ノードからイメージを取る
 
