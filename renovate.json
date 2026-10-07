@@ -9,11 +9,10 @@
             "**/*.yaml"
         ]
     },
-    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。**pulumi/sdks/ も触らせない。** git に入れてある pulumi/sdks/netbird/package.json は pulumi install が作る生成物 (bun.lock を作るためだけに置いている。pulumi/README.md) で、中の依存の版は Pulumi が決める。Renovate が上げると作り直したものと食い違い、CI が落ちる (2026-10-07 の #310・#311)。",
+    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。",
     "ignorePaths": [
         "bootstrap/argocd/helmchart.yaml",
-        "bootstrap/infisical/helmchart.yaml",
-        "pulumi/sdks/**"
+        "bootstrap/infisical/helmchart.yaml"
     ],
     "customManagers": [
         {
@@ -38,7 +37,7 @@
             ]
         },
         {
-            "description": "Pulumi が Terraform の provider を包んで使う版 (pulumi/Pulumi.yaml の packages)。2 つある: 包む側のプラグイン (`source: terraform-provider` の次の `version:`) と、包まれる provider (`parameters:` の 2 つ目)。SDK は CI の `pulumi install` が毎回作るが、git に入れてある SDK の package.json (pulumi/sdks/netbird/package.json) は下の 2 つの版 (provider の版は base64 にした値でも) を含むので Renovate では書き換えられない。CI が食い違いで落ちるので、手元で pulumi install してコミットする (pulumi/README.md)。provider の版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。",
+            "description": "Pulumi が Terraform の provider を包んで使う版 (pulumi/Pulumi.yaml の packages)。2 つある: 包む側のプラグイン (`source: terraform-provider` の次の `version:`) と、包まれる provider (`parameters:` の 2 つ目)。SDK は CI と手元の `pulumi install` が毎回作る。Renovate の枝では下の packageRules の postUpgradeTasks が pulumi install して bun.lock を作る (pulumi/README.md)。provider の版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^pulumi/Pulumi\\.yaml$/"
@@ -63,6 +62,24 @@
         }
     ],
     "packageRules": [
+        {
+            "description": "pulumi/ の bun.lock は Renovate に作らせず、postUpgradeTasks の pulumi install で作る。package.json が NetBird の SDK を file:sdks/netbird で指していて、SDK は pulumi install でしか作れないので、Renovate 自身の bun install は落ちる (#304)。renovate-post-upgrade.sh が Pulumi の CLI と bun を入れて pulumi install し、作り直した bun.lock を同じ枝にコミットさせる。実行の許可は自前の Renovate (5ym/repo-config の renovate.yml) の RENOVATE_ALLOWED_COMMANDS。Pulumi.yaml の packages の版 (customManagers) を上げたときも同じく作り直す。",
+            "matchFileNames": [
+                "pulumi/package.json",
+                "pulumi/Pulumi.yaml"
+            ],
+            "skipArtifactsUpdate": true,
+            "postUpgradeTasks": {
+                "commands": [
+                    "bash pulumi/renovate-post-upgrade.sh"
+                ],
+                "fileFilters": [
+                    "pulumi/bun.lock",
+                    "pulumi/package.json"
+                ],
+                "executionMode": "branch"
+            }
+        },
         {
             "description": "Mattermost の DB。Mattermost が挙げているのは下限 (PostgreSQL 14.0+) だけで、18 を検証したとは書いていない。加えて PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れるので、タグを差し替えるだけでは上がらない (dump と restore が要る)。17 のサポートは 2029-11 まであるので、Mattermost が 18 を明記するまで 17 の線に留める。",
             "matchDatasources": [
