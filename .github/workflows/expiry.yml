@@ -55,21 +55,19 @@ jobs:
 
           add() { # $1 名前 $2 期限 (ISO 8601)
             local exp; exp=$(date -u -d "$2" +%s)
-            printf '%s\t%s\t%s\n' "$(( (exp - now) / 86400 ))" "$1" "$(date -u -d "$2" +%Y-%m-%d)" >> "$items"
+            # 切り捨てを負の側にも効かせる (切れて 1 日未満を「あと 0 日」にしない)
+            local d=$(( exp - now )); d=$(( d < 0 ? -((-d + 86399) / 86400) : d / 86400 ))
+            printf '%s\t%s\t%s\n' "$d" "$1" "$(date -u -d "$2" +%Y-%m-%d)" >> "$items"
           }
 
-          # NetBird: この鍵のサービスユーザーのトークン。サービスユーザーは users/current も 403 なので、
-          # 一覧の全員について読んでみて、読めた (= 自分の) ものを使う。1 人も読めなければ落とす
+          # NetBird: この鍵のサービスユーザー (gitops-pulumi-<preview|apply>) のトークン。名前で選ぶ:
+          # サービスユーザーは users/current が 403 で自分を引けず、apply 用 (Admin) は他人のトークンも読めて二重に数えてしまう
           nb() { curl -fsS -H "Authorization: Token $NB_PAT" -H "Accept: application/json" "https://nb.doany.io/api/$1"; }
-          got=0
-          while IFS=$'\t' read -r u uname; do
-            tokens=$(nb "users/$u/tokens" 2>/dev/null) || continue
-            got=1
-            while IFS=$'\t' read -r tname exp; do
-              add "NetBird $uname / $tname" "$exp"
-            done < <(jq -r '.[] | [.name, .expiration_date] | @tsv' <<< "$tokens")
-          done < <(nb "users?service_user=true" | jq -r '.[] | [.id, .name] | @tsv')
-          [ "$got" = 1 ] || { echo "NetBird: どのサービスユーザーのトークンも読めない" >&2; exit 1; }
+          u=$(nb "users?service_user=true" | jq -r --arg n "gitops-pulumi-$KEY" '.[] | select(.name == $n) | .id')
+          [ -n "$u" ] || { echo "NetBird: サービスユーザー gitops-pulumi-$KEY が無い" >&2; exit 1; }
+          while IFS=$'\t' read -r tname exp; do
+            add "NetBird gitops-pulumi-$KEY / $tname" "$exp"
+          done < <(nb "users/$u/tokens" | jq -r '.[] | select(.expiration_date) | [.name, .expiration_date] | @tsv')
 
           # Cloudflare: この鍵自身 (期限が無ければ null)。アカウントのトークンは accounts/<ID>/tokens/verify でしか確かめられない
           cf() { curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/$1/tokens/verify"; }
@@ -85,9 +83,20 @@ jobs:
           if [ -z "$due" ]; then echo "期限が近いものは無い"; exit 0; fi
 
           lines=$(printf '%s\n' "$due" | awk -F'\t' '{ s = ($1 < 0) ? "切れている" : "あと " $1 " 日"; printf "- **%s**: %s (%s)\n", $2, $3, s }')
-          text=$(printf ':key: 鍵の期限 (%s 日以内)\n\n%s\n\n作り直して差し替える。手順は gitops の pulumi/README.md' "$WARN_DAYS" "$lines")
-          [ "$REPORT_ALL" = true ] && text=$(printf ':key: 鍵の期限 (%s 用、全部)\n\n%s' "$KEY" "$lines")
+          if [ "$REPORT_ALL" = true ]; then
+            text=$(printf ':key: 鍵の期限 (%s 用、全部)\n\n%s' "$KEY" "$lines")
+          else
+            text=$(printf ':key: 鍵の期限 (%s 用、%s 日以内)\n\n%s\n\n作り直して差し替える。手順は gitops の pulumi/README.md' "$KEY" "$WARN_DAYS" "$lines")
+          fi
           if [ "$DRY_RUN" = true ]; then
             echo "--- 投稿する内容 (PR なので投稿しない)"; echo "$text"; exit 0
           fi
           jq -n --arg text "$text" '{text: $text}' | curl -fsS -X POST -H "Content-Type: application/json" --data-binary @- "$WEBHOOK"
+
+      # 確かめられなかったことも知らせる (鍵が切れて 401 になったときなど。黙って落ちると気づかない)
+      - if: failure() && github.event_name != 'pull_request'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg text ":warning: 鍵の期限を確かめられなかった ($KEY 用)。鍵が切れているかもしれない: $RUN_URL" '{text: $text}' |
+            curl -fsS -X POST -H "Content-Type: application/json" --data-binary @- "$WEBHOOK"
