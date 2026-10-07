@@ -1,0 +1,9 @@
+# PSA は restricted で足りる(busybox の httpd が静的なファイルを 1 つ配るだけ。root も書き込みも無い)。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mta-sts
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
