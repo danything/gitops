@@ -14,6 +14,8 @@ import "./entra.ts";
 import "./notifications.ts";
 // doany.io の DNS(ExternalDNS が作らないもの)とゾーンの設定(dns.ts)
 import "./dns.ts";
+// NetBird の DNS・ネットワーク・ルート・ポリシー(netbird.ts)
+import "./netbird.ts";
 
 // アカウント ID は git に置かない(endpoint と同じ扱い。apps/k8up/README.md)。CI は secrets から渡す
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
