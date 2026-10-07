@@ -37,6 +37,22 @@ fish なら `abbr -a t ~/dev/gitops/tools/t` などで短くしておくと楽�
 - Dockerfile を変えると、次の `tools/t` でイメージを作り直す(変わっていなければキャッシュで一瞬)
 - パイプやリダイレクトのときは TTY を付けない(`tools/t` が見分ける)
 
+## Windows(wslc)
+
+Docker の代わりに WSL コンテナ(`wslc`)で動かす [t.ps1](t.ps1) を使う。イメージと `.home/` は同じ。
+
+```powershell
+tools/t.ps1 infisical login --domain https://il.doany.io/api
+tools/t.ps1 infisical secrets --env prod --path /matrix/matrix
+```
+
+- **wslc は host ネットワークに対応していない。** ブラウザのログインは手元の `localhost:<ポート>` に結果を送ってくるので、
+  `infisical login` のときだけ t.ps1 が同じポートで待ち受けて、`wslc exec` の curl でコンテナの中の CLI に渡す。
+  `cf auth login` には対応していない
+- uid は指定しない(Windows のファイルに持ち主の uid は無い)。`.home/` は本人だけが読める ACL にする
+- NetBird の exit ノード越しだと `*.doany.io` を外向きの IPv4 で引いたときに届かないので、NetBird の DNS ゾーンで
+  内部の 10.0.0.2 に向けている(`nb.doany.io` だけは例外)
+
 ## 版
 
 `# renovate: datasource=… depName=…` の次の `ARG` を Renovate が上げる([../renovate.json](../renovate.json))。
