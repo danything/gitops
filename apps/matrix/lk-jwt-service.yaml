@@ -37,7 +37,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: lk-jwt-service
-          image: ghcr.io/element-hq/lk-jwt-service:0.7.0
+          image: ghcr.io/element-hq/lk-jwt-service:0.8.0
           env:
             - name: LIVEKIT_URL
               value: wss://lk.doany.io
