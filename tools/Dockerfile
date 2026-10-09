@@ -8,7 +8,7 @@ FROM golang:1.27-trixie AS age
 ARG AGE_VERSION=v1.3.2
 RUN CGO_ENABLED=0 go install "filippo.io/age/cmd/...@${AGE_VERSION}"
 
-FROM node:26.10.0-trixie-slim
+FROM node:26.11.1-trixie-slim
 ARG TARGETARCH
 
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
