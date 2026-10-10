@@ -46,7 +46,7 @@ spec:
               mountPath: /etc/nginx/tls
               readOnly: true
         - name: 3proxy
-          image: ghcr.io/3proxy/3proxy:1.0.0
+          image: ghcr.io/3proxy/3proxy:1.0.1
           env:
             - name: TZ
               value: Asia/Tokyo
