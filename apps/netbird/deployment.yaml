@@ -128,7 +128,7 @@ spec:
         # 自前で焼かずに済む(アプリ側の 5 つと同じ手)。
         # 読み取り専用でマウントする。このコンテナが DB を書き換えることは無い。
         - name: backup
-          image: oven/bun:1.4.2-slim
+          image: oven/bun:1.4.3-slim
           command: ["sleep", "infinity"]
           resources:
             requests:

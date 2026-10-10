@@ -1,7 +1,7 @@
 # 手元で使う運用のコマンド一式(tools/README.md)。手元には Docker だけを入れ、版はここで固定する。
 # 版は Renovate が上げる(`# renovate:` の次の ARG。renovate.json の customManagers)。
 # kubectl と talosctl はノードの版と揃えたいので、Renovate では talos の群(自動マージしない)。
-FROM oven/bun:1.4.2 AS bun
+FROM oven/bun:1.4.3 AS bun
 
 FROM golang:1.27-trixie AS age
 # renovate: datasource=github-releases depName=FiloSottile/age
