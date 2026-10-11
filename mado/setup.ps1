@@ -47,9 +47,15 @@ if (-not $Stage) {
     icacls $tmp /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
     try {
         # 動いている mado の版 (状態の口。v0.3.0 から)。自分で上げてこちらより新しければ、exe は置き換えない
+        # mado が止まっていて聞けないときは $version を入れる (古いこともある。動き出せば自分でまた上げる)
+        function ConvertTo-Version([string]$v) {
+            try { [version](($v -replace '^v', '') -replace '[-+].*$', '') } catch { $null }
+        }
         $running = $null
         try { $running = (Invoke-RestMethod http://127.0.0.1:8788/status -TimeoutSec 3).version } catch {}
-        $keep = $running -and ([version]($running.TrimStart('v')) -gt [version]($version.TrimStart('v')))
+        $a = ConvertTo-Version $running
+        $b = ConvertTo-Version $version
+        $keep = $a -and $b -and $a -gt $b
         if ($keep) {
             Write-Host "動いている mado ($running) のほうが新しいので、exe はそのまま ($version は入れない)"
         } else {
@@ -91,12 +97,13 @@ try {
         Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         for ($i = 0; $i -lt 30 -and (Get-Process mado -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
     }
-    # 落ちたら (自動更新で入れ替えたときも) 2 秒後に起こし直すループ。タスクはこれを動かす
+    # 落ちたら (自動更新で入れ替えたときも) 2 秒ほどあとに起こし直すループ。タスクはこれを動かす
     Set-Content -Encoding ascii -Path (Join-Path $Stage 'run.cmd') -Value @(
         '@echo off'
         ':loop'
         '"%~dp0mado.exe" --config "%~dp0mado.json" >> "%~dp0mado.log" 2>&1'
-        'timeout /t 2 /nobreak >nul'
+        # timeout は標準入力が無い (SYSTEM のタスク) と待たずに戻ることがあるので ping で待つ
+        'ping -n 3 127.0.0.1 >nul'
         'goto loop'
     )
     # exe を落としていない (動いているほうが新しい) ときは、exe は今のまま
