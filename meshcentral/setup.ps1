@@ -101,9 +101,15 @@ try {
     if (Get-Service MeshCentral -ErrorAction SilentlyContinue) {
         Restart-Service MeshCentral
     } else {
+        # 1 回目は足りないモジュール (node-windows など) を入れたところで「Restart MeshCentral」と言って終わり、
+        # サービスは登録しない (2026-10-11)。登録されるまで流し直す
         Push-Location $dir
-        try { node node_modules/meshcentral --install; if ($LASTEXITCODE) { throw "meshcentral --install ($LASTEXITCODE)" } }
-        finally { Pop-Location }
+        try {
+            for ($i = 0; $i -lt 3 -and -not (Get-Service MeshCentral -ErrorAction SilentlyContinue); $i++) {
+                node node_modules/meshcentral --install
+                if ($LASTEXITCODE) { throw "meshcentral --install ($LASTEXITCODE)" }
+            }
+        } finally { Pop-Location }
     }
     Get-Service MeshCentral | Format-Table -AutoSize
 } catch {
