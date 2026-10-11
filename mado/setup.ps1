@@ -7,9 +7,10 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
-# 入れる版 (MSI)。上げるときはここを変えて流し直す (Renovate が上げる)
+# 初めて入れる版 (MSI)。あとは mado が自分で上げる (署名を確かめた MSI を入れる。v0.5.0 から)。
+# 動いているほうが新しければ MSI は入れない (古い版で上書きしない。MSI もそれを拒む)
 # renovate: datasource=github-releases depName=danything/mado
-$version = 'v0.4.0'
+$version = 'v0.5.0'
 # 設定・client secret・証明書・ログの置き場。MSI が SYSTEM と Administrators だけが読めるように作る
 $data = Join-Path $env:ProgramData 'mado'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
@@ -45,21 +46,36 @@ if (-not $Stage) {
     New-Item -ItemType Directory $tmp | Out-Null
     icacls $tmp /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
     try {
-        # リリースの MSI と SHA-256。照らして合わなければ止める
-        gh release download $version --repo danything/mado --dir $tmp --pattern 'mado.msi' --pattern 'mado.msi.sha256'
-        if ($LASTEXITCODE) { throw "gh release download $version ($LASTEXITCODE)" }
-        $want = ((Get-Content "$tmp\mado.msi.sha256" | Select-String 'mado\.msi$') -split '\s+')[0].ToLower()
-        $got = (Get-FileHash "$tmp\mado.msi" -Algorithm SHA256).Hash.ToLower()
-        if ($want -ne $got) { throw "mado.msi の SHA-256 が合わない ($got / $want)" }
-        # 作ったのが danything/mado の release.yml であること (attest-build-provenance)。SHA-256 は MSI と同じリリースに載っているので、改ざんへの備えはこちら
-        gh attestation verify "$tmp\mado.msi" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
-        if ($LASTEXITCODE) { throw "mado.msi の出どころを確かめられない ($LASTEXITCODE)" }
+        # 動いている mado の版 (状態の口)。自分で上げてこちらより新しければ MSI は入れない (設定と秘密だけ置き直す)
+        function ConvertTo-Version([string]$v) {
+            try { [version](($v -replace '^v', '') -replace '[-+].*$', '') } catch { $null }
+        }
+        $running = $null
+        try { $running = (Invoke-RestMethod http://127.0.0.1:8788/status -TimeoutSec 3).version } catch {}
+        $a = ConvertTo-Version $running
+        $b = ConvertTo-Version $version
+        if ($a -and $b -and $a -gt $b) {
+            Write-Host "動いている mado ($running) のほうが新しいので、MSI はそのまま ($version は入れない)"
+        } else {
+            # リリースの MSI と SHA-256。照らして合わなければ止める
+            gh release download $version --repo danything/mado --dir $tmp --pattern 'mado.msi' --pattern 'mado.msi.sha256'
+            if ($LASTEXITCODE) { throw "gh release download $version ($LASTEXITCODE)" }
+            $want = ((Get-Content "$tmp\mado.msi.sha256" | Select-String 'mado\.msi$') -split '\s+')[0].ToLower()
+            $got = (Get-FileHash "$tmp\mado.msi" -Algorithm SHA256).Hash.ToLower()
+            if ($want -ne $got) { throw "mado.msi の SHA-256 が合わない ($got / $want)" }
+            # 作ったのが danything/mado の release.yml であること (attest-build-provenance)。SHA-256 は MSI と同じリリースに載っているので、改ざんへの備えはこちら
+            gh attestation verify "$tmp\mado.msi" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
+            if ($LASTEXITCODE) { throw "mado.msi の出どころを確かめられない ($LASTEXITCODE)" }
+        }
 
         [IO.File]::WriteAllText("$tmp\client-secret.txt", $secret)
         Copy-Item "$PSScriptRoot\mado.json" $tmp
         $p = Start-Process $pwsh -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass',
             '-File', "`"$PSCommandPath`"", '-Stage', "`"$tmp`""
         if ($p.ExitCode -ne 0) { throw "昇格した側が失敗した ($($p.ExitCode))" }
+        # タスクトレイ (サインイン時にも起動する。MSI が HKLM の Run に登録する)。今のサインインでも出しておく
+        $tray = Join-Path $env:ProgramFiles 'mado\mado-tray.exe'
+        if ((Test-Path $tray) -and -not (Get-Process mado-tray -ErrorAction SilentlyContinue)) { Start-Process $tray }
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force
     }
@@ -98,13 +114,16 @@ try {
     # --- MSI (サービス・ファイアウォール・ProgramData の権限)。新しい版なら古い版を外して入れ替える。同じ版ならそのまま ---
     # 受け渡しのフォルダは本人だけが読めるので、MSI を読む Windows Installer (SYSTEM) には読めない (1619 になる)。
     # SYSTEM と Administrators が読める ProgramData\mado に写してから入れる
-    $msi = Join-Path $data 'mado.msi'
-    Copy-Item (Join-Path $Stage 'mado.msi') $msi -Force
-    $msilog = Join-Path $env:TEMP "mado-msi-$(Get-Date -Format yyyyMMdd-HHmmss).log"
-    $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$msilog`""
-    Remove-Item -LiteralPath $msi -Force
-    # 3010 は「再起動が要る」で、mado には関係ない (ファイルの置き換えだけ)
-    if ($p.ExitCode -notin 0, 3010) { throw "msiexec ($($p.ExitCode))。ログ: $msilog" }
+    # 動いているほうが新しくて落としていなければ、MSI は飛ばす
+    if (Test-Path (Join-Path $Stage 'mado.msi')) {
+        $msi = Join-Path $data 'mado.msi'
+        Copy-Item (Join-Path $Stage 'mado.msi') $msi -Force
+        $msilog = Join-Path $env:TEMP "mado-msi-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+        $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$msilog`""
+        Remove-Item -LiteralPath $msi -Force
+        # 3010 は「再起動が要る」で、mado には関係ない (ファイルの置き換えだけ)
+        if ($p.ExitCode -notin 0, 3010) { throw "msiexec ($($p.ExitCode))。ログ: $msilog" }
+    }
 
     # 設定を読み直させる (MSI が起動したとき、設定がまだ古いこともある)
     Restart-Service mado
