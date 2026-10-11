@@ -59,16 +59,6 @@
             "datasourceTemplate": "github-releases",
             "depNameTemplate": "pulumi/pulumi-terraform-provider",
             "extractVersionTemplate": "^v(?<version>.+)$"
-        },
-        {
-            "description": "mado の版(mado/setup.ps1)。`# renovate: datasource=… depName=…` の次の行の `$version = '…'` を見る。初めて入れる版で、v0.5.0 から動いている mado は自分で上げる(署名を確かめた MSI)。",
-            "customType": "regex",
-            "managerFilePatterns": [
-                "/^mado/setup\\.ps1$/"
-            ],
-            "matchStrings": [
-                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*\\$version\\s*=\\s*'(?<currentValue>[^']+)'"
-            ]
         }
     ],
     "packageRules": [

@@ -7,10 +7,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
-# 初めて入れる版 (MSI)。あとは mado が自分で上げる (署名を確かめた MSI を入れる。v0.5.0 から)。
+# 入れる版 (MSI) は、流したときの最新のリリース (版は固定しない)。あとは mado が自分で上げる (署名を確かめた MSI を入れる。v0.5.0 から)。
 # 動いているほうが新しければ MSI は入れない (古い版で上書きしない。MSI もそれを拒む)
-# renovate: datasource=github-releases depName=danything/mado
-$version = 'v0.5.6'
+$version = $null
 # 設定・client secret・証明書・ログの置き場。MSI が SYSTEM と Administrators だけが読めるように作る
 $data = Join-Path $env:ProgramData 'mado'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
@@ -50,6 +49,9 @@ if (-not $Stage) {
         function ConvertTo-Version([string]$v) {
             try { [version](($v -replace '^v', '') -replace '[-+].*$', '') } catch { $null }
         }
+        $version = gh release view --repo danything/mado --json tagName --jq .tagName
+        if ($LASTEXITCODE -or -not $version) { throw "gh release view: danything/mado の最新のリリースが分からない ($LASTEXITCODE)" }
+        Write-Host "最新のリリース: $version"
         $running = $null
         try { $running = (Invoke-RestMethod http://127.0.0.1:8788/status -TimeoutSec 3).version } catch {}
         $a = ConvertTo-Version $running
