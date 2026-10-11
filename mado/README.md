@@ -11,13 +11,13 @@ routing peer も `main` にあるので、`main` が落ちると入れず、JCOM
 | | |
 | --- | --- |
 | 中身 | ブラウザの中の IronRDP(WASM)が RDP を話し、mado は Entra の OIDC でのログインの確認と、ブラウザ ↔ この PC の 3389 の中継だけ。Windows のパスワードは mado に届かない |
-| 動かし方 | `C:\mado\mado.exe`(+ `mado.json`、`client-secret.txt`、`data\`)をタスク スケジューラのタスク `mado` で「起動時に SYSTEM で」。落ちたら 1 分ごとに起こし直す。出力は `C:\mado\mado.log` |
+| 動かし方 | `C:\mado\`(`mado.exe`、`mado.json`、`client-secret.txt`、`run.cmd`、`data\`)。タスク スケジューラのタスク `mado` が「起動時に SYSTEM で」`run.cmd` を動かし、`run.cmd` が mado を起こし直し続ける(落ちたときも、自動更新で入れ替えたときも)。出力は `C:\mado\mado.log`。この PC の中から `http://127.0.0.1:8788/status` で版・つないでいる数・証明書の残り日数・更新の有無が見られる |
 | 名前 | `md.doany.io` の A / AAAA を JCOM の固定の IP(`61.21.173.41`、PC に足した `2405:1201:5201:3a00::2`)に([pulumi/dns.ts](../pulumi/dns.ts))。Cloudflare も `main` の Gateway も通さない |
 | ルーター | J:COM のアプリで、この PC(OD00)を 10.10.0.2 に予約し、TCP 80 / 443 を転送する。IPv6 はルーターが止めないので設定は要らない([docs/router.md](../docs/router.md)) |
 | 証明書 | mado が Let's Encrypt から自分で取る(80 で HTTP-01)。30 日を切ったら取り直す |
 | ログイン | Entra の共用のアプリ登録(戻り先 `https://md.doany.io/callback` は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れない(ほかのアプリと共通) |
 | 設定 | [mado.json](mado.json)。`targets` がつなぐ先(画面で選ぶ。今はこの PC だけ。10.0 側の PC は、この PC の Wi-Fi がつながっているときだけ届く)。秘密は書かない(client secret は `setup.ps1` が Infisical から取り出して `client-secret.txt` に置く)。`required_role` の `admin` はほかのアプリと共通([docs/entra.md](../docs/entra.md)) |
-| 版 | `setup.ps1` の `$version`。Renovate が上げる。**上がっても PC には自動では入らない**(`setup.ps1` を流し直す) |
+| 版 | **mado が自分で上げる**(6 時間ごとに GitHub のリリースを見て、Ed25519 の署名を確かめ、誰もつないでいないときに入れ替える。v0.3.0 から)。`setup.ps1` の `$version` は初めて入れる版で、Renovate が上げる。動いているほうが新しければ、`setup.ps1` は exe を置き換えない |
 
 ## 入れ方・版を上げる
 
