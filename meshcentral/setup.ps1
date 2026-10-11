@@ -11,6 +11,8 @@ $pwsh = (Get-Command pwsh).Source
 # 先に出ることがある。1.2.6 はタグだけで npm に無かった。2026-10-11)
 $version = '1.2.5'
 $dir = 'C:\meshcentral'
+# サービスの名前 (表示名は MeshCentral。Get-Service は名前で見つからないと表示名でも探すが、名前で書く)
+$svc = 'meshcentral.exe'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
 $ipv6 = '2405:1201:5201:3a00::2'
 
@@ -98,20 +100,21 @@ try {
     powercfg /change hibernate-timeout-ac 0
 
     # サービス (MeshCentral が node-windows で登録する)。入っていれば設定を読み直させる
-    if (Get-Service MeshCentral -ErrorAction SilentlyContinue) {
-        Restart-Service MeshCentral
+    if (Get-Service $svc -ErrorAction SilentlyContinue) {
+        Restart-Service $svc
     } else {
         # 1 回目は足りないモジュール (node-windows など) を入れたところで「Restart MeshCentral」と言って終わり、
         # サービスは登録しない (2026-10-11)。登録されるまで流し直す
         Push-Location $dir
         try {
-            for ($i = 0; $i -lt 3 -and -not (Get-Service MeshCentral -ErrorAction SilentlyContinue); $i++) {
+            for ($i = 0; $i -lt 3 -and -not (Get-Service $svc -ErrorAction SilentlyContinue); $i++) {
                 node node_modules/meshcentral --install
                 if ($LASTEXITCODE) { throw "meshcentral --install ($LASTEXITCODE)" }
             }
         } finally { Pop-Location }
+        if (-not (Get-Service $svc -ErrorAction SilentlyContinue)) { throw "meshcentral --install を流してもサービス $svc が登録されない" }
     }
-    Get-Service MeshCentral | Format-Table -AutoSize
+    Get-Service $svc | Format-Table -AutoSize
 } catch {
     Write-Host $_ -ForegroundColor Red
     Read-Host 'Enter で閉じる'
