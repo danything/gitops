@@ -1,0 +1,11 @@
+{
+	"host": "md.doany.io",
+	"acme": { "email": "info@doany.io" },
+	"oidc": {
+		"issuer": "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0",
+		"client_id": "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e",
+		"client_secret_file": "client-secret.txt",
+		"required_role": "admin"
+	},
+	"targets": [{ "name": "OD00(この PC)", "host": "127.0.0.1" }]
+}

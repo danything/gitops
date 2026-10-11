@@ -8,7 +8,7 @@ $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
 # renovate: datasource=github-releases depName=danything/mado
-$version = 'v0.1.0'
+$version = 'v0.2.0'
 $dir = 'C:\mado'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
 $ipv6 = '2405:1201:5201:3a00::2'
@@ -55,7 +55,7 @@ if (-not $Stage) {
         if ($LASTEXITCODE) { throw "mado.exe の出どころを確かめられない ($LASTEXITCODE)" }
 
         [IO.File]::WriteAllText("$tmp\client-secret.txt", $secret)
-        Copy-Item "$PSScriptRoot\mado.toml" $tmp
+        Copy-Item "$PSScriptRoot\mado.json" $tmp
         $p = Start-Process $pwsh -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass',
             '-File', "`"$PSCommandPath`"", '-Stage', "`"$tmp`""
         if ($p.ExitCode -ne 0) { throw "昇格した側が失敗した ($($p.ExitCode))" }
@@ -79,10 +79,12 @@ try {
         Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force
         Start-Sleep -Seconds 1
     }
-    foreach ($f in 'mado.exe', 'mado.toml', 'client-secret.txt') {
+    foreach ($f in 'mado.exe', 'mado.json', 'client-secret.txt') {
         Copy-Item (Join-Path $Stage $f) (Join-Path $dir $f) -Force
         icacls (Join-Path $dir $f) /reset | Out-Null
     }
+    # v0.1 の設定 (v0.2 から JSON)
+    Remove-Item "$dir\mado.toml" -ErrorAction SilentlyContinue
 
     # AAAA に書いたアドレスを Ethernet (既定経路が JCOM の 10.10.0.1 の口) に足す。出ていく通信の送り元には使わない
     # (外から来た接続の返事はこのアドレスから返る)
@@ -104,7 +106,7 @@ try {
 
     # 起動時に SYSTEM で動かす (サインインしなくても動く)。落ちたら 1 分ごとに起こし直す。出力は mado.log に足していく
     $action = New-ScheduledTaskAction -Execute 'cmd.exe' -WorkingDirectory $dir `
-        -Argument "/c `"`"$dir\mado.exe`" --config `"$dir\mado.toml`" >> `"$dir\mado.log`" 2>&1`""
+        -Argument "/c `"`"$dir\mado.exe`" --config `"$dir\mado.json`" >> `"$dir\mado.log`" 2>&1`""
     $settings = New-ScheduledTaskSettingsSet -RestartCount 9999 -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
     Register-ScheduledTask -TaskName $task -Force -Action $action -Settings $settings `
