@@ -10,6 +10,8 @@ $pwsh = (Get-Command pwsh).Source
 # 入れる最初の版。あとは MeshCentral が自分で上げる (config.json の selfUpdate)
 $version = '1.2.6'
 $dir = 'C:\meshcentral'
+# AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
+$ipv6 = '2405:1201:5201:3a00::2'
 
 if (-not $Config) {
     # --- 普段のユーザー: 秘密を取り出して設定を作り、昇格して続きを流す --------------------------
@@ -74,6 +76,14 @@ try {
     icacls $data /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
     Copy-Item $Config "$data\config.json" -Force
     icacls "$data\config.json" /reset | Out-Null
+
+    # AAAA に書いたアドレスを Ethernet (既定経路が JCOM の 10.10.0.1 の口) に足す。出ていく通信の送り元には使わない
+    # (外から来た接続の返事はこのアドレスから返る)
+    $if = (Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Where-Object NextHop -EQ '10.10.0.1' | Select-Object -First 1).InterfaceIndex
+    if (-not $if) { throw '10.10.0.1 への既定経路が無い (JCOM の LAN につながっていない)' }
+    if (-not (Get-NetIPAddress -IPAddress $ipv6 -ErrorAction SilentlyContinue)) {
+        New-NetIPAddress -InterfaceIndex $if -AddressFamily IPv6 -IPAddress $ipv6 -PrefixLength 64 -SkipAsSource $true | Out-Null
+    }
 
     # 80 (Let's Encrypt と https への転送) と 443 だけ
     if (-not (Get-NetFirewallRule -Name 'MeshCentral-In' -ErrorAction SilentlyContinue)) {
