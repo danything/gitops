@@ -7,9 +7,12 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
-# 入れる最初の版。あとは MeshCentral が自分で上げる (config.json の selfUpdate)
-$version = '1.2.6'
+# 入れる最初の版。あとは MeshCentral が自分で上げる (config.json の selfUpdate)。npm の版を書く (GitHub のタグが
+# 先に出ることがある。1.2.6 はタグだけで npm に無かった。2026-10-11)
+$version = '1.2.5'
 $dir = 'C:\meshcentral'
+# サービスの名前 (表示名は MeshCentral。Get-Service は名前で見つからないと表示名でも探すが、名前で書く)
+$svc = 'meshcentral.exe'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
 $ipv6 = '2405:1201:5201:3a00::2'
 
@@ -55,7 +58,8 @@ if (-not $Config) {
 }
 
 # --- 管理者 ------------------------------------------------------------------------------------------
-Start-Transcript (Join-Path $env:TEMP 'meshcentral-setup.log') | Out-Null
+# 前の回のウィンドウが開いたままでも書けるように、ログは回ごとに分ける
+Start-Transcript (Join-Path $env:TEMP "meshcentral-setup-$(Get-Date -Format yyyyMMdd-HHmmss).log") | Out-Null
 try {
     # Node.js (LTS)。入れたら PATH を読み直す
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -96,14 +100,21 @@ try {
     powercfg /change hibernate-timeout-ac 0
 
     # サービス (MeshCentral が node-windows で登録する)。入っていれば設定を読み直させる
-    if (Get-Service MeshCentral -ErrorAction SilentlyContinue) {
-        Restart-Service MeshCentral
+    if (Get-Service $svc -ErrorAction SilentlyContinue) {
+        Restart-Service $svc
     } else {
+        # 1 回目は足りないモジュール (node-windows など) を入れたところで「Restart MeshCentral」と言って終わり、
+        # サービスは登録しない (2026-10-11)。登録されるまで流し直す
         Push-Location $dir
-        try { node node_modules/meshcentral --install; if ($LASTEXITCODE) { throw "meshcentral --install ($LASTEXITCODE)" } }
-        finally { Pop-Location }
+        try {
+            for ($i = 0; $i -lt 3 -and -not (Get-Service $svc -ErrorAction SilentlyContinue); $i++) {
+                node node_modules/meshcentral --install
+                if ($LASTEXITCODE) { throw "meshcentral --install ($LASTEXITCODE)" }
+            }
+        } finally { Pop-Location }
+        if (-not (Get-Service $svc -ErrorAction SilentlyContinue)) { throw "meshcentral --install を流してもサービス $svc が登録されない" }
     }
-    Get-Service MeshCentral | Format-Table -AutoSize
+    Get-Service $svc | Format-Table -AutoSize
 } catch {
     Write-Host $_ -ForegroundColor Red
     Read-Host 'Enter で閉じる'
