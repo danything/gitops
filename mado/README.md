@@ -32,7 +32,7 @@ SHA-256 と出どころ(`gh attestation verify`)を確かめたあと、残り�
 
 ## 使い方
 
-`https://md.doany.io` を開く → Entra でログイン → つなぐ先を選び、Windows のユーザー名とパスワードを入れて「つなぐ」。
+`https://md.doany.io` を開く → Entra でログイン → つなぐ先を選び(複数あるとき)、Windows のユーザー名とパスワードを入れて「つなぐ」。
 画面の上に Ctrl+Alt+Del・Windows キー・全画面・切断のボタンがある。
 
 ## 遅いとき
