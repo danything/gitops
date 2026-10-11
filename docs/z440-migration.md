@@ -129,16 +129,18 @@ Z440 は Intel vPro の AMT(内蔵の Intel の口に乗る管理機能)を持�
 
 1. 起動中に **Ctrl+P** で MEBx(AMT の設定画面)に入る。最初のパスワードは `admin` で、すぐに変えさせられる
    (大文字・小文字・数字・記号を含む 8 文字以上)。新しいパスワードは Infisical に置く
-2. **ネットワーク**: IPv4 は**固定で 10.0.0.3**(BL1500HM の DHCP は 10.0.0.10 から配るので当たらない。
-   AMT の IP は OS とは別に持つ)。**IPv6 は無効にする**
+2. **ネットワーク**: IPv4 は**固定で 10.0.0.5**(10.0.0.3 は DL360 の iLO なので避ける。BL1500HM の DHCP は 10.0.0.10 から
+   配るので当たらない。AMT の IP は OS とは別に持つ)。固定にするときは名前(FQDN。例: `amt-main`)も聞かれる。
+   **IPv6 は無効にする**
 3. **リダイレクト**: SOL と IDE-R(USB-R)を有効にする
-4. **ユーザーの同意(User Consent)**: 「なし」にする(リモートから操作するときに、本体の画面での承認を求めない)
-5. Wake on LAN・電源が切れていても AMT を動かす設定(「ON in S0, ME Wake in S3, S4-5」)
+4. **「Activate Network Access」を実行する**(これをしないと、ネットワークから AMT に入れない)
+5. **ユーザーの同意(User Consent)**: 「なし」にする(リモートから操作するときに、本体の画面での承認を求めない)
+6. Wake on LAN・電源が切れていても AMT を動かす設定(「ON in S0, ME Wake in S3, S4-5」)
 
 ### 守り
 
 - AMT はパスワード 1 つで電源もコンソールも握れる。**家の外に出さない。**
-  - ルーターの DMZ は 10.0.0.2(ノード)だけに向いているので、10.0.0.3 の AMT は外から届かない
+  - ルーターの DMZ は 10.0.0.2(ノード)だけに向いているので、10.0.0.5 の AMT は外から届かない
   - IPv6 の公開はノード(`bond0` の MAC `e6:2c:1b:1a:a0:39`)だけで、AMT は内蔵の口の元の MAC を使うので当たらない。
     念のため AMT の IPv6 は切る(上の 2)
 - 使う口は 16992・16993(管理)と 16994・16995(SOL・IDE-R)
@@ -148,25 +150,29 @@ Z440 は Intel vPro の AMT(内蔵の Intel の口に乗る管理機能)を持�
 AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Controller」)に見える。
 
 1. 番号を確かめる: `lspci | grep -i "KT Controller"` と `dmesg | grep ttyS`(`ttyS4` などになる)
-2. `/etc/default/grub` の `GRUB_CMDLINE_LINUX` に `console=tty0 console=ttyS<番号>,115200n8` を足し、
-   GRUB 自身も出すなら `GRUB_TERMINAL="console serial"` と `GRUB_SERIAL_COMMAND="serial --speed=115200"` を足して
-   `sudo update-grub`
+2. `/etc/default/grub` の `GRUB_CMDLINE_LINUX` に `console=tty0 console=ttyS<番号>,115200n8` を足して `sudo update-grub`
+   (カーネルの起動のメッセージから先がシリアルに出る)。GRUB の画面もシリアルに出すには、AMT のシリアルが PCI の機器なので
+   `GRUB_SERIAL_COMMAND` に I/O ポートの指定(`--port=0x…`。`lspci -vv` の I/O ports)が要る。**実機で確かめてから**入れる
 3. ログインできるようにする: `sudo systemctl enable --now serial-getty@ttyS<番号>.service`
 
 ### つなぎ方
 
 - **Windows**: [Intel Manageability Commander](https://www.intel.com/content/www/us/en/download/18796/intel-manageability-commander.html)
-  (Intel の公式、Windows 用。前身の MeshCommander は 2022 年に開発終了)。10.0.0.3 にパスワードで入り、電源の操作と
+  (Intel の公式、Windows 用。前身の MeshCommander は 2022 年に開発終了)。10.0.0.5 にパスワードで入り、電源の操作と
   Serial-over-LAN の画面を使う
-- **Linux**: `amtterm 10.0.0.3`(シリアルコンソール)、`amttool`(電源)。Debian・Ubuntu のパッケージ `amtterm`
+- **Linux**: `amtterm 10.0.0.5`(シリアルコンソール)、`amttool`(電源)。Debian・Ubuntu のパッケージ `amtterm`
 - **家の外から**: NetBird で 10.0.0.0/24 に入って使う。ただし **今の NetBird の入口(routing peer)はこのノードの上**なので、
   **ノードが止まっていると外からは AMT に届かない**。小さいサーバ(Talos)を足して入口をそちらにも置けば、
   ノードが止まっていても外から電源を入れ直せる
+- **ノード自身からは自分の AMT に届かない**(AMT は同じ NIC を OS と分け合っていて、自分宛ての通信は折り返さない)。
+  家の中のほかの機器か、NetBird の端末から使う
 
 ## 終わったら
 
 - 戻す見込みが無くなったら `/etc/netplan/00-main.yaml.dl360` を消してよい
 - router.md・この文書の「今の構成」を Z440 に直す
+- 「iLO(10.0.0.3)」と書いてあるところを AMT(10.0.0.5)に直す: apps/netbird/routing-peer.yaml のコメント、ROADMAP.md、
+  docs/decisions.md、docs/migration-day.md、docs/talos.md
 - **10.10 側を外す**(小さいサーバをルーターにしたあと): netplan の `eno4` を消し、AdGuard の 10.10.0.4 の待ち受け
   (apps/adguardhome/service-dns.yaml)を外し、10.10 側の機器の DNS を 10.0.0.2 にする。NetBird の 10.10.0.0/24 の経路は、
   BL1500HM の静的ルーティングで届くのでそのままでよい
