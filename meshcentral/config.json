@@ -1,0 +1,43 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Ylianst/MeshCentral/master/meshcentral-config-schema.json",
+  "settings": {
+    "cert": "mc.doany.io",
+    "port": 443,
+    "redirPort": 80,
+    "mpsPort": 0,
+    "selfUpdate": true
+  },
+  "domains": {
+    "": {
+      "title": "doany",
+      "newAccounts": false,
+      "showPasswordLogin": false,
+      "authStrategies": {
+        "oidc": {
+          "issuer": "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0",
+          "client": {
+            "client_id": "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e",
+            "client_secret": "__ENTRA_CLIENT_SECRET__",
+            "redirect_uri": "https://mc.doany.io/auth-oidc-callback"
+          },
+          "custom": {
+            "scope": "openid profile email"
+          },
+          "groups": {
+            "claim": "roles",
+            "scope": "openid",
+            "required": ["admin"],
+            "siteadmin": ["admin"],
+            "revokeAdmin": true
+          },
+          "newAccounts": true
+        }
+      }
+    }
+  },
+  "letsencrypt": {
+    "email": "info@doany.io",
+    "names": "mc.doany.io",
+    "production": true
+  }
+}
