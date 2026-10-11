@@ -11,11 +11,12 @@ routing peer も `main` にあるので、`main` が落ちると入れず、JCOM
 | | |
 | --- | --- |
 | 中身 | ブラウザの中の IronRDP(WASM)が RDP を話し、mado は Entra の OIDC でのログインの確認と、ブラウザ ↔ この PC の 3389 の中継だけ。Windows のパスワードは mado に届かない |
-| 動かし方 | `C:\mado\mado.exe`(+ `mado.toml`、`client-secret.txt`、`data\`)をタスク スケジューラのタスク `mado` で「起動時に SYSTEM で」。落ちたら 1 分ごとに起こし直す。出力は `C:\mado\mado.log` |
+| 動かし方 | `C:\mado\mado.exe`(+ `mado.json`、`client-secret.txt`、`data\`)をタスク スケジューラのタスク `mado` で「起動時に SYSTEM で」。落ちたら 1 分ごとに起こし直す。出力は `C:\mado\mado.log` |
 | 名前 | `md.doany.io` の A / AAAA を JCOM の固定の IP(`61.21.173.41`、PC に足した `2405:1201:5201:3a00::2`)に([pulumi/dns.ts](../pulumi/dns.ts))。Cloudflare も `main` の Gateway も通さない |
 | ルーター | J:COM のアプリで、この PC(OD00)を 10.10.0.2 に予約し、TCP 80 / 443 を転送する。IPv6 はルーターが止めないので設定は要らない([docs/router.md](../docs/router.md)) |
 | 証明書 | mado が Let's Encrypt から自分で取る(80 で HTTP-01)。30 日を切ったら取り直す |
 | ログイン | Entra の共用のアプリ登録(戻り先 `https://md.doany.io/callback` は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れない(ほかのアプリと共通) |
+| 設定 | [mado.json](mado.json)。`targets` がつなぐ先(画面で選ぶ。今はこの PC だけ。10.0 側の PC は、この PC の Wi-Fi がつながっているときだけ届く)。秘密は書かない(client secret は `setup.ps1` が Infisical から取り出して `client-secret.txt` に置く)。`required_role` の `admin` はほかのアプリと共通([docs/entra.md](../docs/entra.md)) |
 | 版 | `setup.ps1` の `$version`。Renovate が上げる。**上がっても PC には自動では入らない**(`setup.ps1` を流し直す) |
 
 ## 入れ方・版を上げる
@@ -31,5 +32,11 @@ SHA-256 と出どころ(`gh attestation verify`)を確かめたあと、残り�
 
 ## 使い方
 
-`https://md.doany.io` を開く → Entra でログイン → Windows のユーザー名とパスワードを入れて「つなぐ」。
+`https://md.doany.io` を開く → Entra でログイン → つなぐ先を選び(複数あるとき)、Windows のユーザー名とパスワードを入れて「つなぐ」。
 画面の上に Ctrl+Alt+Del・Windows キー・全画面・切断のボタンがある。
+
+## 遅いとき
+
+mado の画面(IronRDP の Web 版)は H.264 を使わず、昔からのビットマップの更新(RemoteFX など)をブラウザの CPU で描く。
+普段使いは家の中から Windows App で直接 RDP し、mado は外からの非常口と割り切る。遅いときはブラウザの窓を小さくする
+(窓の大きさがそのまま RDP の解像度になる)か、Windows 側で見た目の効果を切る。
