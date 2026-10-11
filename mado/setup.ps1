@@ -8,7 +8,7 @@ $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
 # renovate: datasource=github-releases depName=danything/mado
-$version = 'v0.2.0'
+$version = 'v0.2.1'
 $dir = 'C:\mado'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
 $ipv6 = '2405:1201:5201:3a00::2'
