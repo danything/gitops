@@ -96,9 +96,13 @@ try {
     }
 
     # --- MSI (サービス・ファイアウォール・ProgramData の権限)。新しい版なら古い版を外して入れ替える。同じ版ならそのまま ---
+    # 受け渡しのフォルダは本人だけが読めるので、MSI を読む Windows Installer (SYSTEM) には読めない (1619 になる)。
+    # SYSTEM と Administrators が読める ProgramData\mado に写してから入れる
+    $msi = Join-Path $data 'mado.msi'
+    Copy-Item (Join-Path $Stage 'mado.msi') $msi -Force
     $msilog = Join-Path $env:TEMP "mado-msi-$(Get-Date -Format yyyyMMdd-HHmmss).log"
-    $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$(Join-Path $Stage 'mado.msi')`"", '/qn', '/norestart',
-        '/l*v', "`"$msilog`""
+    $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$msilog`""
+    Remove-Item -LiteralPath $msi -Force
     # 3010 は「再起動が要る」で、mado には関係ない (ファイルの置き換えだけ)
     if ($p.ExitCode -notin 0, 3010) { throw "msiexec ($($p.ExitCode))。ログ: $msilog" }
 
