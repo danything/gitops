@@ -20,7 +20,7 @@ routing peer も `main` にあるので、`main` が落ちると入れず、JCOM
 | 設定 | [mado.json](mado.json)。`targets` がつなぐ先(画面で選ぶ。今はこの PC だけ。10.0 側の PC は、この PC の Wi-Fi がつながっているときだけ届く)。秘密は書かない(client secret は `setup.ps1` が Infisical から取り出して `client-secret.txt` に置く)。`required_role` の `admin` はほかのアプリと共通([docs/entra.md](../docs/entra.md)) |
 | 版 | **mado が自分で上げる**(6 時間ごとに GitHub のリリースを見て、ECDSA の署名を確かめた MSI を、誰もつないでいないときに入れる。v0.5.0 から)。タスクトレイの「今すぐ更新を確かめる」でもよい。`setup.ps1` の `$version` は初めて入れる版で、Renovate が上げる。動いているほうが新しければ `setup.ps1` は MSI を入れない |
 
-## 入れ方・版を上げる
+## 入れ方
 
 ```powershell
 pwsh -File mado/setup.ps1

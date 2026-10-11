@@ -61,7 +61,7 @@
             "extractVersionTemplate": "^v(?<version>.+)$"
         },
         {
-            "description": "mado の版(mado/setup.ps1)。`# renovate: datasource=… depName=…` の次の行の `$version = '…'` を見る。上がったら setup.ps1 を流し直すと入れ替わる(PC には自動では入らない)。",
+            "description": "mado の版(mado/setup.ps1)。`# renovate: datasource=… depName=…` の次の行の `$version = '…'` を見る。初めて入れる版で、v0.5.0 から動いている mado は自分で上げる(署名を確かめた MSI)。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^mado/setup\\.ps1$/"
