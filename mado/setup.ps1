@@ -76,11 +76,16 @@ try {
     # 動いていれば止めてから差し替える (exe は動いている間は書き換えられない)
     if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
         Stop-ScheduledTask -TaskName $task
-        Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force
-        Start-Sleep -Seconds 1
+        # タスクを止めても止まるのは cmd.exe だけで、mado.exe は残る。止めて、本当に消えるまで待つ
+        # (消えたあとも exe がしばらく掴まれていることがあるので、下の Copy-Item は何度か試す。2026-10-11)
+        Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        for ($i = 0; $i -lt 30 -and (Get-Process mado -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
     }
     foreach ($f in 'mado.exe', 'mado.json', 'client-secret.txt') {
-        Copy-Item (Join-Path $Stage $f) (Join-Path $dir $f) -Force
+        for ($i = 0; ; $i++) {
+            try { Copy-Item (Join-Path $Stage $f) (Join-Path $dir $f) -Force; break }
+            catch { if ($i -ge 20) { throw }; Start-Sleep -Milliseconds 500 }
+        }
         icacls (Join-Path $dir $f) /reset | Out-Null
     }
     # v0.1 の設定 (v0.2 から JSON)
@@ -99,6 +104,11 @@ try {
         New-NetFirewallRule -Name 'mado-In' -DisplayName 'mado (TCP 80, 443)' -Direction Inbound -Protocol TCP `
             -LocalPort 80, 443 -Action Allow -Profile Any | Out-Null
     }
+
+    # RDP を 60fps に (既定は 30fps)。DWM のフレーム間隔で、15 が 60fps の目安 (Microsoft のサポート記事の値)。
+    # 次の RDP の接続から効く。Windows App で直接つなぐときも mado から入るときも同じ
+    $ts = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations'
+    New-ItemProperty -Path $ts -Name DWMFRAMEINTERVAL -PropertyType DWord -Value 15 -Force | Out-Null
 
     # 寝ると入口ごと消える。電源につないでいるときはスリープも休止もしない
     powercfg /change standby-timeout-ac 0

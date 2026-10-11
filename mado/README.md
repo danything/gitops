@@ -37,6 +37,8 @@ SHA-256 と出どころ(`gh attestation verify`)を確かめたあと、残り�
 
 ## 遅いとき
 
+`setup.ps1` はこの PC の RDP を 60fps にしている(レジストリの `DWMFRAMEINTERVAL` = 15。既定は 30fps)。
+
 mado の画面(IronRDP の Web 版)は H.264 を使わず、昔からのビットマップの更新(RemoteFX など)をブラウザの CPU で描く。
 普段使いは家の中から Windows App で直接 RDP し、mado は外からの非常口と割り切る。遅いときはブラウザの窓を小さくする
 (窓の大きさがそのまま RDP の解像度になる)か、Windows 側で見た目の効果を切る。
