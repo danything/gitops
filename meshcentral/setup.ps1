@@ -56,7 +56,8 @@ if (-not $Config) {
 }
 
 # --- 管理者 ------------------------------------------------------------------------------------------
-Start-Transcript (Join-Path $env:TEMP 'meshcentral-setup.log') | Out-Null
+# 前の回のウィンドウが開いたままでも書けるように、ログは回ごとに分ける
+Start-Transcript (Join-Path $env:TEMP "meshcentral-setup-$(Get-Date -Format yyyyMMdd-HHmmss).log") | Out-Null
 try {
     # Node.js (LTS)。入れたら PATH を読み直す
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
