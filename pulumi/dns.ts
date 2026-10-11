@@ -19,6 +19,13 @@ const record = (key: string, args: Omit<cloudflare.DnsRecordArgs, "zoneId">, imp
 // その答え(家の IP)はこのワイルドカードから来る(netbird.ts)。ここを変えると NetBird の管理サーバーが引けなくなる
 record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 }, "22d196005f64645eca6bccefd4e3fdee");
 
+// mado(ブラウザから RDP する入口。mado/)。**`main` ではなく JCOM 側の PC(10.10.0.2)に直接来る。** `main` が落ちたときの
+// 入口なので、`main` の Gateway も cloudflare-ddns も通さない。JCOM は固定 IP(IPv4 も IPv6 のプレフィックスも)。
+// IPv4 の 80 / 443 は JCOM のルーターでこの PC に転送し、IPv6 はルーターが止めないので PC に足した固定のアドレスに直接来る
+// (docs/router.md「10.10 側(JCOM)のルーター」)
+record("md-a", { name: "md.doany.io", type: "A", content: "61.21.173.41", proxied: false, ttl: 1 });
+record("md-aaaa", { name: "md.doany.io", type: "AAAA", content: "2405:1201:5201:3a00::2", proxied: false, ttl: 1 });
+
 // 証明書を出してよい認証局。cert-manager が使う Let's Encrypt だけ。Cloudflare の Universal SSL の認証局は
 // Cloudflare が自分で足すので書かない
 record("caa-issue", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 0, tag: "issue", value: "letsencrypt.org" } });
