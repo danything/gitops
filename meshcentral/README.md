@@ -16,7 +16,8 @@ Z440 の AMT(10.0.0.5。[docs/z440-migration.md](../docs/z440-migration.md))を�
 | 名前 | `mc.doany.io` の A / AAAA を JCOM の固定の IP(`61.21.173.41` と、PC に足した `2405:1201:5201:3a00::2`)に([pulumi/dns.ts](../pulumi/dns.ts))。Cloudflare も `main` の Gateway も通さない |
 | ルーター | JCOM で TCP 80 / 443 を 10.10.0.2 へ転送(IPv4)し、IPv6 のフィルターで `2405:1201:5201:3a00::2` の TCP 80 / 443 を通す |
 | 証明書 | MeshCentral に組み込みの Let's Encrypt(80 で HTTP-01)。IPv6 でも確認しに来るので、IPv6 の 80 も通しておく |
-| ログイン | Entra の OIDC だけ(共用のアプリ登録 `b0fa498f-…`。リダイレクト URI は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れず、あればサイト管理者([docs/entra.md](../docs/entra.md))。ID とパスワードの欄は出さず、自分でのアカウント作成もさせない |
+| ログイン | Entra の OIDC だけ(共用のアプリ登録 `b0fa498f-…`。リダイレクト URI は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れず、あればサイト管理者([docs/entra.md](../docs/entra.md))。**`admin` はほかのアプリ(Argo CD・Headlamp など)と共通**で、どれかの管理者はここでも管理者になる(LAN の PC を操作できる)。ID とパスワードの欄は出さず、自分でのアカウント作成もさせない |
+| AMT | LAN の中から直接つなぐ(この PC の Wi-Fi から 10.0 側へ)。AMT のほうから外へつないでくる CIRA は使わないので、その受け口(MPS、4433)は `mpsPort: 0` で閉じている |
 | 更新 | `selfUpdate`: 毎晩 0 時すぎに自分で新しい版を見て上げる。インターネットに直接出ているので、上げ遅れないようにする |
 
 設定は [config.json](config.json)(`C:\meshcentral\meshcentral-data\config.json` に置く。client secret は置くときに埋める)。

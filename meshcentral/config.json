@@ -4,6 +4,7 @@
     "cert": "mc.doany.io",
     "port": 443,
     "redirPort": 80,
+    "mpsPort": 0,
     "selfUpdate": true
   },
   "domains": {
