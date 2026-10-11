@@ -172,7 +172,8 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 - 戻す見込みが無くなったら `/etc/netplan/00-main.yaml.dl360` を消してよい
 - router.md・この文書の「今の構成」を Z440 に直す
 - 「iLO(10.0.0.3)」と書いてあるところを AMT(10.0.0.5)に直す: apps/netbird/routing-peer.yaml のコメント、ROADMAP.md、
-  docs/decisions.md、docs/migration-day.md、docs/talos.md
+  docs/decisions.md、docs/migration-day.md(作業の入口として書いてあるところ)。docs/talos.md は DL360 に Talos を入れる
+  検証の記録なので直さない(Talos の入れ先を Z440 に変えるときに読み替える)
 - **10.10 側を外す**(小さいサーバをルーターにしたあと): netplan の `eno4` を消し、AdGuard の 10.10.0.4 の待ち受け
   (apps/adguardhome/service-dns.yaml)を外し、10.10 側の機器の DNS を 10.0.0.2 にする。NetBird の 10.10.0.0/24 の経路は、
   BL1500HM の静的ルーティングで届くのでそのままでよい
