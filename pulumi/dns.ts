@@ -20,10 +20,11 @@ const record = (key: string, args: Omit<cloudflare.DnsRecordArgs, "zoneId">, imp
 record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 }, "22d196005f64645eca6bccefd4e3fdee");
 
 // MeshCentral(meshcentral/)。**`main` ではなく JCOM 側の PC(10.10.0.2)に直接来る。** `main` が落ちたときの入口なので、
-// `main` の Gateway も cloudflare-ddns も通さない。JCOM の IPv4 は固定(2026-10-11)。80 / 443 は JCOM のルーター
-// (HUMAX HGJ310V4。設定は J:COM のアプリ)でこの PC に転送している。**AAAA は置かない** ── アプリに IPv6 で外からの
-// 接続を通す設定が無く、届かない AAAA があると Let's Encrypt が IPv6 で確認しに来て失敗する
+// `main` の Gateway も cloudflare-ddns も通さない。JCOM は IPv4 も IPv6 のプレフィックスも固定(2026-10-11)。
+// IPv4 の 80 / 443 は JCOM のルーター(HUMAX HGJ310V4。設定は J:COM のアプリ)でこの PC に転送している。IPv6 は
+// ルーターが外からの接続を止めない(2026-10-11 に au 側の main から確かめた)ので、PC に手で足した固定のアドレスに直接来る
 record("mc-a", { name: "mc.doany.io", type: "A", content: "61.21.173.41", proxied: false, ttl: 1 });
+record("mc-aaaa", { name: "mc.doany.io", type: "AAAA", content: "2405:1201:5201:3a00::2", proxied: false, ttl: 1 });
 
 // 証明書を出してよい認証局。cert-manager が使う Let's Encrypt だけ。Cloudflare の Universal SSL の認証局は
 // Cloudflare が自分で足すので書かない
