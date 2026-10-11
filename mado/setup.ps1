@@ -76,11 +76,16 @@ try {
     # 動いていれば止めてから差し替える (exe は動いている間は書き換えられない)
     if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
         Stop-ScheduledTask -TaskName $task
+        # タスクを止めても止まるのは cmd.exe だけで、mado.exe は残る。止めて、本当に消えるまで待つ
+        # (消えたあとも exe がしばらく掴まれていることがあるので、下の Copy-Item は何度か試す。2026-10-11)
         Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force
-        Start-Sleep -Seconds 1
+        for ($i = 0; $i -lt 30 -and (Get-Process mado -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
     }
     foreach ($f in 'mado.exe', 'mado.json', 'client-secret.txt') {
-        Copy-Item (Join-Path $Stage $f) (Join-Path $dir $f) -Force
+        for ($i = 0; ; $i++) {
+            try { Copy-Item (Join-Path $Stage $f) (Join-Path $dir $f) -Force; break }
+            catch { if ($i -ge 20) { throw }; Start-Sleep -Milliseconds 500 }
+        }
         icacls (Join-Path $dir $f) /reset | Out-Null
     }
     # v0.1 の設定 (v0.2 から JSON)
