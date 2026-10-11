@@ -12,7 +12,7 @@ Z440 の AMT(10.0.0.5。[docs/z440-migration.md](../docs/z440-migration.md))を�
 
 | | |
 | --- | --- |
-| 動かし方 | Node.js + `C:\meshcentral` の MeshCentral を Windows サービス(`MeshCentral`)で。**WSL(wslc)では動かさない** ── サインインするまで起動しないので、停電のあとに入れない |
+| 動かし方 | Node.js + `C:\meshcentral` の MeshCentral を Windows サービス(名前 `meshcentral.exe`、表示名 `MeshCentral`)で。**WSL(wslc)では動かさない** ── サインインするまで起動しないので、停電のあとに入れない |
 | 名前 | `mc.doany.io` の A / AAAA を JCOM の固定の IP(`61.21.173.41` と、PC に足した `2405:1201:5201:3a00::2`)に([pulumi/dns.ts](../pulumi/dns.ts))。Cloudflare も `main` の Gateway も通さない |
 | ルーター | JCOM の HUMAX HGJ310V4 は Plume の機種で、設定は **J:COM のアプリ**だけ。IPv4 は「設定 → ネットワーク → IP 予約」でこの PC(OD00)を 10.10.0.2 に予約し、同じ画面で TCP 80 / 443 を転送する。**IPv6 はルーターが外からの接続を何も止めない**(2026-10-11 に au 側の `main` から確かめた)ので設定は要らず、止めるのは各機器のファイアウォールだけ。アプリの Guard の「Remote Access Protection」は無効のままにする(有効にすると転送した 80 / 443 も許可待ちで止まる) |
 | 証明書 | MeshCentral に組み込みの Let's Encrypt(80 で HTTP-01。IPv6 でも確認しに来る) |
