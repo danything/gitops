@@ -24,6 +24,7 @@ CI を待たずに走りはじめる**のはこのため。CI の `bootstrap-app
 | [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある。例外は `argocd/repos.yaml` だけ ── 上の「仕組み」)。**main へのマージで GitHub Actions が当てる**(SOPS 済みの 4 ファイルと `cilium/` だけ手で) |
 | [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST |
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
+| [`meshcentral/`](meshcentral/) | **`main` が落ちたときの入口**。JCOM 側の PC(10.10.0.2)で MeshCentral を Windows サービスとして動かす(`mc.doany.io`。クラスタの外) |
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
 | [`talos/`](talos/) | Talos への移行用 machine config(**v1.14 の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**Talos では `bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
 | [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)はコンテナで動かす**。`tools/t.ps1 <コマンド>`(Windows の WSL コンテナ。wslc-compose)。手元にコマンドは入れない |
@@ -55,7 +56,7 @@ tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml | tools/t.ps1 kubectl apply
 
 | アプリ名 | 規則 | 結果 |
 | --- | --- | --- |
-| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`(どちらも今は無い)、NetBird(Net + Bird)→ `nb`、GlitchTip(Glitch + Tip)→ `gt`、Argo CD → `ac`、AdGuard Home → `ah` |
+| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`(どちらも今は無い)、NetBird(Net + Bird)→ `nb`、GlitchTip(Glitch + Tip)→ `gt`、Argo CD → `ac`、AdGuard Home → `ah`、MeshCentral → `mc` |
 | 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・

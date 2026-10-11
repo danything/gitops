@@ -24,6 +24,7 @@ const WEB_REDIRECTS: [string, string, string][] = [
   ["h.doany.io", "/oidc-callback", "Headlamp"],
   ["hl.doany.io", "/oauth2/callback", "Hubble の前段(oauth2-proxy)"],
   ["m.doany.io", "/_matrix/client/unstable/login/sso/callback/b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e", "Matrix(Tuwunel)"],
+  ["mc.doany.io", "/auth-oidc-callback", "MeshCentral(meshcentral/。このクラスタの外)"],
   ["nb.doany.io", "/oauth2/callback", "NetBird"],
   ["nb.doany.io", "/oauth2/logout/callback", "NetBird(ログアウト)"],
   ["yk.doany.io", "/admin/callback", "yosegaki の管理画面"],
