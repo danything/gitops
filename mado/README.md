@@ -1,7 +1,7 @@
 # mado
 
 **`main` が落ちたときの入口。** JCOM 側の PC(10.10.0.2、手元の Windows)で [mado](https://github.com/danything/mado)
-(OIDC でログインしてブラウザから RDP する、自作の小さなゲートウェイ。.NET の Windows サービス)を動かし、`https://md.doany.io` から
+(OIDC でログインしてブラウザから RDP する、自作の小さなゲートウェイ。.NET の Windows サービスとタスクトレイ)を動かし、`https://md.doany.io` から
 この PC の画面に入る(2026-10-11)。入ったら、この PC から iLO(10.0.0.3)や Z440 の AMT(10.0.0.5)を開いて `main` を直す。
 
 それまでは NetBird(`main` のクラスタの中の routing peer)で LAN に入り、この PC に RDP していた。NetBird の管理サーバーも
@@ -12,12 +12,13 @@ routing peer も `main` にあるので、`main` が落ちると入れず、JCOM
 | --- | --- |
 | 中身 | ブラウザの中の IronRDP(WASM)が RDP を話し、mado は Entra の OIDC でのログインの確認と、ブラウザ ↔ この PC の 3389 の中継だけ。Windows のパスワードは mado に届かない |
 | 動かし方 | **Windows のサービス `mado`**(MSI で入れる。`C:\Program Files\mado\mado.exe`、LocalSystem、自動起動、落ちたら 5 秒後に起こし直す)。設定・client secret・証明書・ログは `C:\ProgramData\mado\`(`mado.json`、`client-secret.txt`、`data\`、`logs\mado.log`。SYSTEM と Administrators だけが読める)。この PC の中から `http://127.0.0.1:8788/status` で版・つないでいる数・証明書の残り日数が見られる |
+| タスクトレイ | `mado-tray.exe`(サインイン時に起動)。動いているか・版・つないでいる数・証明書の残り日数を出し、止まったら通知する。右クリックで画面を開く・今すぐ更新・サービスを再起動・ログ |
 | 名前 | `md.doany.io` の A / AAAA を JCOM の固定の IP(`61.21.173.41`、PC に足した `2405:1201:5201:3a00::2`)に([pulumi/dns.ts](../pulumi/dns.ts))。Cloudflare も `main` の Gateway も通さない |
 | ルーター | J:COM のアプリで、この PC(OD00)を 10.10.0.2 に予約し、TCP 80 / 443 を転送する。IPv6 はルーターが止めないので設定は要らない([docs/router.md](../docs/router.md)) |
 | 証明書 | mado が Let's Encrypt から自分で取る(80 で HTTP-01)。30 日を切ったら取り直す |
 | ログイン | Entra の共用のアプリ登録(戻り先 `https://md.doany.io/callback` は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れない(ほかのアプリと共通) |
 | 設定 | [mado.json](mado.json)。`targets` がつなぐ先(画面で選ぶ。今はこの PC だけ。10.0 側の PC は、この PC の Wi-Fi がつながっているときだけ届く)。秘密は書かない(client secret は `setup.ps1` が Infisical から取り出して `client-secret.txt` に置く)。`required_role` の `admin` はほかのアプリと共通([docs/entra.md](../docs/entra.md)) |
-| 版 | `setup.ps1` の `$version`(MSI の版)。Renovate が上げる。**上がっても PC には自動では入らない**(`setup.ps1` を流し直す。MSI が古い版を外して入れ替える) |
+| 版 | **mado が自分で上げる**(6 時間ごとに GitHub のリリースを見て、ECDSA の署名を確かめた MSI を、誰もつないでいないときに入れる。v0.5.0 から)。タスクトレイの「今すぐ更新を確かめる」でもよい。`setup.ps1` の `$version` は初めて入れる版で、Renovate が上げる。動いているほうが新しければ `setup.ps1` は MSI を入れない |
 
 ## 入れ方・版を上げる
 
