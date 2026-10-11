@@ -1,23 +1,22 @@
 ﻿# このPC (10.10.0.2) に mado を入れる / 版や設定を当て直す。README.md の「入れ方」。
 #   pwsh -File mado/setup.ps1
-# 普段のユーザーで流す。Infisical から Entra の client secret を取り出し、リリースの exe を落としてチェックサムを
-# 照らしたあと (tools/t.ps1 は普段のユーザーの WSL コンテナで動く)、残りを UAC で昇格して流す。何度流してもよい
+# 普段のユーザーで流す。Infisical から Entra の client secret を取り出し、リリースの MSI を落として SHA-256 と出どころを
+# 確かめたあと (tools/t.ps1 は普段のユーザーの WSL コンテナで動く)、残りを UAC で昇格して流す。何度流してもよい
 param([string]$Stage)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
-# 初めて入れる版。あとは mado が自分で上げる (署名を確かめて入れ替える。mado の README「自動更新」)。
-# 動いているほうが新しければ exe は置き換えない (古い版に戻さない)
+# 入れる版 (MSI)。上げるときはここを変えて流し直す (Renovate が上げる)
 # renovate: datasource=github-releases depName=danything/mado
-$version = 'v0.3.0'
-$dir = 'C:\mado'
+$version = 'v0.4.0'
+# 設定・client secret・証明書・ログの置き場。MSI が SYSTEM と Administrators だけが読めるように作る
+$data = Join-Path $env:ProgramData 'mado'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
 $ipv6 = '2405:1201:5201:3a00::2'
-$task = 'mado'
 
 if (-not $Stage) {
-    # --- 普段のユーザー: 秘密と exe を用意して、昇格して続きを流す ---------------------------------
+    # --- 普段のユーザー: 秘密と MSI を用意して、昇格して続きを流す ---------------------------------
     # 未ログインだと export がログインの入力を待つので、標準入力を閉じてすぐ失敗させる (dotfiles の init.ps1 と同じ)
     function Export-Entra {
         $psi = New-Object Diagnostics.ProcessStartInfo $pwsh, ("-NoProfile -ExecutionPolicy Bypass -File `"$root\tools\t.ps1`" " +
@@ -46,29 +45,15 @@ if (-not $Stage) {
     New-Item -ItemType Directory $tmp | Out-Null
     icacls $tmp /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
     try {
-        # 動いている mado の版 (状態の口。v0.3.0 から)。自分で上げてこちらより新しければ、exe は置き換えない
-        # mado が止まっていて聞けないときは $version を入れる (古いこともある。動き出せば自分でまた上げる)
-        function ConvertTo-Version([string]$v) {
-            try { [version](($v -replace '^v', '') -replace '[-+].*$', '') } catch { $null }
-        }
-        $running = $null
-        try { $running = (Invoke-RestMethod http://127.0.0.1:8788/status -TimeoutSec 3).version } catch {}
-        $a = ConvertTo-Version $running
-        $b = ConvertTo-Version $version
-        $keep = $a -and $b -and $a -gt $b
-        if ($keep) {
-            Write-Host "動いている mado ($running) のほうが新しいので、exe はそのまま ($version は入れない)"
-        } else {
-            # リリースの exe と SHA-256。照らして合わなければ止める
-            gh release download $version --repo danything/mado --dir $tmp --pattern 'mado.exe' --pattern 'mado.exe.sha256'
-            if ($LASTEXITCODE) { throw "gh release download $version ($LASTEXITCODE)" }
-            $want = ((Get-Content "$tmp\mado.exe.sha256" | Select-String 'mado\.exe$') -split '\s+')[0].ToLower()
-            $got = (Get-FileHash "$tmp\mado.exe" -Algorithm SHA256).Hash.ToLower()
-            if ($want -ne $got) { throw "mado.exe の SHA-256 が合わない ($got / $want)" }
-            # 作ったのが danything/mado の release.yml であること (attest-build-provenance)。SHA-256 は exe と同じリリースに載っているので、改ざんへの備えはこちら
-            gh attestation verify "$tmp\mado.exe" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
-            if ($LASTEXITCODE) { throw "mado.exe の出どころを確かめられない ($LASTEXITCODE)" }
-        }
+        # リリースの MSI と SHA-256。照らして合わなければ止める
+        gh release download $version --repo danything/mado --dir $tmp --pattern 'mado.msi' --pattern 'mado.msi.sha256'
+        if ($LASTEXITCODE) { throw "gh release download $version ($LASTEXITCODE)" }
+        $want = ((Get-Content "$tmp\mado.msi.sha256" | Select-String 'mado\.msi$') -split '\s+')[0].ToLower()
+        $got = (Get-FileHash "$tmp\mado.msi" -Algorithm SHA256).Hash.ToLower()
+        if ($want -ne $got) { throw "mado.msi の SHA-256 が合わない ($got / $want)" }
+        # 作ったのが danything/mado の release.yml であること (attest-build-provenance)。SHA-256 は MSI と同じリリースに載っているので、改ざんへの備えはこちら
+        gh attestation verify "$tmp\mado.msi" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
+        if ($LASTEXITCODE) { throw "mado.msi の出どころを確かめられない ($LASTEXITCODE)" }
 
         [IO.File]::WriteAllText("$tmp\client-secret.txt", $secret)
         Copy-Item "$PSScriptRoot\mado.json" $tmp
@@ -85,38 +70,45 @@ if (-not $Stage) {
 # 前の回のウィンドウが開いたままでも書けるように、ログは回ごとに分ける
 Start-Transcript (Join-Path $env:TEMP "mado-setup-$(Get-Date -Format yyyyMMdd-HHmmss).log") | Out-Null
 try {
-    # 置き場。client secret とセッションの鍵が入るので SYSTEM (タスク) と Administrators だけが読める
-    New-Item -ItemType Directory -Force $dir | Out-Null
-    icacls $dir /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+    # --- v0.3 まで (bun。C:\mado に置いてタスク スケジューラで動かしていた) からの引っ越し ---
+    if (Get-ScheduledTask -TaskName 'mado' -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName 'mado'
+        Unregister-ScheduledTask -TaskName 'mado' -Confirm:$false
+    }
+    # タスクを止めても止まるのは cmd.exe だけで、mado.exe は残る (サービスの mado.exe は MSI が止める)
+    $old = { Get-Process mado -ErrorAction SilentlyContinue | Where-Object Path -Like 'C:\mado\*' }
+    & $old | Stop-Process -Force -ErrorAction SilentlyContinue
+    # 止まるまで待つ (掴まれたままだと下の Move-Item が落ちる)
+    for ($i = 0; $i -lt 30 -and (& $old); $i++) { Start-Sleep -Milliseconds 500 }
+    New-Item -ItemType Directory -Force $data | Out-Null
+    icacls $data /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+    # 証明書・ACME のアカウント・セッションの鍵は同じ形なので、そのまま持ってくる (取り直さずに済む)
+    if ((Test-Path 'C:\mado\data') -and -not (Test-Path "$data\data")) {
+        Move-Item -LiteralPath 'C:\mado\data' -Destination "$data\data"
+    }
+    # v0.3 までの setup.ps1 が足した規則。MSI が入れる規則は「mado (TCP 80)」「mado (TCP 443)」で、名前が違うので消さない
+    Get-NetFirewallRule -Name 'mado-In' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 
-    # 動いていれば止めてから差し替える (exe は動いている間は書き換えられない)
-    if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
-        Stop-ScheduledTask -TaskName $task
-        # タスクを止めても止まるのは cmd.exe だけで、mado.exe は残る。止めて、本当に消えるまで待つ
-        # (消えたあとも exe がしばらく掴まれていることがあるので、下の Copy-Item は何度か試す。2026-10-11)
-        Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        for ($i = 0; $i -lt 30 -and (Get-Process mado -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
+    # --- 設定と client secret (MSI には入れない。サービスが起動したときに読めるよう、MSI より先に置く) ---
+    foreach ($f in 'mado.json', 'client-secret.txt') {
+        Copy-Item (Join-Path $Stage $f) (Join-Path $data $f) -Force
+        icacls (Join-Path $data $f) /reset | Out-Null
     }
-    # 落ちたら (自動更新で入れ替えたときも) 2 秒ほどあとに起こし直すループ。タスクはこれを動かす
-    Set-Content -Encoding ascii -Path (Join-Path $Stage 'run.cmd') -Value @(
-        '@echo off'
-        ':loop'
-        '"%~dp0mado.exe" --config "%~dp0mado.json" >> "%~dp0mado.log" 2>&1'
-        # timeout は標準入力が無い (SYSTEM のタスク) と待たずに戻ることがあるので ping で待つ
-        'ping -n 3 127.0.0.1 >nul'
-        'goto loop'
-    )
-    # exe を落としていない (動いているほうが新しい) ときは、exe は今のまま
-    foreach ($f in 'mado.exe', 'mado.json', 'client-secret.txt', 'run.cmd') {
-        if (-not (Test-Path (Join-Path $Stage $f))) { continue }
-        for ($i = 0; ; $i++) {
-            try { Copy-Item (Join-Path $Stage $f) (Join-Path $dir $f) -Force; break }
-            catch { if ($i -ge 20) { throw }; Start-Sleep -Milliseconds 500 }
-        }
-        icacls (Join-Path $dir $f) /reset | Out-Null
-    }
-    # v0.1 の設定 (v0.2 から JSON)
-    Remove-Item "$dir\mado.toml" -ErrorAction SilentlyContinue
+
+    # --- MSI (サービス・ファイアウォール・ProgramData の権限)。新しい版なら古い版を外して入れ替える。同じ版ならそのまま ---
+    $msilog = Join-Path $env:TEMP "mado-msi-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+    $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$(Join-Path $Stage 'mado.msi')`"", '/qn', '/norestart',
+        '/l*v', "`"$msilog`""
+    # 3010 は「再起動が要る」で、mado には関係ない (ファイルの置き換えだけ)
+    if ($p.ExitCode -notin 0, 3010) { throw "msiexec ($($p.ExitCode))。ログ: $msilog" }
+
+    # 設定を読み直させる (MSI が起動したとき、設定がまだ古いこともある)
+    Restart-Service mado
+    for ($i = 0; $i -lt 30 -and (Get-Service mado).Status -ne 'Running'; $i++) { Start-Sleep -Milliseconds 500 }
+    if ((Get-Service mado).Status -ne 'Running') { throw "サービス mado が起動しない。ログ: $data\logs\mado.log" }
+
+    # 引っ越しが終わったら古い置き場を消す (古い exe・ログ・平文の client secret が残っている)
+    if (Test-Path 'C:\mado') { Remove-Item -LiteralPath 'C:\mado' -Recurse -Force }
 
     # AAAA に書いたアドレスを Ethernet (既定経路が JCOM の 10.10.0.1 の口) に足す。出ていく通信の送り元には使わない
     # (外から来た接続の返事はこのアドレスから返る)
@@ -124,12 +116,6 @@ try {
     if (-not $if) { throw '10.10.0.1 への既定経路が無い (JCOM の LAN につながっていない)' }
     if (-not (Get-NetIPAddress -IPAddress $ipv6 -ErrorAction SilentlyContinue)) {
         New-NetIPAddress -InterfaceIndex $if -AddressFamily IPv6 -IPAddress $ipv6 -PrefixLength 64 -SkipAsSource $true | Out-Null
-    }
-
-    # 80 (Let's Encrypt と https への案内) と 443 だけ
-    if (-not (Get-NetFirewallRule -Name 'mado-In' -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -Name 'mado-In' -DisplayName 'mado (TCP 80, 443)' -Direction Inbound -Protocol TCP `
-            -LocalPort 80, 443 -Action Allow -Profile Any | Out-Null
     }
 
     # RDP を 60fps に (既定は 30fps)。DWM のフレーム間隔で、15 が 60fps の目安 (Microsoft のサポート記事の値)。
@@ -141,18 +127,9 @@ try {
     powercfg /change standby-timeout-ac 0
     powercfg /change hibernate-timeout-ac 0
 
-    # 起動時に SYSTEM で動かす (サインインしなくても動く)。run.cmd が mado を起こし直し続ける (出力は mado.log)。
-    # run.cmd ごと落ちたときのために、タスク スケジューラも 1 分ごとに起こし直す
-    $action = New-ScheduledTaskAction -Execute 'cmd.exe' -WorkingDirectory $dir -Argument "/c `"$dir\run.cmd`""
-    $settings = New-ScheduledTaskSettingsSet -RestartCount 9999 -RestartInterval (New-TimeSpan -Minutes 1) `
-        -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    Register-ScheduledTask -TaskName $task -Force -Action $action -Settings $settings `
-        -Trigger (New-ScheduledTaskTrigger -AtStartup) `
-        -Principal (New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest) | Out-Null
-    Start-ScheduledTask -TaskName $task
-    Start-Sleep -Seconds 3
-    Get-ScheduledTask -TaskName $task | Select-Object TaskName, State | Format-Table -AutoSize
-    Get-Content "$dir\mado.log" -Tail 5 -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Get-Service mado | Format-Table Name, Status, StartType -AutoSize
+    Get-Content "$data\logs\mado.log" -Tail 5 -ErrorAction SilentlyContinue
 } catch {
     Write-Host $_ -ForegroundColor Red
     Read-Host 'Enter で閉じる'
