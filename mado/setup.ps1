@@ -78,7 +78,7 @@ try {
         Stop-ScheduledTask -TaskName $task
         # タスクを止めても止まるのは cmd.exe だけで、mado.exe は残る。止めて、本当に消えるまで待つ
         # (消えたあとも exe がしばらく掴まれていることがあるので、下の Copy-Item は何度か試す。2026-10-11)
-        Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force
+        Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         for ($i = 0; $i -lt 30 -and (Get-Process mado -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
     }
     foreach ($f in 'mado.exe', 'mado.json', 'client-secret.txt') {
