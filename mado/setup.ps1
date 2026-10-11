@@ -76,13 +76,17 @@ try {
         Unregister-ScheduledTask -TaskName 'mado' -Confirm:$false
     }
     # タスクを止めても止まるのは cmd.exe だけで、mado.exe は残る (サービスの mado.exe は MSI が止める)
-    Get-Process mado -ErrorAction SilentlyContinue | Where-Object Path -Like 'C:\mado\*' | Stop-Process -Force -ErrorAction SilentlyContinue
+    $old = { Get-Process mado -ErrorAction SilentlyContinue | Where-Object Path -Like 'C:\mado\*' }
+    & $old | Stop-Process -Force -ErrorAction SilentlyContinue
+    # 止まるまで待つ (掴まれたままだと下の Move-Item が落ちる)
+    for ($i = 0; $i -lt 30 -and (& $old); $i++) { Start-Sleep -Milliseconds 500 }
     New-Item -ItemType Directory -Force $data | Out-Null
     icacls $data /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
     # 証明書・ACME のアカウント・セッションの鍵は同じ形なので、そのまま持ってくる (取り直さずに済む)
     if ((Test-Path 'C:\mado\data') -and -not (Test-Path "$data\data")) {
         Move-Item -LiteralPath 'C:\mado\data' -Destination "$data\data"
     }
+    # v0.3 までの setup.ps1 が足した規則。MSI が入れる規則は「mado (TCP 80)」「mado (TCP 443)」で、名前が違うので消さない
     Get-NetFirewallRule -Name 'mado-In' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 
     # --- 設定と client secret (MSI には入れない。サービスが起動したときに読めるよう、MSI より先に置く) ---
