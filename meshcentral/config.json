@@ -5,7 +5,8 @@
     "port": 443,
     "redirPort": 80,
     "mpsPort": 0,
-    "selfUpdate": true
+    "selfUpdate": true,
+    "authLog": "C:\\meshcentral\\auth.log"
   },
   "domains": {
     "": {
