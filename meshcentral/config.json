@@ -11,6 +11,8 @@
   "domains": {
     "": {
       "title": "doany",
+      "siteStyle": 3,
+      "showModernUIToggle": true,
       "newAccounts": false,
       "showPasswordLogin": false,
       "authStrategies": {

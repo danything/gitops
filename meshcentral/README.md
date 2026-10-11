@@ -19,6 +19,7 @@ Z440 の AMT(10.0.0.5。[docs/z440-migration.md](../docs/z440-migration.md))を�
 | ログイン | Entra の OIDC だけ(共用のアプリ登録 `b0fa498f-…`。リダイレクト URI は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れず、あればサイト管理者([docs/entra.md](../docs/entra.md))。**`admin` はほかのアプリ(Argo CD・Headlamp など)と共通**で、どれかの管理者はここでも管理者になる(LAN の PC を操作できる)。ID とパスワードの欄は出さず、自分でのアカウント作成もさせない |
 | AMT | LAN の中から直接つなぐ(この PC の Wi-Fi から 10.0 側へ)。AMT のほうから外へつないでくる CIRA は使わないので、その受け口(MPS、4433)は `mpsPort: 0` で閉じている |
 | ログ | ログインの経過(OIDC の設定、誰がどのロールで入ったか、弾いた理由)は `C:\meshcentral\meshcentral-data\auth.log`(`authLog`。管理者だけが読める)。**ログアウト用の URL に ID トークンがそのまま書かれる**ので、外に出さない。サービスの標準出力は `C:\meshcentral\WinService\daemon\meshcentral.out.log` |
+| 画面 | 新しい UI(Bootstrap の「Modern UI」)を既定にする(`siteStyle: 3`。2026-10-11)。まだ公式の既定ではなく、スマホの表示やファイル転送の進み具合に未解決の不具合がある(#7838・#8145)ので、`showModernUIToggle` で画面から旧 UI に戻せるようにしてある(選んだほうはユーザーごとに覚える)。URL に `?sitestyle=1` を付けてもそのときだけ旧 UI |
 | 更新 | `selfUpdate`: 毎晩 0 時すぎに自分で新しい版を見て上げる。インターネットに直接出ているので、上げ遅れないようにする |
 
 設定は [config.json](config.json)(`C:\meshcentral\meshcentral-data\config.json` に置く。client secret は置くときに埋める)。
