@@ -13,6 +13,7 @@
       "title": "Doa",
       "siteStyle": 3,
       "showModernUIToggle": true,
+      "themePack": "shadcn",
       "newAccounts": false,
       "showPasswordLogin": false,
       "authStrategies": {

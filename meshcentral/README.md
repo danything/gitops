@@ -20,6 +20,7 @@ Z440 の AMT(10.0.0.5。[docs/z440-migration.md](../docs/z440-migration.md))を�
 | AMT | LAN の中から直接つなぐ(この PC の Wi-Fi から 10.0 側へ)。AMT のほうから外へつないでくる CIRA は使わないので、その受け口(MPS、4433)は `mpsPort: 0` で閉じている |
 | ログ | ログインの経過(OIDC の設定、誰がどのロールで入ったか、弾いた理由)は `C:\meshcentral\meshcentral-data\auth.log`(`authLog`。管理者だけが読める)。**ログアウト用の URL に ID トークンがそのまま書かれる**ので、外に出さない。サービスの標準出力は `C:\meshcentral\WinService\daemon\meshcentral.out.log` |
 | 画面 | 新しい UI(Bootstrap の「Modern UI」)を既定にする(`siteStyle: 3`。2026-10-11)。まだ公式の既定ではなく、スマホの表示やファイル転送の進み具合に未解決の不具合がある(#7838・#8145)ので、`showModernUIToggle` で画面から旧 UI に戻せるようにしてある(選んだほうはユーザーごとに覚える)。URL に `?sitestyle=1` を付けてもそのときだけ旧 UI |
+| テーマ | [shadcn](https://github.com/bherbruck/meshcentral-shadcn-theme)(MIT。shadcn/ui 風、ライト / ダーク)を [theme-pack/shadcn/](theme-pack/shadcn/) に**取り込んで**使う(`themePack`。`setup.ps1` が `meshcentral-data\theme-pack\` に置く)。コミット `d7e7a65`(2026-09-21、1.2.5 で作られたもの)。MeshCentral の公式の theme pack の口(新しい UI のときだけ `styles/theme.css` と `scripts/theme.js` を読む)に CSS を足すだけで、画面のファイルは書き換えないので、selfUpdate で版が上がっても崩れにくい。JS は管理画面の中で動くので、取り込み直すときは中身を読む(今の JS はダークモードをログイン画面に揃えるだけ。CSS は同梱のフォントと埋め込みの SVG しか読まない)。やめるときは `themePack` の行を消す |
 | 更新 | `selfUpdate`: 毎晩 0 時すぎに自分で新しい版を見て上げる。インターネットに直接出ているので、上げ遅れないようにする |
 
 設定は [config.json](config.json)(`C:\meshcentral\meshcentral-data\config.json` に置く。client secret は置くときに埋める)。
