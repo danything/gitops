@@ -50,8 +50,8 @@ if (-not $Stage) {
         $want = ((Get-Content "$tmp\mado.exe.sha256") -split '\s+')[0].ToLower()
         $got = (Get-FileHash "$tmp\mado.exe" -Algorithm SHA256).Hash.ToLower()
         if ($want -ne $got) { throw "mado.exe の SHA-256 が合わない ($got / $want)" }
-        # 作ったのが danything/mado の Actions であること (release.yml の attest-build-provenance)
-        gh attestation verify "$tmp\mado.exe" --repo danything/mado | Out-Null
+        # 作ったのが danything/mado の release.yml であること (attest-build-provenance)。SHA-256 は exe と同じリリースに載っているので、改ざんへの備えはこちら
+        gh attestation verify "$tmp\mado.exe" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
         if ($LASTEXITCODE) { throw "mado.exe の出どころを確かめられない ($LASTEXITCODE)" }
 
         [IO.File]::WriteAllText("$tmp\client-secret.txt", $secret)
