@@ -13,9 +13,9 @@ Z440 の AMT(10.0.0.5。[docs/z440-migration.md](../docs/z440-migration.md))を�
 | | |
 | --- | --- |
 | 動かし方 | Node.js + `C:\meshcentral` の MeshCentral を Windows サービス(`MeshCentral`)で。**WSL(wslc)では動かさない** ── サインインするまで起動しないので、停電のあとに入れない |
-| 名前 | `mc.doany.io` の A / AAAA を JCOM の固定の IP(`61.21.173.41` と、PC に足した `2405:1201:5201:3a00::2`)に([pulumi/dns.ts](../pulumi/dns.ts))。Cloudflare も `main` の Gateway も通さない |
-| ルーター | JCOM で TCP 80 / 443 を 10.10.0.2 へ転送(IPv4)し、IPv6 のフィルターで `2405:1201:5201:3a00::2` の TCP 80 / 443 を通す |
-| 証明書 | MeshCentral に組み込みの Let's Encrypt(80 で HTTP-01)。IPv6 でも確認しに来るので、IPv6 の 80 も通しておく |
+| 名前 | `mc.doany.io` の A を JCOM の固定の IP(`61.21.173.41`)に([pulumi/dns.ts](../pulumi/dns.ts))。Cloudflare も `main` の Gateway も通さない。**IPv4 だけ** ── JCOM のルーターに IPv6 で外からの接続を通す設定が無い |
+| ルーター | JCOM の HUMAX HGJ310V4 は Plume の機種で、設定は **J:COM のアプリ**だけ。「設定 → ネットワーク → IP 予約」でこの PC(OD00)を 10.10.0.2 に予約し、同じ画面で TCP 80 / 443 を転送する |
+| 証明書 | MeshCentral に組み込みの Let's Encrypt(80 で HTTP-01) |
 | ログイン | Entra の OIDC だけ(共用のアプリ登録 `b0fa498f-…`。リダイレクト URI は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れず、あればサイト管理者([docs/entra.md](../docs/entra.md))。**`admin` はほかのアプリ(Argo CD・Headlamp など)と共通**で、どれかの管理者はここでも管理者になる(LAN の PC を操作できる)。ID とパスワードの欄は出さず、自分でのアカウント作成もさせない |
 | AMT | LAN の中から直接つなぐ(この PC の Wi-Fi から 10.0 側へ)。AMT のほうから外へつないでくる CIRA は使わないので、その受け口(MPS、4433)は `mpsPort: 0` で閉じている |
 | 更新 | `selfUpdate`: 毎晩 0 時すぎに自分で新しい版を見て上げる。インターネットに直接出ているので、上げ遅れないようにする |
@@ -24,9 +24,9 @@ Z440 の AMT(10.0.0.5。[docs/z440-migration.md](../docs/z440-migration.md))を�
 
 ## 入れ方
 
-1. JCOM のルーターで上の「ルーター」の 2 つを設定する(DHCPv6 が配る範囲に `::2` が入っていないことも見る)
+1. J:COM のアプリで上の「ルーター」を設定する
 2. 普段のユーザーで流す。Infisical の `/shared/entra` から client secret を取り出し、残りを UAC で昇格して流す
-   (Node.js、MeshCentral、IPv6 のアドレス、ファイアウォール、スリープ無効、サービス)。何度流してもよい
+   (Node.js、MeshCentral、ファイアウォール、スリープ無効、サービス)。何度流してもよい
 
    ```powershell
    pwsh -File meshcentral/setup.ps1
