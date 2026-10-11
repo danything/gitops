@@ -27,7 +27,7 @@ CI を待たずに走りはじめる**のはこのため。CI の `bootstrap-app
 | [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
 | [`talos/`](talos/) | Talos への移行用 machine config(**v1.14 の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**Talos では `bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
 | [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)はコンテナで動かす**。`tools/t.ps1 <コマンド>`(Windows の WSL コンテナ。wslc-compose)。手元にコマンドは入れない |
-| [`docs/`](docs/) | **[移行当日の手順](docs/migration-day.md)**、[決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos の実機検証](docs/talos.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
+| [`docs/`](docs/) | **[移行当日の手順](docs/migration-day.md)**、[決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos の実機検証](docs/talos.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Z440 への移行](docs/z440-migration.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
 | [`ROADMAP.md`](ROADMAP.md) | 暫定構成から Talos までの道筋と進捗(なぜそうしたかは `docs/decisions.md`) |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
 | [`.sops.yaml`](.sops.yaml) | 平文の秘密を SOPS(age)で暗号化する規則(`bootstrap/` の 4 ファイルと `talos/` の 2 つ) |
