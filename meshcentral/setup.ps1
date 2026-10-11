@@ -81,6 +81,11 @@ try {
     Copy-Item $Config "$data\config.json" -Force
     icacls "$data\config.json" /reset | Out-Null
 
+    # 見た目のテーマ (config.json の themePack)。リポジトリの中身で毎回置き換える
+    if (Test-Path "$data\theme-pack\shadcn") { Remove-Item -Recurse -Force "$data\theme-pack\shadcn" }
+    New-Item -ItemType Directory -Force "$data\theme-pack" | Out-Null
+    Copy-Item -Recurse "$PSScriptRoot\theme-pack\shadcn" "$data\theme-pack\shadcn"
+
     # AAAA に書いたアドレスを Ethernet (既定経路が JCOM の 10.10.0.1 の口) に足す。出ていく通信の送り元には使わない
     # (外から来た接続の返事はこのアドレスから返る)
     $if = (Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Where-Object NextHop -EQ '10.10.0.1' | Select-Object -First 1).InterfaceIndex
