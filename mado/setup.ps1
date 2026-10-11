@@ -105,6 +105,11 @@ try {
             -LocalPort 80, 443 -Action Allow -Profile Any | Out-Null
     }
 
+    # RDP を 60fps に (既定は 30fps)。DWM のフレーム間隔で、15 が 60fps の目安 (Microsoft のサポート記事の値)。
+    # 次の RDP の接続から効く。Windows App で直接つなぐときも mado から入るときも同じ
+    $ts = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations'
+    New-ItemProperty -Path $ts -Name DWMFRAMEINTERVAL -PropertyType DWord -Value 15 -Force | Out-Null
+
     # 寝ると入口ごと消える。電源につないでいるときはスリープも休止もしない
     powercfg /change standby-timeout-ac 0
     powercfg /change hibernate-timeout-ac 0
