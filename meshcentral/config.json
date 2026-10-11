@@ -6,7 +6,7 @@
     "redirPort": 80,
     "mpsPort": 0,
     "selfUpdate": true,
-    "authLog": "C:\\meshcentral\\auth.log"
+    "authLog": "C:\\meshcentral\\meshcentral-data\\auth.log"
   },
   "domains": {
     "": {
@@ -22,11 +22,11 @@
             "redirect_uri": "https://mc.doany.io/auth-oidc-callback"
           },
           "custom": {
-            "scope": "openid profile email"
+            "scope": "openid profile email",
+            "authorities": ["roles"]
           },
           "groups": {
             "claim": "roles",
-            "scope": "openid",
             "required": ["admin"],
             "siteadmin": ["admin"],
             "revokeAdmin": true
