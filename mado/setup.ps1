@@ -7,8 +7,10 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
+# 初めて入れる版。あとは mado が自分で上げる (署名を確かめて入れ替える。mado の README「自動更新」)。
+# 動いているほうが新しければ exe は置き換えない (古い版に戻さない)
 # renovate: datasource=github-releases depName=danything/mado
-$version = 'v0.2.1'
+$version = 'v0.3.0'
 $dir = 'C:\mado'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
 $ipv6 = '2405:1201:5201:3a00::2'
@@ -44,15 +46,29 @@ if (-not $Stage) {
     New-Item -ItemType Directory $tmp | Out-Null
     icacls $tmp /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
     try {
-        # リリースの exe と SHA-256。照らして合わなければ止める
-        gh release download $version --repo danything/mado --dir $tmp --pattern 'mado.exe' --pattern 'mado.exe.sha256'
-        if ($LASTEXITCODE) { throw "gh release download $version ($LASTEXITCODE)" }
-        $want = ((Get-Content "$tmp\mado.exe.sha256") -split '\s+')[0].ToLower()
-        $got = (Get-FileHash "$tmp\mado.exe" -Algorithm SHA256).Hash.ToLower()
-        if ($want -ne $got) { throw "mado.exe の SHA-256 が合わない ($got / $want)" }
-        # 作ったのが danything/mado の release.yml であること (attest-build-provenance)。SHA-256 は exe と同じリリースに載っているので、改ざんへの備えはこちら
-        gh attestation verify "$tmp\mado.exe" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
-        if ($LASTEXITCODE) { throw "mado.exe の出どころを確かめられない ($LASTEXITCODE)" }
+        # 動いている mado の版 (状態の口。v0.3.0 から)。自分で上げてこちらより新しければ、exe は置き換えない
+        # mado が止まっていて聞けないときは $version を入れる (古いこともある。動き出せば自分でまた上げる)
+        function ConvertTo-Version([string]$v) {
+            try { [version](($v -replace '^v', '') -replace '[-+].*$', '') } catch { $null }
+        }
+        $running = $null
+        try { $running = (Invoke-RestMethod http://127.0.0.1:8788/status -TimeoutSec 3).version } catch {}
+        $a = ConvertTo-Version $running
+        $b = ConvertTo-Version $version
+        $keep = $a -and $b -and $a -gt $b
+        if ($keep) {
+            Write-Host "動いている mado ($running) のほうが新しいので、exe はそのまま ($version は入れない)"
+        } else {
+            # リリースの exe と SHA-256。照らして合わなければ止める
+            gh release download $version --repo danything/mado --dir $tmp --pattern 'mado.exe' --pattern 'mado.exe.sha256'
+            if ($LASTEXITCODE) { throw "gh release download $version ($LASTEXITCODE)" }
+            $want = ((Get-Content "$tmp\mado.exe.sha256" | Select-String 'mado\.exe$') -split '\s+')[0].ToLower()
+            $got = (Get-FileHash "$tmp\mado.exe" -Algorithm SHA256).Hash.ToLower()
+            if ($want -ne $got) { throw "mado.exe の SHA-256 が合わない ($got / $want)" }
+            # 作ったのが danything/mado の release.yml であること (attest-build-provenance)。SHA-256 は exe と同じリリースに載っているので、改ざんへの備えはこちら
+            gh attestation verify "$tmp\mado.exe" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
+            if ($LASTEXITCODE) { throw "mado.exe の出どころを確かめられない ($LASTEXITCODE)" }
+        }
 
         [IO.File]::WriteAllText("$tmp\client-secret.txt", $secret)
         Copy-Item "$PSScriptRoot\mado.json" $tmp
@@ -81,7 +97,18 @@ try {
         Get-Process mado -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         for ($i = 0; $i -lt 30 -and (Get-Process mado -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
     }
-    foreach ($f in 'mado.exe', 'mado.json', 'client-secret.txt') {
+    # 落ちたら (自動更新で入れ替えたときも) 2 秒ほどあとに起こし直すループ。タスクはこれを動かす
+    Set-Content -Encoding ascii -Path (Join-Path $Stage 'run.cmd') -Value @(
+        '@echo off'
+        ':loop'
+        '"%~dp0mado.exe" --config "%~dp0mado.json" >> "%~dp0mado.log" 2>&1'
+        # timeout は標準入力が無い (SYSTEM のタスク) と待たずに戻ることがあるので ping で待つ
+        'ping -n 3 127.0.0.1 >nul'
+        'goto loop'
+    )
+    # exe を落としていない (動いているほうが新しい) ときは、exe は今のまま
+    foreach ($f in 'mado.exe', 'mado.json', 'client-secret.txt', 'run.cmd') {
+        if (-not (Test-Path (Join-Path $Stage $f))) { continue }
         for ($i = 0; ; $i++) {
             try { Copy-Item (Join-Path $Stage $f) (Join-Path $dir $f) -Force; break }
             catch { if ($i -ge 20) { throw }; Start-Sleep -Milliseconds 500 }
@@ -114,9 +141,9 @@ try {
     powercfg /change standby-timeout-ac 0
     powercfg /change hibernate-timeout-ac 0
 
-    # 起動時に SYSTEM で動かす (サインインしなくても動く)。落ちたら 1 分ごとに起こし直す。出力は mado.log に足していく
-    $action = New-ScheduledTaskAction -Execute 'cmd.exe' -WorkingDirectory $dir `
-        -Argument "/c `"`"$dir\mado.exe`" --config `"$dir\mado.json`" >> `"$dir\mado.log`" 2>&1`""
+    # 起動時に SYSTEM で動かす (サインインしなくても動く)。run.cmd が mado を起こし直し続ける (出力は mado.log)。
+    # run.cmd ごと落ちたときのために、タスク スケジューラも 1 分ごとに起こし直す
+    $action = New-ScheduledTaskAction -Execute 'cmd.exe' -WorkingDirectory $dir -Argument "/c `"$dir\run.cmd`""
     $settings = New-ScheduledTaskSettingsSet -RestartCount 9999 -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
     Register-ScheduledTask -TaskName $task -Force -Action $action -Settings $settings `
