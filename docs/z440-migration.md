@@ -47,36 +47,46 @@ Z440 の NIC に **MAC アドレスで今と同じ名前(`eno1`・`eno4`)を付�
    何かの OS で起動して `ip link`)
 4. BIOS の設定: セキュアブート無効、起動は UEFI、電源が戻ったら起動する(停電のあと自動で上がるように)、Wake on LAN
 
-## 2. netplan を両方で動く形にしておく(移す前に今のサーバで)
+## 2. Z440 用の netplan を別のファイルで用意する(移す前に今のサーバで)
 
-今の `/etc/netplan/00-main.yaml` を `sudo cat` で確かめてから、**Z440 の口に名前を付ける節だけを足す**。
-DL360 の口(`eno1`〜`eno4`)は名前で、Z440 の口は MAC で当てるので、どちらの機械で起動しても同じ設定で動く。
+**1 つのファイルに DL360 用と Z440 用の両方を書かない。** Z440 で名前の `eno1` と MAC で名前を付けた口の両方の定義が
+当たり、どちらが効くかがファイルの並び順任せになる(PR #331 のレビュー)。Z440 用は別のファイルに丸ごと書き、
+**電源を切る直前に入れ替える**(DL360 はもう起動しないので、入れ替えたあとに DL360 で効くことは無い)。
+
+1. 今の `/etc/netplan/00-main.yaml` を `sudo cat` で確かめる
+2. それを写して `/etc/netplan/00-main.yaml.z440` を作り(拡張子が `.yaml` でないので netplan は読まない)、
+   `ethernets:` の `eno1` / `eno2` / `eno4` を次に置き換える。`bond0`(`interfaces: [eno1]` に減らす)と
+   `eno4` の IP・経路はそのまま。`<…>` は控えた MAC
 
 ```yaml
-# 足すもの(ethernets: の下)。<…> は控えた MAC
-    z440-onboard:
+  ethernets:
+    eno1:
       match:
         macaddress: "<Z440 の内蔵の口の MAC>"
       set-name: eno1
       wakeonlan: true
-    z440-nic1:
+    eno4:
       match:
         macaddress: "<361T のポート 1 の MAC>"
       set-name: eno4
+      # (ここから下は今の eno4 の設定をそのまま: dhcp4: false、addresses: 10.10.0.4/24、routes …)
+  bonds:
+    bond0:
+      interfaces: [eno1]
+      # (ほかは今の bond0 のまま)
 ```
 
-既存の `eno1` / `eno2` / `eno4` と `bond0`(`interfaces: [eno1, eno2]`)はそのまま。Z440 には `eno2` が無いので
-`bond0` は `eno1` だけで上がる。
-
-反映は `sudo netplan generate` までにして、**`netplan apply` はしない**(bond0 を作り直すので k3s が動いているあいだは避ける。
-00-main.yaml の先頭の注意)。DL360 では足した節は何にも当たらないので、今の動きは変わらない。
+3. 書いたら中身を目で見て確かめるだけにする。**`netplan apply` はしない**(bond0 を作り直すので k3s が動いているあいだは
+   避ける。00-main.yaml の先頭の注意)。このファイルは移す直前に入れ替える(3. の 3)
 
 ## 3. 移す直前
 
 1. バックアップを取って成功を確かめる: `sudo systemctl start k3s-backup.service` → `journalctl -u k3s-backup -n 50`
    (backup/README.md)
 2. 計画停止を知らせる(止まるもの: 全部の Web、DNS、NetBird、Matrix、録画)
-3. `sudo poweroff`
+3. netplan を Z440 用に入れ替える(反映はしない。次の起動から効く):
+   `sudo mv /etc/netplan/00-main.yaml /etc/netplan/00-main.yaml.dl360 && sudo mv /etc/netplan/00-main.yaml.z440 /etc/netplan/00-main.yaml`
+4. `sudo poweroff`
 
 ## 4. 載せ替え
 
@@ -97,11 +107,13 @@ CPU(グリスを塗り直す)・メモリ 6 枚・SSD・PT3・USB 機器を Z440
 
 ## 戻し方
 
-SSD とほかの部品を DL360 に戻せば、そのまま元どおりに起動する(足した netplan の節は DL360 では何にも当たらない)。
+SSD とほかの部品を DL360 に戻し、DL360 の画面(モニタか iLO)で netplan を元に戻して再起動する:
+`sudo mv /etc/netplan/00-main.yaml /etc/netplan/00-main.yaml.z440 && sudo mv /etc/netplan/00-main.yaml.dl360 /etc/netplan/00-main.yaml`
+(戻さないとネットワークが上がらない。ほかは何も変えていないので、それで元どおりになる)
 
 ## 終わったら
 
-- netplan から DL360 の口(`eno2`・DL360 の `eno1` / `eno4` の節)を消してよい
+- 戻す見込みが無くなったら `/etc/netplan/00-main.yaml.dl360` を消してよい
 - router.md・この文書の「今の構成」を Z440 に直す
 - **10.10 側を外す**(小さいサーバをルーターにしたあと): netplan の `eno4` を消し、AdGuard の 10.10.0.4 の待ち受け
   (apps/adguardhome/service-dns.yaml)を外し、10.10 側の機器の DNS を 10.0.0.2 にする。NetBird の 10.10.0.0/24 の経路は、
