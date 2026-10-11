@@ -7,8 +7,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $pwsh = (Get-Command pwsh).Source
 
-# 入れる最初の版。あとは MeshCentral が自分で上げる (config.json の selfUpdate)
-$version = '1.2.6'
+# 入れる最初の版。あとは MeshCentral が自分で上げる (config.json の selfUpdate)。npm の版を書く (GitHub のタグが
+# 先に出ることがある。1.2.6 はタグだけで npm に無かった。2026-10-11)
+$version = '1.2.5'
 $dir = 'C:\meshcentral'
 # AAAA (pulumi/dns.ts) に書いた固定のアドレス。JCOM のプレフィックスの中で、DHCPv6 が配る範囲の外
 $ipv6 = '2405:1201:5201:3a00::2'
