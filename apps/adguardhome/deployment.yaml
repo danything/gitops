@@ -32,7 +32,7 @@ spec:
       annotations:
         # config.yaml の sha256 (`sha256sum apps/adguardhome/config.yaml`)。ConfigMap が変わっても
         # Pod は作り直されないので、ここを変えて作り直させる。ずれていると CI (adguard-config) が落ちる
-        doany.io/config-sha256: 5e3bc965c8f5cfd2c2dcd2bba1e58e9ababe80dc49c508b5ed0626ce8b068fbe
+        doany.io/config-sha256: 76c2e1e2e336551eaaea1a0f71d6003209b48b1834e0aaf6c3cd0b5f2755051a
     spec:
       # git の設定 (config.yaml) を PVC に書き戻してから AdGuard を起動する。AdGuard は設定ファイルを
       # 書き換えるので、ConfigMap を直接マウントせずにコピーする
@@ -48,7 +48,7 @@ spec:
       containers:
         - name: adguardhome
           # 版を固定する (2026-10-07 まで latest)。上げると起動時に設定を移行する (schema_version) ので、
-          # 起動のたびに git の config.yaml を書き戻して移行し直す。Renovate の PR は自動マージする
+          # Renovate の PR の中で renovate-post-upgrade.sh が config.yaml も移行しておく。その PR は自動マージする
           image: adguard/adguardhome:v0.107.79
           # ServiceLB(k3s 組み込み)をやめたので、ノードの全アドレスで受けるために hostPort を持つ。
           # Talos には ServiceLB 相当が無いので、この形がそのまま移行先でも使える。

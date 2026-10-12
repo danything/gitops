@@ -84,6 +84,27 @@
             }
         },
         {
+            "description": "AdGuard Home ã®çä¸ããèµ·åæã«è¨­å®ãç§»è¡ãã (schema_version) ã®ã§ãpostUpgradeTasks ã® renovate-post-upgrade.sh ãæ°ããçã® --check-config ã§ apps/adguardhome/config.yaml ãç§»è¡ããdeployment.yaml ã® doany.io/config-sha256 ãåããã¦åãæã«ã³ããããããèª­ããªãè¨­å®ãªãã¹ã¯ãªãããè½ã¡ã¦ PR ã«åºããå®è¡ã®è¨±å¯ã¯èªåã® Renovate (5ym/repo-config ã® renovate.yml) ã® RENOVATE_ALLOWED_COMMANDSãå°ç¨ã®æã«ããã®ã¯ãç§»è¡ãè½ã¡ãã¨ãã« all dependencies ã® PR ã¾ã§æ­¢ããªããã",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "adguard/adguardhome"
+            ],
+            "groupName": "adguardhome",
+            "groupSlug": "adguardhome",
+            "postUpgradeTasks": {
+                "commands": [
+                    "bash apps/adguardhome/renovate-post-upgrade.sh"
+                ],
+                "fileFilters": [
+                    "apps/adguardhome/config.yaml",
+                    "apps/adguardhome/deployment.yaml"
+                ],
+                "executionMode": "branch"
+            }
+        },
+        {
             "description": "Mattermost の DB。Mattermost が挙げているのは下限 (PostgreSQL 14.0+) だけで、18 を検証したとは書いていない。加えて PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れるので、タグを差し替えるだけでは上がらない (dump と restore が要る)。17 のサポートは 2029-11 まであるので、Mattermost が 18 を明記するまで 17 の線に留める。",
             "matchDatasources": [
                 "docker"
