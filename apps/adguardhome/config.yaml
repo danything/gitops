@@ -6,8 +6,8 @@
 # - **このファイルを変えたら deployment.yaml の `doany.io/config-sha256` も変える**
 #   (ConfigMap が変わっても Pod は作り直されないため。値は `sha256sum apps/adguardhome/config.yaml`。
 #   ずれていると CI の adguard-config が落ちる)
-# - AdGuard の版が上がると起動時に設定を移行する (schema_version)。移行後の内容は UI か
-#   `kubectl exec ... cat /opt/adguardhome/conf/AdGuardHome.yaml` で取ってここに入れ直す
+# - AdGuard の版が上がると起動時に設定を移行する (schema_version)。Renovate が版を上げる PR の中で
+#   renovate-post-upgrade.sh が新しい版に移行させ、ここと deployment.yaml の sha256 を書き換えてコミットする
 # - gitops は公開リポジトリ。クライアントの固定設定 (端末名・MAC) などを足すときは公開してよいか考える
 apiVersion: v1
 kind: ConfigMap

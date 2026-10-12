@@ -84,6 +84,27 @@
             }
         },
         {
+            "description": "AdGuard Home の版上げ。起動時に設定を移行する (schema_version) ので、postUpgradeTasks の renovate-post-upgrade.sh が新しい版の --check-config で apps/adguardhome/config.yaml を移行し、deployment.yaml の doany.io/config-sha256 も合わせて同じ枝にコミットする。読めない設定ならスクリプトが落ちて PR に出る。実行の許可は自前の Renovate (5ym/repo-config の renovate.yml) の RENOVATE_ALLOWED_COMMANDS。専用の枝にするのは、移行が落ちたときに all dependencies の PR まで止めないため",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "adguard/adguardhome"
+            ],
+            "groupName": "adguardhome",
+            "groupSlug": "adguardhome",
+            "postUpgradeTasks": {
+                "commands": [
+                    "bash apps/adguardhome/renovate-post-upgrade.sh"
+                ],
+                "fileFilters": [
+                    "apps/adguardhome/config.yaml",
+                    "apps/adguardhome/deployment.yaml"
+                ],
+                "executionMode": "branch"
+            }
+        },
+        {
             "description": "Mattermost の DB。Mattermost が挙げているのは下限 (PostgreSQL 14.0+) だけで、18 を検証したとは書いていない。加えて PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れるので、タグを差し替えるだけでは上がらない (dump と restore が要る)。17 のサポートは 2029-11 まであるので、Mattermost が 18 を明記するまで 17 の線に留める。",
             "matchDatasources": [
                 "docker"
@@ -141,21 +162,6 @@
                 "frappe/erpnext"
             ],
             "sourceUrl": "https://github.com/frappe/erpnext"
-        },
-        {
-            "description": "AdGuard Home は自動マージしない。上げると起動時に設定を移行する(schema_version)が、設定の正本は git(apps/adguardhome/config.yaml)で起動のたびに書き戻すので、移行後の設定を config.yaml に入れ直すまでが 1 つの作業になる。",
-            "matchDatasources": [
-                "docker"
-            ],
-            "matchPackageNames": [
-                "adguard/adguardhome"
-            ],
-            "groupName": "adguardhome",
-            "groupSlug": "adguardhome",
-            "automerge": false,
-            "addLabels": [
-                "needs-review"
-            ]
         },
         {
             "description": "NetBird の provider と、それを包む Pulumi のプラグインは自動マージしない。0.0.x で API が動くうえ、マージは NetBird の実物への up になる。PR の preview の差分を人が見る。**pulumi/Pulumi.yaml の分だけに当てる。** netbirdio/netbird は Docker のイメージ (apps/netbird/) と名前が同じで、絞らないとイメージの更新もこの枝に入る。そうなると枝の全部の更新が pulumi/ の規則 (skipArtifactsUpdate) に当たらなくなり、bun.lock を作る postUpgradeTasks が効かない (#315 のレビュー)。この枝の更新は全部 pulumi/ の規則にも当たる。",
