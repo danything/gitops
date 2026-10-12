@@ -84,7 +84,7 @@
             }
         },
         {
-            "description": "AdGuard Home ã®çä¸ããèµ·åæã«è¨­å®ãç§»è¡ãã (schema_version) ã®ã§ãpostUpgradeTasks ã® renovate-post-upgrade.sh ãæ°ããçã® --check-config ã§ apps/adguardhome/config.yaml ãç§»è¡ããdeployment.yaml ã® doany.io/config-sha256 ãåããã¦åãæã«ã³ããããããèª­ããªãè¨­å®ãªãã¹ã¯ãªãããè½ã¡ã¦ PR ã«åºããå®è¡ã®è¨±å¯ã¯èªåã® Renovate (5ym/repo-config ã® renovate.yml) ã® RENOVATE_ALLOWED_COMMANDSãå°ç¨ã®æã«ããã®ã¯ãç§»è¡ãè½ã¡ãã¨ãã« all dependencies ã® PR ã¾ã§æ­¢ããªããã",
+            "description": "AdGuard Home の版上げ。起動時に設定を移行する (schema_version) ので、postUpgradeTasks の renovate-post-upgrade.sh が新しい版の --check-config で apps/adguardhome/config.yaml を移行し、deployment.yaml の doany.io/config-sha256 も合わせて同じ枝にコミットする。読めない設定ならスクリプトが落ちて PR に出る。実行の許可は自前の Renovate (5ym/repo-config の renovate.yml) の RENOVATE_ALLOWED_COMMANDS。専用の枝にするのは、移行が落ちたときに all dependencies の PR まで止めないため",
             "matchDatasources": [
                 "docker"
             ],
