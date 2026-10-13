@@ -2,6 +2,7 @@
 
 対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、NIC は BCM5719 ×4、ディスクは SAS の SSD 447 GB)。
 検証用に Hyper-V でも同じ ISO を使う。2026-09-06 時点の最新は Talos v1.14.0(v1.13.10 も可)。
+いま使う版は [talos/versions.yaml](../talos/versions.yaml) が正(2026-10-13 時点で v1.14.2)。下の URL の版もそれに合わせる。
 
 ## 1. Image Factory で ISO を作る
 
@@ -39,9 +40,15 @@ Web UI(factory.talos.dev → Bare-metal Machine → amd64 → version → extens
 
 | 用途 | URL |
 | --- | --- |
-| ISO(通常、Secure Boot オフ) | `https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.14.0/metal-amd64.iso` |
+| ISO(通常、Secure Boot オフ) | `https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.14.2/metal-amd64.iso` |
 | ISO(Secure Boot 用、Sidero の鍵で署名。UEFI に鍵登録が要るので今回は使わない) | 同じ URL で `metal-amd64-secureboot.iso` |
-| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.0` |
+| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.2` |
+
+**プレリリース(alpha / beta)も同じ形の URL で取れる。** 版のところを差し替えるだけ。Web UI では既定で隠れているので、
+pre-release を表示するチェックを入れる。2026-10-13 に v1.15.0-alpha.1 が出た当日、
+`https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.15.0-alpha.1/metal-amd64.iso`
+が 200 を返すのを確かめた(約 407 MB)。installer は `factory.talos.dev/installer/32820716…:v1.15.0-alpha.1`。
+試すなら Hyper-V か QEMU で。ノードが 1 台なので本番には当てない。
 
 ISO は約 400 MB。extension を足したくなったら schematic を作り直して ID を差し替え、`talosctl upgrade` で当てる(ISO を焼き直す必要はない)。
 

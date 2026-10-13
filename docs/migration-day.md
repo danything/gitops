@@ -70,13 +70,13 @@ sudo systemctl start k3s-backup.service     # ホストのぶん
 そのまま書けばよい。Windows なら Rufus の **DD イメージモード**。
 
 ```shell
-curl -LO https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.14.0/metal-amd64.iso
+curl -LO https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.14.2/metal-amd64.iso
 sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
 **焼いた ISO の schematic は気にしなくてよい。** ISO が決めるのは maintenance mode の
 カーネルだけで、**ディスクに書かれるのは machine config の `--install-image`**
-(`factory.talos.dev/installer/32820716…:v1.14.0`。[render.sh](../talos/render.sh))。
+(`factory.talos.dev/installer/32820716…:v1.14.2`。[render.sh](../talos/render.sh))。
 ドリル用の `2d61dd07…` で起動しても、入るのは本番用の schematic。
 
 - [ ] **Secure Boot が Disabled** であること(RBSU は POST 中に F9 →
