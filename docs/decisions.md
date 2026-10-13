@@ -646,7 +646,13 @@ Infisical から作って `imagePullSecrets` で参照していた(tamasagashi�
 
 実機には Earthsoft PT3(`earth_pt3`、Altera 1172:4c15)が刺さっていて、Talos のカーネルは `CONFIG_DVB_PT3` を
 有効にしておらず、公式 extension にも無い。denpa の tuner-agent はこの箱の `/dev/dvb` と B-CAS リーダーに依存している。
-**余っている箱は無い**(2026-09-06 本人談)ので、次の 2 本立てで進めている。
+**余っている箱は無い**(2026-09-06 本人談)ので、次の 2 本立てで進めていた。
+
+**結論(2026-10-13): 1 が通った。** pkgs#1682 は v1.15.0-alpha.1 に入り、`siderolabs/dvb-pt3` が Image Factory の
+公式 extension に出た。本番の schematic を `96371c8f…`(dvb-pt3 + intel-ucode + IOMMU の引数)に作り直し、
+Talos を v1.15.0-alpha.1 に上げた(`talos/versions.yaml`)。extension は `earth_pt3` を blacklist して配るので、
+`talos/patches/main.yaml` の `machine.kernel.modules` で読ませる。2 の vfio は PT3 をホストのドライバと取り合うので外した。
+alpha をノード 1 台の本番に乗せることになるが、1.15.0 の正式版を待つより PT3 を先に取った。
 
 1. **上流に PR 済み(本命)**: [siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682)
    (`CONFIG_DVB_PT3=m` の 1 行。依存する tc90522 / qm1d1c0042 / mxl301rf は既に `m`)と
