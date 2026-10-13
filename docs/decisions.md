@@ -662,7 +662,7 @@ alpha をノード 1 台の本番に乗せることになるが、1.15.0 の正�
    extension の `compatibility.talos.version` は `>= v1.15.0` と当て推量。
 2. **入らなかった場合の保険: KubeVirt の VM にパススルー。** 実機で確認済み — VT-d 有効(IOMMU グループ 66 個)、
    PT3(05:00.0)は**グループ 36 に単独**、B-CAS は USB(Gemalto GemPC Twin 08e6:3437)。Talos のカーネルは
-   `vfio-pci` / `vfio_iommu_type1` / KVM を持っている(`talos/patches/main.yaml` で `intel_iommu=on` と vfio を指定済み)。
+   `vfio-pci` / `vfio_iommu_type1` / KVM を持っている(`intel_iommu=on` は schematic に残してある。vfio は 2026-10-13 に `talos/patches/main.yaml` から外したので、この道に戻るなら足し直す)。
    tuner-agent だけ VM(Ubuntu)で動かせば Talos 本体は素のまま、アップグレードも Image Factory のままでいける。
 
 自前 extension を `imager` で焼く案は、Image Factory から外れてアップグレードのたびに自前ビルドになるので採らない。

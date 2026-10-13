@@ -1,7 +1,7 @@
 # Talos Linux — メディア作成と machine config
 
 対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、NIC は BCM5719 ×4、ディスクは SAS の SSD 447 GB)。
-検証用に Hyper-V でも同じ ISO を使う。2026-09-06 時点の最新は Talos v1.14.0(v1.13.10 も可)。
+検証用に Hyper-V でも同じ ISO を使う。VM ブートドリルは 2026-09-06 に v1.14.0 でやった。
 いま使う版は [talos/versions.yaml](../talos/versions.yaml) が正(2026-10-13 時点で v1.15.0-alpha.1)。下の URL の版もそれに合わせる。
 
 ## 1. Image Factory で ISO を作る
