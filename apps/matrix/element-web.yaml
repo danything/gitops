@@ -79,7 +79,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: element-web
-          image: vectorim/element-web:v1.12.30
+          image: vectorim/element-web:v1.12.31
           env:
             # イメージは root でない nginx で動くので、80 ではなく 8080 で待つ(docs/install.md)
             - name: ELEMENT_WEB_PORT
