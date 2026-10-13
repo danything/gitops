@@ -26,7 +26,7 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       **作業中は何も見せない(2026-09-08 に決めた)。** Cloudflare 側でメンテナンス画面を出す案は、
       止まっている数時間のために配線を 1 つ増やすことになるのでやめた。見に来るのは自分だけ。
 - [ ] 最終バックアップを取り、`restic check` を通す。
-- [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `32820716…`)。
+- [ ] Talos を実機にインストール(`talos/README.md` の手順、schematic `96371c8f…`)。
 - [ ] **service の IPv6 CIDR を `fd43::/108` に変える**(Talos は `/64` を受け付けない)。ClusterIP が振り直しになる。
       設定は入っていて、VM で出ることも確かめた(2026-09-08。`kube-dns` が `["10.43.0.10","fd43::a"]`)。
       当日は「振り直された ClusterIP で困るものが無いか」を見るだけ。
@@ -38,7 +38,8 @@ Talos 側は **`KubeFlannelCNIConfig` を `$patch: delete` で消して `KubePro
       (中身は [apps/k8up/README.md](apps/k8up/README.md)「戻し方」。**順番と、`Succeeded` が
       「戻った」の意味ではないこと**が要点。2026-09-08 に実際に流して確認済み)。
 - [ ] Infisical → operator → 各アプリの順で疎通確認。DNS(cloudflare-ddns)、netbird、AdGuard の公開リゾルバを確認。
-- [ ] **PT3**: 上流 PR が間に合わなければ KubeVirt にパススルーして tuner-agent だけ VM で動かす
+- [ ] **PT3**: 上流 PR は v1.15.0-alpha.1 に入った。schematic に `dvb-pt3` を入れ、`earth-pt3` を読ませてある。
+      実機で `/dev/dvb/adapter*` が出るのを確かめ、tuner-agent に `/dev/dvb` を hostPath で渡す
       ([docs/decisions.md](docs/decisions.md)「PT3 チューナー」)。
 
 ### 用意が済んだもの

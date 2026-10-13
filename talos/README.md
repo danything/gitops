@@ -155,5 +155,5 @@ talosctl -n 10.0.0.2 upgrade --image factory.talos.dev/installer/<schematic>:<�
 `patches/` のインタフェース名とディスクだけを VM 用に読み替えて QEMU で実際に起動した(2026-09-07〜09)。
 確認できたこと(bond0 のフェイルオーバー、静的 IPv6 と `accept_ra: "2"`、カーネル組み込みの wireguard ──
 NetBird も同じものを使う ── など)と、VM では原理的に確かめられないこと(実機の NIC 名 `eno1`/`eno2`/`eno4` と
-tg3、本物のスイッチ相手の balance-alb、ISP の RA、`/dev/sda`、PT3 の vfio パススルー本体)は
+tg3、本物のスイッチ相手の balance-alb、ISP の RA、`/dev/sda`、PT3 本体)は
 [../docs/talos.md](../docs/talos.md)「VM ブートドリル」にまとめてある。

@@ -21,11 +21,13 @@ talos:
   # リリースされた版はそのまま使える。Factory のレジストリはタグの一覧を返さない (/v2/…/tags/list が 404)
   # ので、installer イメージを docker で追う形では Renovate が版を引けなかった (2026-10-07 まで)。
   # 手元の talosctl (tools/Dockerfile) と同じ depName なので、同じ PR で上がる。
+  # PT3 のドライバ(dvb-pt3)が v1.15.0-alpha.1 からしか無いので、2026-10-13 から alpha に乗せている
+  # (../docs/decisions.md「PT3 チューナー」)。いまの版がプレリリースなので、Renovate は次の alpha / beta も PR にしてくる。
   # renovate: datasource=github-releases depName=siderolabs/talos
-  version: v1.14.2
-  # 拡張(intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ ID。
+  version: v1.15.0-alpha.1
+  # 拡張(dvb-pt3、intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ ID。
   # 中身を変えたら Image Factory で作り直して、この値を差し替える。
-  schematic: 32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302
+  schematic: 96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca
 
 kubernetes:
   # `gen config` に `--kubernetes-version` で渡すこと。渡さないと Talos の既定

@@ -1,14 +1,17 @@
 # Talos Linux — メディア作成と machine config
 
 対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、NIC は BCM5719 ×4、ディスクは SAS の SSD 447 GB)。
-検証用に Hyper-V でも同じ ISO を使う。2026-09-06 時点の最新は Talos v1.14.0(v1.13.10 も可)。
+検証用に Hyper-V でも同じ ISO を使う。VM ブートドリルは 2026-09-06 に v1.14.0 でやった。
+いま使う版は [talos/versions.yaml](../talos/versions.yaml) が正(2026-10-13 時点で v1.15.0-alpha.1)。下の URL の版もそれに合わせる。
 
 ## 1. Image Factory で ISO を作る
 
 Talos は「素の ISO」ではなく、必要な system extension を焼き込んだ ISO を https://factory.talos.dev で作る。
 組み合わせは **schematic** という YAML で表し、その内容のハッシュが schematic ID になる(同じ YAML なら誰が作っても同じ ID)。
 
-この箱に要る extension は intel-ucode だけ(BCM5719 の tg3、bonding、AHCI は Talos のカーネルに入っている)。
+この箱に要る extension は intel-ucode と dvb-pt3(BCM5719 の tg3、bonding、AHCI は Talos のカーネルに入っている)。
+dvb-pt3 は PT3 チューナーのドライバで、**v1.15.0-alpha.1 から**ある([decisions.md](decisions.md)「PT3 チューナー」)。
+PT3 のために本番を alpha に乗せている。
 **カーネル引数もここに入れる。** v1.14 では `machine.install` が `UnattendedInstallConfig` と衝突して machine config 側に
 書けないため、IOMMU の引数は schematic に持たせる。
 
@@ -16,10 +19,11 @@ Talos は「素の ISO」ではなく、必要な system extension を焼き込�
 # schematic.yaml (本番用)
 customization:
   extraKernelArgs:
-    - intel_iommu=on      # PT3 を KubeVirt に渡すため
+    - intel_iommu=on      # 元は PT3 を KubeVirt に渡すため。dvb-pt3 が入ったいまは要らないが、パススルーの道として残す
     - iommu=pt
   systemExtensions:
     officialExtensions:
+      - siderolabs/dvb-pt3
       - siderolabs/intel-ucode
 ```
 
@@ -28,20 +32,27 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 # => {"id":"2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8"}
 ```
 
-実際に発行した ID は 2 つある。
+実際に発行した ID は 3 つある。
 
 | 用途 | schematic ID |
 | --- | --- |
-| **本番**(intel-ucode + IOMMU の引数) | `32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302` |
+| **本番**(dvb-pt3 + intel-ucode + IOMMU の引数。2026-10-13 から) | `96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca` |
+| 旧本番(intel-ucode + IOMMU の引数。PT3 なし) | `32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302` |
 | 検証用(intel-ucode のみ) | `2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8` |
 
 Web UI(factory.talos.dev → Bare-metal Machine → amd64 → version → extensions)でも同じ ID が出る。
 
 | 用途 | URL |
 | --- | --- |
-| ISO(通常、Secure Boot オフ) | `https://factory.talos.dev/image/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302/v1.14.0/metal-amd64.iso` |
+| ISO(通常、Secure Boot オフ) | `https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca/v1.15.0-alpha.1/metal-amd64.iso` |
 | ISO(Secure Boot 用、Sidero の鍵で署名。UEFI に鍵登録が要るので今回は使わない) | 同じ URL で `metal-amd64-secureboot.iso` |
-| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302:v1.14.0` |
+| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca:v1.15.0-alpha.1` |
+
+**プレリリース(alpha / beta)も同じ形の URL で取れる。** 版のところを差し替えるだけ。Web UI では既定で隠れているので、
+pre-release を表示するチェックを入れる。2026-10-13 に v1.15.0-alpha.1 が出た当日、
+上の本番 schematic で ISO(約 409 MB)と installer が 200 を返すのを確かめた。
+ノード 1 台の本番を alpha に乗せるのは荒いが、PT3 のドライバがこの版からしか無いので割り切っている。
+1.15.0 の正式版が出たら Renovate の PR で乗り換える。
 
 ISO は約 400 MB。extension を足したくなったら schematic を作り直して ID を差し替え、`talosctl upgrade` で当てる(ISO を焼き直す必要はない)。
 
@@ -747,7 +758,7 @@ talosctl read /sys/module/wireguard/version -n 10.0.0.2 -e …   # => 1.0.0
   ハブなので送ったフレームが相方の NIC にも返ってくるが、それで bond が壊れることは無かった
 - **RA も SLIRP のもの**(`fe80::2`、プレフィックス `240f:6d:842b:1::/64` は手で合わせた)。
   ISP のルータの RA(MTU オプション、RDNSS、valid/preferred lifetime)は別物
-- carrier の**復旧**方向、PT3 の vfio パススルー本体
+- carrier の**復旧**方向、PT3 本体(当時は vfio パススルーの予定。いまは dvb-pt3 で `/dev/dvb` が出るか)
 
 ## ネットワークまわりの前提
 
