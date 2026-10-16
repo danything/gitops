@@ -7,9 +7,9 @@
 # 読めない設定なら失敗する(= PR の postUpgradeTasks が落ちて気づける)。書き直したら config.yaml に戻し、
 # deployment.yaml の doany.io/config-sha256 も合わせる(CI の adguard-config が見る)。
 #
-# 動くのは Renovate のコンテナ(ghcr.io/renovatebot/renovate、5ym/repo-config の renovate.yml)の中、リポジトリの直下。
+# 動くのは Renovate のコンテナ(ghcr.io/renovatebot/renovate、apps/renovate/renovate.yaml の CronJob)の中、リポジトリの直下。
 # AdGuard の版は deployment.yaml のイメージのタグ(Renovate が上げた後の値)から取り、公式のチェックサムと照らしてから使う。
-# 許可は repo-config の renovate.yml の RENOVATE_ALLOWED_COMMANDS
+# 許可は apps/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS
 set -euo pipefail
 cd "$(dirname "$0")"
 
