@@ -3,7 +3,7 @@
 Renovate を CronJob で回す(2026-10-16〜)。GitHub の `danything` と `5ym`、Forgejo(fj.doany.io)の `doa` の全リポジトリ。
 設定は各リポジトリの `renovate.json`(共通は `github>5ym/repo-config`)。
 
-それまでは GitHub Actions(5ym/repo-config の `renovate.yml`)と Forgejo Actions(doa/renovate)で毎時回していたが、
+それまでは GitHub Actions(5ym/repo-config の `renovate.yml`)と Forgejo Actions(doa/renovate)で毎時回していたが(どちらも消した)、
 GitHub の schedule は 15〜40 分遅れ、丸ごと飛ばされることもあった。
 
 | CronJob | 対象 | 時刻(毎時) |
@@ -36,6 +36,5 @@ GitHub のトークンは実行のたびに App の鍵から作る(1 時間で�
 
 ## クラスタが落ちているとき
 
-Renovate も止まる。もとの workflow は `workflow_dispatch` だけ残してあるので、急ぐときは手で回す
-(GitHub は 5ym/repo-config の Actions → Renovate、Forgejo は doa/renovate の Actions)。
-**CronJob と同時に走らせないこと**(同じリポジトリに 2 つの Renovate が触る)。
+Renovate も止まる。予備は置かない(もとの GitHub Actions と Forgejo Actions の workflow は 2026-10-17 に消した)。
+更新先のサーバもこのクラスタの上なので、止まっているあいだに PR を出しても意味が無い。戻れば次の実行で追いつく。
