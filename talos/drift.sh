@@ -5,19 +5,17 @@
 # (render.sh)。つまり**ズレは git とノードの間で起きる** ── `talosctl apply-config` を
 # 手で打ち忘れる、実機で `talosctl patch` して git に戻し忘れる、のどちらでも。
 #
-# **当てない。** machine config の適用は再起動を伴うことがあり、1 ノードでは即断になる。
-# Talos API は mTLS だけで OIDC を受けないので、CI にも渡さない
-# (.github/workflows/talos-validate.yml の「検出は自動、適用は手動」と同じ線)。
-# これは**ホストから手で回す道具**で、ノードの os:admin 証明書を持っている人だけが使える。
+# **当てない**(理由は talos/README.md「適用は CI にやらせない」)。
+# ノードの os:admin 証明書を持っている人が手で回す道具。移行後は手元の PC(tools/t.ps1)で回す
+# (python3 + PyYAML が要る。tools のコンテナに入っているかは要確認)。
 #
 #   ./talos/drift.sh                # talosconfig の既定のノード
 #   ./talos/drift.sh 10.0.0.2       # ノードを指定
 #
 # 出力は diff。**何も出なければ一致**。終了コードは一致 0 / ズレ 1(cron に置ける)。
 #
-# **`yq` は使わない。** サーバに入っているのは v3(jq 構文)で、v4 の式は動かない
-# ── render.sh が awk で組んでいるのと同じ理由。ここは python3 + PyYAML(どちらも
-# サーバにある)で読む。
+# **`yq` は使わない。** k3s 期のサーバに入っているのは v3(jq 構文)で、v4 の式は動かない
+# ── render.sh が awk で組んでいるのと同じ理由。ここは python3 + PyYAML で読む。
 set -eu
 
 NODE=${1:-}

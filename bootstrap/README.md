@@ -9,7 +9,7 @@
 `infisical/secrets.yaml`、`infisical/helmchart.yaml`、`argocd/helmchart.yaml`、
 `cert-manager/cloudflare-secret.yaml`。鍵は [`recovery/sops-age.key.age`](../recovery/)。
 
-いま動いているのは Ubuntu 26.04(NetworkManager、netplan バックエンド、TZ は UTC)の暫定構成で、
+いま動いているのは Ubuntu 26.04(netplan → systemd-networkd。2026-09-24 までは NetworkManager。TZ は UTC)の暫定構成で、
 最終形は Talos Linux。進捗は [ROADMAP.md](../ROADMAP.md)、なぜそうしたかは [docs/decisions.md](../docs/decisions.md)。
 Talos では**この層のほぼ全部が machine config の `inlineManifests` に載る**(平文の残りは引き続き GitHub Actions。
 [docs/decisions.md](../docs/decisions.md)「層の分け方」)。
@@ -31,13 +31,10 @@ Talos では**この層のほぼ全部が machine config の `inlineManifests` �
 **argocd と infisical の版は 2026-09-08 に固定した**(argo-cd 10.8.1 /
 infisical-standalone 1.10.0)。それまでは `HelmChart` CR に `version:` が無く、
 コントローラが**そのときの最新**を入れていた ── 作り直すと別の版になるし、Renovate も追えない。
-**Renovate はこの 2 ファイルを見ない**(`renovate.json` の `ignorePaths`)。
-2026-09-08 に argo-cd 10.8.2 の PR が**暗号文の中の `version: 10.8.1` を平文置換して
-自動マージされ、MAC が壊れて `sops -d` が通らなくなった。** 暗号化したファイルの
-1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、
-再現性(固定されていること)を取っている** ── 新しい版は人が見る。
+**Renovate はこの 2 ファイルを見ない**(`renovate.json` の `ignorePaths`)。2026-09-08 に暗号文の中の版を平文置換した PR が
+自動マージされ、`sops -d` が通らなくなったため。**版は固定して人が上げる**([docs/decisions.md](../docs/decisions.md)「依存の更新をどこまで自動で入れるか」)。
 
-**中を触るときは平文で書き足さないこと**(上の MAC の話)。位置を選びたいので `sops set` ではなくこの順でやった:
+中を触るときは、位置を選びたいので `sops set` ではなくこの順でやった:
 
 ```shell
 f=bootstrap/argocd/helmchart.yaml
@@ -49,8 +46,7 @@ sops -d "$f" | diff /tmp/before.yaml -     # 足した 1 行だけが出るこ�
 rm -f /tmp/before.yaml
 ```
 
-**`git diff` では代用できない** ── `mac` と `lastmodified` は中身が変わらなくても
-毎回書き換わるので、暗号文の差分を見ても何も分からない。**復号した中身どうしを比べる。**
+**`git diff` では代用できない**(`mac` と `lastmodified` が毎回変わる)。**復号した中身どうしを比べる。**
 
 ## git と live がずれていないか
 
@@ -162,17 +158,16 @@ ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` �
 見なして sync のたびに prune する(復元リハーサル 2026-09-06 で発覚)。
 `Prune=false` も一緒にコピーさせて、prune の対象から外す。
 
-**`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無い。**
-ArgoCD は同期の前に dry-run するので、`secrets.infisical.com/v1alpha1` が引けないと
-**`apps/` の同期が丸ごと落ちる。** CRD を入れる当の Application
-(`apps/infisical-operator/`)が同じ同期の中にいるので抜けられない
-(2026-09-08 のドリル 5 回目。[../docs/talos.md](../docs/talos.md))。
-**k8up の `Schedule` と同じ形の穴**で、あちらは 2026-09-07 に対処済みだった。
+**`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無く、`apps/` の同期が丸ごと落ちる**
+(CRD を入れる `apps/infisical-operator/` が同じ同期の中にいる。2026-09-08 のドリル 5 回目)。
+仕組みは k8up の `Schedule` と同じで、説明は [apps/k8up/README.md](../apps/k8up/README.md)「CRD がまだ無いクラスタで apps を止めないこと」。
 
 **`bootstrap/` の `InfisicalSecret` には要らない**(`argocd/oidc-secret.yaml`・
 `auth/secrets.yaml`・`infisical/smtp-secret.yaml`)。**ArgoCD が見ていない**ためで、
-これらは GitHub Actions が `kubectl apply` で当てる ── app-of-apps は
-`bootstrap/argocd` の `repos.yaml` **だけ**を `directory.include` で拾っている。
+これらは GitHub Actions が `kubectl apply` で当てる ── app-of-apps(Argo CD の chart が作る `apps` Application。
+`argocd/helmchart.yaml` の中、prune / selfHeal 付き)は `bootstrap/argocd` の `repos.yaml` **だけ**を `directory.include` で拾っている。
+chart と一緒に入るので、**まっさらなクラスタでも CI を待たずに ApplicationSet が走りはじめる**。CI の `bootstrap-apply` も
+同じファイルを当てるが、中身が同じなので衝突しない。
 
 ### アプリ側の書き方
 

@@ -33,8 +33,9 @@ provisioning:
 filesystem:
   type: xfs
 # noexec を外す。Talos v1.14 から /var 系は既定で nosuid,nodev,noexec になり、
-# PVC の中の実行ファイルが動かない。Mattermost はプラグイン 4 つを PVC から exec
-# するので落ちる (実機の PVC に実行ファイルは 5 本)。上流も Longhorn / vCluster が
+# PVC の中の実行ファイルが動かない。PVC から実行するものがある前提 (当初は Mattermost の
+# プラグイン。2026-10-06 に撤去。いまは Forgejo が forgejo-repos の各リポジトリの hooks/ に置く
+# サーバ側フックを git が exec するはずだが、未検証)。上流も Longhorn / vCluster が
 # 同じ理由で壊れたと言っていて、mount.secure がその逃げ道。
 # nosuid と nodev も一緒に外れるが、PVC に書けるのはコンテナだけで、そこは
 # PSA と securityContext で押さえているので釣り合うと判断した。

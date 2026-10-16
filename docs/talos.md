@@ -1,7 +1,8 @@
 # Talos Linux — メディア作成と machine config
 
-対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、NIC は BCM5719 ×4、ディスクは SAS の SSD 447 GB)。
-検証用に Hyper-V でも同じ ISO を使う。VM ブートドリルは 2026-09-06 に v1.14.0 でやった。
+対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、RDIMM は 6 枚中 5 枚で 40 GB、NIC は BCM5719 ×4)。
+ディスクは **SATA の SSD(Radeon R7、447 GB)を Smart Array(hpsa)越しに**見ている。Linux からは `/dev/sda`(`TRAN=sas` と出るが SAS ではない)。
+**Talos への移行はこの DL360 で先にやり、Z440 へ移すのはそのあと**(下の「Z440 に移すときに変わるもの」)。
 いま使う版は [talos/versions.yaml](../talos/versions.yaml) が正(2026-10-13 時点で v1.15.0-alpha.1)。下の URL の版もそれに合わせる。
 
 ## 1. Image Factory で ISO を作る
@@ -29,17 +30,11 @@ customization:
 
 ```shell
 curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
-# => {"id":"2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8"}
+# => {"id":"96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca"}
 ```
 
-実際に発行した ID は 3 つある。
-
-| 用途 | schematic ID |
-| --- | --- |
-| **本番**(dvb-pt3 + intel-ucode + IOMMU の引数。2026-10-13 から) | `96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca` |
-| 旧本番(intel-ucode + IOMMU の引数。PT3 なし) | `32820716ca2384dc3cefbb672e6be929c67636e93e556d7740c312efb6538302` |
-| 検証用(intel-ucode のみ) | `2d61dd07b20062062ea671b4d01873506103b67c0f7a4c3fb6cf4ee85585dcb8` |
-
+**本番の schematic ID は `96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca`**(上の YAML。2026-10-13 から)。
+それ以前は `32820716…`(intel-ucode + IOMMU の引数、PT3 なし)、ドリルは `2d61dd07…`(intel-ucode のみ)を使っていた。
 Web UI(factory.talos.dev → Bare-metal Machine → amd64 → version → extensions)でも同じ ID が出る。
 
 | 用途 | URL |
@@ -48,44 +43,18 @@ Web UI(factory.talos.dev → Bare-metal Machine → amd64 → version → extens
 | ISO(Secure Boot 用、Sidero の鍵で署名。UEFI に鍵登録が要るので今回は使わない) | 同じ URL で `metal-amd64-secureboot.iso` |
 | `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca:v1.15.0-alpha.1` |
 
-**プレリリース(alpha / beta)も同じ形の URL で取れる。** 版のところを差し替えるだけ。Web UI では既定で隠れているので、
-pre-release を表示するチェックを入れる。2026-10-13 に v1.15.0-alpha.1 が出た当日、
-上の本番 schematic で ISO(約 409 MB)と installer が 200 を返すのを確かめた。
-ノード 1 台の本番を alpha に乗せるのは荒いが、PT3 のドライバがこの版からしか無いので割り切っている。
-1.15.0 の正式版が出たら Renovate の PR で乗り換える。
+**プレリリース(alpha / beta)も同じ形の URL で取れる**(版を差し替えるだけ。Web UI では pre-release を表示するチェックを入れる)。
+2026-10-13 に本番 schematic の ISO(約 409 MB)と installer が 200 を返すのを確かめた。1.15.0 の正式版が出たら Renovate の PR で乗り換える。
 
-ISO は約 400 MB。extension を足したくなったら schematic を作り直して ID を差し替え、`talosctl upgrade` で当てる(ISO を焼き直す必要はない)。
+extension を足したくなったら schematic を作り直して ID を差し替え、`talosctl upgrade` で当てる(ISO を焼き直す必要はない)。
 
 ## 2. メディアに載せる
 
-**本番は USB でやる**(2026-09-09 の判断。iLO の Virtual Media は USB を作らなくて済むが、
-挙動が怪しいことがあったため)。ISO はハイブリッドなので、そのまま書けばよい。
+**本番は USB でやる**(2026-09-09 の判断。iLO の Virtual Media は USB を作らなくて済むが、挙動が怪しいことがあったため)。
+ISO はハイブリッドなのでそのまま書けばよい。書き方・起動のしかた(Secure Boot、F11、USB を抜く時機)・Virtual Media を使う場合は
+[migration-day.md](migration-day.md) の 4 にまとめてある。
 
-```shell
-# Linux から(USB が /dev/sdX として見えている前提)
-sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
-```
-
-Windows なら Rufus で ISO を選び、書き込みモードを聞かれたら **DD イメージモード**を選ぶ。balenaEtcher でもよい。
-WSL からは USB が見えないので(usbipd で渡す必要がある)Windows 側でやる方が早い。
-
-起動のしかた:
-
-1. Secure Boot を **Disabled** に(POST 中に F9 → RBSU → Server Security → Secure Boot Settings)。
-   通常 ISO は署名されていない。Boot Mode は UEFI のまま。
-2. USB を挿して電源を入れ、POST 中に **F11(Boot Menu)**でその USB を選ぶ。
-3. **インストールが終わって再起動したら USB を抜く。** 挿したままだとブート順によっては
-   また maintenance mode で上がる。
-
-**コンソールは iLO の Remote Console(HTML5)でよい** ── 実機の前に立たなくても
-ブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す。
-
-**iLO の Virtual Media を使う場合**: Remote Console → Virtual Drives → Image File CD-ROM/DVD で
-手元の ISO を選び(上の factory の URL を直接貼ってもよい)、Power → Reset して F11 で
-"iLO Virtual USB 3 : iLO Virtual CD-ROM" を選ぶ。
-
-**Hyper-V(検証用)**: 第 2 世代 VM、Secure Boot **オフ**、メモリ 4 GB 以上、CPU 2 以上、ディスク 40 GB 以上、
-DVD ドライブに ISO を接続、ネットワークは外部スイッチ(LAN の DHCP で IP が付く)。第 1 世代でも動くが UEFI にならないので実機と条件が変わる。
+**コンソールは iLO の Remote Console(HTML5)でよい** ── 実機の前に立たなくてもブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す。
 
 ## 3. 起動したあと
 
@@ -97,10 +66,11 @@ ISO から起動すると Talos は **maintenance mode** で立ち上がり、�
 
 ## 4. この箱で先に潰しておくこと
 
-- **PT3(Earthsoft、`earth_pt3`)が Talos のカーネルに入っていない**(`CONFIG_DVB_PT3 is not set`、extension も無い)。
-  denpa の tuner-agent は `/dev/dvb` と `/dev/bus`(B-CAS リーダー)を hostDevices で掴むので、今のままだと Talos 上では動かない。
-  算段は [decisions.md](decisions.md)「PT3 チューナー」。
-- Secure Boot を切る(上記)。
+- **PT3 は dvb-pt3 extension(v1.15.0-alpha.1 から)で動く見込み。** extension は `earth_pt3` を blacklist して配るので
+  [patches/main.yaml](../talos/patches/main.yaml) で読ませている。denpa の tuner-agent は `/dev/dvb` と `/dev/bus`(B-CAS リーダー)を
+  hostDevices で掴む。**実機で `/dev/dvb/adapter*` と B-CAS リーダーが見えるかは当日確かめる**([migration-day.md](migration-day.md) の 9)。
+  経緯は [decisions.md](decisions.md)「PT3 チューナー」
+- Secure Boot を切る([migration-day.md](migration-day.md) の 4)。
 - iLO の IP(10.0.0.3)と管理者パスワードを手元に。ISO 起動も再インストールも全部ここからできる。
 
 ## machine config の作法(v1.14 で確認)
@@ -119,8 +89,9 @@ ISO から起動すると Talos は **maintenance mode** で立ち上がり、�
 | インストール先ディスク | `UnattendedInstallConfig` の `provisioning.diskSelector.match`(**CEL 式**。例 `disk.dev_path == "/dev/sda"`) |
 | カーネル引数 | `machine.install.extraKernelArgs` は使えない(同じく衝突)。**Image Factory の schematic の `customization.extraKernelArgs`** に入れる |
 | host DNS | `ResolverConfig`。**既定で有効**なので普通は書かなくてよい |
-| kubelet の `extraMounts` | `KubeletConfig` には無い。**`KubeletConfig` を `$patch: delete` してから** v1alpha1 の `machine.kubelet` に書く |
-| control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。`KubeNodeConfig` の `taints` を消す必要があるが、**strategic merge の空マップ(`taints: {}`)では消えなかった**。talhelper 経由か、起動後に `kubectl taint nodes --all node-role.kubernetes.io/control-plane-` |
+| bond とそのメンバー | `BondConfig` / `LinkConfig`。v1alpha1 の `machine.network.interfaces` は bond の MAC を指定できない([patches/cluster.yaml](../talos/patches/cluster.yaml)) |
+| PV の置き場 | `UserVolumeConfig`。マウント先(`/var/mnt/<name>`)は kubelet に自動で通るので `extraMounts` は要らない([patches/volumes.yaml](../talos/patches/volumes.yaml))。名前はトップレベルの `name`(1〜34 文字の英数字とハイフン)、ディスク上のラベルは `u-<name>` |
+| control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。**`KubeNodeConfig` を `$patch: delete` して `labels` だけ書き戻す**(`HostnameConfig` も同じ手。理由は [patches/cluster.yaml](../talos/patches/cluster.yaml)) |
 
 ### service の IPv6 CIDR は `/108` 以下
 
@@ -180,14 +151,6 @@ configuration:
     namespaces: [kube-system]
 ```
 
-### 動いたこと
-
-- ISO(Image Factory の schematic `2d61dd07…`)から UEFI で起動、maintenance mode の API はポート 50000
-- `apply-config` → 自動でディスクへインストール → 再起動 → `bootstrap` → kubeconfig 取得
-- **`cluster.inlineManifests` は期待どおり適用された**(仕込んだ Namespace がラベルごと存在した)。
-  `bootstrap/` をここに載せる案([decisions.md](decisions.md))は成立する
-- flannel でデュアルスタック、CoreDNS / kube-proxy / scheduler すべて Running
-
 ## etcd スナップショットからの復旧(検証済み)
 
 Talos 期のバックアップは **etcd(k8s オブジェクト)と PV データで別経路**になる。両方を試した。
@@ -231,8 +194,7 @@ restic dump <ID> /work/etcd.snapshot > etcd.snapshot
 
 ## VM の組み方(QEMU/KVM)
 
-本番サーバの上で回す。**ホストのネットワークには触らない。** ドリル 4 回ぶんの
-つまずきをここにまとめてある(各回で何が分かったかは下の記録)。
+k3s 期の本番サーバ(Ubuntu)の上で回していた。**ホストのネットワークには触らない。** ドリルのつまずきをここにまとめてある。
 
 ### tap/bridge は要らない。QEMU の内部ハブで足りる
 
@@ -260,7 +222,7 @@ sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
 **KVM を使うので sudo で起動する。** `patches/*.yaml` からの読み替えは
 **インタフェース名とディスクだけ**(`eno1`/`eno2`/`eno4` → `enp0s2`/`enp0s3`/`enp0s4`、
 `/dev/sda` → `/dev/vda`)。`balance-alb`・`miimon: 100`・静的 IPv6・
-**v6 のデフォルトルートを書かないこと**はそのまま。ボリュームの大きさだけディスクに合わせて縮める。
+**v6 のデフォルトルートを書かないこと**はそのまま。
 
 ### つまずいた点
 
@@ -273,8 +235,7 @@ sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
 - **`NETDEV WATCHDOG: transmit queue 0 timed out` は QEMU 側のミス。** bond の 2 本目を
   **何も繋がっていないハブ**に挿していた。QEMU 自身が
   `warning: hub 3 is not connected to host network` と言うので、**`qemu.log` を必ず読む**。
-  ハブが正しければ **NIC 3 本でも問題ない** ── 2 回目の記録に「NIC は 1 本にする」と
-  書いていたが、原因はハブの挿し間違いのほうだった
+  ハブが正しければ **NIC 3 本でも問題ない**
 - **インタフェース名は起動ごとに変わる。** maintenance mode で
   `talosctl get links --insecure` を見てから patch を読み替えること
 - **コンソールが要るときは monitor の `screendump`。** `-display none` でも
@@ -296,48 +257,11 @@ sudo qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 12288 \
   `--endpoint https://127.0.0.1:<hostfwd>` を渡す。`kubeconfig` の書き換えだけでは足りない
 - ハブの構成は monitor の `info network` で確認できる
 
-## ブートドリル 6 回目(2026-09-09、移行直前の確認)
-
-5 回目のあとに 7 本マージしたので、machine config に効くぶんを確かめ直した
-(Entra を 2 つめの issuer にした `bootstrap/apiserver/` と `talos/patches/apiserver.yaml`)。
-
-**今回はディスクを 140 GB にした。** 3〜5 回目は VM のディスクが小さくて
-`talos/patches/volumes.yaml` の値を縮めて焼いていたので、**本番と同じ
-`maxSize: 64GiB` / `minSize: 50GiB` のまま試したのはこれが初めて。**
-
-確かめたこと:
-
-| | |
-| --- | --- |
-| apiserver が Entra の issuer を載せて起動する | `--authentication-config=/system/config/kubernetes/kube-apiserver/authentication-config.yaml` が渡り、ファイルに issuer が 2 本(github + login.microsoftonline.com)。`anonymous` の livez/readyz/healthz も残っている |
-| groups の CEL | `entra:admin` / `entra:viewer` が両方描かれている |
-| RBAC が inlineManifest から入る | `entra-admin`(→ cluster-admin)・`entra-viewer`(→ view)・`entra-viewer-extra`(→ `readonly-extra`)と ClusterRole `readonly-extra` |
-| `EPHEMERAL` | **ちょうど 64.0 GiB**。`maxSize` が効く |
-| `u-local-path` | 72.0 GiB(残りに grow)、ready |
-| control-plane の taint | 無し |
-| Pod | 25 個が Running / Completed。そのあと ArgoCD が Application 16 本を復元しはじめる |
-
-所要: `apply-config` → apid 復帰 75 秒 → bootstrap → ノード Ready 200 秒 → bootstrap 層が全部 Running まで 120 秒。
-
-**headlamp は `secret "headlamp-oidc" not found` で止まる。これは正常。** Infisical の DB が
-空なので `InfisicalSecret` を使うアプリは Secret をもらえない。
-[migration-day.md](migration-day.md) の 7 が「先に Infisical の DB だけ戻す」と言っているとおりで、
-当日は 8 の手順で 1 本だけ戻してから待つ。`portainer` の namespace が作られないことも確認した。
-
-## ブートドリル 5 回目(2026-09-08、**app-of-apps まで通した**)
-
-4 回目は ArgoCD の `extraObjects` を空にして app-of-apps を外していた。5 回目は
-**外さずに、本物のリポジトリ群を同期させた。** 見たかったのは
-「**まっさらなクラスタで ArgoCD が `apps/` を再構築しきるか**」の一点。
-
-**移行当日に何も上がらない不具合が出た。** 詳細は下。
-
 ### 副作用の遮断: QEMU を専用ユーザーで走らせる
 
-復元リハーサル(Ubuntu の VM)では**中で** iptables を叩いていたが、
-**Talos の VM には入れない。** ホスト側で落とすと本番の通信まで巻き込む。
-
-**QEMU を専用ユーザーで動かして `-m owner --uid-owner` で落とす。**
+app-of-apps まで同期させると cloudflare-ddns(本番の DNS を書き換える)・netbird(本番に繋ぐ)・
+k8up(本番の restic リポジトリに書く)・ACME・SMTP が外に出る。**Talos の VM の中には入れないし、ホスト側で宛先だけで落とすと本番の通信まで
+巻き込む**ので、QEMU を専用ユーザーで動かして `-m owner --uid-owner` で落とす(イメージの取得は通るので同期は進む):
 
 ```shell
 sudo useradd -r -M -s /usr/sbin/nologin -G kvm qemudrill
@@ -350,64 +274,47 @@ done
 sudo ip6tables -I OUTPUT 1 -m owner --uid-owner qemudrill -d 2000::/3 -j REJECT
 ```
 
-止めたのは **cloudflare-ddns(本番の DNS を書き換える)**・**netbird(本番に繋ぐ)**・
-**k8up(本番の restic リポジトリに書く)**・ACME・SMTP。
-イメージの取得(ghcr.io / docker.io など)は通るので同期は進む。
+- **`sudo -u qemudrill` は通らない**(sudoers が root 宛てだけ NOPASSWD)。`sudo runuser -u qemudrill -- <script>` を使う
+- **起動は script にする。** `nohup … > log` のリダイレクトは**呼び出し側の権限**で開かれるので、qemudrill が所有するディレクトリには書けない
+- `/var/tmp/drill` を qemudrill 所有にすると **`kubeconfig` を書き出せない。** 出力先は別の場所にする
 
-- **`sudo -u qemudrill` は通らない**(sudoers が root 宛てだけ NOPASSWD)。
-  `sudo runuser -u qemudrill -- <script>` を使う
-- **起動は script にする。** `nohup … > log` のリダイレクトは**呼び出し側の権限**で
-  開かれるので、qemudrill が所有するディレクトリには書けない
-- `/var/tmp/drill` を qemudrill 所有にすると **`kubeconfig` を書き出せない。**
-  出力先は別の場所にする
+## VM ブートドリル(2026-09-06〜09、6 回)
 
-### 見つけた問題: **`apps/` の同期が丸ごと止まる**
+`talos/patches/` を本番サーバ上の QEMU で実際に起動して確かめた記録。**直したものは直した場所に理由を書いてある**ので、ここは索引。
 
-```
-gitops   OutOfSync  Missing
-  one or more synchronization tasks are not valid: failed to discover server
-  resources for group version secrets.infisical.com/v1alpha1: the server could
-  not find the requested resource (retried 5 times)
-```
+| 日付 | 確かめたこと | 見つけた穴 → 直した場所 |
+| --- | --- | --- |
+| 09-06 | v1.14.0 の作法、etcd スナップショットからの復旧 | 型付きドキュメントとの衝突 → 上の「machine config の作法」 |
+| 09-07(1 回目) | `patches/` だけで起動。bond0(balance-alb)・静的 IPv6・wireguard | IPv6 の既定経路が消える → [cluster.yaml](../talos/patches/cluster.yaml) の `accept_ra: "2"`。`addr_gen_mode: "2"` が黙って失敗 → 同 `"3"` |
+| 09-07(2 回目) | `apiserver.yaml` を足して bootstrap まで。`KubeAuthenticationConfig`・`certExtraSANs`(`DNS:ks.doany.io`)が効く | `versions.yaml` の Kubernetes 版が使われず Talos の既定になる → [versions.yaml](../talos/versions.yaml)・[render.sh](../talos/render.sh) の `--kubernetes-version` と needle |
+| 09-08(3 回目) | `render.sh` の出力を丸ごと。Cilium(KPR・vxlan・BPF masq)・nodePort 80・dual-stack の `kube-dns` | kubelet だけ既定の版 → user volume にして `KubeletConfig` を消すのをやめた。control-plane の taint で全部 Pending → [cluster.yaml](../talos/patches/cluster.yaml)。EPHEMERAL がディスク全部 → [volumes.yaml](../talos/patches/volumes.yaml) |
+| 09-08(4 回目) | 本物の値で ArgoCD・cert-manager・infisical まで(下) | chart が `metadata.namespace` を書かず `default` に落ちる → [add-namespace.awk](../talos/add-namespace.awk)(直した config を `upgrade-k8s` で当て直すと正しい namespace に作られた) |
+| 09-08 | inlineManifests の更新と削除 | 下の「inlineManifests は「更新できない」ではない」 |
+| 09-08(5 回目) | app-of-apps まで同期 | `InfisicalSecret` の CRD が無くて `apps/` が丸ごと止まる → `SkipDryRunOnMissingResource`([apps/k8up/README.md](../apps/k8up/README.md))。5 回失敗した Application は自動では戻らない → ArgoCD の `retry`([migration-day.md](migration-day.md) の 7) |
+| 09-09(6 回目) | ディスク 140 GB・本番と同じ値で。Entra の issuer と groups の CEL、RBAC、`EPHEMERAL` ちょうど 64.0 GiB、`u-local-path` 72 GiB | 無し |
 
-**`InfisicalSecret` の CRD がまだ無い。** ArgoCD は同期の前に dry-run するので、
-CRD が引けないと**その Application が丸ごと落ちる** ── そして
-**CRD を入れる当の Application(`apps/infisical-operator/`)が同じ同期の中にいる**ので
-抜けられない。
+ほかに残しておくこと:
 
-**k8up の `Schedule` で 2026-09-07 に踏んだのと同じ形**なのに、
-`InfisicalSecret` には `SkipDryRunOnMissingResource=true` が付いていなかった。
-**復元リハーサルでは出ない** ── あちらは etcd から戻すので CRD が最初からある。
-**まっさらから組む Talos の移行でだけ出る。**
+- **bond のフェイルオーバーは 8 秒以内**(片方の carrier を落とすと `Currently Active Slave` が移り、`talosctl` は途切れない)。
+  balance-alb らしくメンバー間で MAC が入れ替わる。**復旧方向は QEMU では確かめられていない**(`set_link … on` でゲストの carrier が戻らない)
+- `addr_gen_mode: "3"` は再起動ごとに IID が変わる。cloudflare-ddns(`local.iface.stable:bond0`)が ::2 ではなく SLAAC 側を拾うようなら
+  `stable_secret` を足して 2 に戻す(当日の 9 で ::2 が出ていることを見る)
+- **wireguard はカーネル組み込み**(`/sys/module/wireguard/version` が 1.0.0)。privileged + hostNetwork の Pod から `wg-quick up` が通る。
+  Ubuntu で要った AppArmor の回避は Talos には無い(LSM が SELinux)
+- `net.ipv6.conf.eno4.disable_ipv6: "1"` は効く。`bond0` の sysctl は Talos が bond を作ったあとに当たる。`/proc/cmdline` に schematic の引数が載る
+- `patches/main.yaml` の `vfio_pci` / `vfio_iommu_type1` が `/proc/modules` に出た(**当時。いまは外した**)
+- infisical は SMTP が無くても上がる(`Testing smtp connection` で止まって見えるだけ)。起動直後の
+  `CreateContainerConfigError: failed to sync secret cache` は optional な Secret の同期待ちで、放っておくと直る
+- 6 回目の所要: `apply-config` → apid 復帰 75 秒 → ノード Ready 200 秒 → bootstrap 層が全部 Running まで 120 秒。
+  **headlamp の `secret "headlamp-oidc" not found` は正常**(Infisical の DB が空のため。当日は 7 で先に戻す)
 
-直したら通った(同じドリルの中で確認):
+### ブートドリル 4 回目(2026-09-08、本物の値で bootstrap 層まで)
 
-```
-  CRD infisical 系            0 → 7
-  Pod のある namespace        5 → 18
-  erpnext 15 / netbird 5 / cloudflare-ddns 4 / mattermost 2 / adguardhome 2 /
-  infisical-operator / infisical-push-bridge / k8up / headlamp / 3proxy …
-```
-
-### **5 回失敗した Application は自動では戻らない**
-
-CRD が入っても、**先に 5 回失敗していた Application は
-`(retried 5 times)` のまま止まったまま**だった。`refresh=hard` の注釈では動かず、
-**明示的に sync を投げたら `Synced / Healthy` になった。**
-
-移行当日は、**gitops の同期が通ったあとに、止まっているアプリを 1 回ずつ叩く**。
-[migration-day.md](migration-day.md) の 7 に入れた。
-
-## ブートドリル 4 回目(2026-09-08、**本物の値で bootstrap 層まで**)
-
-3 回目までは Cilium・local-path・metrics-server だけだった。4 回目は
-**ArgoCD・cert-manager・infisical と SOPS 済みの Secret を入れた machine config**を
-そのまま焼いて、**`apply-config` 1 回でどこまで立ち上がるか**を見た。
-
-**立ち上がった:**
+ArgoCD・cert-manager・infisical と SOPS 済みの Secret を入れた machine config を、`apply-config` 1 回で焼いた絵。
+**当日の 5 はこれと同じになれば通っている**(ドリルでは ArgoCD の `extraObjects` を空にして app-of-apps だけ外していた)。
 
 ```
-main   Ready   control-plane   v1.36.2
+main   Ready   control-plane   v1.36.2      # 当時の版。いまは versions.yaml の kubernetes:
 
 argocd        argocd-application-controller-0 / applicationset / notifications /
               redis / repo-server / server            すべて Running
@@ -415,160 +322,12 @@ cert-manager  cert-manager / cainjector / webhook     Running(startupapicheck �
 infisical     infisical / postgresql-0 / redis-master-0  Running、/api/status が 200
 kube-system   cilium / envoy / operator / coredns ×2 / hubble ×2 / metrics-server
 local-path-storage  local-path-provisioner
-
-EPHEMERAL      partition  ready  /dev/vda5  13 GB
-u-local-path   partition  ready  /dev/vda6  11 GB
 ```
 
-**ドリル専用の細工は 1 つだけ** ── ArgoCD の `extraObjects` を空にして
-app-of-apps を外した。本物のリポジトリを同期しに行くと cloudflare-ddns が
-DNS を書き換え、netbird が本番に繋ぎに行く(「副作用を出さないための遮断」と
-同じ理由)。それ以外は本番と同じ値。
+### VM では確かめられていないこと
 
-### 見つけた問題: **chart が `metadata.namespace` を書かないものがある**
-
-infisical の `Deployment` と `Service` が **`default` namespace に落ちた。**
-
-```
-$ kubectl get deploy -A | grep infisical
-default     deployment.apps/infisical   0/1     0   0   4m15s      ← ここ
-infisical   （無い）
-```
-
-`helm template -n infisical` は `.Release.Namespace` を渡すが、
-**chart 側がそれを `metadata.namespace` に書かない**ことがある(bitnami の subchart は
-書いていた。infisical 本体のテンプレートだけが書いていなかった)。helm や kubectl なら
-`-n` で決まるが、**Talos のマニフェスト適用には既定の namespace が無い。**
-
-**`infisical-secrets` は `infisical` namespace にあるので、`default` に落ちた Pod は
-永久に起動しない。** 移行当日は Infisical が上がらず、そこから全アプリの秘密が
-配られないので、**何も動かないところだった。**
-
-直し方は [`talos/add-namespace.awk`](../talos/add-namespace.awk) ── helm の描き出しを
-通して、`metadata.namespace` が無い名前空間付きリソースに補う。クラスタスコープのもの
-(Namespace / ClusterRole / CRD など)には足さない(足すと API が弾く)。
-**全部の chart の描き出しに通してある。**
-
-### `upgrade-k8s` が本当に reconcile することを実地で確かめた
-
-直した machine config を `apply-config` してから `talosctl upgrade-k8s` を流すと、
-**`infisical` namespace に Deployment が作られた**(`default` の古いものは残る。
-まっさらな導入なら存在しない)。[../talos/README.md](../talos/README.md)「上げ方 /
-当て直し方」に書いた手順が、実際にそのとおり効くことの裏付け。
-
-### ついでに分かったこと
-
-- **infisical はメール無しでも上がる。** 起動時に `Testing smtp connection` で
-  止まって見えるが、`infisical-smtp`(Infisical operator が作る Secret)が
-  無くても最終的に `1/1 Running` になり `/api/status` が 200 を返す。
-  **鶏卵にはならない**ことの確認になった
-- 起動直後に `CreateContainerConfigError: failed to sync secret cache` が数回出るが、
-  **optional な Secret の同期待ちで、放っておくと直る**
-
-## ブートドリル 3 回目(2026-09-08、`render.sh` の出力をそのまま焼いた)
-
-1・2 回目は `talos/patches/` だけを起動した。3 回目は **[`talos/render.sh`](../talos/render.sh) が
-描いた machine config を丸ごと**焼いて、Cilium・local-path・metrics-server まで上がるところを見た。
-
-**移行当日に踏むはずだった穴が 3 つ出た。**
-
-### 1. kubelet だけ v1.37.0 で動いていた
-
-コンソールに出ていたのはこれ:
-
-```
-KUBERNETES  v1.37.0        KUBELET  x Unhealthy
-```
-
-`patches/cluster.yaml` が `KubeletConfig` をドキュメントごと消していて、
-**`--kubernetes-version` が入れていた kubelet のイメージも一緒に消えていた。**
-生成物には kubelet のイメージが 1 行も無く、Talos の既定で上がる。
-
-```
-== --kubernetes-version v1.36.2 あり:  kubelet:v1.36.2 / kube-apiserver:v1.36.2
-== 無し(既定):                        kubelet:v1.37.0 / kube-apiserver:v1.37.0
-```
-
-**kubelet が API サーバより新しいのは Kubernetes のサポート外。** CI は
-`kube-apiserver:<版>` しか見ておらず、「kubelet が無い」ことに気づけなかったので、
-needle を足した(#114)。**その後 user volume を入れて `KubeletConfig` を消す必要が
-なくなった**ので、いまはこの穴自体が塞がっている。needle は再発の見張りとして残してある。
-
-### 2. control-plane の taint で、アプリが 1 つも上がらない
-
-`KubeNodeConfig` は既定で `node-role.kubernetes.io/control-plane: NoSchedule` を入れる。
-**ノードが 1 台のこのクラスタでは、toleration を持たない Pod が全部 Pending になる**
-(k3s は単一ノードを control-plane 兼 worker として扱うので、この問題が無かった)。
-
-**質が悪いのは、ノードが `Ready` に見えること。** cilium と CoreDNS は toleration を
-持っているので上がる:
-
-```
-kube-system          cilium-l4xvm                              1/1     Running
-kube-system          coredns-6cb54fb45c-9k5sl                  1/1     Running
-kube-system          metrics-server-5ffb6b8554-drtss           0/1     Pending
-local-path-storage   local-path-provisioner-75f8fcb898-j9hqb   0/1     Pending
-
-Warning  FailedScheduling  default-scheduler  no nodes available to schedule pods
-```
-
-`taints` はマップなので `taints: {}` では消えない。中に `$patch: replace` を書くと
-**キーとして残ってしまい** `name "$patch" is invalid` で validate が落ちる。
-`KubeletConfig` / `HostnameConfig` と同じく**ドキュメントごと消して `labels` だけ
-書き戻す**のが唯一の手(#115)。
-
-### 3. EPHEMERAL がディスク全部を取る
-
-```
-EPHEMERAL   partition   ready   /dev/vda5   24 GB     ← 26 GB のディスクほぼ全部
-ETCD        directory   ready                          ← その中
-CRI         directory   ready                          ← その中
-```
-
-etcd もコンテナイメージも PV データも同じ 1 枚。**local-path は PVC の容量を強制しない**ので、
-1 個の PVC が暴走すると etcd ごと道連れになる。**ボリュームの設定は「まだ確保されていない
-ときにしか効かない」ので、直せるのは入れ直すときだけ。**
-
-`VolumeConfig`(EPHEMERAL に `maxSize`)と `UserVolumeConfig` を足して割り直した。
-**システムボリュームはユーザーボリュームより先に確保される**ので、EPHEMERAL に上限を
-書き忘れると取り分が残らない(siderolabs/talos#12713)。
-
-### ついでに分かったこと
-
-- **user volume のマウント先は kubelet コンテナに自動で通る。** `extraMounts` のハックが
-  要らなくなり、上の 1 の原因ごと消えた
-- `UserVolumeConfig` は `metadata.name` ではなく**トップレベルの `name`**。名前は
-  1〜34 文字の英数字とハイフンで、ディスク上のラベルは `u-<name>` になる
-
-### 通しで確かめたこと
-
-**Cilium のデータパスは k3s 期と同じ形で上がる。**
-
-```
-KubeProxyReplacement:  True   [bond0  10.0.0.2 240f:6d:842b:1::2 (Direct Routing), enp0s4  10.10.0.4]
-Cilium:                Ok     1.20.1
-Routing:               Network: Tunnel [vxlan]   Host: BPF
-Masquerading:          BPF    [bond0, enp0s4]   10.42.0.0/24 fd42::/64 [IPv4: Enabled, IPv6: Enabled]
-```
-
-`cgroup.hostRoot` と KubePrism(`localhost:7445`)の上書き([`talos/cilium-values.yaml`](../talos/cilium-values.yaml))が
-効いていることの裏付けでもある。
-
-**`service-node-port-range: 80-32767` は実際に効く。** 生成物を見るだけでなく、
-クラスタで nodePort 80 の Service を作れることを確かめた
-(Gateway の公開経路がここに乗っている。[`talos/patches/apiserver.yaml`](../talos/patches/apiserver.yaml))。
-
-```
-$ kubectl create svc nodeport np --tcp=80:80 --node-port=80
-np   NodePort   10.43.251.48   <none>   80:80/TCP
-```
-
-**dual-stack も出る。** `fd43::/108` に変えた影響を確かめた:
-
-```
-$ kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIPs}'
-["10.43.0.10","fd43::a"]      ipFamilyPolicy: RequireDualStack
-```
+当日の確認に入れてある([migration-day.md](migration-day.md) の 4・9): 実機の NIC 名(`eno1`/`eno2`/`eno4`、tg3)とインストール先ディスク、
+本物のスイッチ相手の balance-alb、ISP のルータの RA(MTU・RDNSS・lifetime)、carrier の復旧方向、PT3 と B-CAS リーダー。
 
 ## inlineManifests は「更新できない」ではない(2026-09-08、VM で実測)
 
@@ -611,158 +370,21 @@ $ kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIPs}'
 **`render.sh` が `bootstrap/` の値から描く**形にして消えている ── 読むのは
 `bootstrap/cilium/values.yaml` のままで、machine config はその派生物。
 
-## Talos ブートドリル 2 回目(2026-09-07、`apiserver.yaml` を足して実際に bootstrap まで)
+## Z440 に移すときに変わるもの
 
-1 回目はネットワークだけを見た。2 回目は **API サーバの設定(`patches/apiserver.yaml`)を足して
-`bootstrap` まで通し、コントロールプレーンが上がるところまで**確かめた。
+Talos に移ったあと(Phase 2.5)、同じ Talos のまま HP Z440 に載せ替える。計画は [z440-migration.md](z440-migration.md)。
 
-**確かめられたこと:**
-
-- **`KubeAuthenticationConfig` を入れてもコントロールプレーンは上がる。**
-  `configuration` は既定を置き換えるので `anonymous` を書き忘れるとヘルスチェックが
-  匿名で通らなくなる ── と書いていたが、**明示して書けば正しく上がる**ことを実地で確認した。
-  `kube-apiserver` / `kube-controller-manager` / `kube-scheduler` の 3 つとも `CONTAINER_RUNNING`
-- **`certExtraSANs` は効く。** 6443 に繋いで証明書を見ると `DNS:ks.doany.io` が入っている
-- ネットワークは 1 回目と同じ(bond0 に `10.0.0.2/24` と静的 IPv6 `::2`、`enp0s4` に `10.10.0.4/24`)
-
-**見つかった問題: `versions.yaml` の Kubernetes 版が使われていなかった。**
-
-```
-生成物:        kube-apiserver:v1.37.0     ← Talos v1.14.0 の既定
-versions.yaml: kubernetes v1.36.2         ← 宣言しているだけ
-```
-
-`talosctl gen config` は `versions.yaml` を読まないので、**`--kubernetes-version` で渡さないと
-Talos の既定になる**。移行当日に意図せず 1.36 → 1.37 の飛び級をするところだった。
-README の手順と `talos-validate` のワークフローに `--kubernetes-version` を足し、
-**生成物に宣言どおりの版が入っているかも CI で見る**ようにした。
-
-VM 側の読み替え(NIC 名は起動ごとに変わる、qemu は sudo)は上の「VM の組み方」。
-
-## VM ブートドリル(2026-09-07、`talos/patches/` をそのまま起動した)
-
-`talosctl validate` が通るだけで一度も起動していなかった `talos/patches/cluster.yaml` /
-`main.yaml` を、**本番サーバ上の QEMU で実際に起動して**確かめた。ホストのネットワークには一切触っていない。
-
-### 1. bond0 は上がる
-
-```shell
-talosctl read /proc/net/bonding/bond0 -n 10.0.0.2 -e 127.0.0.1:50011
-```
-
-```
-Bonding Mode: adaptive load balancing      # = balance-alb
-Currently Active Slave: enp0s3
-MII Status: up
-MII Polling Interval (ms): 100             # = miimon
-Slave Interface: enp0s3 / MII Status: up / Link Failure Count: 0
-Slave Interface: enp0s4 / MII Status: up / Link Failure Count: 0
-```
-
-monitor から片方の carrier を落とす(`set_link virtio-net-pci.0 off`)と **8 秒以内に**
-`MII Status: down` / `Link Failure Count: 1` になり、`Currently Active Slave` が enp0s4 に移って
-`talosctl` の応答は途切れなかった。balance-alb らしく **メンバー間で MAC が入れ替わる**
-(`get links` で enp0s3 が `…aa:00:02`、enp0s4 が `…aa:00:01` になる)のも見えた。
-なお QEMU の `set_link … on` ではゲスト側の carrier が戻らないので、**復旧方向は確かめられていない**。
-
-### 2. 静的 IPv6 は載る。だが **`accept_ra: "2"` が無いと既定経路が消える**
-
-静的アドレスと SLAAC は素直に並ぶ。
-
-```
-bond0/10.0.0.2/24
-bond0/240f:6d:842b:1::2/64                      # patches に書いた静的アドレス
-bond0/240f:6d:842b:1:9f48:ba23:fcbb:1cd0/64     # SLAAC
-bond0/fe80::8628:e278:4977:732/64
-```
-
-問題は既定経路のほうで、**Kubernetes が上がった瞬間に IPv6 の default route が消えた**。
-
-| 時点 | `net.ipv6.conf.bond0.forwarding` | `accept_ra` | `protocol: ra` の default route |
-| --- | --- | --- | --- |
-| maintenance mode | 0 | 1(既定) | **あり** |
-| クラスタ起動後 | 1 | 1(既定) | **無い** |
-| クラスタ起動後 | 1 | **2** | **あり** |
-
-`accept_ra=1` は「forwarding が有効なら RA を無視する」という意味で、flannel / kube-proxy が
-`net.ipv6.conf.all.forwarding=1` にした時点でカーネルが RA 由来の経路を落とす。
-**Ubuntu 期にこれが問題にならなかったのは NetworkManager が userspace で RA を処理していたから**で、
-実機は現在 `bond0/accept_ra = 0` のまま `default via fe80::… proto ra metric 300` が載っている。
-Talos には RA を代行するものが無いので、カーネルに任せる = `accept_ra: "2"` が必須。
-
-`patches/cluster.yaml` に足した:
-
-```yaml
-net.ipv6.conf.bond0.accept_ra: "2"
-```
-
-入れたあとの確認(**クラスタが Ready になってから**見ること):
-
-```shell
-talosctl get routes -o yaml -n 10.0.0.2 -e … | grep -B10 'protocol: ra'
-#     id: bond0/inet6/fe80::2//1024
-#     dst: ""
-#     gateway: fe80::2
-#     outLinkName: bond0
-#     protocol: ra
-```
-
-### `addr_gen_mode: "2"` は書いても効かない(黙って失敗し続ける)
-
-同時に見つかった。`net.ipv6.conf.bond0.addr_gen_mode: "2"`(stable-privacy)は
-**`stable_secret` が未設定だとカーネルが EINVAL を返す**ので、一度も適用されない。
-`talosctl get addresses` は EUI-64 のまま(`240f:6d:842b:1:5054:ff:feaa:1`)で、
-`KernelParamSpecController` が数秒おきにこれを吐き続ける:
-
-```
-ERROR controller failed {"controller": "runtime.KernelParamSpecController",
-  "error": "write /proc/sys/net/ipv6/conf/bond0/addr_gen_mode: invalid argument"}
-```
-
-**`"3"`(random)に変えたら通った。** 書き込みが成功し、link-local も SLAAC も MAC 由来でなくなる
-(`fe80::8628:e278:4977:732` / `240f:6d:842b:1:9f48:ba23:fcbb:1cd0`)。
-実機の NetworkManager も同じ見た目(`240f:6d:842b:1:a096:1754:8738:2ede`)なので状態としては揃う。
-違いは **3 は再起動ごとに IID が変わる**こと。ブート間で固定したければ `stable_secret` を足して 2 に戻す
-(cloudflare-ddns の `local.iface.stable:bond0` が ::2 ではなく SLAAC 側を拾っていた場合はそれが要る)。
-
-### 3. wireguard はカーネル組み込み。AppArmor 相当の回避は要らない
-
-`/proc/modules` にも `/lib/modules/…/kernel/` にも wireguard は出てこない。**`=y` で組み込まれている**からで、
-
-```shell
-talosctl read /sys/module/wireguard/version -n 10.0.0.2 -e …   # => 1.0.0
-```
-
-実際に privileged + hostNetwork の Pod(namespace に `pod-security.kubernetes.io/enforce=privileged`)から
-`wg-quick up wg0` を通した(`ip link add dev wg0 type wireguard` が通り、UDP 51820 を v4 / v6 で LISTEN)。
-ホスト側の `talosctl get links` にも `wg0 … KIND wireguard` が現れる。
-**Ubuntu で必要だった AppArmor プロファイルの無効化は Talos には存在しない**(そもそも LSM が SELinux)。
-
-### ついでに確認できたこと
-
-- `UnattendedInstallConfig` の CEL diskSelector で実際にインストールされた(`EPHEMERAL` が `/dev/vda4`)
-- schematic のカーネル引数が載る: `/proc/cmdline` に `intel_iommu=on iommu=pt`
-- `patches/main.yaml` の `vfio_pci` / `vfio_iommu_type1` が `/proc/modules` に出る
-- `net.ipv6.conf.eno4.disable_ipv6: "1"` は効く(相当インタフェースに v6 アドレスが一切付かない)
-- `bond0` は Talos が作ったあとに sysctl が適用される(存在しないパスなら ENOENT のはずが EINVAL だった)
-
-### VM では確かめられていないこと
-
-読み替えたぶんと、SLIRP が本物でないぶんは未検証のまま:
-
-- **インタフェース名**は `enp0s3/enp0s4/enp0s5`。実機は `eno1/eno2/eno4`(tg3)。
-  名前が違えば `machine.sysctls` のキーも `interfaces` も当たらないので、実機では
-  `talosctl get links` で名前を確認してから流すこと
-- **ディスクは `/dev/vda`** で試した。実機は `/dev/sda`(`talosctl get disks` で確定させる)
-- **相手が SLIRP**なので、balance-alb の ARP ネゴシエーションを本物のスイッチ相手に試したことにはならない。
-  ハブなので送ったフレームが相方の NIC にも返ってくるが、それで bond が壊れることは無かった
-- **RA も SLIRP のもの**(`fe80::2`、プレフィックス `240f:6d:842b:1::/64` は手で合わせた)。
-  ISP のルータの RA(MTU オプション、RDNSS、valid/preferred lifetime)は別物
-- carrier の**復旧**方向、PT3 本体(当時は vfio パススルーの予定。いまは dvb-pt3 で `/dev/dvb` が出るか)
+- **NIC の名前が変わる。** `LinkAliasConfig` で `mac(link.permanent_addr)` を selector にして名前を付け、bond のメンバーはその別名で指す。
+  別名は `eno1` のようなシステムの名前に見えるものにしない。**bond0 の MAC は `hardwareAddr` で固定してあるので変わらない**([patches/cluster.yaml](../talos/patches/cluster.yaml))
+- **ディスクはオンボードの SATA(AHCI)につながる。** `/dev/sda` のままか `talosctl get disks` で見て [patches/main.yaml](../talos/patches/main.yaml) の `diskSelector` を合わせる
+- **iLO が無い。** Intel AMT 9.x(10.0.0.5)で電源と Serial-over-LAN だけ(KVM は無い)。SOL に出すには schematic の
+  `extraKernelArgs` に `console=ttyS<n>,115200n8` が要る(v1.14 以降は machine config にカーネル引数を書けない。上の「Image Factory で ISO を作る」)
+- **GPU を挿さないと POST しない。** Intel Arc A310 を常設する(AV1 のエンコードにも使う)。schematic に `siderolabs/i915`(**要確認**)を足す。
+  Arc は **UEFI で CSM を切る**のが前提
 
 ## ネットワークまわりの前提
 
-Talos 1.14.0 の既定は Flannel 0.28.9 + kube-proxy(1.13 から Flannel も NetworkPolicy に対応。L3/L4 まで)。
+Talos の既定は Flannel + kube-proxy(1.14.0 で Flannel 0.28.9。1.13 から NetworkPolicy に対応。L3/L4 まで)。
 **このクラスタは Cilium に替える**(decisions.md「ルーティングの選定」。CNI の交換は構築時にやる ──
 稼働中の差し替えは全 Pod 再起動が前提で、後からだとコストが一桁変わる)。Talos 側の止め方は
 [../talos/patches/cni.yaml](../talos/patches/cni.yaml)(**v1alpha1 の `cni.name: none` はもう書けない**)、
@@ -779,7 +401,7 @@ Cilium 側の Talos 固有の値は [../talos/cilium-values.yaml](../talos/ciliu
 | --- | --- | --- |
 | イメージ | カーネル引数、system extension(GPU ドライバ等) | Image Factory で schematic を作って `talosctl upgrade` |
 | machine config | CNI、kube-proxy、ディスク、ネットワーク、ファイアウォール | `talosctl apply-config` |
-| Kubernetes | ワークロード、Envoy Gateway、Cilium 本体 | `kubectl` / Helm / GitOps |
+| Kubernetes | ワークロード、Cilium の Gateway API、Cilium 本体 | `kubectl` / Helm / GitOps |
 
 SSH もシェルもパッケージマネージャも無く gRPC API だけなので、**障害時は「直さず作り直す」**。
 machine config は必ず git に置く(唯一の真実になる)。デバッグは `talosctl dmesg` / `logs` / `read`、1.13 以降は debug コンテナ。

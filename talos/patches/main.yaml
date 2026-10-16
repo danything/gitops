@@ -10,7 +10,8 @@ apiVersion: v1alpha1
 kind: UnattendedInstallConfig
 provisioning:
     diskSelector:
-        # DL360 Gen9 の SAS SSD(447 GB)。実機で `talosctl get disks` を見てから確定させる。CEL 式。
+        # SATA の SSD(Radeon R7、447 GB)。DL360 では Smart Array(hpsa)越しで Linux からは TRAN=sas に見える。
+        # Z440 ではオンボードの SATA(AHCI)。どちらも当日 `talosctl get disks` を見てから確定させる。CEL 式。
         match: disk.dev_path == "/dev/sda"
     wipe: false
 ---
