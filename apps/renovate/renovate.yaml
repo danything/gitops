@@ -3,7 +3,7 @@
 # それまでは GitHub Actions(5ym/repo-config の renovate.yml)と Forgejo Actions(doa/renovate)で毎時回していたが、
 # GitHub の schedule は 15〜40 分遅れるうえに丸ごと飛ばされることがあった(2026-10-12 に数えた)。
 # CronJob なら時刻どおりに走る。**クラスタが落ちている間は止まる**が、予備は置かない(もとの 2 つの workflow は消した)。
-# 更新先のサーバもこのクラスタの上なので、止まっているあいだに PR を出しても意味が無い。
+# クラスタが止まっているときはそれを直すのが先で、ほかの依存を上げる PR を出しても仕方がない(Forgejo はそもそもクラスタの上)。
 #
 # 1 本の CronJob が 1 つの owner を受け持つ(GitHub App のトークンがインストールごとに分かれるため。
 # Actions の matrix と同じ)。15 分おきで、3 本は 5 分ずつずらす。1 回 3〜7 分で終わる。
