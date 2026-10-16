@@ -20,11 +20,11 @@ ARG HELM_VERSION=v4.3.1
 # renovate: datasource=github-releases depName=getsops/sops
 ARG SOPS_VERSION=v3.13.3
 # renovate: datasource=github-releases depName=Infisical/cli
-ARG INFISICAL_VERSION=v0.44.1
+ARG INFISICAL_VERSION=v0.44.2
 # renovate: datasource=github-releases depName=restic/restic
 ARG RESTIC_VERSION=v0.19.1
 # renovate: datasource=github-releases depName=pulumi/pulumi
-ARG PULUMI_VERSION=v3.269.0
+ARG PULUMI_VERSION=v3.270.0
 # renovate: datasource=npm depName=cf
 ARG CF_VERSION=1.0.0-beta.18
 
