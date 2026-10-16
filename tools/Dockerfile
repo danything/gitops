@@ -26,7 +26,7 @@ ARG RESTIC_VERSION=v0.19.1
 # renovate: datasource=github-releases depName=pulumi/pulumi
 ARG PULUMI_VERSION=v3.269.0
 # renovate: datasource=npm depName=cf
-ARG CF_VERSION=1.0.0-beta.17
+ARG CF_VERSION=1.0.0-beta.18
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl bzip2 git openssh-client less \
