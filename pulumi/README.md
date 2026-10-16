@@ -115,7 +115,7 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
   止め(`skipArtifactsUpdate: true`)、代わりに Renovate の `postUpgradeTasks` が [renovate-post-upgrade.sh](renovate-post-upgrade.sh)
   を流す。Pulumi の CLI(`.pulumi-version`、公式のチェックサムと照らす)と bun(`.bun-version`)を入れて `pulumi install --no-plugins`
   し、作り直した bun.lock を同じ枝にコミットさせる。手元・CI と同じ `pulumi install` で作るので、CI の lock の確認とずれない。
-  実行の許可は 5ym/repo-config の renovate.yml の `RENOVATE_ALLOWED_COMMANDS`(2026-10-08。#306 の SDK の package.json の写しはやめた)
+  実行の許可は [apps/renovate/renovate.yaml](../apps/renovate/renovate.yaml) の `RENOVATE_ALLOWED_COMMANDS`(2026-10-08。#306 の SDK の package.json の写しはやめた)
 - `*.doany.io` を家の 10.0.0.2 に向けているのは、exit ノード越しに家の外向きの IPv4 を引くと折り返しで届かないため。
   `nb.doany.io` だけは外向きのアドレスで例外にしている。アドレスは書かず、2 段の名前 `nb.origin.doany.io` (ゾーンのワイルドカードに当たらず Cloudflare で引かれ、cloudflare-ddns が追従させる) に CNAME で向ける
 

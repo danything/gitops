@@ -1,0 +1,9 @@
+# PSA は restricted で足りる(Renovate のイメージは非 root の 12021 で動き、hostPath も特権も使わない)。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: renovate
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

@@ -1,0 +1,310 @@
+# Renovate を自前で回す。danything と 5ym の GitHub の全リポジトリと、Forgejo(fj.doany.io)の doa の全リポジトリ。
+#
+# それまでは GitHub Actions(5ym/repo-config の renovate.yml)と Forgejo Actions(doa/renovate)で毎時回していたが、
+# GitHub の schedule は 15〜40 分遅れるうえに丸ごと飛ばされることがあった(2026-10-12 に数えた)。
+# CronJob なら時刻どおりに走る。**クラスタが落ちている間は止まる**ので、両方の workflow は
+# workflow_dispatch だけ残して手で回せるようにしてある(README.md)。
+#
+# 1 本の CronJob が 1 つの owner を受け持つ(GitHub App のトークンがインストールごとに分かれるため。
+# Actions の matrix と同じ)。15 分おきで、3 本は 5 分ずつずらす。1 回 3〜7 分で終わる。
+#
+# **Job はいつも成功で終える。** Renovate が非ゼロで終わっても、トークンが作れなくても exit 0。
+# Job が失敗すると CronJob が Degraded になり、ArgoCD が gitops の同期を retry に入れて
+# apps/ の更新が止まる(2026-09-12 に k8up-notify で実際に起きた。apps/k8up/notify.yaml の末尾)。
+# 失敗はログに残す: `kubectl -n renovate logs job/<名前>`。Job はいつも成功なので、ログを見られるよう成功の Job を 3 回分残す。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-scripts
+  namespace: renovate
+data:
+  run.sh: |
+    # CronJob の入口。RENOVATE_PLATFORM でトークンの取り方を変えて renovate を流す。
+    # 何があっても exit 0(理由は renovate.yaml の冒頭)。
+    set -uo pipefail
+    case "$RENOVATE_PLATFORM" in
+      github)
+        if [ -z "${APP_PRIVATE_KEY:-}" ]; then
+          echo "renovate-secrets に github-app-private-key が無い。Infisical に入れるまで何もしない(README.md)" >&2
+          exit 0
+        fi
+        if ! RENOVATE_TOKEN=$(node /scripts/github-app-token.mjs); then
+          echo "GitHub App のトークンを作れなかった(上のエラー)" >&2
+          exit 0
+        fi
+        unset APP_PRIVATE_KEY
+        ;;
+      forgejo)
+        if [ -z "${RENOVATE_TOKEN:-}" ]; then
+          echo "renovate-secrets に forgejo-token が無い。Infisical に入れるまで何もしない(README.md)" >&2
+          exit 0
+        fi
+        ;;
+    esac
+    export RENOVATE_TOKEN
+    renovate
+    rc=$?
+    [ "$rc" -eq 0 ] || echo "renovate が $rc で終わった(Job は成功にしておく。renovate.yaml の冒頭)" >&2
+    exit 0
+  github-app-token.mjs: |
+    // GitHub App doa-renovate のインストールトークンを作って標準出力に出す
+    // (Actions の頃の actions/create-github-app-token の代わり)。
+    // App の JWT(RS256、iss は client ID)で OWNER のインストールを探し、トークンと交換する。
+    // トークンは 1 時間で切れる。Job の activeDeadlineSeconds はそれより短くしてある。
+    import { sign } from "node:crypto";
+
+    const { APP_CLIENT_ID, APP_PRIVATE_KEY, OWNER } = process.env;
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const now = Math.floor(Date.now() / 1000);
+    // iat を 60 秒戻すのは GitHub の推奨(時計のずれ)。exp は 10 分が上限
+    const body = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: now - 60, exp: now + 540, iss: APP_CLIENT_ID })}`;
+    const jwt = `${body}.${sign("RSA-SHA256", Buffer.from(body), APP_PRIVATE_KEY).toString("base64url")}`;
+
+    const api = async (method, path) => {
+      const r = await fetch(`https://api.github.com${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      });
+      if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${await r.text()}`);
+      return r.json();
+    };
+
+    const installs = await api("GET", "/app/installations?per_page=100");
+    const inst = installs.find((i) => i.account.login.toLowerCase() === OWNER.toLowerCase());
+    if (!inst) throw new Error(`${OWNER} に App が入っていない(あるのは ${installs.map((i) => i.account.login).join(", ")})`);
+    process.stdout.write((await api("POST", `/app/installations/${inst.id}/access_tokens`)).token);
+---
+# GitHub の 2 本で共通の設定。中身は Actions の頃の renovate.yml の env と同じ
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-github
+  namespace: renovate
+data:
+  RENOVATE_PLATFORM: github
+  # GitHub App doa-renovate(danything の org が持ち主。5ym にもインストールしてある)。client ID は秘密ではない
+  APP_CLIENT_ID: Iv23liZjExRcK6lxJueN
+  # App のトークンからは自分のユーザーを引けないので明示する。id は
+  # `gh api users/doa-renovate%5Bbot%5D --jq .id`
+  RENOVATE_GIT_AUTHOR: doa-renovate[bot] <336970664+doa-renovate[bot]@users.noreply.github.com>
+  # コミットを API で作る = App の署名付き(Verified)になる
+  RENOVATE_PLATFORM_COMMIT: enabled
+  RENOVATE_AUTODISCOVER: "true"
+  # renovate.json の無いリポジトリには、共有プリセットを使う renovate.json を
+  # 足す onboarding の PR を出す。マージされるまでは依存の PR は出さない
+  RENOVATE_ONBOARDING: "true"
+  RENOVATE_ONBOARDING_CONFIG: '{"$schema":"https://docs.renovatebot.com/renovate-schema.json","extends":["github>5ym/repo-config"]}'
+  RENOVATE_REQUIRE_CONFIG: required
+  # postUpgradeTasks で流してよいコマンド(正規表現。これに合わないものは Renovate が拒む)。
+  # pulumi/ は bun.lock を Renovate が作れない(SDK を pulumi install でしか作れない)ので、
+  # スクリプトで pulumi install させる(pulumi/README.md)。
+  # AdGuard Home の版上げでは、新しい版に config.yaml を移行させる(apps/adguardhome/renovate-post-upgrade.sh)
+  RENOVATE_ALLOWED_COMMANDS: '["^bash pulumi/renovate-post-upgrade\\.sh$", "^bash apps/adguardhome/renovate-post-upgrade\\.sh$"]'
+  LOG_LEVEL: info
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate-danything
+  namespace: renovate
+spec:
+  schedule: "2-59/15 * * * *"
+  # 前の実行が終わっていなければ飛ばす(同じリポジトリに 2 つの Renovate が同時に触らない)
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # トークンは 1 時間で切れる。それより前に止める
+      activeDeadlineSeconds: 2700
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: renovate
+              image: ghcr.io/renovatebot/renovate:44.164.10
+              # ENTRYPOINT(containerbase の初期化)は残して args だけ替える
+              args: [bash, /scripts/run.sh]
+              envFrom:
+                - configMapRef:
+                    name: renovate-github
+              env:
+                - name: OWNER
+                  value: danything
+                - name: RENOVATE_AUTODISCOVER_FILTER
+                  value: danything/*
+                - name: APP_PRIVATE_KEY
+                  valueFrom:
+                    secretKeyRef: {name: renovate-secrets, key: github-app-private-key, optional: true}
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 1Gi
+                limits:
+                  memory: 4Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: work
+                  mountPath: /tmp/renovate
+          volumes:
+            - name: scripts
+              configMap:
+                name: renovate-scripts
+            # clone と postUpgradeTasks の作業場所(RENOVATE_BASE_DIR の既定)。毎回空から
+            - name: work
+              emptyDir:
+                sizeLimit: 10Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate-5ym
+  namespace: renovate
+spec:
+  schedule: "7-59/15 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 2700
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: renovate
+              image: ghcr.io/renovatebot/renovate:44.164.10
+              args: [bash, /scripts/run.sh]
+              envFrom:
+                - configMapRef:
+                    name: renovate-github
+              env:
+                - name: OWNER
+                  value: 5ym
+                - name: RENOVATE_AUTODISCOVER_FILTER
+                  value: 5ym/*
+                - name: APP_PRIVATE_KEY
+                  valueFrom:
+                    secretKeyRef: {name: renovate-secrets, key: github-app-private-key, optional: true}
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 1Gi
+                limits:
+                  memory: 4Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: work
+                  mountPath: /tmp/renovate
+          volumes:
+            - name: scripts
+              configMap:
+                name: renovate-scripts
+            - name: work
+              emptyDir:
+                sizeLimit: 10Gi
+---
+# Forgejo(fj.doany.io)の doa。中身は doa/renovate の .forgejo/workflows/renovate.yml の env と同じ。
+# Pod から fj.doany.io へは IPv6 でしか届かない(IPv4 はヘアピンで落ちる。apps/forgejo/runner.yaml の冒頭)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate-forgejo
+  namespace: renovate
+spec:
+  schedule: "12-59/15 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 2700
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: renovate
+              image: ghcr.io/renovatebot/renovate:44.164.10
+              args: [bash, /scripts/run.sh]
+              env:
+                - name: RENOVATE_PLATFORM
+                  value: forgejo
+                - name: RENOVATE_ENDPOINT
+                  value: https://fj.doany.io/api/v1
+                # Forgejo のユーザー renovate のトークン(チーム bots = 全リポジトリに書き込み)
+                - name: RENOVATE_TOKEN
+                  valueFrom:
+                    secretKeyRef: {name: renovate-secrets, key: forgejo-token, optional: true}
+                - name: RENOVATE_GIT_AUTHOR
+                  value: Renovate Bot <renovate@fj.doany.io>
+                - name: RENOVATE_AUTODISCOVER
+                  value: "true"
+                - name: RENOVATE_AUTODISCOVER_FILTER
+                  value: doa/*
+                # github.com のリリースノートやタグを読むとき、無いと匿名の回数制限(60 回/時)に当たる。
+                # 権限なしの GitHub のトークンでよい。無ければ空で動く
+                - name: GITHUB_COM_TOKEN
+                  valueFrom:
+                    secretKeyRef: {name: renovate-secrets, key: github-com-token, optional: true}
+                - name: LOG_LEVEL
+                  value: info
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 1Gi
+                limits:
+                  memory: 4Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: work
+                  mountPath: /tmp/renovate
+          volumes:
+            - name: scripts
+              configMap:
+                name: renovate-scripts
+            - name: work
+              emptyDir:
+                sizeLimit: 10Gi

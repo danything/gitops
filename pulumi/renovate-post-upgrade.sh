@@ -5,9 +5,9 @@
 # `file:sdks/netbird` で指していて、SDK は `pulumi install` でしか作れない(git には入れない。pulumi/README.md)。
 # Renovate の `bun install` は SDK が無くて落ちるので、renovate.json でそれを止め(skipArtifactsUpdate: true)、ここで作る。
 #
-# 動くのは Renovate のコンテナ(ghcr.io/renovatebot/renovate、5ym/repo-config の renovate.yml)の中、リポジトリの直下。
+# 動くのは Renovate のコンテナ(ghcr.io/renovatebot/renovate、apps/renovate/renovate.yaml の CronJob)の中、リポジトリの直下。
 # Pulumi の CLI は入っていないので、.pulumi-version の版を公式のチェックサムと照らしてから入れる。bun は containerbase の
-# install-tool で .bun-version の版を入れる。許可は repo-config の renovate.yml の RENOVATE_ALLOWED_COMMANDS
+# install-tool で .bun-version の版を入れる。許可は apps/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS
 set -euo pipefail
 cd "$(dirname "$0")"
 
