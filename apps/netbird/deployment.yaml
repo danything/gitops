@@ -94,7 +94,7 @@ spec:
               mountPath: /etc/netbird
       containers:
         - name: netbird-server
-          image: netbirdio/netbird-server:0.81.0
+          image: netbirdio/netbird-server:0.81.1
           args: ["--config", "/etc/netbird/config.yaml"]
           ports:
             - name: http
