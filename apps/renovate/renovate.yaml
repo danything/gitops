@@ -234,7 +234,7 @@ spec:
               emptyDir:
                 sizeLimit: 10Gi
 ---
-# Forgejo(fj.doany.io)の doa。中身は doa/renovate の .forgejo/workflows/renovate.yml の env と同じ。
+# Forgejo(fj.doany.io)の doa。中身はもとの doa/renovate(2026-10-17 に消した)の Forgejo Actions の env と同じ。
 # Pod から fj.doany.io へは IPv6 でしか届かない(IPv4 はヘアピンで落ちる。apps/forgejo/runner.yaml の冒頭)
 apiVersion: batch/v1
 kind: CronJob
