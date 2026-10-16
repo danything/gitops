@@ -216,7 +216,7 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
       [talos/patches/cluster.yaml](../talos/patches/cluster.yaml))
 - [ ] **別の回線の IPv6 だけで 443 に届く**(A レコードもあるので、ブラウザで名前を開くだけでは IPv4 に落ちて確かめにならない。モバイル回線で `https://[240f:6d:842b:1::2]/` を開いて証明書の警告まで出れば届いている。[router.md](router.md)「IPv6 はノードだけを公開する」)
 - [ ] `talosctl get routes -o yaml | grep -B10 'protocol: ra'` に `dst: ""` が残っている(IPv6 の既定経路。クラスタが上がってから見る)
-- [ ] DNS(cloudflare-ddns が A/AAAA を書く)。**AAAA が `::2`** で、SLAAC のアドレスではないこと(`bond0` の `autoconf=0` が効いていれば SLAAC は付かない。Ubuntu 期は SLAAC を書いていた)
+- [ ] DNS(cloudflare-ddns が A/AAAA を書く)。**AAAA が `::2`** で、SLAAC のアドレスではないこと(`bond0` の `autoconf=0` が効いていれば SLAAC は付かない。Ubuntu 期は SLAAC を書いていた)。**sysctl より先に RA が届くと SLAAC が一度付いて残りうる**ので、`talosctl get addresses` を起動直後・数分後・再起動後の 3 回見る
 - [ ] netbird(外から VPN に入れる)。**ここだけブラウザでは確かめられない**
 - [ ] AdGuard の公開リゾルバ(`dig @10.10.0.4 example.com`)
 - [ ] **`/dev/dvb/adapter*` と B-CAS リーダーが見える**(`talosctl ls /dev/dvb`、`talosctl ls /dev/bus/usb`)。

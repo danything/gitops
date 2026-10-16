@@ -7,7 +7,7 @@
 #
 # **当てない**(理由は talos/README.md「適用は CI にやらせない」)。
 # ノードの os:admin 証明書を持っている人が手で回す道具。移行後は手元の PC(tools/t.ps1)で回す
-# (python3 + PyYAML が要る。tools のコンテナに入っているかは要確認)。
+# (python3 + PyYAML が要る。**tools のコンテナには入っていない**(2026-10-17 に Dockerfile で確認)ので、移行後に回すなら tools/Dockerfile の apt に python3-yaml を足す)。
 #
 #   ./talos/drift.sh                # talosconfig の既定のノード
 #   ./talos/drift.sh 10.0.0.2       # ノードを指定
