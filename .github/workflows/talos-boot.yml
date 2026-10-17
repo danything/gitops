@@ -38,10 +38,10 @@ on:
 permissions:
   contents: read
 
-# 同じ PR で積み上がると runner を 20 分ずつ食うので、古い方を止める
+# 同じ PR で積み上がると runner を食うので、古い方を止める。main は止めない(マージごとの結果を残す)
 concurrency:
   group: talos-boot-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # 本番と同じアドレス。SLIRP の網をこれに合わせて、machine config の住所は書き換えない
@@ -234,6 +234,13 @@ jobs:
           # (u-local-path の上)なので、ここが通れば PV の経路も通っている
           ro infisical deploy/infisical
           kubectl -n infisical wait --for=jsonpath='{.status.phase}'=Bound pvc --all --timeout=1m
+          # 上の一覧に無いもの(chart が増やした Pod など)の取りこぼし止め
+          for i in $(seq 24); do
+            BAD=$(kubectl get pods -A --no-headers --field-selector=status.phase!=Running,status.phase!=Succeeded)
+            [ -z "$BAD" ] && break
+            sleep 5
+          done
+          [ -z "$BAD" ] || { echo "$BAD"; echo "::error::Running でない Pod がある"; exit 1; }
           # talosctl health はノードの側で回るので runner から 10.0.0.2 に届かなくてよい(Kubernetes 側の項目は SKIP になるので上で見ている)
           talosctl health --wait-timeout 5m
 
