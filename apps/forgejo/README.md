@@ -135,57 +135,15 @@ CI から Forgejo の API・git・レジストリに**長く生きる秘密な�
 | 見送り | forgejo-bot | doa-registry | Forgejo Actions | doa の todoroku・tamasagashi・worklog-cloud、`refs/heads/main`、`publish.yml` / `fetch-latest.yml`、push / workflow_dispatch / schedule | すべて・`write:package` | 組織 doa の変数 `REGISTRY_AUDIENCE` | (今は組織の `REGISTRY_TOKEN`) |
 | 見送り | forgejo-bot | todoroku-deploy | Forgejo Actions | todoroku、`refs/heads/main`、`publish.yml`、push / workflow_dispatch | todoroku だけ・`write:repository` | todoroku の変数 `DEPLOY_AUDIENCE` | (今は todoroku の `DEPLOY_TOKEN`) |
 
-**forgejo-bot の 2 つは見送った**(2026-10-07)。下のとおり forgejo-bot のものは 16.0.5 では画面にも CLI・API にも
-管理の手段が無く、止める・作り直すには DB を直接触ることになる。秘密を減らす効果より、後から手で扱えない設定を本番に
-増やす損が大きい。v17 以降で管理の手段が揃ったら、下のコマンドで作り、ワークフローの PR(doa/tamasagashi#106・
-doa/todoroku#368・doa/worklog-cloud#148。閉じてある)を出し直す。
+**forgejo-bot の 2 つは見送った**(2026-10-07)。forgejo-bot のものは 16.0.5 では画面にも CLI・API にも一覧・変更・削除の手段が無く
+(forgejo-bot は画面にログインできない。`ENABLE_INTERNAL_SIGNIN: "false"`)、止めるには DB の `authorized_integration` の行を触ることになる。
+v17 以降で管理の手段が揃ったら、表のルールで `forgejo admin user create-authorized-integration --username forgejo-bot …` を本番で打ち、
+出力の `audience`(`u:<ユーザー ID>:<UUID>`。秘密ではない)を表の変数に入れて、ワークフローの PR
+(doa/tamasagashi#106・doa/todoroku#368・doa/worklog-cloud#148。閉じてある)を出し直す。急いで止めるなら forgejo-bot を bots チームから外す
+(`prohibit_login` はレジストリを止めない)。doa の ID は 2、リポジトリ ID は todoroku 1・tamasagashi 3・worklog-cloud 4(変更の CLI が無いので、足すときは作り直し)。
 
-aud はインテグレーションを作ると決まる(`u:<ユーザー ID>:<UUID>`)。秘密ではないので変数に置く。
-**doa にイメージを出すリポジトリを足したら、doa-registry のリポジトリ ID も足す**(変更の CLI が無いので作り直し。aud が変わる)。
-
-**forgejo-bot は画面にログインできない**(`ENABLE_INTERNAL_SIGNIN: "false"`)ので、forgejo-bot のものは本番の CLI で作る。
-一覧・変更・削除の CLI と API は無い(16.0.5)。急いで止めるなら、forgejo-bot を組織 doa の bots チームから外す
-(パッケージもリポジトリも書けなくなる。トークンも巻き込む)。`prohibit_login` は API と git は止めるが、
-レジストリは止めない(`routers/api/packages` は見ていない)。消すのは DB の `authorized_integration`
-(と `authorized_integ_resource_repo`)の行。
-
-```shell
-# (見送り中。作るときのため)
-# doa-registry(リポジトリ ID は 1 = todoroku、3 = tamasagashi、4 = worklog-cloud。組織 doa の ID は 2)
-kubectl -n forgejo exec deploy/forgejo-web -c forgejo -- forgejo admin user create-authorized-integration \
-  --username forgejo-bot --name doa-registry \
-  --description "doa の main の publish がイメージを push する" \
-  --issuer urn:forgejo:authorized-integrations:actions \
-  --claim-eq repository_owner_id=2 --claim-eq ref=refs/heads/main \
-  --claim-in repository_id=1,3,4 --claim-in workflow=publish.yml,fetch-latest.yml \
-  --claim-in event_name=push,workflow_dispatch,schedule \
-  --scope write:package --repo all
-
-# todoroku-deploy
-kubectl -n forgejo exec deploy/forgejo-web -c forgejo -- forgejo admin user create-authorized-integration \
-  --username forgejo-bot --name todoroku-deploy \
-  --description "todoroku の publish が deploy-bump を push して PR を作り、マージを予約する" \
-  --issuer urn:forgejo:authorized-integrations:actions \
-  --claim-eq repository_id=1 --claim-eq ref=refs/heads/main --claim-eq workflow=publish.yml \
-  --claim-in event_name=push,workflow_dispatch \
-  --scope write:repository --repo doa/todoroku
-```
-
-出力の `audience` を変数に入れる(`POST /api/v1/orgs/doa/actions/variables/REGISTRY_AUDIENCE`、
-`POST /api/v1/repos/doa/todoroku/actions/variables/DEPLOY_AUDIENCE`。本文は `{"value": "<audience>"}`)。
-yui のもの(repo-config)は画面(設定 → 承認済みインテグレーション → 汎用 JWT)で作る。発行者は
-`https://token.actions.githubusercontent.com`、範囲は「すべて」、スコープは organization と repository を「読み取りと書き込み」。
-ルール(GitHub の 5ym/repo-config の ID は 1315588536、5ym は 13718335。クレームの値は文字列):
-
-```json
-{"rules": [
-  {"claim": "repository_id", "compare": "eq", "value": "1315588536"},
-  {"claim": "repository_owner_id", "compare": "eq", "value": "13718335"},
-  {"claim": "ref", "compare": "eq", "value": "refs/heads/main"},
-  {"claim": "workflow_ref", "compare": "eq", "value": "5ym/repo-config/.github/workflows/forgejo-settings.yml@refs/heads/main"},
-  {"claim": "event_name", "compare": "in", "values": ["push", "schedule", "workflow_dispatch"]}
-]}
-```
+yui のもの(repo-config)は画面(設定 → 承認済みインテグレーション → 汎用 JWT)で作った。発行者は `https://token.actions.githubusercontent.com`、
+クレームの値は文字列(5ym/repo-config の `repository_id` は 1315588536、`repository_owner_id` は 13718335)。
 
 ## ノードからイメージを取る
 

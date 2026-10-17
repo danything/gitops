@@ -117,59 +117,25 @@ restic dump <ID> /work/etcd.snapshot > etcd.snapshot
 
 ## inlineManifests は「更新できない」ではない(2026-09-08、VM で実測)
 
-**`talosctl upgrade-k8s` を通せば更新も削除もされる。** Sidero のドキュメントの
-「Talos only creates missing resources from inline manifests — it never deletes or updates them.」は
-Talos 自身の起動時の適用の話で、`upgrade-k8s` は別の経路だった。プローブ用の `ConfigMap` で確かめた:
+Sidero のドキュメントの「Talos only creates missing resources from inline manifests」は起動時の適用の話で、
+**`talosctl apply-config` では更新も削除もされないが、`talosctl upgrade-k8s`(同じ版でも)を通せば SSA とインベントリで更新も削除もされる**
+(prune は既定で有効)。プローブ用の `ConfigMap` で確かめた。この実測を根拠に `bootstrap/` をまるごと inlineManifests に載せた。
+当て直しの手順は [talos/README.md](../talos/README.md)「上げ方 / 当て直し方」。
 
-| 操作 | 値の更新 | config から消したとき |
-| --- | --- | --- |
-| `talosctl apply-config` | **されない** | 消えない |
-| `talosctl upgrade-k8s --to <いまと同じ版>` | **される** | **オブジェクトも消える** |
+## VM ブートドリル
 
-出力は差分つき(`< configured ConfigMap/…` と diff)で、SSA とインベントリで完全な reconcile をしている
-(`--manifests-inventory-policy`・`--manifests-no-prune`・`--manifests-force`。**prune は既定で有効**)。
-**この実測を根拠に、`bootstrap/` をまるごと inlineManifests に載せた**([decisions.md](decisions.md)「machine config と Cilium の chart をどう連動させるか」)。
+`talos/patches/` を QEMU で起動して確かめる。2026-09-06〜10-17 に手で 7 回回し、いまは
+[.github/workflows/talos-boot.yml](../.github/workflows/talos-boot.yml) が PR ごとに描いた machine config を起動して見る。
+見つけた穴は直した場所(`talos/patches/`・`render.sh`・`add-namespace.awk`)に理由を書いてある。
 
-## VM ブートドリル(2026-09-06〜10-17、7 回)
+VM では確かめられないもの: PT3 のモジュールの読み順、bond のフェイルオーバーの復旧方向(落とす方向は 8 秒以内で `talosctl` は途切れない)。
 
-`talos/patches/` を QEMU で起動して確かめた記録。**直したものは直した場所に理由を書いてある**ので、ここは索引。
-
-| 日付 | 確かめたこと | 見つけた穴 → 直した場所 |
-| --- | --- | --- |
-| 09-06 | v1.14.0 の作法、etcd スナップショットからの復旧 | 型付きドキュメントとの衝突 → 上の「machine config の作法」 |
-| 09-07(1 回目) | `patches/` だけで起動。bond0(balance-alb)・静的 IPv6・wireguard | IPv6 の既定経路が消える → [cluster.yaml](../talos/patches/cluster.yaml) の `accept_ra: "2"`。`addr_gen_mode: "2"` が黙って失敗 → 同 `"3"` |
-| 09-07(2 回目) | `apiserver.yaml` を足して bootstrap まで。`KubeAuthenticationConfig`・`certExtraSANs` が効く | `versions.yaml` の Kubernetes 版が使われず Talos の既定になる → [render.sh](../talos/render.sh) の `--kubernetes-version` と needle |
-| 09-08(3 回目) | `render.sh` の出力を丸ごと。Cilium(KPR・vxlan・BPF masq)・nodePort 80・dual-stack の `kube-dns` | control-plane の taint で全部 Pending → [cluster.yaml](../talos/patches/cluster.yaml)。EPHEMERAL がディスク全部 → [volumes.yaml](../talos/patches/volumes.yaml) |
-| 09-08(4 回目) | 本物の値で ArgoCD・cert-manager・infisical まで | chart が `metadata.namespace` を書かず `default` に落ちる → [add-namespace.awk](../talos/add-namespace.awk) |
-| 09-08(5 回目) | app-of-apps まで同期 | `InfisicalSecret` の CRD が無くて `apps/` が丸ごと止まる → `SkipDryRunOnMissingResource`([apps/k8up/README.md](../apps/k8up/README.md))。5 回失敗した Application は自動では戻らない → ArgoCD の `retry` |
-| 09-09(6 回目) | ディスク 140 GB・本番と同じ値で。Entra の issuer と groups の CEL、RBAC、`EPHEMERAL` ちょうど 64.0 GiB、`u-local-path` 72 GiB | 無し |
-| 10-17(7 回目) | v1.15.0-alpha.1 と型付きの `BondConfig` / `LinkConfig`。`bond0` の MAC が `hardwareAddr` になる。`autoconf=0` で SLAAC が付かず、forwarding=1 になっても RA の既定経路が残る | 無し |
-
-**VM では確かめられず実機で踏んだもの(2026-10-17)**: `render.sh` が GatewayClass を描いていなかった(`helm template` は
-クラスタを見ないので `--api-versions` が要る。[render.sh](../talos/render.sh))、PT3 のモジュールの読み順(上の表)。
-
-ほかに残しておくこと:
-
-- **bond のフェイルオーバーは 8 秒以内**(片方の carrier を落とすと `Currently Active Slave` が移り、`talosctl` は途切れない)。
-  **復旧方向は QEMU では確かめられていない**
-- **wireguard はカーネル組み込み**。privileged + hostNetwork の Pod から `wg-quick up` が通る(LSM は SELinux)
-- `net.ipv6.conf.eno4.disable_ipv6: "1"` は効く。`bond0` の sysctl は Talos が bond を作ったあとに当たる
-- infisical は SMTP が無くても上がる。起動直後の `CreateContainerConfigError: failed to sync secret cache` は
-  optional な Secret の同期待ちで、放っておくと直る
-- 所要: `apply-config` → apid 復帰 75 秒 → ノード Ready 200 秒 → bootstrap 層が全部 Running まで 120 秒
 - **v1.14 以降の `talosctl` は `--nodes` / `--endpoints` がグローバルフラグではない。** `talosctl get links --insecure -n … -e …` の順で書く。
   `talosctl apply-config -m reboot` は無い(`auto` / `no-reboot` / `staged` / `try`)
+- infisical の起動直後の `CreateContainerConfigError: failed to sync secret cache` は optional な Secret の同期待ちで、放っておくと直る
+- 所要: `apply-config` → apid 復帰 75 秒 → ノード Ready 200 秒 → bootstrap 層が全部 Running まで 120 秒
 
-## Z440 に移すときに変わるもの
-
-同じ Talos のまま HP Z440 に載せ替える。計画は [z440-migration.md](z440-migration.md)。
-
-- **NIC の名前が変わる。** `LinkAliasConfig` で `mac(link.permanent_addr)` を selector にして名前を付け、bond のメンバーはその別名で指す。
-  **bond0 の MAC は `hardwareAddr` で固定してあるので変わらない**
-- **ディスクはオンボードの SATA(AHCI)につながる。** `talosctl get disks` で見て [patches/main.yaml](../talos/patches/main.yaml) の `diskSelector` を合わせる
-- **iLO が無い。** Intel AMT 9.x(10.0.0.5)で電源と Serial-over-LAN だけ。SOL に出すには schematic の
-  `extraKernelArgs` に `console=ttyS<n>,115200n8` が要る
-- **GPU を挿さないと POST しない。** Intel Arc A310 を常設する。schematic に `siderolabs/i915`(**要確認**)を足す
+Z440 に移すときに変わるもの(NIC の名前・ディスク・AMT・GPU)は [z440-migration.md](z440-migration.md)。
 
 ## ネットワークまわりの前提
 
