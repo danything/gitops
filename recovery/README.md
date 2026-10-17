@@ -104,8 +104,9 @@ kubectl get pods -A        # cilium・coredns・metrics-server・local-path・ar
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
 
-`secrets.yaml` が同じなら `talos/kubeconfig.yaml` は前のクラスタのものがそのまま通る(CA が同じ。証明書は 1 年で切れる)。
-切れていたり `secrets.yaml` を作り直したりしたときは、`talosctl kubeconfig` から作り直す(tools/README.md「管理者の kubeconfig の入れ方」)。
+`kubectl` の前に管理者の kubeconfig(`talos/kubeconfig.yaml`、SOPS)が要る。`secrets.yaml` が同じなら前のものがそのまま通る
+(CA が同じ。証明書は 1 年で切れる)。無い・切れている・`secrets.yaml` を作り直したときは、ここで `talosctl kubeconfig` から作って
+コミットする(tools/README.md「管理者の kubeconfig の入れ方」)。
 
 ## 5. 残りの bootstrap/ を当てる(GitHub Actions)
 
