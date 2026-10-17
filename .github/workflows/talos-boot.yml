@@ -263,10 +263,11 @@ jobs:
           YAML
           # webhook が受け付けるようになるまで断られる
           until kubectl apply -f /tmp/issuer.yaml 2>/dev/null; do sleep 5; done
-          until kubectl apply -f bootstrap/gateway/ -f bootstrap/argocd/httproute.yaml; do sleep 5; done
+          # nodeport.yaml は ArgoCD の PostSync 用(VM では下で直に patch する)なので当てない
+          until kubectl apply -f bootstrap/gateway/gateway.yaml -f bootstrap/gateway/redirect-https.yaml -f bootstrap/argocd/httproute.yaml; do sleep 5; done
           kubectl -n kube-system wait --for=condition=Ready certificate --all --timeout=3m
           kubectl -n kube-system wait --for=condition=Programmed gateway/doany --timeout=3m
-          # bootstrap-apply.yml と同じ手当て。nodePort が 80/443 でないと L7LB に入らない(bootstrap/cilium/values.yaml)
+          # bootstrap/gateway/nodeport.yaml と同じ手当て(本番では ArgoCD の PostSync)。nodePort が 80/443 でないと L7LB に入らない(bootstrap/cilium/values.yaml)
           until kubectl -n kube-system get svc cilium-gateway-doany >/dev/null 2>&1; do sleep 5; done
           kubectl -n kube-system patch svc cilium-gateway-doany --type=json -p '[
             {"op":"replace","path":"/spec/ports/0/nodePort","value":80},

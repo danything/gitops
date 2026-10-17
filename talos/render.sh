@@ -76,8 +76,8 @@ inline() { # $1=name  stdin=manifest
 
 # bootstrap/<name>/ の chart を描いて inlineManifest にする。chart と repo は version.yaml の
 # `# renovate:` の行から、値は values.yaml から読む。値をここに写さない(../docs/decisions.md)。
-# namespace.yaml があれば先頭に付ける。chart は Namespace を描かないし、当てる側の bootstrap-apply.yml は
-# クラスタが立つまで走れないので、machine config が最初に流れる時点では誰も作っていない。
+# namespace.yaml があれば先頭に付ける。chart は Namespace を描かないし、ArgoCD は
+# machine config の中にいるので、machine config が最初に流れる時点では誰も作っていない。
 # `updatedAt` は infisical の chart が描いた時刻を Deployment と Pod に付ける注釈(values では消せない)。
 # 残すと描くたびに差分が出て、当て直すたびに infisical が再起動するので落とす。
 chart() { # $1=name  $2=namespace  残り=helm template に足す引数
@@ -107,8 +107,8 @@ chart cilium kube-system --api-versions gateway.networking.k8s.io/v1/GatewayClas
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
 
-# bootstrap-applier の RBAC。当のワークフローに当てさせるわけにいかない (自分の権限を
-# 書き換えられる) ので bootstrap-apply.yml は bootstrap/apiserver/ を除外していて、ここで載せる。
+# GitHub Actions(cilium-drift)と人(Entra)の RBAC。認証の設定と同じく、ArgoCD も CI も要らない層に置く
+# (締め出されたときに直せる)。bootstrap/argocd/repos.yaml の `bootstrap` は apiserver/ を外している。
 # 認証の側(OIDC の issuer)は patches/apiserver.yaml の KubeAuthenticationConfig。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
@@ -151,7 +151,7 @@ done
 chart cert-manager cert-manager
 
 # SOPS 済みの Secret も入れる。infisical/secrets.yaml は infisical の起動に要る
-# (kubeSecretRef)ので、CI が当てるのでは間に合わない。cloudflare-secret.yaml は
+# (kubeSecretRef)ので、machine config に無いと起動しない。どちらも ArgoCD は復号できない。cloudflare-secret.yaml は
 # DNS-01 の資格情報。machine config はもともと秘密の塊なので信頼水準は変わらない。
 # `sops -d … | inline` と繋がないこと。`#!/bin/sh` には `pipefail` が無いので、
 # 復号に失敗しても `set -e` が拾わず、中身が空の KubeInlineManifestConfig が
@@ -212,7 +212,7 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	'kind: GatewayClass' io.cilium/gateway-controller \
 	'name: local-path' rancher.io/local-path \
 	hubble-generate-certs \
-	'name: apiserver-rbac' bootstrap-applier \
+	'name: apiserver-rbac' 'name: cilium-drift' \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'name: argocd' argocd-server 'name: argocd-application-crd' manifests/crds/applicationset-crd.yaml \
 	'kind: Namespace\nmetadata:\n  name: argocd' \
