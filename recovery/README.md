@@ -11,6 +11,8 @@
 | [pv.sh](pv.sh) | PV のデータを k8up の `Restore` で戻す道具(下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
+**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次のリハーサルか建て直しで最初に確かめる。
+
 手で持つのは **age のパスフレーズ 1 つだけ**。GitHub へのログインは要らない
 (置き場の考え方は [../docs/decisions.md](../docs/decisions.md)「そのパスフレーズをどこに置くか」)。
 **この 2 ファイルは紙にも刷っておく** ── リポジトリが読めることは前提にしている。
