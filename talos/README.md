@@ -91,6 +91,10 @@ kubeconfig も talosconfig もファイルでは持たない(t.ps1 がその場�
 - **`upgrade-k8s` は版を上げなくても reconcile する。** SSA とインベントリで**更新も削除も**する
   ([../docs/talos.md](../docs/talos.md)「inlineManifests は「更新できない」ではない」)
 - **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。** 古い machine config のまま流すと**走っている Cilium が巻き戻る**
+- **`timeout waiting for: [Job/argocd/argocd-redis-secret-init status: 'NotFound']` で終わったら、もう一度流す。**
+  この Job は終わると 60 秒で消える(`ttlSecondsAfterFinished`)ので、待っている間に消えて時間切れになり、
+  その後ろの Deployment まで当たらないことがある(2026-10-17、argo-cd 10.10.5 を当てたとき 1 回目は ArgoCD が古い版のままだった)。
+  当て終わったら `kubectl -n argocd get deploy -o wide` でイメージの版を見る
 - **何も変えていなくても差分が出るものがある。** chart が描くたびに作り直す値で、Cilium の Hubble の CA と証明書 3 つ、
   infisical の `postgres-password`(Postgres の superuser。使うのは初期化のときだけ)。当て直しても害は無い
 
