@@ -60,7 +60,7 @@ data:
       # pulumi/ は bun.lock を Renovate が作れない(SDK を pulumi install でしか作れない)ので、
       # スクリプトで pulumi install させる(pulumi/README.md)。
       # AdGuard Home の版上げでは、新しい版に config.yaml を移行させる(apps/adguardhome/renovate-post-upgrade.sh)
-      export RENOVATE_ALLOWED_COMMANDS='["^bash pulumi/renovate-post-upgrade\.sh$", "^bash apps/adguardhome/renovate-post-upgrade\.sh$"]'
+      export RENOVATE_ALLOWED_COMMANDS='["^bash pulumi/renovate-post-upgrade\\.sh$", "^bash apps/adguardhome/renovate-post-upgrade\\.sh$"]'
       # github.com のトークンは Forgejo のときだけ使う(GitHub ではトークンそのものが github.com のもの)
       unset RENOVATE_GITHUB_COM_TOKEN
       if [ -z "${APP_PRIVATE_KEY:-}" ]; then
@@ -128,7 +128,8 @@ spec:
       completionMode: Indexed
       completions: 3
       parallelism: 3
-      # 番号ごとに数える。1 つが落ちても(OOMKilled など。exit 0 にできない終わり方)残りは止めない
+      # 番号ごとに数える。1 つが落ちても(OOMKilled など。exit 0 にできない終わり方)残りの番号は最後まで回す
+      # (そのときの Job は Failed になる。3 本の CronJob だった頃にその 1 本が Failed になったのと同じ)
       backoffLimitPerIndex: 0
       # トークンは 1 時間で切れる。それより前に止める
       activeDeadlineSeconds: 2700
