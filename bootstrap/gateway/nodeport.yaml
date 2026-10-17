@@ -6,6 +6,8 @@
 #
 # ArgoCD が `bootstrap` を同期するたびに流す(PostSync)。冪等。Service がまだ無ければ Job が落ち、
 # 同期の retry(../argocd/repos.yaml の `bootstrap`)でやり直す。2026-10-17 まで bootstrap-apply.yml の 1 step だった。
+# **Service が作り直されたら(Gateway の作り直しなど)、ArgoCD で `bootstrap` を手で Sync する。** selfHeal は
+# ArgoCD の管理外の Service には効かないので、次に git が変わるまで 80/443 に戻らない。
 apiVersion: v1
 kind: ServiceAccount
 metadata:
