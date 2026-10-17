@@ -5,14 +5,12 @@
 # 接続がタイムアウトする(2026-09-15 に shadai で踏んだ)。レジストリはトークンの取得先(realm)も
 # `https://fj.doany.io/v2/token` を返すので、IP だけ差し替えるミラーでは足りない。
 #
-# そこで fj.doany.io の証明書を持つ nginx を ClusterIP の 443 に置き、**ホストの /etc/hosts で
-# fj.doany.io をこの ClusterIP に向ける**。ホストから ClusterIP には届く(Pod と違って Gateway を通らない)。
-# /etc/hosts はホストのプロセスにしか効かず、Pod の名前解決(CoreDNS)は変わらない。
+# そこで fj.doany.io の証明書を持つ nginx を ClusterIP の 443 に置き、**ノードの名前解決で
+# fj.doany.io をこの ClusterIP に向ける**(talos/patches/cluster.yaml の `StaticHostConfig`)。
+# ノードから ClusterIP には届く(Pod と違って Gateway を通らない)。
+# ノードのプロセスにしか効かず、Pod の名前解決(CoreDNS)は変わらない。
 #
-#   k3s:   /etc/hosts に `10.43.200.10 fj.doany.io`(2026-09-15 に足した)
-#   Talos: machine.network.extraHostEntries(talos/README.md)
-#
-# ClusterIP は固定。変えるとホストの /etc/hosts と揃わなくなる
+# ClusterIP は固定。変えると StaticHostConfig と揃わなくなる
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

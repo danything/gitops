@@ -3,7 +3,7 @@
 # Secret 更新時に自動でローリング再起動される。
 # https://infisical.com/docs/integrations/platforms/kubernetes/overview
 #
-# k3s の HelmChart CRD から移した(2026-09-07)。HelmChart は k3s 固有で Talos には無い。
+# もとは HelmChart CR で入れていた(2026-09-07 に Application へ。docs/decisions.md)。
 # ArgoCD 自身は operator に依存しないので、bootstrap ではなくここで面倒を見られる。
 #
 # リリース名は変えられない。chart は名前を 15 文字で切って
@@ -30,7 +30,7 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # CRD より先に同期しにいくと既定の 5 回で諦める(migration-day の 7)。
+    # CRD より先に同期しにいくと既定の 5 回で諦める。15s から倍々・上限 5 分・10 回(約 33 分)で自力で戻る。
     retry:
       limit: 10
       backoff:

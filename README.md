@@ -1,6 +1,6 @@
 # gitops
 
-自宅の Kubernetes クラスタ(k3s から Talos へ移行中)上のセルフホストアプリを [Argo CD](https://argo-cd.readthedocs.io/) で管理するマニフェスト群。
+自宅の Kubernetes クラスタ(Talos Linux の 1 ノード)上のセルフホストアプリを [Argo CD](https://argo-cd.readthedocs.io/) で管理するマニフェスト群。
 
 ## 仕組み
 
@@ -18,15 +18,14 @@
 | | |
 | --- | --- |
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト。**`_` で始まるディレクトリ (`apps/_glitchtip/` など) は同期しない** (動かしていないもの。下の表) |
-| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある。例外は `argocd/repos.yaml` だけ ── 上の「仕組み」)。**main へのマージで GitHub Actions が当てる**(SOPS 済みの 4 ファイルと `cilium/` だけ手で) |
-| [`backup/`](backup/) | ホストのバックアップ(restic → Cloudflare R2)。毎日 04:00 JST。**k3s 期だけ**(後継は `apps/k8up/`) |
+| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある。例外は `argocd/repos.yaml` だけ ── 上の「仕組み」)。Helm で入れるもの・RBAC・SOPS 済みのものは **machine config に載り**(`talos/render.sh`)、残りの平文は **main へのマージで GitHub Actions が当てる** |
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
 | [`mado/`](mado/) | **`main` が落ちたときの入口**。JCOM 側の PC(10.10.0.2)で [mado](https://github.com/danything/mado)(OIDC でログインしてブラウザから RDP する exe)を動かす(`md.doany.io`。クラスタの外) |
-| [`recovery/`](recovery/) | まっさらなホストから戻すための復元スクリプトと、暗号化した鍵 |
-| [`talos/`](talos/) | Talos への移行用 machine config(**v1.14 の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**Talos では `bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
+| [`recovery/`](recovery/) | **まっさらから建て直す入口**(手順・PV を戻す道具・暗号化した鍵)。git と restic だけで戻す |
+| [`talos/`](talos/) | ノードの machine config(**v1.14 以降の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**`bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
 | [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)はコンテナで動かす**。`tools/t.ps1 <コマンド>`(Windows の WSL コンテナ。wslc-compose)。手元にコマンドは入れない |
-| [`docs/`](docs/) | **[移行当日の手順](docs/migration-day.md)**、[決定の記録](docs/decisions.md)、[復元リハーサル](docs/restore-drill.md)、[Talos の実機検証](docs/talos.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Z440 への移行](docs/z440-migration.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
-| [`ROADMAP.md`](ROADMAP.md) | 暫定構成から Talos までの道筋と進捗(なぜそうしたかは `docs/decisions.md`) |
+| [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[Talos の作法と検証](docs/talos.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Z440 への移行](docs/z440-migration.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
+| [`ROADMAP.md`](ROADMAP.md) | やることと進捗(なぜそうしたかは `docs/decisions.md`) |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
 | [`.sops.yaml`](.sops.yaml) | 平文の秘密を SOPS(age)で暗号化する規則(`bootstrap/` の 4 ファイルと `talos/` の 2 つ) |
 
@@ -40,11 +39,12 @@
 **Infisical より下の層だけは Infisical から取れない**ので、`bootstrap/` の 4 ファイル(Infisical 自身の鍵、
 Argo CD が git を読む GitHub App 鍵、cert-manager の Cloudflare トークン)は **SOPS + age** で該当キーだけ暗号化してある。
 鍵は [`recovery/sops-age.key.age`](recovery/)(バックアップの `env.age` と同じパスフレーズ)。
+当てるのは machine config(`talos/render.sh` が復号して載せる)。
 
 ```shell
 # 鍵はリポジトリの .home/(git に入らない)に置く。コマンドは tools/t.ps1 で動かす(tools/README.md)
 tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
-tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml | tools/t.ps1 --admin kubectl apply -f -
+tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml      # 中を見る(画面に出すと平文になるので注意)
 ```
 
 ## ホスト名の付け方
@@ -78,7 +78,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
-| [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。**Talos でホストのスクリプトが使えなくなる**ぶんの受け皿 |
+| [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。PVC・DB のダンプ・etcd のスナップショット |
 | [`infisical/`](apps/infisical/) [`infisical-operator/`](apps/infisical-operator/) [`infisical-push-bridge/`](apps/infisical-push-bridge/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジ |
 | [`renovate/`](apps/renovate/) | Renovate(GitHub の danything・5ym と Forgejo の doa の全リポジトリの依存を上げる PR)。CronJob で 15 分おき。**秘密の入れ方は [apps/renovate/README.md](apps/renovate/README.md)** |
 | [`headlamp/`](apps/headlamp/) | Kubernetes の Web UI(`h.doany.io`、Portainer の置き換え)。認証は Entra、権限は `bootstrap/apiserver/` |

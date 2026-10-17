@@ -1,76 +1,272 @@
 # recovery
 
-サーバをまっさらな状態から戻すためのもの。**秘密は暗号化してあるので、この repo は公開のままでよい。**
+**ノード `main` をまっさらから建て直す入口。** git と restic(Cloudflare R2)だけで戻す。
+2026-10-17 に実機でこの順に建て直した(そのときの姿が今の本番)。
+秘密は暗号化してあるので、この repo は公開のままでよい。
 
 | | |
 | --- | --- |
-| `restore.sh` | 復元スクリプト。Cloudflare R2 の restic バックアップから k3s ホストを丸ごと戻す。**k3s 期だけ**(下記) |
 | `env.age` | バックアップ先の資格情報(R2 の鍵、restic のパスワード)。age のパスフレーズで暗号化 |
-| `sops-age.key.age` | `../bootstrap/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
+| `sops-age.key.age` | `bootstrap/` と `talos/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
+| [pv.sh](pv.sh) | PV のデータを k8up の `Restore` で戻す道具(下の 8) |
+| [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
-手で持つのは **age のパスフレーズ 1 つだけ**。GitHub へのログインは要らない。
-置き場の考え方は [../docs/decisions.md](../docs/decisions.md)「そのパスフレーズをどこに置くか」。
+**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次のリハーサルか建て直しで最初に確かめる。
 
-**Talos の秘密はここには無い。** `talos/secrets.yaml`(SOPS 済み)にあり、上の age 鍵で開く。
-**`talosconfig` はどこにも保存していない** ── `secrets.yaml` から `talosctl gen config` で毎回出る
-派生物なので、使い捨てにする([../talos/README.md](../talos/README.md))。
-
-**この 2 ファイルは紙にも刷っておくこと。** 上の手順は「GitHub にログインしなくてよい」だけで、
-**リポジトリが読めることは前提にしている**。base64 で `env.age` が 12 行、`sops-age.key.age` が 7 行。
+手で持つのは **age のパスフレーズ 1 つだけ**。GitHub へのログインは要らない
+(置き場の考え方は [../docs/decisions.md](../docs/decisions.md)「そのパスフレーズをどこに置くか」)。
+**この 2 ファイルは紙にも刷っておく** ── リポジトリが読めることは前提にしている。
+base64 で `env.age` が 12 行、`sops-age.key.age` が 7 行。
 
 ```shell
 base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 ```
 
-```shell
-curl -fsSLO https://raw.githubusercontent.com/danything/gitops/main/recovery/restore.sh
-sudo sh restore.sh          # パスフレーズを聞かれる
-```
+`env.age` の中身は `KEY=値` の env ファイル(`RESTIC_REPOSITORY=s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>`・
+`RESTIC_PASSWORD`・`AWS_ACCESS_KEY_ID`・`AWS_SECRET_ACCESS_KEY`・`AWS_DEFAULT_REGION=auto`・`MATTERMOST_WEBHOOK`)。
+値を入れ替えたら作り直してコミットする(`age -p -o recovery/env.age <env ファイル>`。同じ値は Infisical の `/k8up/k8up-global` にもある)。
 
-SOPS の鍵を使うとき:
-
-```shell
-mkdir -p ~/.config/sops/age
-age -d -o ~/.config/sops/age/keys.txt sops-age.key.age
-sops -d bootstrap/infisical/secrets.yaml | kubectl apply -f -
-```
-
-値を入れ替えたら作り直してコミットする。
-
-```shell
-age -p -o recovery/env.age /etc/k3s-backup/env
-```
-
-リハーサルの手順と結果は [`../docs/restore-drill.md`](../docs/restore-drill.md)。
-
-## Talos に移ったあと
-
-**`restore.sh` は使えない。** ホストを戻すスクリプトで、Talos には戻す先のホストが無い
-(シェルも `/etc/k3s-backup/env` も無い)。代わりに層ごとに戻す。
+## 何で戻すか
 
 | 層 | 何で戻すか |
 | --- | --- |
-| ホストの設定 | **machine config**。`talos/render.sh` が repo から描き直す。戻すものは無い |
-| k8s オブジェクト | **git から ArgoCD で再構築**(主経路)。etcd の日次スナップショット(restic の `--host etcd`)は git に無い状態まで一度に戻したいときの近道([../docs/talos.md](../docs/talos.md)「etcd スナップショットからの復旧」) |
-| **PV データ** | **k8up の `Restore`**([../apps/k8up/README.md](../apps/k8up/README.md)「戻し方」) |
+| ホストの設定 | **machine config**。`talos/render.sh` が repo から描く(`talos/secrets.yaml` が同じなら同じクラスタ CA) |
+| k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config と GitHub Actions が当てる |
+| Infisical の DB | **手元の restic で直接**(k8up の資格情報 `k8up-global` が Infisical から来るので、k8up では戻せない) |
+| ほかの PV データ | **k8up の `Restore`**([pv.sh](pv.sh)) |
 
-順番は [`../docs/migration-day.md`](../docs/migration-day.md) がそのまま使える。あれは
-「k3s から移る」手順だが、**3 以降は「まっさらな実機から建てる」手順と同じ**。
+etcd のスナップショット(restic の `--host etcd`、[../apps/k8up/etcd-snapshot.yaml](../apps/k8up/etcd-snapshot.yaml))は
+git に無い状態まで一度に戻したいときの近道で、主経路ではない([../docs/talos.md](../docs/talos.md)「etcd スナップショットからの復旧」)。
 
-**要る道具**(移行後は**ノードにシェルが無い**ので、全部手元から叩く):
+## 道具と経路
 
-| | いつ |
+**コマンドは全部 `tools/t.ps1 --admin` で入ったコンテナのシェルで打つ**(`HOME` はリポジトリの `.home/` で、
+age 鍵と restic の資格情報はそこに残る。ノードにシェルは無い)。**talosctl / kubectl の資格情報は t.ps1 が用意する** ──
+talosconfig も管理者の kubeconfig も `talos/secrets.yaml` の CA からその場で作る(ファイルでは持たない)
+([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。GitHub の操作(5)だけ手元の `gh`。
+
+- **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno4)にしか届かない**(10.0.0.2 は届かない)。t.ps1 の行き先はそこに固定してある
+- iLO(10.0.0.3)の Remote Console(HTML5)で、ブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す
+- **GitHub Actions では代わりにならない。** Talos の API(50000)は LAN からしか届かず、CI の OIDC の信頼も
+  machine config を当てて初めてできる
+
+## 1. 鍵を開いて machine config を描く
+
+```shell
+mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age   # パスフレーズ
+./talos/render.sh talos/clusterconfig       # `valid for metal mode` まで出ること
+```
+
+- **`talos/secrets.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver/ca.crt`・
+  Infisical の Kubernetes auth(7)が合わなくなる
+- **`render.sh` は出力先を丸ごと消して作り直す。** `talos/clusterconfig/` に kubeconfig などを置いていたら消える
+- 版は [../talos/versions.yaml](../talos/versions.yaml)。**上げるなら建て直しの日ではない日に**
+
+## 2. ISO で起動する
+
+ISO は Image Factory のもの(URL の schematic と版は `versions.yaml` と揃える)。ハイブリッドなのでそのまま書けばよい
+(Windows なら Rufus の **DD イメージモード**。WSL からは USB が見えない)。
+
+```shell
+curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca/v1.15.0-alpha.1/metal-amd64.iso
+```
+
+- ISO の schematic は気にしなくてよい。ディスクに書かれるのは machine config の `--install-image`
+- **Secure Boot が Disabled**(RBSU は POST 中に F9 → Server Security → Secure Boot Settings)。Boot Mode は UEFI のまま
+- POST 中に **F11** で USB を選ぶ(iLO の Virtual Media なら Image File CD-ROM/DVD に ISO の URL を貼り、Reset して F11)
+- コンソールに maintenance mode の IP が出る。インタフェースが `eno1` / `eno2` / `eno4`、インストール先が `/dev/sda`(447 GB)であること
+  (違ったら `talos/patches/cluster.yaml` / `main.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
+
+```shell
+IP=<コンソールに出た IP>
+talosctl get links --insecure -n $IP -e $IP
+talosctl get disks --insecure -n $IP -e $IP
+```
+
+## 3. 当てる(インストールは無人で進む)
+
+```shell
+talosctl apply-config --insecure -n $IP -e $IP -f talos/clusterconfig/controlplane.yaml
+```
+
+`UnattendedInstallConfig` があるので、ディスクに書いて自分で再起動する。**ここで SSD が上書きされる。**
+`STATE` / `EPHEMERAL` / `u-local-path` が `ready` になったら USB を抜いてよい(挿したままだとブート順によっては
+また maintenance mode で上がる):
+
+```shell
+talosctl get volumestatus    # EPHEMERAL は 64GiB 上限。違ったら入れ直すしかない
+```
+
+## 4. クラスタを起こす
+
+```shell
+talosctl bootstrap         # 単一ノードなので 1 回だけ
+kubectl get nodes          # Ready / control-plane / versions.yaml の kubernetes: の版
+kubectl get pods -A        # cilium・coredns・metrics-server・local-path・argocd・cert-manager・infisical が Running
+kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
+```
+
+`talosctl kubeconfig` は使わない(取り消せない 1 年の証明書が呼ぶたびに出る)。t.ps1 が `secrets.yaml` の CA でその場で作る。
+
+## 5. 残りの bootstrap/ を当てる(GitHub Actions)
+
+```shell
+gh workflow run bootstrap-apply.yml -R danything/gitops     # 手元で
+```
+
+- `ClusterIssuer`・Gateway・auth・`InfisicalSecret` が入る。SOPS 済みの 4 ファイルは machine config に入っているので何もしない
+- **最後の nodePort 80/443 の当て直しは、Gateway の Service が無いと警告して飛ばす**(Service は Cilium が Gateway を
+  処理してから現れる)。`kubectl -n kube-system get svc cilium-gateway-doany` が `80:80` / `443:443` でなければもう 1 回流す。
+  ここが 80/443 でないと公開経路が全部死ぬ([../bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml) の `nodePort`)
+- Gateway に証明書が付く(`kubectl get certificate -A`)
+
+Argo CD はこの間に `apps/` と各リポジトリの `deploy/` を同期しはじめる。**中身はまだ空**なので、
+Infisical の Secret を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。
+
+## 6. Infisical の DB を戻す
+
+```shell
+age -d -o ~/.config/restic.env recovery/env.age     # パスフレーズ。終わったら消す(10)
+set -a; . ~/.config/restic.env; set +a
+restic snapshots --host infisical --latest 1 --compact      # /infisical-postgresql.sql の ID
+sh recovery/infisical.sh db <ID>     # users が 0 なら Infisical を起こさずに止まる。流し直すときは先に drop-old
+```
+
+起動したばかりの Infisical の Postgres にダンプを流す(ロールと DB は chart が作ってある)。
+`public` は消さずに `old_public` に退ける(`DROP SCHEMA` は `max_locks_per_transaction` が足りず落ちる。[infisical.sh](infisical.sh))。
+Infisical が上がって中身が見えたら、退けたものを消す:
+
+```shell
+sh recovery/infisical.sh drop-old
+```
+
+## 7. Infisical の Kubernetes auth の CA を差し替える
+
+**DB を戻すと、operator の Machine Identity(`f2bc3416…`、許可 SA `infisical/infisical-auth`)の CA も
+古いクラスタのものに戻る。** InfisicalSecret が全部 `SSL certificate verification failed … self-signed certificate` で止まる。
+
+管理者でログインしておく。ブラウザのログインは t.ps1 が中継するので、シェルの中ではなく手元で
+`tools/t.ps1 infisical login --domain https://il.doany.io/api`(トークンは `.home/` に残る)。
+
+```shell
+sh recovery/infisical.sh ca          # クラスタと Infisical の CA の頭を並べて見る
+sh recovery/infisical.sh ca apply    # 差し替えて、operator を蹴り直す(失敗が続くと間を空けるため)
+kubectl get infisicalsecret -A       # 全部 Ready になる。k8up/k8up-global もここで入り、k8up が動き出す
+```
+
+`secrets.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
+
+## 8. PV データを戻す(k8up)
+
+**Argo CD を止めてから。** selfHeal が replicas を git の値に戻すので、アプリを 0 にしても起き上がってくる。
+戻し終わるまで application-controller を 0 にしておく(ApplicationSet は止まらないので Application は作られ続ける):
+
+```shell
+sh recovery/pv.sh - argo-pause
+```
+
+**Forgejo を先に。** 非公開アプリのイメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、Argo CD が読む
+マニフェストも、それを読むトークン(Forgejo の DB)も全部 Forgejo にあるので、戻すまで 1 本も上がらない:
+
+```shell
+restic snapshots --host forgejo --latest 1 --compact
+sh recovery/pv.sh forgejo stop postgres
+sh recovery/pv.sh forgejo pgload postgres-data <ID> /forgejo-postgres.sql postgres forgejo forgejo
+sh recovery/pv.sh forgejo folder forgejo-repos <ID>
+sh recovery/pv.sh forgejo start
+sh recovery/pv.sh - argo-resume      # repos-forgejo の ERR が False になり、非公開アプリの Application と PVC が出てくるのを待つ
+kubectl -n argocd get applicationset -o custom-columns='NAME:.metadata.name,ERR:.status.conditions[?(@.type=="ErrorOccurred")].status'
+sh recovery/pv.sh - argo-pause
+```
+
+残りは namespace ごとに `restic snapshots --host <ns> --latest 1 --compact` で経路と ID を見て、
+**`stop` → 経路ごとに戻す → `start`**。経路の形で操作が決まる:
+
+| 経路 | 操作 |
 | --- | --- |
-| `age` / `sops` | 最初。`sops-age.key.age` を開いて repo の秘密を読めるようにする |
-| `talosctl` | `render.sh` → `apply-config` → `bootstrap` → `kubeconfig` |
-| **`kubectl`** | **そこから先は全部。** PV の復元は k8up の CR を作る操作なので、これが無いと 1 バイトも戻らない |
-| `restic` | 戻すスナップショットの ID を選ぶ |
-| `helm` | `render.sh` が中で使う |
+| `/data/<pvc>` | `folder <pvc> <ID>`(`/data/adguardhome-ssl` だけは戻さない。どの Pod も使っていない PVC で、消した) |
+| `/<ns>-<app>.db`(SQLite) | `sqlite <pvc> <ファイル名> <ID> /<ns>-<app>.db`。xool・worklog・lgtm・todoroku は `<app>-db` / `<app>.db`、blog は `yosegaki-db` / `yosegaki.db`、denpa は `denpa-data` / `denpa.db`(**`/data/denpa-data` の `folder` を先に**。あちらは `denpa.db*` を除いて取っている) |
+| `/rybbit-postgres.sql` | `stop postgres` にしてから `pgload postgres-data <ID> /rybbit-postgres.sql postgres rybbit analytics`(ダンプは `--clean` 付き) |
+| `/netbird-backup.tar` | `untar netbird-data <ID> /netbird-backup.tar "store.db* idp.db* events.db*"`。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
+| `/matrix-backup.tar` | 下 |
 
-**GitHub Actions で代わりにはならない。** Talos の API(50000)は LAN からしか届かず、CI の OIDC の信頼も
-machine config を当てて初めてできる。**復旧はその machine config を手元から当てるところから始まる。**
+```shell
+# 例: xool
+sh recovery/pv.sh xool stop
+sh recovery/pv.sh xool folder xool-assets <ID>
+sh recovery/pv.sh xool sqlite xool-db xool.db <ID> /xool-xool.db
+sh recovery/pv.sh xool start
+```
 
-**`env.age` は Talos 期も要る。** Infisical がまだ空の段階で `k8up-global` の Secret を
-手で作る必要があり、その値の出どころがこれ
-([../apps/k8up/k8up-secrets.yaml](../apps/k8up/k8up-secrets.yaml))。
-`/etc/k3s-backup/env` は消えるが、**中身(R2 の鍵と restic のパスフレーズ)は変わらない**。
+matrix(Tuwunel)は DB のファイルではなく、Tuwunel 自身のバックアップ(`backups/`)と `media/` を tar で取っている。
+新しく作られた `db/` を消して置き、**1 回だけ `--restore-backup` 付きで起こす**(引数は Argo CD を戻すと selfHeal が消す):
+
+```shell
+sh recovery/pv.sh matrix stop
+sh recovery/pv.sh matrix folder tuwunel-data <ID>
+sh recovery/pv.sh matrix shell tuwunel-data 'rm -rf db backups media; tar -xf matrix-backup.tar; rm -f matrix-backup.tar; chown -R 65532:65532 .; ls backups'
+kubectl -n matrix patch sts tuwunel -p '{"spec":{"template":{"spec":{"containers":[{"name":"tuwunel","args":["--restore-backup"]}]}}}}'
+sh recovery/pv.sh matrix start
+kubectl -n matrix logs tuwunel-0 -c tuwunel | grep -iE 'restor|backup|error'
+```
+
+終わったら Argo CD を戻し、戻したアプリを一度入れ直して開いているファイルを掴み直させる:
+
+```shell
+sh recovery/pv.sh - argo-resume
+kubectl -n <ns> rollout restart deploy     # 戻した namespace ごと
+```
+
+- **`Succeeded` は「戻った」の意味ではない。** `pv.sh` は `Restored N files` と(SELinux 以外の)エラー数を出すので、それを見る。
+  SQLite は大きさを restic と突き合わせてから付け替える
+- `pv.sh` がやっていることと理由(root で走らせる・数字だけの ID を引用符で囲む・バイナリを標準入力で流さない)は [pv.sh](pv.sh) の冒頭
+- PVC が `Pending`(local-path は使う Pod が付くまで bind しない)でも、Restore の Pod が付けば bind する
+
+## 9. 確かめる
+
+公開している名前を全部叩く(作業用 PC のコンテナから。ノードの上からは 80/443 に届かない)。
+
+```shell
+kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.hostnames[*]}{@}{"\n"}{end}{end}' \
+  | grep -v '^\*' | sort -u | while read h; do
+      printf '%-24s %s\n' "$h" "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "https://$h/" 2>/dev/null || echo ERR)"
+    done
+```
+
+| | |
+| --- | --- |
+| 200 | 大半 |
+| **302** | `a` / `ah` / `hl` ── oauth2-proxy が Entra へ飛ばしている |
+| **401** | `dp` ── **これが正しい。** 公開側から来た通信を denpa が弾いている。200 なら X-Forwarded-For が壊れていて住所判定が効いていない |
+| ERR | `dp.l.doany.io` ── 宅内専用の名前。AdGuard を引く端末からしか通らない |
+
+- [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy、`kubectl get infisicalsecret -A` が全部 Ready
+- [ ] `talosctl get links bond0` の MAC が **`e6:2c:1b:1a:a0:39`**(ルーターの IPv6 ホスト公開がこの MAC を指す。[../docs/router.md](../docs/router.md))
+- [ ] **別の回線の IPv6 だけで 443 に届く。** J:COM 側の PC から `curl -6 -so /dev/null -w "%{http_code} %{remote_ip}\n" https://fj.doany.io/` で
+      `200 240f:6d:842b:1::2`(アドレス直打ちは SNI が無く Gateway が切るので駄目)
+- [ ] DNS の AAAA が `::2`(SLAAC のアドレスではない)。`talosctl get addresses` を起動直後・数分後・再起動後に見る
+      (sysctl より先に RA が届くと SLAAC が一度付いて残りうる)
+- [ ] `talosctl get routes -o yaml | grep -B10 'protocol: ra'` に `dst: ""`(IPv6 の既定経路)が残っている
+- [ ] netbird で外から VPN に入れる(ブラウザでは確かめられない)、AdGuard(`dig @10.10.0.4 example.com`)
+- [ ] **PT3**: `talosctl ls /dev/dvb` に adapter0〜3 と各 `frontend0`、`talosctl ls /dev/bus/usb` に B-CAS リーダー、録画が動く
+      (frontend が無いときは [../apps/pt3/rebind.yaml](../apps/pt3/rebind.yaml) が付け直しているか)
+- [ ] Renovate の CronJob が次の回で動く(`kubectl -n renovate get jobs`)、k8up の通知が翌日 OK ✅
+- [ ] etcd のスナップショットを 1 回手で取る(`kubectl -n k8up create job --from=cronjob/etcd-snapshot etcd-snapshot-first`)
+
+## 10. 後始末
+
+```shell
+rm -f ~/.config/restic.env ~/infisical-load.log
+```
+
+## 詰まったときに見るところ
+
+| | |
+| --- | --- |
+| ノードが上がらない | iLO のコンソール。ダッシュボードに版と健全性が出る |
+| Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
+| PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
+| 非公開イメージが引けない | `talos/registries.yaml` が machine config に入っているか、Forgejo が戻っているか(8) |
+| bootstrap apply が TLS で落ちる | `secrets.yaml` を作り直した。`bootstrap/apiserver/ca.crt` を新しい `secrets.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
+| Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
+| inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |

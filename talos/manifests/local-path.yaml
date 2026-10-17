@@ -1,20 +1,11 @@
-# local-path-provisioner。Talos に持っていくために要る。
+# local-path-provisioner。Talos には無いので、入れないと PVC が 1 つも bind せず、
+# ストレージを持つアプリが全部 Pending で止まる。
 #
-# k3s ではこれが組み込みのアドオンとして動いている(`objectset.rio.cattle.io/owner-name:
-# local-storage`)。Talos には無いので、入れないと PVC が 1 つも bind せず、
-# ストレージを持つアプリが全部 Pending で止まる。CNI と同じ「移行当日まで気づかない」類い。
-#
-# k3s の設定との違い
-#
-# | | k3s | ここ |
-# | --- | --- | --- |
-# | データの置き場 | `/var/lib/rancher/k3s/storage` | `/var/mnt/local-path`([`talos/patches/volumes.yaml`](../patches/volumes.yaml) の `UserVolumeConfig` が切る別パーティション) |
-# | namespace | `kube-system` | `local-path-storage`(PSA は privileged。ヘルパー Pod が hostPath を使う) |
-#
-# StorageClass は既定の `local-path` 1 つだけ。
-#
-# k3s 期にあった `local-path-retain` は 2026-10-05 に撤去した(全 PVC を既存の PV ごと
-# `local-path` に結び直した。ROADMAP)。PVC を守るのは Retain ではなく日次の restic。
+# - データの置き場は `/var/mnt/local-path`([`talos/patches/volumes.yaml`](../patches/volumes.yaml) の
+#   `UserVolumeConfig` が切る別パーティション)。ディレクトリは `pvc-<uid>_<ns>_<name>`
+# - namespace は `local-path-storage`(PSA は privileged。ヘルパー Pod が hostPath を使う)
+# - StorageClass は既定の `local-path` 1 つだけ。PVC を守るのは Retain ではなく日次の restic
+#   (docs/decisions.md「PVC を守る仕掛けをやめた」)
 apiVersion: v1
 kind: Namespace
 metadata:

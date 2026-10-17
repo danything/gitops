@@ -1,13 +1,11 @@
 # bootstrap/ を main へのマージ時にクラスタへ当てる。
 #
 # **保存している秘密はゼロ。** GitHub Actions の OIDC トークンを API サーバが直接受ける
-# (bootstrap/apiserver/authentication-config.yaml)。kubeconfig も age 鍵も置いていない。
+# (talos/patches/apiserver.yaml の KubeAuthenticationConfig)。kubeconfig も age 鍵も置いていない。
 #
-# **`bootstrap/apiserver/ca.crt` には CA が 2 枚入っている**(k3s と Talos。2026-10-05)。
-# Talos の CA は `talos/secrets.yaml` のもので k3s とは別物なので、k3s の 1 枚だけだと
-# 移行当日にこのワークフローが TLS で落ち、下の nodePort の当て直しも走らず公開経路が
-# 戻らない。kubectl はバンドルを受けるので、両方入れておけば切り替えの瞬間を選ばない。
-# **移行が済んだら k3s の 1 枚目を消す**(docs/migration-day.md の 10)。cilium-drift も同じファイルを使う。
+# **`bootstrap/apiserver/ca.crt` はクラスタの CA**(`talos/secrets.yaml` の Kubernetes CA。
+# t.ps1 が作る kubeconfig の `certificate-authority-data` と同じもの)。
+# `secrets.yaml` を作り直すと別の CA になり、ここが TLS で落ちる。cilium-drift も同じファイルを使う。
 #
 # **SOPS で暗号化した 4 ファイルは当てない**(復号鍵を GitHub に置かないため)。
 # あれらは滅多に変わらないので手で当てる。判定はファイルの中身を見てやっているので、
@@ -45,9 +43,7 @@ jobs:
           #                        名前で外す ── ディレクトリ名で並べていたら
           #                        cert-manager が増えたときに取りこぼした(2026-09-08)
           #   apiserver/           **ここを当てさせない。** rbac.yaml を当てられると
-          #                        ワークフローが自分の権限を書き換えられてしまう。
-          #                        authentication-config.yaml はそもそも k8s の
-          #                        リソースではない(API サーバに渡すファイル)
+          #                        ワークフローが自分の権限を書き換えられてしまう
           #   `sops:` を含むもの   SOPS で暗号化済み。復号鍵を GitHub に置かない
           mapfile -d '' FILES < <(
             find bootstrap -name '*.yaml' \
@@ -58,6 +54,11 @@ jobs:
           )
           printf '  %s\n' "${FILES[@]}"
           printf 'list=%s\n' "$(printf -- '-f %s ' "${FILES[@]}")" >> "$GITHUB_OUTPUT"
+          # Namespace だけ先に当てる(下の apply)。同じ `kubectl apply` に中身と一緒に渡すと、
+          # まっさらなクラスタでは `namespaces "auth" not found` で落ちる(2026-10-17 の初回で踏んだ)
+          mapfile -d '' NS < <(printf '%s\0' "${FILES[@]}" | xargs -0 grep -lZ '^kind: Namespace$')
+          [ ${#NS[@]} -gt 0 ] || { echo "::error::Namespace のファイルが見つからない"; exit 1; }
+          printf 'ns=%s\n' "$(printf -- '-f %s ' "${NS[@]}")" >> "$GITHUB_OUTPUT"
 
       - name: OIDC トークンを取る
         id: token
@@ -83,23 +84,24 @@ jobs:
         env:
           T: ${{ steps.token.outputs.token }}
         run: |
-          kubectl --server=https://ks.doany.io:6443 \
-                  --certificate-authority=bootstrap/apiserver/ca.crt \
-                  --token="$T" \
-                  apply ${{ steps.files.outputs.list }}
+          set -euo pipefail
+          k() {
+            kubectl --server=https://ks.doany.io:6443 \
+                    --certificate-authority=bootstrap/apiserver/ca.crt \
+                    --token="$T" "$@"
+          }
+          k apply ${{ steps.files.outputs.ns }}
+          k apply ${{ steps.files.outputs.list }}
 
       # **Gateway の Service の nodePort を 80/443 に揃える。**
       # これは git に書けない唯一の値で、しかも**公開経路そのもの**
       # (Cilium の L7LB リダイレクト。bootstrap/cilium/values.yaml の `nodePort` に実測あり)。
       # Cilium が Service を作り直すと API サーバが範囲内のランダムな値を割り当てるので、
-      # **復元後は必ずズレている。**
+      # **復元後は必ずズレている。** 復元手順(recovery/README.md)はこのワークフローを
+      # `workflow_dispatch` で流す。
       #
-      # k3s 期は `recovery/restore.sh` が当てているが、**Talos にはシェルが無い**ので
-      # あちらは持っていけない。復元手順を「machine config を当てる →
-      # このワークフローを `workflow_dispatch` で流す」にすると、両方の時代で同じ形になる。
-      #
-      # 冪等。既に 80/443 なら `unchanged` になるだけ。Service がまだ無ければ黙って諦める
-      # (Cilium が Gateway を処理する前に流したとき)。
+      # 冪等。既に 80/443 なら `unchanged` になるだけ。Service がまだ無ければ警告して諦める
+      # (Service は Cilium が GatewayClass を見て Gateway を処理してから現れる)。
       - name: Gateway の nodePort を 80/443 に揃える
         env:
           T: ${{ steps.token.outputs.token }}

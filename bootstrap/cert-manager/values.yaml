@@ -1,30 +1,18 @@
-# cert-manager の Helm 値。
+# cert-manager の Helm 値。版は [version.yaml](version.yaml)。
 #
-# 2026-09-08 まで、版も値も git に無かった
+# 当てるのは [../../talos/render.sh](../../talos/render.sh)。この値で `helm template` して
+# machine config の inlineManifest にする(Cilium と同じ。更新は render.sh → apply-config → upgrade-k8s)。
 #
-# `helm install` した一度きりで入っていて、git にあったのは `ClusterIssuer` と
-# Cloudflare の Secret だけだった。作り直すと cert-manager が入らない。
-# そして素で `helm upgrade` すると下の `enableGatewayAPI` が既定(false)に戻り、
-# Gateway の `cert-manager.io/cluster-issuer` 注釈が無視されて証明書が発行されなくなる。
-# cilium で 2026-09-07 に直したのと同じ形の穴で、同じ形(version.yaml + values.yaml)で出した。
-#
-# 中身は実機の `helm get values cert-manager -n cert-manager` と同じ。
-# 版は [version.yaml](version.yaml)(実機は `cert-manager-v1.21.1`)。
-#
-# これは k3s 期の当て方。Talos では [../../talos/render.sh](../../talos/render.sh) が
-# この値で `helm template` して machine config の inlineManifest にする
-# (CRD だけは大きすぎるので URL 渡し。../../talos/cert-manager-values.yaml)。
-#
-#   helm repo add jetstack https://charts.jetstack.io
-#   helm upgrade --install cert-manager jetstack/cert-manager \
-#     --version "$(sed -n 's/^version: //p' bootstrap/cert-manager/version.yaml)" \
-#     -n cert-manager --create-namespace -f bootstrap/cert-manager/values.yaml
+# 2026-09-08 まで版も値も git に無かった(`helm install` した一度きり)。
+# 作り直すと下の `enableGatewayAPI` が既定(false)に戻り、証明書が 1 枚も発行されなくなる。
 
 # Gateway API を見る。これが無いと Gateway の `cert-manager.io/cluster-issuer`
 # 注釈から Certificate を作ってくれない。
 config:
   enableGatewayAPI: true
 
-# CRD も chart に入れさせる(別途 apply しない)。
+# CRD は chart から描かせない。6 つで 1.30 MB あり、描き出しの 97%。
+# render.sh が `KubeExternalManifestConfig` で URL を渡す(argocd・gateway-api と同じ手)。
+# なぜ URL なのかは [../../docs/decisions.md](../../docs/decisions.md)「層の分け方」。
 crds:
-  enabled: true
+  enabled: false

@@ -1,12 +1,7 @@
 # etcd のスナップショットを日次で restic(R2)へ。
 #
-# **移行が済んだら apps/k8up/ へ `git mv` する**(docs/migration-day.md の 10)。
-# ここに置いてあるのは、k3s には `talos.dev/v1alpha1` の CRD が無いから ──
-# apps/ に置くと Argo CD が適用に失敗し続けて、apps/ の同期が丸ごと止まる
-# (SkipDryRunOnMissingResource は dry-run を飛ばすだけで、適用の失敗は防げない)。
-#
 # **戻すときの主経路ではない。** 主経路は「git から Argo CD で建て直して PV を k8up で戻す」
-# (docs/migration-day.md。ドリルで通してある)。こちらは git に無い状態
+# (recovery/README.md。2026-10-17 に実機で通した)。こちらは git に無い状態
 # (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書、
 # API サーバが割り当てた nodePort など)まで含めて**一瞬で戻したいとき**の近道。
 # 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
@@ -32,9 +27,9 @@ metadata:
   name: etcd-snapshot
   namespace: k8up
 spec:
-  # 14:00〜17:45 UTC は k8up の Schedule で埋まっているので、その手前(ashi が 14:15)。
+  # 13:30〜17:45 UTC は k8up の Schedule で埋まっているので、その手前(matrix が 13:30)。
   # forget はリポジトリをロックするので、動かすときは schedules.yaml と突き合わせること。
-  schedule: "45 13 * * *"
+  schedule: "0 13 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2

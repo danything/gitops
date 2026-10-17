@@ -50,8 +50,7 @@ spec:
           # 版を固定する (2026-10-07 まで latest)。上げると起動時に設定を移行する (schema_version) ので、
           # Renovate の PR の中で renovate-post-upgrade.sh が config.yaml も移行しておく。その PR は自動マージする
           image: adguard/adguardhome:v0.107.79
-          # ServiceLB(k3s 組み込み)をやめたので、ノードの全アドレスで受けるために hostPort を持つ。
-          # Talos には ServiceLB 相当が無いので、この形がそのまま移行先でも使える。
+          # LoadBalancer は使わず、ノードの全アドレスで受けるために hostPort を持つ(docs/decisions.md「LoadBalancer をどう置き換えるか」)。
           # hostPort は送信元 IP を保つので、AdGuard のクライアント別統計も従来どおり。
           ports:
             - name: dns-udp

@@ -1,37 +1,31 @@
 # bootstrap
 
-クラスタそのものを組む層。**Argo CD は同期しない**(`apps/` の外にあるため)。
-代わりに **main へのマージで GitHub Actions が当てる**(下の「適用は GitHub Actions がやる」)。
+クラスタそのものを組む層。**Argo CD は同期しない**(`apps/` の外にあるため)。2 つの経路で当たる
+([docs/decisions.md](../docs/decisions.md)「層の分け方」):
 
-**SOPS(age)で暗号化した 4 ファイルだけは手で当てる** ── CI に復号鍵を渡さないため。
-**中を編集するときも sops を通すこと**(下の「Helm で入れるもの」に手順)。MAC は暗号化して
-いない値も含めて計算されるので、**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる。**
+| | 何を | いつ |
+| --- | --- | --- |
+| **machine config**([../talos/render.sh](../talos/render.sh) が描く) | Helm で入れるもの(cilium・cert-manager・argocd・infisical)、`apiserver/rbac.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |
+| **GitHub Actions**([bootstrap-apply.yml](../.github/workflows/bootstrap-apply.yml)) | 残りの平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など) | main へのマージ(下の「適用は GitHub Actions がやる」) |
+
+**SOPS(age)で暗号化した 4 ファイルは CI が当てない** ── CI に復号鍵を渡さないため。
 `infisical/secrets.yaml`、`infisical/helmchart.yaml`、`argocd/helmchart.yaml`、
 `cert-manager/cloudflare-secret.yaml`。鍵は [`recovery/sops-age.key.age`](../recovery/)。
-
-いま動いているのは Ubuntu 26.04(netplan → systemd-networkd。2026-09-24 までは NetworkManager。TZ は UTC)の暫定構成で、
-最終形は Talos Linux。進捗は [ROADMAP.md](../ROADMAP.md)、なぜそうしたかは [docs/decisions.md](../docs/decisions.md)。
-Talos では**この層のほぼ全部が machine config の `inlineManifests` に載る**(平文の残りは引き続き GitHub Actions。
-[docs/decisions.md](../docs/decisions.md)「層の分け方」)。
+**中を編集するときも sops を通すこと**(下の「Helm で入れるもの」に手順)。MAC は暗号化して
+いない値も含めて計算されるので、**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる。**
 
 ## Helm で入れるもの
 
-`bootstrap/` には Helm で入れるものが 3 つある。**版と値をどこに置くかが揃っていなかったので、
-2026-09-08 に整理した。**
+どれも `render.sh` が `helm template` して machine config に載せる。版と値の置き場:
 
 | | 版 | 値 |
 | --- | --- | --- |
 | cilium | [cilium/version.yaml](cilium/version.yaml) | [cilium/values.yaml](cilium/values.yaml) |
-| **cert-manager** | [cert-manager/version.yaml](cert-manager/version.yaml) | [cert-manager/values.yaml](cert-manager/values.yaml) |
-| argocd / infisical | CR の `spec.version` | CR の `spec.values` |
+| cert-manager | [cert-manager/version.yaml](cert-manager/version.yaml) | [cert-manager/values.yaml](cert-manager/values.yaml) |
+| argocd / infisical | SOPS 済みの CR の `spec.version` | CR の `spec.values`(+ `talos/{argocd,infisical}-values.yaml`) |
 
-**cert-manager は版も値も git に無かった**(2026-09-08 に出した)。経緯は
-[cert-manager/values.yaml](cert-manager/values.yaml) の冒頭 ── ここには写さない。
-
-**argocd と infisical の版は 2026-09-08 に固定した**(argo-cd 10.8.1 /
-infisical-standalone 1.10.0)。それまでは `HelmChart` CR に `version:` が無く、
-コントローラが**そのときの最新**を入れていた ── 作り直すと別の版になるし、Renovate も追えない。
-**Renovate はこの 2 ファイルを見ない**(`renovate.json` の `ignorePaths`)。2026-09-08 に暗号文の中の版を平文置換した PR が
+**argocd と infisical の版は固定して人が上げる**(argo-cd 10.8.1 / infisical-standalone 1.10.0。版が無いと作り直すたびに
+別の版になり、Renovate も追えない)。**Renovate はこの 2 ファイルを見ない**(`renovate.json` の `ignorePaths`)。2026-09-08 に暗号文の中の版を平文置換した PR が
 自動マージされ、`sops -d` が通らなくなったため。**版は固定して人が上げる**([docs/decisions.md](../docs/decisions.md)「依存の更新をどこまで自動で入れるか」)。
 
 中を触るときは、位置を選びたいので `sops set` ではなくこの順でやった:
@@ -50,35 +44,19 @@ rm -f /tmp/before.yaml
 
 ## git と live がずれていないか
 
-**machine config は git の値で描く**ので、git と実機がずれていると、移行した瞬間に
-別物が入る。cilium は [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が
-毎日見ているが、**残りは見ていない**ので手で突き合わせる。2026-09-08 に cert-manager / argocd(88 行)/
-infisical(51 行)の 3 つとも**一致**を確認した。
-
-```shell
-helm get values <release> -n <ns>     # ← 実機
-# ↑と bootstrap/<name>/values.yaml(cert-manager)または
-#   HelmChart CR の spec.values(argocd / infisical)を比べる
-```
-
-**比べるときは値を伏せること。** `helm get values` は平文を吐く。
-秘密のキー(`password` / `githubAppPrivateKey` / `service.webhook.mattermost` など)を
-`<SECRET>` に置き換えてから diff する ── **画面に出した時点で漏れたのと同じ。**
-
-**CI では自動化できない。** helm の値は**リリースの Secret の中**にあり、
-`bootstrap-applier` の ClusterRole には**意図的に Secret の権限が無い**
-([apiserver/rbac.yaml](apiserver/rbac.yaml))。cilium が自動化できているのは、
-値が `cilium-config` という **ConfigMap** に出ているから。
-**権限を広げるより、移行前に手で見るほうが安い**と判断した。
+**cilium は [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で見ている**(値が `cilium-config` という
+ConfigMap に出ているので、読むだけの権限で比べられる)。**残りは見ていない。** 当て忘れは `upgrade-k8s` の差分に出るので、
+直したら流す(流し忘れたことは誰も教えてくれない)。`upgrade-k8s` で差分に出るのに害の無いもの
+(描くたびに作り直す証明書とパスワード)は [../talos/README.md](../talos/README.md)「inlineManifests を直したとき」。
 
 ## Secret
 
 平文の Secret はアプリのリポジトリにはコミットしない。値は **Infisical**(https://il.doany.io、このクラスタでセルフホスト)が持ち、
-**Infisical 純正 operator**（`infisical/operator.yaml`）が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
+**Infisical 純正 operator**(`apps/infisical-operator/`)が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
 `secrets.infisical.com/auto-reload` 注釈のある Deployment は Secret 更新時に自動で入れ替わる。
 認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
 
-- `infisical/` … Infisical 本体(HelmChart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
+- `infisical/` … Infisical 本体(chart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
   `secrets.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は既定の `local-path` で、`pg_dump` を k8up が日次で取っている。
 - **operator と push-bridge はここには無い。** ArgoCD の Application に移した(`apps/infisical-operator/`、
@@ -94,39 +72,25 @@ helm get values <release> -n <ns>     # ← 実機
 がこの層を当てる。** 手で `kubectl apply` する必要は無くなった。
 
 **保存している秘密はゼロ。** GitHub Actions の OIDC トークンを API サーバが直接受ける
-([apiserver/authentication-config.yaml](apiserver/authentication-config.yaml))。
+([../talos/patches/apiserver.yaml](../talos/patches/apiserver.yaml) の `KubeAuthenticationConfig`)。
+CA は [apiserver/ca.crt](apiserver/ca.crt)(`talos/secrets.yaml` のクラスタ CA。作り直したら替える)。
 kubeconfig も age 鍵も GitHub に置いていない。トークンは実行のたびに発行され数分で切れ、
 `danything/gitops` の `main` の `bootstrap-apply.yml` からのものだけが通る(CEL で固定)。
 
 権限も cluster-admin ではなく、この層で実際に使う種類だけ([apiserver/rbac.yaml](apiserver/rbac.yaml))。
 **Secret は含まれていない**ので、GitHub 側が落ちても Secret は読まれない。`delete` も渡していない。
 
-**同じ 2 ファイルが人の入口でもある(2026-09-09)。** Entra を 2 つめの issuer として足し、
+**同じ認証設定と RBAC が人の入口でもある(2026-09-09)。** Entra を 2 つめの issuer として足し、
 Headlamp が利用者本人の id_token を API サーバへ転送する。アプリロール `admin` を持つ人は
 `entra:admin` で cluster-admin、それ以外は `entra:viewer` で読み取り専用(組み込みの `view`
 ＋ CRD とノードぶんの `readonly-extra`)。**振り分けは CEL で、割り当ては Entra 側で完結する。**
 ここに置いたのは、ArgoCD も CI も要らずに効く層だから ── 締め出されたときに直せる。
+認証設定([../talos/patches/apiserver.yaml](../talos/patches/apiserver.yaml))も [apiserver/rbac.yaml](apiserver/rbac.yaml) も
+machine config に載っているので、変えたら `render.sh` → `apply-config`(RBAC は inlineManifest なので `upgrade-k8s` まで)。
+**ワークフローには当てさせない**(ClusterRole を作る権限を渡すと、自分の権限を書き換えられる)。
 
-**設定を変えるときの手順**(2026-09-07 に実地で確認):
-
-| 変えるもの | 必要なこと |
-| --- | --- |
-| [apiserver/authentication-config.yaml](apiserver/authentication-config.yaml) | ホストの `/etc/rancher/k3s/` に置き直すだけ。**API サーバが自動で読み直す**(k8s 1.32+ の structured authn の再読み込み)。k3s の再起動は要らない。**同じディレクトリに置いてから `mv` すること** ── `install` で直接上書きすると読みかけを掴んで `status="failure"` が増える(2026-09-09 に実測。壊れた内容は無視されて前の設定のまま動き、書き終わったあとの読み直しで success になるので実害は無いが、指標が汚れる) |
-| [apiserver/rbac.yaml](apiserver/rbac.yaml) | **手で `kubectl apply`。** ワークフローには ClusterRole を作る権限を渡していない(自分の権限を書き換えられないように) |
-| `kube-apiserver-arg` / `tls-san`(`/etc/rancher/k3s/config.yaml`) | **k3s の再起動が要る。** 失敗すると API サーバが上がらないので、必ず `config.yaml.pre-oidc` のような退避を取ってから |
-
-**当たらないもの:**
-
-| | 理由 |
-| --- | --- |
-| SOPS で暗号化した 4 ファイル | 復号鍵(age)を GitHub に置かないため。**手で当てる**(下記)。判定はファイルの中身を見ているので、暗号化ファイルが増えても自動で除外される |
-| `cilium/values.yaml` | Helm の値でマニフェストではない。`helm upgrade` で当てる(ファイル冒頭を読むこと) |
-
-暗号化してあるものは今までどおり:
-
-```shell
-sops -d infisical/secrets.yaml | kubectl apply -f -
-```
+**CI が当てないもの:** SOPS で暗号化した 4 ファイル(判定はファイルの中身を見ているので、暗号化ファイルが増えても自動で除外される。
+4 つとも machine config に載っている)、`values.yaml` / `version.yaml`(Helm の値と版。`render.sh` が読む)、`apiserver/`。
 
 ### 公開経路(HTTPRoute)もここにある
 

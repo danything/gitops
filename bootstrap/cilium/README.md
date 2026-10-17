@@ -3,78 +3,30 @@
 **クラスタの土台。** CNI・kube-proxy の代替・Gateway API を全部これが担う。
 決定の経緯は [../../docs/decisions.md](../../docs/decisions.md)「ルーティングの選定」。
 
-## 入れ方
+## 当て方
 
-Argo CD は同期しない(`bootstrap/` は対象外)。手で当てる。
+Argo CD は同期しない(`bootstrap/` は対象外)。**machine config の inlineManifest に載っている**ので、
+[values.yaml](values.yaml) か [version.yaml](version.yaml) を直したら
+**`render.sh` → `apply-config` → `upgrade-k8s`**([../../talos/README.md](../../talos/README.md)「上げ方 / 当て直し方」)。
+`helm upgrade` は使わない。値はここが正本で、machine config は [../../talos/render.sh](../../talos/render.sh) が
+ここから描く派生物(二度書かない。decisions.md「machine config と Cilium の chart をどう連動させるか」)。
 
-**これは k3s 期の当て方。** Talos では [../../talos/render.sh](../../talos/render.sh) が
-この値で `helm template` して machine config の inlineManifest にする ──
-**あちらでは `helm upgrade` を使わず、`render.sh` → `apply-config` → `upgrade-k8s`** が
-更新経路になる([../../talos/README.md](../../talos/README.md)「上げ方 / 当て直し方」)。
-
-```shell
-helm repo add cilium https://helm.cilium.io
-helm upgrade --install cilium cilium/cilium --version "$(sed -n 's/^version: //p' version.yaml)" \
-  --namespace kube-system -f values.yaml
-```
-
+**どの設定が何のために要るかは [values.yaml](values.yaml) のコメントにある**(ここには写さない)。
 版は [version.yaml](version.yaml) が唯一の出どころ(Renovate がここを追う)。
-**`yq` を使わないのは、サーバに入っているのが v3(構文が違う)だから。**
-手元とサーバのどちらで打っても同じように動くよう `sed` にしてある。
 
-## **`helm upgrade` の前に必ず [values.yaml](values.yaml) を読むこと**
-
-過去に ConfigMap を直接いじって当てた設定があり、**素で `helm upgrade` すると黙って元に戻る。**
-いま `values.yaml` が「あるべき値」で、**どの設定が何のために要るかも経緯も
-そのファイルのコメントにある**(ここには写さない ── 二重に持つと必ず片方が腐る)。
-**以後は ConfigMap を直接いじらず、あちらを直して `helm upgrade` する。**
-
-## **`helm upgrade` のたびに Hubble の証明書が入れ替わる**
+## 描き直すたびに Hubble の証明書が入れ替わる
 
 チャートの `hubble/tls-helm/*` は毎回 `genCA` / `genSignedCert` で作り直す
-(テンプレートに `cilium.io/helm-template-non-idempotent: "true"` が付いている)。
-つまり **値を 1 行も変えない `helm upgrade` でも、`hubble-ca-secret` /
-`hubble-server-certs` / `hubble-relay-client-certs` の 3 つは差分として出る。**
-
-実害は無い(2026-09-07 に確認)。エージェントも Relay もマウントしたファイルを
-見張っていて入れ替わりに追従するので、**Pod の再起動は要らない**。
+(`cilium.io/helm-template-non-idempotent: "true"`)。**値を 1 行も変えなくても、`hubble-ca-secret` /
+`hubble-server-certs` / `hubble-relay-client-certs` の 3 つは `upgrade-k8s` の差分に出る。**
+実害は無い(エージェントも Relay もファイルの入れ替わりに追従する。Pod の再起動は要らない)。
 `cilium-dbg status` の `Hubble: Ok` と `hubble-relay` の Ready で確かめる。
-
-**差分を見るときはここを読み飛ばす。** 中身のある変更だけ見たいなら:
-
-```shell
-helm get manifest cilium -n kube-system > /tmp/before.yaml
-helm upgrade cilium cilium/cilium --version 1.20.1 -n kube-system -f values.yaml --dry-run \
-  | sed -n '/^MANIFEST:/,$p' | tail -n +2 > /tmp/after.yaml
-diff -u /tmp/before.yaml /tmp/after.yaml | grep -E '^[+-][^+-]' | grep -vE 'ca\.crt|tls\.(crt|key)'
-```
 
 ## ズレは CI が見ている
 
-**当てるのは人だが、当て忘れとクラスタ側の直接編集は
-[../../.github/workflows/cilium-drift.yml](../../.github/workflows/cilium-drift.yml) が見つける。**
-`values.yaml` から ConfigMap を描いて live と突き合わせるだけで、**読むだけ**(権限は
-`cilium-config` の `get` 1 つ)。`bootstrap/cilium/**` を触ったときと毎週月曜に走る。
-
-**`helm upgrade` そのものは自動化しない。** ClusterRole / ClusterRoleBinding / Secret /
-DaemonSet の書き込みが要り、**ClusterRoleBinding を書けるということは自分に何の権限でも
-足せるということ**で、実質 cluster-admin を公開リポジトリの OIDC 主体に渡すことになる。
-そして Talos では `helm upgrade` 自体を使わなくなるので、そこに手をかけても捨てることになる。
-
-## Talos では当てる道具が替わる(このファイルは正本のまま)
-
-Cilium は machine config の `inlineManifests` に載り、**`talosctl upgrade-k8s` で当たる**
-(`upgrade-k8s` は inlineManifests を reconcile する。2026-09-08 に VM で実測。../../docs/talos.md)。
-**`helm upgrade` は使わなくなる。**
-
-**それでも値がここに二度書かれることは無い。** machine config は
-[../../talos/render.sh](../../talos/render.sh) が**このファイルから描く派生物**で、
-版も `version.yaml` から読む。Renovate が追う先も変わらない。
-経緯は ../../docs/decisions.md「machine config と Cilium の chart をどう連動させるか」。
-
-**上の drift チェックは Talos でも続ける。** `upgrade-k8s` は流せば差分を出すが、
-**流し忘れたことは教えてくれない。** Talos では `talos/cilium-values.yaml` を重ねて描く
-(重ねないと `cgroup-root` が必ず食い違う)。切り替えはサーバの版で自動。
+**当て忘れとクラスタ側の直接編集は [../../.github/workflows/cilium-drift.yml](../../.github/workflows/cilium-drift.yml) が見つける。**
+`values.yaml` から ConfigMap を描いて live と突き合わせるだけで、**読むだけ**(権限は `cilium-config` の `get` 1 つ)。
+`bootstrap/cilium/**` を触ったときと毎週月曜に走る。当てるのは自動化しない(Talos API の os:admin を CI に置かない)。
 
 ## 当てたあとに確認すること
 

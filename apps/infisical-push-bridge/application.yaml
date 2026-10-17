@@ -8,8 +8,6 @@
 # URL http://infisical-push-bridge.infisical-push-bridge.svc.cluster.local、
 # Secret Path は必ず `/`(既定の `/` はルートにしかマッチしない)、
 # 同じ secret key の Webhook を作る(README 参照)。
-#
-# k3s の HelmChart CRD から移した(2026-09-07)。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -41,7 +39,7 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # CRD より先に同期しにいくと既定の 5 回で諦める(migration-day の 7)。
+    # CRD より先に同期しにいくと既定の 5 回で諦める。15s から倍々・上限 5 分・10 回(約 33 分)で自力で戻る。
     retry:
       limit: 10
       backoff:
