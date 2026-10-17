@@ -1,12 +1,5 @@
-# talos/render.sh が machine config を作れるか、中身が想定どおりかを PR ごとに検証する。
-#
-# **クラスタにも実機にも触らない。** 秘密は使い捨てのものをその場で作る
-# (検証したいのはパッチの構文とスキーマであって、鍵の中身ではない)。
-#
-# **適用はしない。** machine config の適用は再起動を伴うことがあり、1 ノード構成では
-# マージが即再起動になってしまう。Talos API は mTLS のみで OIDC を受けないので、
-# CI に渡すには os:admin のクライアント証明書を置くことになる ── そこまでは渡さない。
-# 「検出は自動、適用は手動」は Talos の版追従(talos/versions.yaml の Renovate)と同じ方針。
+# talos/render.sh が machine config を作れるか、中身が想定どおりか(needle は render.sh)を PR ごとに検証する。
+# **クラスタにも実機にも触らず、適用もしない**(talos/README.md「適用は CI にやらせない」)。
 name: talos validate
 
 on:
@@ -34,48 +27,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: versions.yaml から版と schematic を読む
-        id: v
-        run: |
-          set -euo pipefail
-          VER=$(yq -r '.talos.version' talos/versions.yaml)
-          SCH=$(yq -r '.talos.schematic' talos/versions.yaml)
-          K8S=$(yq -r '.kubernetes.version' talos/versions.yaml)
-          GW=$(yq -r '.gatewayAPI.version' talos/versions.yaml)
-          CM=$(sed -n 's/^version: //p' bootstrap/cert-manager/version.yaml)
-          echo "  talos=$VER schematic=$SCH k8s=$K8S gateway-api=$GW"
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "schematic=$SCH" >> "$GITHUB_OUTPUT"
-          echo "k8s=$K8S" >> "$GITHUB_OUTPUT"
-          echo "gw=$GW" >> "$GITHUB_OUTPUT"
-          echo "certmgr=$CM" >> "$GITHUB_OUTPUT"
-
       - name: talosctl を入れる
         run: |
           set -euo pipefail
+          VER=$(yq -r '.talos.version' talos/versions.yaml)
           curl -fsSL -o /usr/local/bin/talosctl \
-            "https://github.com/siderolabs/talos/releases/download/${{ steps.v.outputs.version }}/talosctl-linux-amd64"
+            "https://github.com/siderolabs/talos/releases/download/$VER/talosctl-linux-amd64"
           chmod +x /usr/local/bin/talosctl
           talosctl version --client
 
       - name: machine config を生成する
         run: |
           set -euo pipefail
-          # **本番と同じ道具で作る。** talos/render.sh は Cilium と
-          # local-path-provisioner を inlineManifest として描いてから組む。
-          # ここで別の作り方をすると、CI が通っても当日は通らない、が起こる。
+          # **本番と同じ道具で作る。** ここで別の作り方をすると、CI が通っても当日は通らない、が起こる。
+          # 生成物の中身の確かめ(needle)も render.sh がやる。
           #
-          # **使い捨ての秘密。** 本物(talos/secrets.yaml、SOPS 済み)は使わない。
-          # SECRETS を渡すと render.sh は sops を呼ばない。
+          # **秘密は使い捨てとダミー。** 本物は SOPS 済みで、age の鍵は CI に渡さない。
+          # SECRETS などを渡すと render.sh は sops を呼ばない。
           talosctl gen secrets -o /tmp/secrets.yaml
-          # **ghcr.io の資格情報もダミーで渡す。** 本物(talos/registries.yaml)は
-          # SOPS 済みで、age の鍵は CI に渡さない約束(README「秘密の扱い」)。
-          # ダミーでも `machine.registries` の経路と生成物の形は確かめられる。
           cat > /tmp/registries.yaml <<'PATCH'
           machine:
             registries:
               config:
-                ghcr.io:
+                fj.doany.io:
                   auth:
                     username: ci-dummy
                     password: ci-dummy
@@ -137,68 +111,3 @@ jobs:
             ARGOCD_CHART=/tmp/argocd-chart.yaml INFISICAL_CHART=/tmp/infisical-chart.yaml \
             INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
             ./talos/render.sh /tmp/out
-
-      - name: 生成物に想定の設定が入っているか
-        run: |
-          set -euo pipefail
-          # パッチが黙って落ちていないことを確かめる(gen config は未知のキーを
-          # 警告なく無視することがある)
-          for needle in \
-            "kube-apiserver:${{ steps.v.outputs.k8s }}" \
-            'ks.doany.io' \
-            'token.actions.githubusercontent.com' \
-            'claims.repository == "danything/gitops"' \
-            'service-node-port-range: 80-32767' \
-            'cilium-drift.yml' \
-            'enabled: false # Enable or disable kube-proxy' \
-            'balance-alb' \
-            'name: cilium' \
-            'cilium-operator' \
-            'name: local-path' \
-            'rancher.io/local-path' \
-            'KUBERNETES_SERVICE_PORT' \
-            'value: \"7445\"' \
-            'cgroup-root: \"/sys/fs/cgroup\"' \
-            'name: metrics-server' \
-            'system:metrics-server' \
-            '--kubelet-insecure-tls' \
-            '/var/mnt/local-path' \
-            'name: EPHEMERAL' \
-            'maxSize: 64GiB' \
-            'secure: false' \
-            'username: ci-dummy' \
-            'name: apiserver-rbac' \
-            'bootstrap-applier' \
-            'gha:danything/gitops:refs/heads/main' \
-            "gateway-api/releases/download/${{ steps.v.outputs.gw }}/standard-install.yaml" \
-            'name: argocd' \
-            'argocd-server' \
-            'name: argocd-application-crd' \
-            'manifests/crds/applicationset-crd.yaml' \
-            'name: infisical' \
-            'infisical-standalone' \
-            'kind: Namespace\nmetadata:\n  name: argocd' \
-            'kind: Namespace\nmetadata:\n  name: infisical' \
-            'name: cert-manager' \
-            'cert-manager-webhook' \
-            'name: cert-manager-crds' \
-            "cert-manager/releases/download/${{ steps.v.outputs.certmgr }}/cert-manager.crds.yaml" \
-            'kind: Namespace\nmetadata:\n  name: cert-manager' \
-            'name: infisical-secrets' \
-            'name: cloudflare-secret' \
-            "ghcr.io/siderolabs/kubelet:${{ steps.v.outputs.k8s }}"
-          do
-            # `--` を忘れないこと(needle が `--` で始まると grep がオプションとして扱う)
-            grep -qF -- "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が無い"; exit 1; }
-            echo "  ある: $needle"
-          done
-
-          # **無いことを確かめる側。** flannel は「ドキュメントが在ること」が
-          # 有効化の意味なので、消えていることを見るしかない(talos/patches/cni.yaml)。
-          for needle in \
-            'KubeFlannelCNIConfig' \
-            '/var/local-path-provisioner'
-          do
-            ! grep -qF -- "$needle" /tmp/out/controlplane.yaml || { echo "::error::生成物に '$needle' が残っている"; exit 1; }
-            echo "  無い: $needle"
-          done

@@ -8,14 +8,9 @@
 #
 #   ./talos/render.sh talos/clusterconfig
 #
-# 秘密(talos/secrets.yaml などの SOPS ファイル)は自分で復号して作業用の一時ディレクトリに置き、
-# 終わったら消す(age の鍵が要る)。CI は鍵を持たないので SECRETS / REGISTRIES などの env で
-# 渡し、そのときは復号しない。出力の machine config は秘密を含むので扱いに注意。
-#
-# 手元の PC(tools/t.ps1 のコンテナ)で回す。**出力先は丸ごと消して作り直す**ので、
-# talos/clusterconfig/ に出したなら kubeconfig は `talosctl kubeconfig` で取り直すこと。
-#
-# `talosctl upgrade-k8s` の前にも実行すること(talos/README.md「inlineManifests を直したとき」)。
+# SOPS ファイルは自分で復号する(age の鍵が要る)。CI は鍵を持たないので SECRETS / REGISTRIES などの
+# env にダミーを渡し、そのときは復号しない。出力は秘密を含む。出力先は丸ごと消して作り直す。
+# 当て方は talos/README.md「上げ方 / 当て直し方」。
 set -eu
 
 OUT=${1:?usage: render.sh <output-dir>}
@@ -46,15 +41,8 @@ fi
 # CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通す。
 REGISTRIES=${REGISTRIES:-}
 if [ -z "$REGISTRIES" ]; then
-	if [ -f talos/registries.yaml ]; then
-		REGISTRIES=$WORK/registries.yaml
-		sops -d talos/registries.yaml > "$REGISTRIES"
-	else
-		# 止めない。このファイルが無くても他は描けるので、作る前でも作業は進む。
-		# ただし気づかず焼くと private イメージが全部 ImagePullBackOff になるので、
-		# はっきり言う(talos/README.md「fj.doany.io の資格情報」)。
-		echo "WARNING: talos/registries.yaml が無い。fj.doany.io の非公開イメージが引けない構成になる" >&2
-	fi
+	REGISTRIES=$WORK/registries.yaml
+	sops -d talos/registries.yaml > "$REGISTRIES"
 fi
 
 # キーを名前で引く。「1 つ目の version」「最後の version」で数えていると、
@@ -137,13 +125,7 @@ helmchart_inline() { # $1=name  $2=復号済み CR
 	_repo=$(hc "$_cr" repo)
 	_ver=$(hc "$_cr" version)
 	_ns=$(hc "$_cr" targetNamespace)
-	if [ -z "$_ver" ]; then
-		# 止めない。版を固定するのは人の手作業(bootstrap/README.md
-		# 「Helm で入れるもの」)で、それより前でも他は描けるようにしておく。
-		echo "WARNING: bootstrap/$_name/helmchart.yaml に version: が無いので $_name を描かない" >&2
-		echo "         sops edit で chart:/repo:/version: の 3 行を連続させること" >&2
-		return 0
-	fi
+	[ -n "$_ver" ] || { echo "ERROR: $_name の CR に version: が無い" >&2; exit 1; }
 	hc "$_cr" @values > "$WORK/$_name-values.yaml"
 	helm repo add "$_name" "$_repo" >/dev/null 2>&1 || true
 	helm repo update "$_name" >/dev/null 2>&1 || true
@@ -166,39 +148,31 @@ helmchart_inline() { # $1=name  $2=復号済み CR
 # `INFISICAL_CHART` にダミーを入れて経路だけ通す(SECRETS / REGISTRIES と同じ)。
 decrypt_cr() { # $1=name  $2=env で渡された上書き
 	if [ -n "$2" ]; then echo "$2"; return 0; fi
-	if [ ! -f "bootstrap/$1/helmchart.yaml" ]; then
-		echo "WARNING: bootstrap/$1/helmchart.yaml が無いので $1 を描かない" >&2
-		return 0
-	fi
 	sops -d "bootstrap/$1/helmchart.yaml" > "$WORK/$1-chart.yaml"
 	echo "$WORK/$1-chart.yaml"
 }
 
 ARGOCD_CR=$(decrypt_cr argocd "${ARGOCD_CHART:-}")
 INFISICAL_CR=$(decrypt_cr infisical "${INFISICAL_CHART:-}")
-# `[ … ] && cmd` で書かないこと。`set -e` の下では、条件が偽のときに
-# その行が 1 を返してスクリプトごと落ちる(cleanup のトラップで実際に踏んだ)。
-if [ -n "$ARGOCD_CR" ]; then helmchart_inline argocd "$ARGOCD_CR"; fi
-if [ -n "$INFISICAL_CR" ]; then helmchart_inline infisical "$INFISICAL_CR"; fi
+helmchart_inline argocd "$ARGOCD_CR"
+helmchart_inline infisical "$INFISICAL_CR"
 
 # ArgoCD の CRD は URL で渡す(理由は talos/argocd-values.yaml)。
 # 版は chart の appVersion をそのまま使う。版を 2 つ持つと必ずずれる。
-if [ -f "$WORK/inline-argocd.yaml" ]; then
-	ARGOCD_APP=$(helm show chart "argocd/$(hc "$ARGOCD_CR" chart)" \
-		--version "$(hc "$ARGOCD_CR" version)" 2>/dev/null \
-		| sed -n 's/^appVersion: *//p' | tr -d "\"'")
-	[ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
-	echo "  argocd の CRD: $ARGOCD_APP"
-	for c in application applicationset appproject; do
-		cat >> "$WORK/external-crds.yaml" <<PATCH
+ARGOCD_APP=$(helm show chart "argocd/$(hc "$ARGOCD_CR" chart)" \
+	--version "$(hc "$ARGOCD_CR" version)" 2>/dev/null \
+	| sed -n 's/^appVersion: *//p' | tr -d "\"'")
+[ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
+echo "  argocd の CRD: $ARGOCD_APP"
+for c in application applicationset appproject; do
+	cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig
 name: argocd-$c-crd
 url: https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_APP}/manifests/crds/$c-crd.yaml
 ---
 PATCH
-	done
-fi
+done
 
 # cert-manager も bootstrap/ にいる。無いと証明書が 1 枚も発行されず、
 # Gateway の HTTPS リスナーに載せる Secret ができない。
@@ -223,10 +197,6 @@ helm repo update jetstack >/dev/null 2>&1 || true
 inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書き
 	if [ -n "$3" ]; then
 		inline "$1" < "$3" > "$WORK/inline-$1.yaml"
-		return 0
-	fi
-	if [ ! -f "$2" ]; then
-		echo "WARNING: $2 が無いので $1 を描かない" >&2
 		return 0
 	fi
 	sops -d "$2" > "$WORK/plain-$1.yaml"
@@ -267,11 +237,9 @@ helm template metrics-server metrics-server/metrics-server --version "$METRICS" 
 set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
 	--install-image "factory.talos.dev/installer/${SCHEMATIC}:${TALOS}"
-for f in talos/patches/*.yaml; do set -- "$@" --config-patch "@$f"; done
-if [ -n "$REGISTRIES" ]; then set -- "$@" --config-patch "@$REGISTRIES"; fi
-set -- "$@" --config-patch "@$WORK/gateway-api.yaml"
-if [ -f "$WORK/external-crds.yaml" ]; then set -- "$@" --config-patch "@$WORK/external-crds.yaml"; fi
-for f in "$WORK"/inline-*.yaml; do set -- "$@" --config-patch "@$f"; done
+for f in talos/patches/*.yaml "$REGISTRIES" "$WORK/gateway-api.yaml" "$WORK/external-crds.yaml" "$WORK"/inline-*.yaml; do
+	set -- "$@" --config-patch "@$f"
+done
 
 rm -rf "$OUT"
 talosctl gen config doany https://10.0.0.2:6443 "$@" --output-dir "$OUT" >/dev/null
@@ -279,55 +247,39 @@ echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 
 # 描いたものが本当に入ったか。gen config は知らないキーを黙って捨てることがある。
 # 生成物では manifest が 1 行のエスケープ文字列になるので、引用符は \" で探す。
-for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path' \
-	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
-	'kind: GatewayClass' 'io.cilium/gateway-controller' \
-	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
-	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
-	'name: apiserver-rbac' 'bootstrap-applier' 'entra:admin' 'entra:viewer' \
-	login.microsoftonline.com \
+for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
+	ks.doany.io token.actions.githubusercontent.com 'claims.repository == "danything/gitops"' \
+	'gha:danything/gitops:refs/heads/main' login.microsoftonline.com 'entra:admin' 'entra:viewer' \
+	'service-node-port-range: 80-32767' cilium-drift.yml 'enabled: false # Enable or disable kube-proxy' \
+	balance-alb /var/mnt/local-path 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
+	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
+	'kind: GatewayClass' io.cilium/gateway-controller \
+	'name: local-path' rancher.io/local-path \
+	'name: metrics-server' system:metrics-server --kubelet-insecure-tls \
+	'name: apiserver-rbac' bootstrap-applier \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
-	'gha:danything/gitops:refs/heads/main' \
-	"ghcr.io/siderolabs/kubelet:$K8S"; do
-	# `--` を忘れないこと。`--kubelet-insecure-tls` のような needle を
-	# grep がオプションとして解釈して落ちる。
-	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
-done
-
-# 描けたときだけ見る。version が入る前は argocd / infisical を飛ばすので
-# (上の WARNING)、無条件の needle にすると作業できなくなる。
-if [ -f "$WORK/inline-argocd.yaml" ]; then
-	for n in 'name: argocd' 'argocd-server' 'name: argocd-application-crd' \
-		'manifests/crds/applicationset-crd.yaml' \
-		'kind: Namespace\nmetadata:\n  name: argocd'; do
-		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
-	done
-	# CRD は URL で渡すので、描き出しに入っていないこと。入ると 1.83 MB 増える。
-	# 生成物ではなく包む前のファイルを見る(あちらは 1 行のエスケープ文字列になる)。
-	! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-argocd.yaml" \
-		|| { echo "ERROR: argocd の CRD が inline に入っている(talos/argocd-values.yaml)" >&2; exit 1; }
-fi
-if [ -f "$WORK/inline-infisical.yaml" ]; then
-	for n in 'name: infisical' 'infisical-standalone' \
-		'metadata:\n  namespace: infisical' \
-		'kind: Namespace\nmetadata:\n  name: infisical'; do
-		grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
-	done
-fi
-for n in 'name: cert-manager' 'cert-manager-webhook' 'name: cert-manager-crds' \
+	'name: argocd' argocd-server 'name: argocd-application-crd' manifests/crds/applicationset-crd.yaml \
+	'kind: Namespace\nmetadata:\n  name: argocd' \
+	'name: infisical' infisical-standalone 'metadata:\n  namespace: infisical' \
+	'kind: Namespace\nmetadata:\n  name: infisical' \
+	'name: cert-manager' cert-manager-webhook 'name: cert-manager-crds' \
 	"cert-manager/releases/download/$CERTMGR/cert-manager.crds.yaml" \
-	'kind: Namespace\nmetadata:\n  name: cert-manager'; do
+	'kind: Namespace\nmetadata:\n  name: cert-manager' \
+	'name: infisical-secrets' 'name: cloudflare-secret'; do
+	# `--` を忘れないこと(`--kubelet-insecure-tls` を grep がオプションと取る)
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
-# CRD は URL 側。入ると 1.30 MB 増える(bootstrap/cert-manager/values.yaml)。
-! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-cert-manager.yaml" \
-	|| { echo "ERROR: cert-manager の CRD が inline に入っている" >&2; exit 1; }
-if [ -f "$WORK/inline-infisical-secrets.yaml" ]; then
-	grep -qF -- 'name: infisical-secrets' "$OUT/controlplane.yaml" \
-		|| { echo "ERROR: 'name: infisical-secrets' が生成物に無い" >&2; exit 1; }
-fi
-if [ -f "$WORK/inline-cloudflare-secret.yaml" ]; then
-	grep -qF -- 'name: cloudflare-secret' "$OUT/controlplane.yaml" \
-		|| { echo "ERROR: 'name: cloudflare-secret' が生成物に無い" >&2; exit 1; }
-fi
+# machine.registries のキー。fj.doany.io は StaticHostConfig にも出るので行ごと見る
+grep -qx '            fj.doany.io:' "$OUT/controlplane.yaml" \
+	|| { echo "ERROR: machine.registries に fj.doany.io が無い" >&2; exit 1; }
+# 無いことを見る側。flannel は「ドキュメントが在ること」が有効化の意味(talos/patches/cni.yaml)
+for n in KubeFlannelCNIConfig /var/local-path-provisioner; do
+	! grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に残っている" >&2; exit 1; }
+done
+# CRD は URL 側。入ると argocd は 1.83 MB、cert-manager は 1.30 MB 増える(talos/argocd-values.yaml、
+# bootstrap/cert-manager/values.yaml)。生成物は 1 行のエスケープ文字列になるので、包む前のファイルを見る。
+for c in argocd cert-manager; do
+	! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-$c.yaml" \
+		|| { echo "ERROR: $c の CRD が inline に入っている" >&2; exit 1; }
+done
 talosctl validate --config "$OUT/controlplane.yaml" --mode metal
