@@ -44,7 +44,7 @@ Argo CD が git を読む GitHub App 鍵、cert-manager の Cloudflare トーク
 ```shell
 # 鍵はリポジトリの .home/(git に入らない)に置く。コマンドは tools/t.ps1 で動かす(tools/README.md)
 tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
-tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml | tools/t.ps1 kubectl apply -f -
+tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml | tools/t.ps1 --admin kubectl apply -f -
 ```
 
 ## ホスト名の付け方

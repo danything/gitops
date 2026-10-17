@@ -29,7 +29,7 @@ ARG PULUMI_VERSION=v3.270.0
 ARG CF_VERSION=1.0.0-beta.18
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl bzip2 git openssh-client less \
+ && apt-get install -y --no-install-recommends ca-certificates curl bzip2 git openssh-client less openssl \
  && rm -rf /var/lib/apt/lists/*
 
 # **入れるものは全部、公式が出しているチェックサムと照らし合わせる**(2026-10-07)。sops は age 鍵を、infisical は
@@ -55,16 +55,18 @@ RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     ok "$gh/restic/restic/releases/download/${RESTIC_VERSION}/SHA256SUMS" "restic_${RESTIC_VERSION#v}_linux_$a.bz2"; \
     get "$gh/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION}-linux-$p.tar.gz"; \
     ok "$gh/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION#v}-checksums.txt" "pulumi-${PULUMI_VERSION}-linux-$p.tar.gz"; \
-    install -m 755 kubectl /usr/local/bin/kubectl; \
-    install -m 755 "talosctl-linux-$a" /usr/local/bin/talosctl; \
-    tar -xzf "helm-${HELM_VERSION}-linux-$a.tar.gz" --strip-components=1 -C /usr/local/bin "linux-$a/helm"; \
+    # kubectl・talosctl・helm の本物は libexec に置く。/usr/local/bin のほうは creds.sh(下)
+    mkdir -p /usr/local/libexec/gitops; \
+    install -m 755 kubectl /usr/local/libexec/gitops/kubectl; \
+    install -m 755 "talosctl-linux-$a" /usr/local/libexec/gitops/talosctl; \
+    tar -xzf "helm-${HELM_VERSION}-linux-$a.tar.gz" --strip-components=1 -C /usr/local/libexec/gitops "linux-$a/helm"; \
     install -m 755 "sops-${SOPS_VERSION}.linux.$a" /usr/local/bin/sops; \
     tar -xzf "cli_${INFISICAL_VERSION#v}_linux_$a.tar.gz" -C /usr/local/bin infisical; \
     bunzip2 -c "restic_${RESTIC_VERSION#v}_linux_$a.bz2" > /usr/local/bin/restic; \
     # Pulumi は本体と bun・Node.js の言語ホストだけ。ほかの言語のぶんは 200MB 近いので入れない。
     # bun の言語ホストが無いと runtime: bun のプロジェクトで SDK を作れない (pulumi install。2026-10-07 まで抜けていた)
     tar -xzf "pulumi-${PULUMI_VERSION}-linux-$p.tar.gz" --strip-components=1 -C /usr/local/bin pulumi/pulumi pulumi/pulumi-language-bun pulumi/pulumi-language-nodejs; \
-    chmod +x /usr/local/bin/*; \
+    chmod +x /usr/local/bin/* /usr/local/libexec/gitops/*; \
     cd / && rm -r /tmp/dl
 
 # age はチェックサムのファイルを出していない(sigsum の証明だけ)。Go のモジュールとして入れ、Go の公開の
@@ -73,6 +75,10 @@ COPY --from=age /go/bin/age /go/bin/age-keygen /usr/local/bin/
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN npm install -g "cf@${CF_VERSION}" && npm cache clean --force
+
+# kubectl・talosctl・helm はクラスタに繋ぐときだけ、暗号化した資格情報を tmpfs に戻して渡す(creds.sh)
+COPY --chmod=755 creds.sh /usr/local/bin/creds.sh
+RUN for t in kubectl talosctl helm; do ln -s creds.sh "/usr/local/bin/$t"; done
 
 # HOME はリポジトリの .home/(compose.yaml)
 WORKDIR /repo
