@@ -17,6 +17,10 @@ case ${1:-} in
 	db)
 		snap=${2:?snapshot}
 		set -a; . "$HOME/.config/restic.env"; set +a
+		# ダンプを先に手元へ取る。取れないまま public を退けると、空の DB と old_public だけが残る
+		restic dump "$snap" /infisical-postgresql.sql > "$HOME/infisical.sql"
+		[ -s "$HOME/infisical.sql" ] || { rm -f "$HOME/infisical.sql"; echo "ダンプが空(スナップショット $snap を見直す)" >&2; exit 1; }
+		wc -c "$HOME/infisical.sql"
 		$K -n infisical scale deploy/infisical --replicas=0
 		$K -n infisical wait --for=delete pod -l app.kubernetes.io/name=infisical-standalone --timeout=120s 2>/dev/null || sleep 20
 		# **`DROP SCHEMA public CASCADE` は通らない。** テーブルがパーティション込みで約 750 あり、
@@ -27,8 +31,6 @@ case ${1:-} in
 		[ "$old" = 0 ] || { echo "old_public が残っている。先に sh recovery/infisical.sh drop-old" >&2; exit 1; }
 		pg "-v ON_ERROR_STOP=1 -c 'ALTER SCHEMA public RENAME TO old_public' -c 'CREATE SCHEMA public'"
 		# テキストの SQL なので標準入力で流してよい(バイナリは欠ける。pv.sh の冒頭)
-		restic dump "$snap" /infisical-postgresql.sql > "$HOME/infisical.sql"
-		wc -c "$HOME/infisical.sql"
 		$K -n infisical exec -i postgresql-0 -- sh -c "$PSQL -q" < "$HOME/infisical.sql" > "$HOME/infisical-load.log" 2>&1 || true
 		rm -f "$HOME/infisical.sql"
 		echo "errors: $(grep -c ERROR "$HOME/infisical-load.log" || true)"
