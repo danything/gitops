@@ -6,6 +6,14 @@
 # (なぜ URL なのかは docs/decisions.md「層の分け方」)。
 crds:
     install: false
+# chart の既定は ecr-public.aws.com/docker/library/redis。匿名の取得は共有 IP だと絞られ、
+# talos-boot で ImagePullBackOff になった(2026-10-17)。mirror.gcr.io は Docker Hub の
+# pull-through キャッシュで、中身は同じ(digest を確かめた)。tag は chart の既定に合わせてある。
+# Renovate は Docker Hub の側で版を引く(../../renovate.json の mirror.gcr.io の規則)。
+redis:
+    image:
+        repository: mirror.gcr.io/library/redis
+        tag: 8.6.4-alpine
 # Native OIDC straight to Entra ID (same tenant/app registration as
 # auth/deployment.yaml, gitlab, erpnext) instead of Dex.
 dex:

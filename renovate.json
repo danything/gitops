@@ -141,6 +141,32 @@
             ]
         },
         {
+            "description": "上と同じ扱いを、bootstrap/{argocd,infisical}/values.yaml で上書きしているイメージ (argocd の redis、infisical 本体) にも。chart と同じく machine config に載り、当てるのは render.sh → apply-config → upgrade-k8s。",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchFileNames": [
+                "bootstrap/argocd/values.yaml",
+                "bootstrap/infisical/values.yaml"
+            ],
+            "groupName": "bootstrap charts",
+            "groupSlug": "bootstrap-charts",
+            "automerge": false,
+            "addLabels": [
+                "needs-review"
+            ]
+        },
+        {
+            "description": "mirror.gcr.io (Docker Hub の pull-through キャッシュ) から引くイメージは、版を Docker Hub で引く。mirror.gcr.io は取得ならどの tag でも通す (無ければその場で Docker Hub から取ってくる) が、tags/list は誰かが一度取った tag しか返さないので、そこで引くと新しい版が見えない (2026-10-17 に rancher/local-path-provisioner で確かめた)。書き換えるのは tag だけで、ファイルの mirror.gcr.io/… はそのまま残る。",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "mirror.gcr.io/**"
+            ],
+            "overridePackageName": "{{{replace 'mirror.gcr.io/' 'docker.io/' packageName}}}"
+        },
+        {
             "description": "sourceUrl はリリースノートを PR 本文に載せるため。netbird のイメージは OCI ラベル (org.opencontainers.image.source) を持っておらず、Renovate が元リポジトリを辿れないと Release Notes の節ごと欠ける (#85)。netbird は 3 つのイメージが同じリポジトリから出ている (netbird = クライアント、netbird-server = combined サーバ、どちらも netbirdio/netbird)。dashboard だけは別リポジトリで、そちらは OCI ラベルを持っているので書かない。 サーバとクライアントは版を揃えて上げたいので、2 つのイメージを専用の枝 (renovate/netbird) にまとめ、同じ PR で自動マージする (片方だけ先に入らない)。メジャーは共通の設定どおり人を待つ。下の netbird provider の規則が Pulumi.yaml の分を後から上書きするので、こちらに入るのはイメージ (apps/netbird/) だけ。",
             "matchDatasources": [
                 "docker"
