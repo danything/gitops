@@ -5,7 +5,7 @@
 #
 # 既定は読み取り用。管理者は `tools/t.ps1 --admin …`(GITOPS_ADMIN=1)のときだけ。
 #   kubectl / helm  読み取り用は talos/secrets.yaml の CA でその場で証明書を作る(1 日で切れる)。
-#                   管理者は talos/kubeconfig.yaml(SOPS 済み。talosctl kubeconfig の出力)を復号する
+#                   管理者も同じく system:masters の証明書をその場で作る(ファイルで持たない)
 #   talosctl        同じく CA でその場で作る(os:reader / os:admin)。talosconfig は保存しない
 #                   (docs/decisions.md「手で持つもの」)
 set -eu
@@ -88,35 +88,41 @@ mint() {
 # render.sh の 10.0.0.2 はクラスタの LAN で、手元からは届かない。NetBird はクラスタの上で動くので、
 # クラスタが落ちたときに使えない。10.10.0.4 は Talos の証明書(apid・kube-apiserver)の SAN に入っている
 ep=10.10.0.4
-if [ "$tool" = talosctl ]; then
-	out=$shm/talosconfig-$role
-	if [ ! -s "$out" ]; then
-		if [ $role = admin ]; then os=os:admin; else os=os:reader; fi
-		mint os "/O=$os" "$out.c.$$" ed25519
+
+# talosconfig を $shm に作って置き場所を返す($1 = admin / readonly)。作るのは初回だけ
+talosconfig() {
+	t=$shm/talosconfig-$1
+	if [ ! -s "$t" ]; then
+		if [ "$1" = admin ]; then os=os:admin; else os=os:reader; fi
+		mint os "/O=$os" "$t.c.$$" ed25519
 		(umask 077 && printf 'context: doany\ncontexts:\n  doany:\n    endpoints: [%s]\n    nodes: [%s]\n    ca: %s\n    crt: %s\n    key: %s\n' \
-			"$ep" "$ep" "$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
-		rm -f "$out.c.$$".*
+			"$ep" "$ep" "$(cat "$t.c.$$.ca")" "$(cat "$t.c.$$.crt")" "$(cat "$t.c.$$.key")" >"$t.$$" && mv "$t.$$" "$t")
+		rm -f "$t.c.$$".*
 	fi
-	export TALOSCONFIG="$out"
+	echo "$t"
+}
+
+if [ "$tool" = talosctl ]; then
+	TALOSCONFIG=$(talosconfig $role)
+	export TALOSCONFIG
 	exec "$real" "$@"
 fi
 
 out=$shm/kubeconfig-$role
-if [ ! -s "$out" ] && [ $role = readonly ]; then
-	# 読み取り用は bootstrap/apiserver/rbac.yaml の entra:viewer(組み込みの view + readonly-extra。Secret は読めない)。
-	# Headlamp で Entra の viewer が持つ権限と同じにするため、同じグループ名を使う
-	mint k8s "/O=entra:viewer/CN=tools-readonly" "$out.c.$$" ec
-	(umask 077 && printf 'apiVersion: v1\nkind: Config\nclusters:\n- name: doany\n  cluster:\n    server: https://%s:6443\n    certificate-authority-data: %s\ncontexts:\n- name: readonly@doany\n  context:\n    cluster: doany\n    user: readonly\ncurrent-context: readonly@doany\nusers:\n- name: readonly\n  user:\n    client-certificate-data: %s\n    client-key-data: %s\n' \
-		"$ep" "$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
+if [ ! -s "$out" ]; then
+	if [ $role = admin ]; then
+		# 管理者は system:masters(Talos の talosctl kubeconfig と同じグループ)。talosctl kubeconfig は 1 年もつ
+		# 証明書を毎回出すので使わず、読み取り用と同じく 1 日で切れるものを作る
+		subj=/O=system:masters/CN=tools-admin
+	else
+		# 読み取り用は bootstrap/apiserver/rbac.yaml の entra:viewer(組み込みの view + readonly-extra。Secret は読めない)。
+		# Headlamp で Entra の viewer が持つ権限と同じにするため、同じグループ名を使う
+		subj=/O=entra:viewer/CN=tools-readonly
+	fi
+	mint k8s "$subj" "$out.c.$$" ec
+	(umask 077 && printf 'apiVersion: v1\nkind: Config\nclusters:\n- name: doany\n  cluster:\n    server: https://%s:6443\n    certificate-authority-data: %s\ncontexts:\n- name: %s@doany\n  context:\n    cluster: doany\n    user: %s\ncurrent-context: %s@doany\nusers:\n- name: %s\n  user:\n    client-certificate-data: %s\n    client-key-data: %s\n' \
+		"$ep" "$(cat "$out.c.$$.ca")" $role $role $role $role "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
 	rm -f "$out.c.$$".*
-elif [ ! -s "$out" ]; then
-	f=talos/kubeconfig.yaml
-	[ -f $f ] || die "$f が無い。作り方は tools/README.md「クラスタの資格情報」"
-	grep -q '^sops:' $f || die "$f が暗号化されていない。git に入れる前に tools/README.md の手順で暗号化する"
-	nokey
-	# talosctl kubeconfig が書く行き先は 10.0.0.2(クラスタの endpoint)なので、手元から届く口に替える
-	(umask 077 && sops -d $f >"$out.$$" && sed -i "s#^\( *server:\) https://.*#\1 https://$ep:6443#" "$out.$$" && mv "$out.$$" "$out") ||
-		{ rm -f "$out.$$"; die "$f を復号できなかった"; }
 fi
 export KUBECONFIG="$out"
 exec "$real" "$@"
