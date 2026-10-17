@@ -66,7 +66,9 @@ tools/t.ps1        # 引数なしならシェルに入る
 - **talosconfig は保存しない**([../docs/decisions.md](../docs/decisions.md)「手で持つもの」)。`secrets.yaml` から毎回作る
 - 管理者の kubeconfig だけはファイルで持つ。Talos が出す正式なもの(`talosctl kubeconfig`)を使い、証明書は 1 年で切れる。
   中身は `secrets.yaml` の CA で作れるものなので、置いても開けられる範囲は今と変わらない
-- 行き先はどれも `10.0.0.2`(`talos/render.sh` と同じ)。`KUBECONFIG` / `TALOSCONFIG` や `--kubeconfig` / `--talosconfig` /
+- 行き先はどれも `10.10.0.4`(ノードの、作業用 PC の LAN 側の口。`creds.sh` の `ep`)。`talos/render.sh` の `10.0.0.2` は
+  クラスタの LAN で手元から届かず、NetBird はクラスタの上で動くので落ちたときに使えない。API は外に開かない。
+  外からは mado で作業用 PC に入って打つ。`10.10.0.4` は Talos の証明書の SAN に入っている。`KUBECONFIG` / `TALOSCONFIG` や `--kubeconfig` / `--talosconfig` /
   `--server` を自分で渡したときは何もしない。繋がないもの(`kubectl kustomize`、`helm template`、`talosctl gen`、`--client` など)も同じ
 
 **管理者の kubeconfig の入れ方**(作り直すときも同じ。切れる前に):

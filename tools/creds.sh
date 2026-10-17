@@ -84,14 +84,17 @@ mint() {
 	[ $rc = 0 ] || { rm -f "$3".*; die "証明書を作れなかった(talos/secrets.yaml を age の鍵で開けるか)"; }
 }
 
-# 名前と行き先は talos/render.sh の gen config と同じ(doany、https://10.0.0.2:6443)
+# 名前は talos/render.sh の gen config と同じ(doany)。行き先は作業用 PC の LAN にいるノードの口 10.10.0.4。
+# render.sh の 10.0.0.2 はクラスタの LAN で、手元からは届かない。NetBird はクラスタの上で動くので、
+# クラスタが落ちたときに使えない。10.10.0.4 は Talos の証明書(apid・kube-apiserver)の SAN に入っている
+ep=10.10.0.4
 if [ "$tool" = talosctl ]; then
 	out=$shm/talosconfig-$role
 	if [ ! -s "$out" ]; then
 		if [ $role = admin ]; then os=os:admin; else os=os:reader; fi
 		mint os "/O=$os" "$out.c.$$" ed25519
-		(umask 077 && printf 'context: doany\ncontexts:\n  doany:\n    endpoints: [10.0.0.2]\n    nodes: [10.0.0.2]\n    ca: %s\n    crt: %s\n    key: %s\n' \
-			"$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
+		(umask 077 && printf 'context: doany\ncontexts:\n  doany:\n    endpoints: [%s]\n    nodes: [%s]\n    ca: %s\n    crt: %s\n    key: %s\n' \
+			"$ep" "$ep" "$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
 		rm -f "$out.c.$$".*
 	fi
 	export TALOSCONFIG="$out"
@@ -103,15 +106,17 @@ if [ ! -s "$out" ] && [ $role = readonly ]; then
 	# 読み取り用は bootstrap/apiserver/rbac.yaml の entra:viewer(組み込みの view + readonly-extra。Secret は読めない)。
 	# Headlamp で Entra の viewer が持つ権限と同じにするため、同じグループ名を使う
 	mint k8s "/O=entra:viewer/CN=tools-readonly" "$out.c.$$" ec
-	(umask 077 && printf 'apiVersion: v1\nkind: Config\nclusters:\n- name: doany\n  cluster:\n    server: https://10.0.0.2:6443\n    certificate-authority-data: %s\ncontexts:\n- name: readonly@doany\n  context:\n    cluster: doany\n    user: readonly\ncurrent-context: readonly@doany\nusers:\n- name: readonly\n  user:\n    client-certificate-data: %s\n    client-key-data: %s\n' \
-		"$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
+	(umask 077 && printf 'apiVersion: v1\nkind: Config\nclusters:\n- name: doany\n  cluster:\n    server: https://%s:6443\n    certificate-authority-data: %s\ncontexts:\n- name: readonly@doany\n  context:\n    cluster: doany\n    user: readonly\ncurrent-context: readonly@doany\nusers:\n- name: readonly\n  user:\n    client-certificate-data: %s\n    client-key-data: %s\n' \
+		"$ep" "$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
 	rm -f "$out.c.$$".*
 elif [ ! -s "$out" ]; then
 	f=talos/kubeconfig.yaml
 	[ -f $f ] || die "$f が無い。作り方は tools/README.md「クラスタの資格情報」"
 	grep -q '^sops:' $f || die "$f が暗号化されていない。git に入れる前に tools/README.md の手順で暗号化する"
 	nokey
-	(umask 077 && sops -d $f >"$out.$$" && mv "$out.$$" "$out") || { rm -f "$out.$$"; die "$f を復号できなかった"; }
+	# talosctl kubeconfig が書く行き先は 10.0.0.2(クラスタの endpoint)なので、手元から届く口に替える
+	(umask 077 && sops -d $f >"$out.$$" && sed -i "s#^\( *server:\) https://.*#\1 https://$ep:6443#" "$out.$$" && mv "$out.$$" "$out") ||
+		{ rm -f "$out.$$"; die "$f を復号できなかった"; }
 fi
 export KUBECONFIG="$out"
 exec "$real" "$@"
