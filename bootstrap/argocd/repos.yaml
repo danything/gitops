@@ -22,8 +22,7 @@ spec:
   generators:
     # Two steps: find the repos, then let each repo describe itself.
     #   1. scmProvider walks the danything org and keeps repos that carry a
-    #      deploy/argocd.yaml (this replaces the "argocd" GitHub topic
-    #      that the deleted sync-webhooks.sh used to look for).
+    #      deploy/argocd.yaml.
     #   2. git reads that file out of the repo, and its keys become the
     #      template parameters below.
     # Adding an app is therefore "push manifests + deploy/argocd.yaml to a new repo".
@@ -58,12 +57,8 @@ spec:
     preserveResourcesOnDeletion: true
   template:
     metadata:
-      # Declared per-repo rather than derived from the repo name, because the
-      # hand-made Applications don't match their repos (denpa -> epg,
-      # worklog-cloud -> worklog). Keeping the existing
-      # names lets the controller adopt them in place -- it adds its
-      # ownerReference to the Application that's already there instead of
-      # standing up a second one fighting over the same resources.
+      # Declared per-repo rather than derived from the repo name, so a repo can
+      # keep an existing Application's name and have the controller adopt it in place.
       name: '{{ .name }}'
     spec:
       project: default
@@ -73,11 +68,7 @@ spec:
         path: '{{ .sourcePath }}'
         directory:
           include: '*.yaml'
-          # gitops keeps its manifests at the repo root (sourcePath: .,
-          # recurse: true), so its deploy/argocd.yaml ends up inside the synced
-          # path one level down; without this the sync fails on a document
-          # with no apiVersion/kind.  matches it there and at top level for
-          # any repo whose sourcePath is the same directory argocd.yaml lives in.
+          # argocd.yaml は apiVersion/kind の無い設定なので外す(sourcePath が deploy のリポジトリでは同期の中に入る)。
           # bootstrap/ も外す。gitops repo は同期対象を apps/ に絞っているので通常は当たらないが、
           # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
           # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
@@ -160,18 +151,11 @@ spec:
               revision: '{{ .branch }}'
               files:
                 - path: deploy/argocd.yaml
-  # generator の結果から repo が消えても(改名の途中、一時的な API エラー)、Application は消しても
-  # その中の実リソース(Deployment や PVC)は道連れにしない。
+  # ここから下は上の `repos` と同じ(説明も上)。直すときは両方そろえる
   syncPolicy:
     preserveResourcesOnDeletion: true
   template:
     metadata:
-      # Declared per-repo rather than derived from the repo name, because the
-      # hand-made Applications don't match their repos (denpa -> epg,
-      # worklog-cloud -> worklog). Keeping the existing
-      # names lets the controller adopt them in place -- it adds its
-      # ownerReference to the Application that's already there instead of
-      # standing up a second one fighting over the same resources.
       name: '{{ .name }}'
     spec:
       project: default
@@ -181,39 +165,19 @@ spec:
         path: '{{ .sourcePath }}'
         directory:
           include: '*.yaml'
-          # gitops keeps its manifests at the repo root (sourcePath: .,
-          # recurse: true), so its deploy/argocd.yaml ends up inside the synced
-          # path one level down; without this the sync fails on a document
-          # with no apiVersion/kind.  matches it there and at top level for
-          # any repo whose sourcePath is the same directory argocd.yaml lives in.
-          # bootstrap/ も外す。gitops repo は同期対象を apps/ に絞っているので通常は当たらないが、
-          # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
-          # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
-          # `_` で始まるディレクトリも外す。用意はしたが動かしていないアプリを、置き場を変えずに
-          # 寝かせておくため (例: apps/_<name>/)。動かすときは `_` を外して git mv するだけ。
-          # 照らすのは sourcePath からの相対パスで、gobwas/glob を区切り無しで使う (`*` も `/` を
-          # 跨ぐ) ので、`**/_*/**` は頭に `/` が要り、いちばん上の `_<name>/…` には当たらない。
-          # そのために `_*/**` も並べる
           exclude: '{**/argocd.yaml,bootstrap/**,_*/**,**/_*/**}'
       destination:
         server: https://kubernetes.default.svc
-        # Empty for a repo whose manifests span several namespaces, which is
-        # fine because every manifest in these repos carries its own.
         namespace: '{{ .namespace }}'
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
-        # CRD を入れる Application より先に同期しにいったものは、既定の 5 回で諦めて
-        # OutOfSync のまま止まる(refresh=hard では戻らない。ドリル 5 回目で踏んだ)。
-        # backoff を伸ばして自力で戻るようにする。15s から倍々で上限 5 分、10 回で約 33 分。
         retry:
           limit: 10
           backoff:
             duration: 15s
             factor: 2
             maxDuration: 5m
-  # These four live in the patch rather than in template because plain
-  # templating only substitutes strings, and they're booleans.
   templatePatch: |
     spec:
       source:
