@@ -39,6 +39,13 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          # 2 つのコンテナを同じユーザーで動かす。talosctl のイメージは root で走り、スナップショットを
+          # 0600 で書くので、k8up のイメージ(65532)の restic が `permission denied` で読めなかった
+          # (最初の 1 回、2026-10-17)。
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
           initContainers:
             # talosctl だけのイメージ(シェルが無い)なので、取るだけを init に分ける。
             # 版は talos/versions.yaml と揃える(クライアントとノードの版は離れすぎないこと)。
@@ -71,6 +78,9 @@ spec:
                   restic backup --host etcd --tag etcd etcd.snapshot
                   restic forget --host etcd --tag etcd --keep-daily 7 --keep-weekly 4
               env:
+                # HOME が / のままなので、既定の ~/.cache には 65532 で書けない
+                - name: RESTIC_CACHE_DIR
+                  value: /work/.cache
                 - name: ENDPOINT
                   valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
                 - name: BUCKET

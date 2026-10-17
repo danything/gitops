@@ -42,7 +42,7 @@ spec:
                 # Secret は ArgoCD の管理対象から外す。git に平文 Secret は置かない方針なので ArgoCD が Secret を
                 # 作ることは無く、一方で Infisical operator が作る Secret には CR からコピーされた tracking-id が
                 # 付くため、ArgoCD が「git に無い管理対象」と見なして sync 時に prune してしまう
-                # (復元リハーサル 2026-09-06、docs/restore-drill.md の 3)。
+                # (2026-09-06 の復元リハーサルで踏んだ)。
                 resource.exclusions: |
                     - apiGroups: [""]
                       kinds: ["Secret"]
