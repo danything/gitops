@@ -157,7 +157,7 @@ jobs:
           # 網: bond0(eno1 + eno2)は QEMU の内部ハブ越しに 1 つの SLIRP へ。SLIRP を本番の 10.0.0.0/24 と
           # IPv6 のプレフィックスに合わせ、RA も出させる(accept_ra / autoconf を確かめるため)。
           # dhcpstart を .2 にするのは maintenance mode(DHCP)でも hostfwd の宛先に居させるため。
-          # eno4 は外に出さない別の SLIRP。
+          # ipv4=on は省けない(ipv6=on だけ書くと IPv4 が無効になる)。eno4 は外に出さない別の SLIRP。
           # ディスクは virtio-scsi にする。/dev/sda に見えるので main.yaml の diskSelector を書き換えずに済む。
           qemu-system-x86_64 \
             -machine q35,accel=kvm -cpu host -smp 4 -m 8192 \
@@ -166,7 +166,7 @@ jobs:
             -device virtio-scsi-pci,id=scsi0 \
             -drive file=/tmp/vm/disk.raw,format=raw,if=none,id=d0,cache=unsafe,discard=unmap \
             -device scsi-hd,drive=d0,bus=scsi0.0 \
-            -netdev "user,id=up,net=10.0.0.0/24,host=10.0.0.1,dhcpstart=$NODE,ipv6=on,ipv6-net=240f:6d:842b:1::/64,ipv6-host=240f:6d:842b:1::1,hostfwd=tcp:127.0.0.1:50000-$NODE:50000,hostfwd=tcp:127.0.0.1:6443-$NODE:6443,hostfwd=tcp:127.0.0.1:18080-$NODE:80,hostfwd=tcp:127.0.0.1:18443-$NODE:443" \
+            -netdev "user,id=up,net=10.0.0.0/24,host=10.0.0.1,dhcpstart=$NODE,ipv4=on,ipv6=on,ipv6-net=240f:6d:842b:1::/64,ipv6-host=240f:6d:842b:1::1,hostfwd=tcp:127.0.0.1:50000-$NODE:50000,hostfwd=tcp:127.0.0.1:6443-$NODE:6443,hostfwd=tcp:127.0.0.1:18080-$NODE:80,hostfwd=tcp:127.0.0.1:18443-$NODE:443" \
             -netdev hubport,id=hub-up,hubid=0,netdev=up \
             -netdev hubport,id=hub1,hubid=0 -device virtio-net-pci,netdev=hub1,mac=$MAC_ENO1 \
             -netdev hubport,id=hub2,hubid=0 -device virtio-net-pci,netdev=hub2,mac=$MAC_ENO2 \
