@@ -61,6 +61,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 
 - 読み取り用の権限は [`../bootstrap/apiserver/rbac.yaml`](../bootstrap/apiserver/rbac.yaml) の `entra:viewer`
   (組み込みの `view` と `readonly-extra`。ログは読めて、Secret は読めない)。Headlamp で Entra の viewer が持つものと同じ
+- **helm はリリースの情報を Secret に持つ**ので、`helm list` や `helm status` も `--admin` を付ける
 - **talosconfig は保存しない**([../docs/decisions.md](../docs/decisions.md)「手で持つもの」)。`secrets.yaml` から毎回作る
 - 管理者の kubeconfig だけはファイルで持つ。Talos が出す正式なもの(`talosctl kubeconfig`)を使い、証明書は 1 年で切れる。
   中身は `secrets.yaml` の CA で作れるものなので、置いても開けられる範囲は今と変わらない

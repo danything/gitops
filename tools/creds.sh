@@ -16,13 +16,15 @@ shm=/dev/shm/gitops
 die() { echo "$tool: $*" >&2; exit 1; }
 
 # 最初の引数らしいもの(フラグを飛ばす)。`kubectl -n x get` だと x を拾うが、そのときは「繋ぐ」側に倒れるだけ
+# (helm も「繋がないと分かっているもの」以外は繋ぐ側にしてある)。`--` より後ろはコマンドの引数なので見ない
 sub=
-for a in "$@"; do case $a in -*) ;; *) sub=$a; break ;; esac; done
+for a in "$@"; do case $a in --) break ;; -*) ;; *) sub=$a; break ;; esac; done
 
 # 繋がないもの(版を見る・描くだけ)と、資格情報を自分で渡しているものはそのまま通す。CI(tools.yml)もここを通る
 pass() { exec "$real" "$@"; }
 for a in "$@"; do
 	case $a in
+	--) break ;;
 	-h | --help | --client | --kubeconfig | --kubeconfig=* | --talosconfig | --talosconfig=* | -s | --server | --server=*) pass "$@" ;;
 	esac
 done
@@ -33,7 +35,7 @@ kubectl)
 	;;
 helm)
 	[ -z "${KUBECONFIG:-}" ] || pass "$@"
-	case $sub in install | upgrade | uninstall | delete | rollback | list | ls | status | history | get | test) ;; *) pass "$@" ;; esac
+	case $sub in '' | template | lint | package | create | show | inspect | pull | fetch | push | repo | registry | search | dependency | dep | plugin | env | version | completion | verify | help) pass "$@" ;; esac
 	;;
 talosctl)
 	[ -z "${TALOSCONFIG:-}" ] || pass "$@"
@@ -52,10 +54,15 @@ nokey() { [ -s ~/.config/sops/age/keys.txt ] || die "age の鍵が無い(README�
 mint() {
 	nokey
 	w=$(mktemp -d "$shm/w.XXXXXX")
+	# `( … ) || …` だと中の set -e が効かないので、終了コードを受けてから見る。パイプは最後の終了コードしか
+	# 返さないので、復号したものは一度ファイルに出す
+	set +e
 	(
+		set -e
 		umask 077
 		for k in crt key; do
-			sops -d --extract "[\"certs\"][\"$1\"][\"$k\"]" talos/secrets.yaml | base64 -d >"$w/ca.$k"
+			sops -d --extract "[\"certs\"][\"$1\"][\"$k\"]" talos/secrets.yaml >"$w/ca.$k.b64"
+			base64 -d "$w/ca.$k.b64" >"$w/ca.$k"
 		done
 		# Talos は ed25519 の鍵に独自の見出しを付けている。中身は PKCS#8 なので見出しだけ直せば openssl が読める
 		sed -i 's/ED25519 PRIVATE KEY/PRIVATE KEY/' "$w/ca.key"
@@ -64,13 +71,17 @@ mint() {
 		*) openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$w/c.key" ;;
 		esac
 		printf 'keyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\n' >"$w/ext"
-		openssl req -new -key "$w/c.key" -subj "$2" 2>/dev/null |
-			openssl x509 -req -CA "$w/ca.crt" -CAkey "$w/ca.key" -extfile "$w/ext" \
-				-not_before "$(date -u -d '-5 min' +%Y%m%d%H%M%SZ)" -days 1 -out "$w/c.crt" 2>/dev/null
+		openssl req -new -key "$w/c.key" -subj "$2" -out "$w/c.csr" 2>/dev/null
+		openssl x509 -req -in "$w/c.csr" -CA "$w/ca.crt" -CAkey "$w/ca.key" -extfile "$w/ext" \
+			-not_before "$(date -u -d '-5 min' +%Y%m%d%H%M%SZ)" -days 1 -out "$w/c.crt" 2>/dev/null
 		for k in crt key; do base64 -w0 "$w/c.$k" >"$3.$k"; done
 		base64 -w0 "$w/ca.crt" >"$3.ca"
-	) || { rm -rf "$w"; die "証明書を作れなかった"; }
+		[ -s "$3.crt" ] && [ -s "$3.key" ] && [ -s "$3.ca" ]
+	)
+	rc=$?
+	set -e
 	rm -rf "$w"
+	[ $rc = 0 ] || { rm -f "$3".*; die "証明書を作れなかった(talos/secrets.yaml を age の鍵で開けるか)"; }
 }
 
 # 名前と行き先は talos/render.sh の gen config と同じ(doany、https://10.0.0.2:6443)
