@@ -1,16 +1,5 @@
-# k8up の失敗を Mattermost に流す。
-#
-# k8up には通知が無い。黙って止まると誰も気づかないので足した。
-# ArgoCD の通知は Mattermost に繋がっているが、あれは Application しか見ないので
-# k8up の Backup CR の失敗は拾えない。
-#
-# 見るのは restic の中身。k8up の Backup オブジェクトは掃除されるので、
-# 「オブジェクトが無い」は「取れていない」の証拠にならない。スケジュールを書き換えた
-# だけで消えることを実際に確認した(2026-09-08)。唯一の証拠はスナップショットなので、
-# init コンテナで `restic snapshots` を取ってきて、そちらを数える。
-#
-# 秘密は `k8up-global` に相乗りさせている(apps/k8up/README.md の作り方に
-# `mattermostWebhook` が入っている)。新しい配線は増やさない。
+# k8up の状態を日次で通知の部屋に 1 行流す。k8up には通知が無く、ArgoCD の通知は Application しか見ない。
+# 見張りの中身は下の notify.js のコメント。秘密は `k8up-global` の `mattermostWebhook` に相乗り。
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -26,11 +15,7 @@ rules:
   - apiGroups: [k8up.io]
     resources: [schedules, backups, prunes, checks, restores]
     verbs: [get, list]
-  # 注釈の付け忘れではなく、Schedule の付け忘れを捕まえるために要る。
-  # PVC に `k8up.io/backup: "true"` を付けても、Pod に `k8up.io/backupcommand` を
-  # 付けても、その namespace に Schedule が無ければジョブは作られない
-  # (2026-09-08 に yuzuriha で実際に起きていた)。
-  # 名前と注釈しか読まない。中身(`spec` の中)には興味が無い。
+  # Schedule の付け忘れ(注釈はあるのに namespace に Schedule が無い)を捕まえるため。名前と注釈しか読まない
   - apiGroups: [""]
     resources: [persistentvolumeclaims, pods]
     verbs: [list]
@@ -59,9 +44,7 @@ metadata:
   name: k8up-notify
   namespace: k8up
 spec:
-  # 最後のバックアップ(yuzuriha 17:45 UTC)の後。余裕は 15 分しかない。
-  # yuzuriha-data は 12 MB / 7 ファイルなので数秒で終わるが、ここから先に
-  # Schedule を足すならこの時刻もずらすこと(schedules.yaml の冒頭にも書いた)。
+  # バックアップ(〜17:45 UTC)の後。同じ時刻に始まった初回のバックアップは「来ていない」と鳴る
   schedule: "0 18 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
@@ -74,9 +57,7 @@ spec:
           restartPolicy: Never
           serviceAccountName: k8up-notify
           initContainers:
-            # リポジトリの中身を取ってくる。k8up のイメージには restic が入っている
-            # (`/usr/local/bin/restic`)ので、これのためだけに別のものを持ち込まなくてよい。
-            # 読むだけ。`snapshots` はリポジトリを書き換えない。
+            # k8up のイメージに入っている restic でスナップショットの一覧を取る。読むだけ
             - name: snapshots
               image: ghcr.io/k8up-io/k8up:v2.16.0
               command:
@@ -139,16 +120,16 @@ metadata:
   namespace: k8up
 data:
   notify.js: |
-    // k8up の状態を見て Mattermost に 1 行投げる。CronJob から日次で走る。
+    // **見るのは restic の中身。** k8up の Backup オブジェクトは掃除され、Schedule を書き換えても消えるので、
+    // 有無は「取れたか」の証拠にならない。
     //
-    // **見るのは restic の中身。** k8up の Backup オブジェクトは
-    // successfulJobsHistoryLimit で掃除されるうえ、スケジュールを書き換えると消える
-    // (2026-09-08 に実際に起きた)。**オブジェクトの有無は「取れたか」の証拠にならない。**
-    // 唯一の証拠はリポジトリに増えたスナップショットなので、そちらを数える。
-    //
-    // **何が取れているべきかは履歴から学ぶ。** 過去 8 日に出てきた (host, path) の組を
-    // 「あるべきもの」とみなし、それぞれの最新が 25 時間以内かを見る。一覧を人が
-    // 書き写す必要がなく、PVC や namespace が増えても勝手に追いつく。
+    // 見張りは重ねてある(どれか 1 つでは穴が残る):
+    //   - 履歴: 過去 8 日に出てきた (host, path) の最新が 25 時間以内か。経路ごとの退行を拾い、一覧を人が持たなくてよい
+    //   - Schedule: backup を持つ namespace のホストに 25 時間以内のスナップショットがあるか。履歴は 8 日で忘れるため
+    //   - 中身が 0 バイト: 読めないファイルがあっても restic は空のスナップショットを作り、k8up は Succeeded にする
+    //   - 注釈があるのに Schedule が無い PVC / Pod: ジョブ自体が作られず、上の 3 つでは一度も来ないものが見えない
+    //   - k8up の CR の失敗と、k8up の namespace の CronJob が最後まで走ったか
+    // 残る穴: 経路を複数持つ namespace で 1 本だけ 8 日を超えて止まると無音に戻る(その 8 日は毎日鳴る)。
     const WINDOW_H = 25;
     const LEARN_H = 24 * 8;
 
@@ -156,14 +137,7 @@ data:
     const now = Date.now();
     const hours = (t) => (now - Date.parse(t)) / 3600e3;
 
-    // (host, path) ごとに最新を拾う。
-    //
-    // **やめたアプリの残りは見ない。** namespace ごと消したアプリ(noren)や名前を
-    // 変えたアプリ(shadai → todoroku)のスナップショットは、8 日の学習窓が閉じるまで
-    // 毎日「更新されていない」と鳴る。消してよいものは `restic forget --host <名前>` で
-    // 消すが、**残しておきたいもの(改名前の履歴)は `restic tag --host <旧名> --add retired`**
-    // で印を付ける(README「やめたアプリの残り」)。印の付いたものはここで落とす。
-    // 中身はそのままなので、戻すときは今までどおり restore できる。
+    // (host, path) ごとに最新を拾う。`retired` の付いたもの(やめたアプリの残り。README「やめたアプリの残り」)は見ない。
     const latest = new Map();
     for (const s of snapshots) {
       if ((s.tags ?? []).includes("retired")) continue;
@@ -184,10 +158,7 @@ data:
       }
     }
 
-    // **やめた経路を失敗と呼ばない。** 取る対象を広げると古い経路が履歴に残る
-    // (個別のファイルを取るのをやめてディレクトリごと取るようにした、など)。
-    // **同じホストで、より上の階層が新しく取れているなら
-    // その中身も取れている**ので、そちらは黙って落とす。
+    // やめた経路を失敗と呼ばない。同じホストでより上の階層が新しく取れていれば、その中身も取れている。
     const fresh = [...latest.values()].filter((x) => x.h <= WINDOW_H);
     const superseded = (x) =>
       fresh.some((f) => f.host === x.host && x.path.startsWith(f.path.replace(/\/$/, "") + "/"));
@@ -202,13 +173,8 @@ data:
     // コアの API は `/api/v1`(`/apis` ではない)。
     const getCore = (kind) => fetchAll(`https://kubernetes.default.svc/api/v1/${kind}`, kind);
 
-    // **止めてあるアプリには何も言わない。** Deployment を 0 にして寝かせている
-    // namespace は、PVC は空のまま、backupcommand は打つ先の Pod が無い。
-    // それを「空」「来ない」と鳴らすと、寝かせている間ずっと毎日 FAILED になる
-    // (2026-09-12 に noren で起きた)。「動いている Pod が無い」を「止めてある」と
-    // みなして、その namespace の stale / 空 / 無音は見送る。Completed の
-    // バックアップ Pod は数に入れない(Running / Pending だけを動いているとみなす)。
-    // 注釈と Schedule の食い違い(orphans)は設定の話なので、止めていても言う。
+    // 止めてあるアプリ(Running / Pending の Pod が無い namespace)の stale / 空 / 無音は見送る。
+    // 寝かせている間ずっと鳴るため。orphans は設定の話なので止めていても言う。
     const backupNs = new Set(
       (await get("schedules")).filter((s) => s.spec?.backup).map((s) => s.metadata.namespace),
     );
@@ -223,15 +189,7 @@ data:
       .filter((x) => x.h > WINDOW_H && !superseded(x) && !isParked(x.host))
       .sort((a, b) => b.h - a.h);
 
-    // **「新しい」だけでは足りない。中身が空でも新しいスナップショットはできる。**
-    // 読めないファイルがあると restic は `errors: N` を出しながら 0 バイトの
-    // スナップショットを作り、**k8up はそれを Succeeded にする**。2026-09-08 に
-    // adguardhome-conf / adguardhome-work / portainer-data の 3 本が
-    // 何週間もこの状態だった(原因と対策は README「空のスナップショット」)。
-    // `restic snapshots --json` の `summary.total_bytes_processed` がそのまま使える
-    // ので、追加のコマンドは要らない。
-    // **`summary` を持たないスナップショットは黙って見送る**(古い restic で
-    // 取ったものには無い)。無いことを異常と呼ぶと過去のぶんで鳴り続ける。
+    // 中身が 0 バイト(README「空のスナップショット」)。`summary` の無い古いスナップショットは見送る。
     const empty = [...latest.values()].filter(
       (x) => x.h <= WINDOW_H && x.bytes === 0 && !superseded(x) && !isParked(x.host),
     );
@@ -246,20 +204,11 @@ data:
       }
     }
 
-    // **履歴だけに頼らない。** 上の学習は 8 日で忘れるので、完全に止まったまま 8 日を
-    // 過ぎた経路は追跡対象から落ちて無音に戻る。**クラスタ側から見た「あるべき姿」**も
-    // 突き合わせる ── `backup` を持つ Schedule の namespace には、その namespace 名の
-    // ホストのスナップショットが 25 時間以内にあるはず。こちらは時間で減衰しない。
+    // Schedule から見た「あるべき姿」。履歴と違って時間で減衰しない。
     const freshHosts = new Set(fresh.map((x) => x.host));
     const silent = [...backupNs].filter((n) => !freshHosts.has(n) && !isParked(n));
 
-    // **注釈の付け忘れではなく、Schedule の付け忘れ。** PVC に
-    // `k8up.io/backup: "true"` を付けても、その namespace に Schedule が無ければ
-    // **ジョブ自体が作られず、何のエラーも出ない。** 上の 3 つの見張りは
-    // 「あるはずのものが来ない」を見るので、**最初から一度も来ていないものには
-    // 何も言わない。** 2026-09-08 に yuzuriha-data がこの穴に落ちていた。
-    // **PVC と Pod の両方を見る。** ファイルは PVC の `k8up.io/backup`、DB は Pod の
-    // `k8up.io/backupcommand` で取っていて、**穴は同じ形で両方に開く。**
+    // Schedule の付け忘れ。ファイルは PVC の `k8up.io/backup`、DB は Pod の `k8up.io/backupcommand` なので両方見る。
     const wanted = [
       ...(await getCore("persistentvolumeclaims")).filter(
         (o) => o.metadata.annotations?.["k8up.io/backup"] === "true",
@@ -278,8 +227,7 @@ data:
       ),
     ];
 
-    // **同じ namespace の CronJob が最後まで走ったか。** restore-check(月次)は FAILED でも
-    // 自分で投稿するが、OOMKilled や期限切れ、Secret の欠落では投稿まで届かずに黙って落ちる。
+    // k8up の namespace の CronJob が最後まで走ったか。restore-check は OOMKilled や期限切れでは投稿まで届かない。
     // 最後に予定された回より最後に成功した回が古ければ拾う。走っている最中(自分も)は見ない
     const unfinished = (
       await fetchAll("https://kubernetes.default.svc/apis/batch/v1/namespaces/k8up/cronjobs", "cronjobs")
@@ -332,10 +280,5 @@ data:
       console.error(`Mattermost への投稿に失敗: ${r.status} ${await r.text()}`);
       process.exit(1);
     }
-    // 問題があればジョブも落とす。通知が届かなくても kubectl から見えるように。
-    // FAILED でも exit 0。以前は非ゼロで終わらせていたが、それだと
-    //   1. backoffLimit ぶん(3 回)走り直して同じ警告を 3 回投稿する
-    //   2. Job が失敗扱い → CronJob が Degraded → ArgoCD が gitops の同期を
-    //      retry に入れて apps/ 配下の更新が止まる(2026-09-12 に実際に起きた)
-    // 「投稿できた」がこの Job の成功で、警告の中身は Mattermost 側で伝わっている。
-    // 非ゼロで終わるのは投稿そのものに失敗したとき(上)だけ。
+    // FAILED でも exit 0。「投稿できた」がこの Job の成功。非ゼロにすると backoffLimit ぶん同じ警告を投稿し、
+    // CronJob が Degraded になって ArgoCD が apps/ の同期を retry に入れて止まる。
