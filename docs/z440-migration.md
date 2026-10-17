@@ -96,8 +96,15 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 
 ### つなぎ方
 
-- **Windows**: [Intel Manageability Commander](https://www.intel.com/content/www/us/en/download/18796/intel-manageability-commander.html)
-  (Intel の公式。前身の MeshCommander は 2022 年に開発終了)。10.0.0.5 に入り、電源の操作と SOL の画面を使う
+- **Windows**: Intel の [Device Management Toolkit の Console](https://github.com/device-management-toolkit/console) を使う。
+  Releases の `console_windows_x64.exe` を落として実行するだけ(Web の UI は同梱。初回だけ `Key Not Found, Generate new key? Y/N` に `Y`)。
+  10.0.0.5 を足して、電源の操作・SOL・IDE-R(ISO をつなぐ)を使う。**常駐させない**(使うときだけ手元で起動する)
+  - 選んだ理由(2026-10-17 に調べた): Intel Manageability Commander はサポート終了(2022 年の 2.4 が最後、新しい AMT では動かない報告あり)。
+    Intel EMA は AMT 11.8.79 以降が対象で Windows Server + SQL Server が要る(AMT 9 は対象外)。MeshCommander・MeshCentral は
+    Intel の公式から外れた(MeshCentral は独立した OSS として続いている)。Console は Intel の公式で開発中
+  - **未確認**: Console は README で「アルファ版、本番では使わない」としていて、対応する AMT の版も書いていない。**AMT 9 につながるか、
+    UEFI(Arc のため CSM 無効)のまま IDE-R の ISO から起動できるかは、AMT の初期設定のあとで最初に試す**。
+    つながらなければ [MeshCentral](https://github.com/Ylianst/MeshCentral) を手元で一時的に動かす。IDE-R がだめでも USB を挿せば済む
 - **Linux**: `amtterm 10.0.0.5`(SOL)、`amttool`(電源)。Debian・Ubuntu のパッケージ `amtterm`
 - **家の外から**: NetBird で 10.0.0.0/24 に入る。ただし **NetBird の入口(routing peer)はこのノードの上**なので、
   **ノードが止まっていると外からは届かない**。小さいサーバに入口を置けば、止まっていても外から電源を入れ直せる
