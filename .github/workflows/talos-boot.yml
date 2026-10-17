@@ -147,6 +147,96 @@ jobs:
           talosctl config endpoint 127.0.0.1
           talosctl config node "$NODE"
 
+      # --- イメージのキャッシュ ----------------------------------------------
+      # 時間の大半は VM がイメージを取るところ(2026-10-17 の main で、bootstrap 層を待つ 6m40s のほとんど)。
+      # 要るイメージを runner に置いて `talosctl image cache-serve` で配り、VM の Talos に mirror として見せる。
+      # 層は actions/cache で次の run に持ち越す。手順の元は
+      # https://docs.siderolabs.com/talos/v1.15/configure-your-talos-cluster/images-container-runtime/image-cache-registry-mirror
+      #
+      # **どこで落ちても起動は止めない。** 下の 4 つは continue-on-error で、配れたときだけ CI の config に
+      # mirror を足す。足したあとも、キャッシュに無いイメージは本来のレジストリに取りに行く
+      # (RegistryMirrorConfig は skipFallback を書かなければ fallback する)。
+      - name: 要るイメージの一覧
+        id: img
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # inlineManifest の中は 1 行のエスケープ文字列なので `image: \"…` の形もある。
+          # installer は取らない(入れ済みのディスクから起動する)。kube-proxy は切ってある(Cilium が代わる)
+          grep -oE 'image: (\\")?[a-z0-9][^" \\]*' /tmp/out/controlplane.yaml | sed -E 's/^image: (\\")?//' \
+            | grep -v -e '^factory\.talos\.dev/' -e '/kube-proxy:' > /tmp/images.raw
+          # config に書かれない Talos の既定は CoreDNS と pause だけ(kubelet・etcd・apiserver などは書かれる)
+          talosctl images k8s-bundle --k8s-version "${{ steps.v.outputs.k8s }}" | grep -e /coredns/ -e /pause: >> /tmp/images.raw
+          sort -u /tmp/images.raw > /tmp/images.txt
+          cat /tmp/images.txt
+          # キャッシュの形は talosctl の版で変わりうるので、版も鍵に混ぜる
+          echo "hash=$({ talosctl version --client --short; cat /tmp/images.txt; } | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: イメージの層を戻す
+        id: restore
+        if: steps.img.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: /tmp/image-layers
+          key: talos-image-layers-${{ steps.img.outputs.hash }}
+          # 一覧が変わっても(Renovate の版上げ)、前の run の層のうち変わっていないものは使える
+          restore-keys: talos-image-layers-
+
+      - name: イメージのキャッシュを作る
+        id: create
+        if: steps.img.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          # 層は /tmp/image-layers に無いものだけ取りに行く(manifest は毎回引く)。署名(cosign)は使わない
+          talosctl images cache-create --images=- --image-cache-path=/tmp/image-cache \
+            --image-layer-cache-path=/tmp/image-layers --layout=flat --cosign-signatures=false \
+            < /tmp/images.txt > /tmp/image-cache-create.log 2>&1 \
+            || { tail -30 /tmp/image-cache-create.log; exit 1; }
+          echo "  取りに行った層: $(grep -c '> layer' /tmp/image-cache-create.log || true) 件(戻した層も数える)"
+          # 古い版の層を持ち越さない(actions/cache は repo 全体で 10 GB)。層は flat の blob と同じ名前(: が - になる)
+          for f in /tmp/image-layers/*; do n=${f##*/}; [ -e "/tmp/image-cache/blob/${n/:/-}" ] || rm -f "$f"; done
+          du -sh /tmp/image-cache /tmp/image-layers
+
+      - name: イメージの層を残す
+        if: steps.create.outcome == 'success' && steps.restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: /tmp/image-layers
+          key: talos-image-layers-${{ steps.img.outputs.hash }}
+
+      - name: イメージのキャッシュを VM に配る
+        if: steps.create.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/image-cache-tls
+          cd /tmp/image-cache-tls
+          # VM から見た runner は SLIRP の host(10.0.0.1)で、そこへの接続は runner の 127.0.0.1 に届く。
+          # mirror は HTTPS で(docs)。証明書は 127.0.0.1 にも出す(下の疎通確認のため)。
+          # CA を信じさせる TrustedRootsConfig は cache-cert-gen が image-cache-patch.yaml に書く
+          talosctl image cache-cert-gen --advertised-address 10.0.0.1,127.0.0.1 \
+            --tls-ca-file ca.crt --tls-cert-file tls.crt --tls-key-file tls.key
+          nohup talosctl image cache-serve --image-cache-path=/tmp/image-cache --address=127.0.0.1:5000 \
+            --tls-cert-file tls.crt --tls-key-file tls.key > /tmp/image-cache-serve.log 2>&1 &
+          for i in $(seq 30); do curl -fs --cacert ca.crt https://127.0.0.1:5000/v2/ >/dev/null && break; sleep 1; done
+          curl -fsS --cacert ca.crt https://127.0.0.1:5000/v2/ >/dev/null
+          # mirror は一覧に出てくるレジストリごと(名前に . が無いものは docker.io)
+          {
+            cat image-cache-patch.yaml
+            awk -F/ '{print (index($1, ".") ? $1 : "docker.io")}' /tmp/images.txt | sort -u | while read -r r; do
+              printf -- '---\napiVersion: v1alpha1\nkind: RegistryMirrorConfig\nname: %s\nendpoints:\n  - url: https://10.0.0.1:5000\n' "$r"
+            done
+          } > /tmp/image-cache-mirrors.yaml
+          grep -E '^(kind|name):' /tmp/image-cache-mirrors.yaml
+          # 足すのは CI で描いた /tmp/out の方だけ。本番のファイル(talos/)には触らない
+          { cat /tmp/out/controlplane.yaml; echo ---; cat /tmp/image-cache-mirrors.yaml; } > /tmp/controlplane-cache.yaml
+          talosctl validate --config /tmp/controlplane-cache.yaml --mode metal
+          mv /tmp/controlplane-cache.yaml /tmp/out/controlplane.yaml
+
       - name: VM を起動する
         run: |
           set -euo pipefail
@@ -318,6 +408,18 @@ jobs:
           done
           fail "bond0 に RA 由来の IPv6 既定経路が無い"
 
+      - name: イメージのキャッシュの効き
+        if: always()
+        run: |
+          # Pod のイメージの取得にかかった時間(kubelet の event)。etcd・kubelet・static pod の分は出ない
+          kubectl get events -A --field-selector reason=Pulled -o jsonpath='{range .items[*]}{.message}{"\n"}{end}' 2>/dev/null \
+            | sed -nE 's/^Successfully pulled image "([^"@]*)[^"]*" in ([^ ]*) .*/  \2\t\1/p' | sort -u || true
+          [ -f /tmp/image-cache-serve.log ] || { echo "  キャッシュは配っていない(全部本来のレジストリから)"; exit 0; }
+          # 配った manifest の数と、キャッシュに無くて本来のレジストリに回ったもの
+          echo "  キャッシュが返した manifest: $(grep 'image request' /tmp/image-cache-serve.log | grep -c '"is_blob": false')"
+          echo "  キャッシュに無かった: $(grep -c 'failed to handle request' /tmp/image-cache-serve.log)"
+          grep 'failed to handle request' /tmp/image-cache-serve.log | grep -oE 'image-cache/[^:"\]*' | sort -u | head -20 || true
+
       - name: 失敗したときの様子
         if: failure()
         run: |
@@ -337,6 +439,7 @@ jobs:
           echo "::endgroup::"
           echo "::group::talosctl dmesg(末尾)"; talosctl dmesg | tail -300; echo "::endgroup::"
           echo "::group::serial(末尾)"; tail -200 /tmp/vm/serial.log; echo "::endgroup::"
+          echo "::group::image cache-serve(末尾)"; tail -50 /tmp/image-cache-serve.log; echo "::endgroup::"
 
       - name: VM を止める
         if: always()
