@@ -79,8 +79,10 @@ jobs:
           # (ランナーに PyYAML が入っている保証は無い)。
           python3 - <<'PY'
           import os, sys, json
-          r = json.load(open("rendered.json"))
-          l = json.load(open("live.json"))
+          # 値が空文字のキーは両側から落とす。Talos の inlineManifest で当てると live に残らない
+          # (2026-10-17 から debug-verbose・nodeport-addresses・policy-cidr-match-mode が「git にしか無い」で毎回落ちていた)
+          r = {k: v for k, v in json.load(open("rendered.json")).items() if v != ""}
+          l = {k: v for k, v in json.load(open("live.json")).items() if v != ""}
           only_git  = sorted(set(r) - set(l))
           only_live = sorted(set(l) - set(r))
           differ    = sorted(k for k in set(r) & set(l) if r[k] != l[k])
