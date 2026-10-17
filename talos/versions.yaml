@@ -29,12 +29,6 @@ kubernetes:
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   version: v1.37.1
 
-metricsServer:
-  # Talos には metrics-server が無い(無いと `kubectl top` と、各 UI の使用量表示が死ぬ)。
-  # inlineManifest として載せる(../talos/render.sh)。
-  # renovate: datasource=helm depName=metrics-server registryUrl=https://kubernetes-sigs.github.io/metrics-server/
-  version: 3.14.0
-
 gatewayAPI:
   # Gateway API の CRD。無いと `Gateway` も `HTTPRoute` も `GRPCRoute` も
   # 適用できず、公開経路が丸ごと消える。Cilium の chart は CRD を同梱しないので

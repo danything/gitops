@@ -218,7 +218,8 @@ jobs:
           ro kube-system ds/cilium-envoy
           ro kube-system deploy/cilium-operator
           ro kube-system deploy/coredns
-          ro kube-system deploy/metrics-server
+          # Hubble の証明書はクラスタの中の Job が作る(bootstrap/cilium/values.yaml の `hubble.tls`)
+          until kubectl -n kube-system get secret hubble-server-certs hubble-relay-client-certs >/dev/null 2>&1; do sleep 5; done
           ro kube-system deploy/hubble-relay
           ro kube-system deploy/hubble-ui
           ro local-path-storage deploy/local-path-provisioner

@@ -135,6 +135,11 @@ hubble:
     enabled: true
   ui:
     enabled: true
+  # Hubble の TLS 証明書はクラスタの中の Job / CronJob(cilium-certgen)が作る。既定の `helm` は描くたびに
+  # CA と証明書を作り直すので、machine config に秘密鍵が載り、何も変えなくても apply-config に差分が出ていた。
+  tls:
+    auto:
+      method: cronJob
 
 # Envoy に特権ポートを bind させるための権限。Gateway のリスナーは 80/443 で、
 # hostNetwork にするとホストのその番号を直接掴む。既定の Envoy にはこの権限が無い。

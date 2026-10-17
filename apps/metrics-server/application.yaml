@@ -1,0 +1,33 @@
+# metrics-server。Talos には無い。入れないと `kubectl top` が使えず、ArgoCD・Headlamp・
+# Hubble の各 UI から使用量の表示が消える。HPA は今のところ 1 つも無いので停止には至らない。
+#
+# 2026-10-17 まで machine config の inlineManifest だった。起動に要るものではないので ArgoCD に移した
+# (版を上げても render.sh → apply-config → upgrade-k8s を流さなくて済む)。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  source:
+    repoURL: https://kubernetes-sigs.github.io/metrics-server/
+    chart: metrics-server
+    targetRevision: 3.14.0
+    helm:
+      releaseName: metrics-server
+      valuesObject:
+        # `args` は chart の `defaultArgs` に足される(置き換えではない)。
+        # kubelet の証明書はクラスタ CA では検証できない。Talos の kubelet は自己署名のサービング証明書を
+        # 使うので、これが無いと `x509: certificate signed by unknown authority` で何も取れない。
+        args:
+          - --kubelet-insecure-tls
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
