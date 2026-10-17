@@ -127,7 +127,7 @@ Infisical の Secret を待つアプリと、Forgejo から来る非公開アプ
 age -d -o ~/.config/restic.env recovery/env.age     # パスフレーズ。終わったら消す(10)
 set -a; . ~/.config/restic.env; set +a
 restic snapshots --host infisical --latest 1 --compact      # /infisical-postgresql.sql の ID
-sh recovery/infisical.sh db <ID>
+sh recovery/infisical.sh db <ID>     # users が 0 なら Infisical を起こさずに止まる。流し直すときは先に drop-old
 ```
 
 起動したばかりの Infisical の Postgres にダンプを流す(ロールと DB は chart が作ってある)。

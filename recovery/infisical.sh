@@ -22,6 +22,9 @@ case ${1:-} in
 		# **`DROP SCHEMA public CASCADE` は通らない。** テーブルがパーティション込みで約 750 あり、
 		# max_locks_per_transaction=64 の 1 トランザクションに収まらず `out of shared memory` で落ちる。
 		# 名前を変えて退け、空の public にダンプを流す(退けたものは drop-old で少しずつ消す)。
+		# 前の回の old_public が残っていると rename が落ちる。流し直すときは先に drop-old
+		old=$(pg "-Atc \"select count(*) from pg_namespace where nspname = 'old_public'\"")
+		[ "$old" = 0 ] || { echo "old_public が残っている。先に sh recovery/infisical.sh drop-old" >&2; exit 1; }
 		pg "-v ON_ERROR_STOP=1 -c 'ALTER SCHEMA public RENAME TO old_public' -c 'CREATE SCHEMA public'"
 		# テキストの SQL なので標準入力で流してよい(バイナリは欠ける。pv.sh の冒頭)
 		restic dump "$snap" /infisical-postgresql.sql > "$HOME/infisical.sql"
@@ -30,7 +33,10 @@ case ${1:-} in
 		rm -f "$HOME/infisical.sql"
 		echo "errors: $(grep -c ERROR "$HOME/infisical-load.log" || true)"
 		grep ERROR "$HOME/infisical-load.log" | sort | uniq -c | sort -rn | head -10 || true
-		pg "-Atc 'select count(*) from public.users' -c 'select count(*) from public.projects'"
+		users=$(pg "-Atc 'select count(*) from public.users'" 2>/dev/null || echo 0)
+		echo "users: $users / projects: $(pg "-Atc 'select count(*) from public.projects'" 2>/dev/null || echo 0)"
+		# 空のまま起こすと Infisical が新しい状態を作ってしまう。中身が入っていなければ止めたまま見る
+		[ "${users:-0}" -gt 0 ] || { echo "users が 0。Infisical は 0 のまま($HOME/infisical-load.log を見る)" >&2; exit 1; }
 		$K -n infisical scale deploy/infisical --replicas=1
 		$K -n infisical rollout status deploy/infisical --timeout=300s ;;
 	drop-old)
@@ -49,10 +55,12 @@ case ${1:-} in
 		[ -n "$CA" ] || { echo "kubeconfig から CA を読めなかった" >&2; exit 1; }
 		TOKEN=$(infisical user get token --plain 2>/dev/null || true)
 		[ -n "$TOKEN" ] || { echo "infisical のトークンが無い。tools/t.ps1 infisical login --domain https://il.doany.io/api" >&2; exit 1; }
+		# 18080 はこのコンテナの中だけのポート(t.ps1 は実行ごとに新しいコンテナ)なので、ほかとは取り合わない
 		$K -n infisical port-forward svc/infisical 18080:8080 > /tmp/pf.log 2>&1 &
 		PF=$!
 		trap 'kill $PF 2>/dev/null || true' EXIT
-		sleep 3
+		for _ in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:18080/api/status 2>/dev/null && break; sleep 1; done
+		curl -fsS -o /dev/null http://127.0.0.1:18080/api/status || { cat /tmp/pf.log >&2; echo "port-forward が繋がらない" >&2; exit 1; }
 		CA="$CA" TOKEN="$TOKEN" bun "$(dirname "$0")/infisical-ca.mjs" "${2:-}"
 		if [ "${2:-}" = apply ]; then
 			# operator は失敗が続くと間を空けるので、蹴り直さないとしばらく戻らない

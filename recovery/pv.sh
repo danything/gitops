@@ -35,11 +35,15 @@ restic_env() { set -a; . "$HOME/.config/restic.env"; set +a; }
 
 stop() {
 	mkdir -p "$(dirname "$REP")"
-	: > "$REP"
+	# 控えがもうあれば書き直さない。流し直したときに「元は 0」と控えてしまい、start で何も起きなくなる
+	# (start が控えを消す)
+	keep_rep=
+	[ -s "$REP" ] && keep_rep=1 && echo "控え $REP があるので使う(前の stop のぶん)"
+	[ -n "$keep_rep" ] || : > "$REP"
 	for w in $($K -n "$NS" get deploy,sts -o name); do
 		n=${w#*/}
 		for keep in "$@"; do [ "$n" = "$keep" ] && continue 2; done
-		echo "$w $($K -n "$NS" get "$w" -o jsonpath='{.spec.replicas}')" >> "$REP"
+		[ -n "$keep_rep" ] || echo "$w $($K -n "$NS" get "$w" -o jsonpath='{.spec.replicas}')" >> "$REP"
 		$K -n "$NS" scale "$w" --replicas=0 >/dev/null
 	done
 	# 止まるのを待つ(Restore とヘルパーの Pod、残したものは数えない)
@@ -53,8 +57,10 @@ stop() {
 }
 
 start() {
+	[ -s "$REP" ] || { echo "控え $REP が無い(stop を先に)" >&2; exit 1; }
 	while read -r w r; do $K -n "$NS" scale "$w" --replicas="$r" >/dev/null; done < "$REP"
 	echo "started: $(cut -d' ' -f1 "$REP" | tr '\n' ' ')"
+	rm -f "$REP"
 }
 
 # **root で走らせる。** 既定の nonroot(65532)だと PVC に mkdir できず、それでも `Succeeded` になる
@@ -132,8 +138,11 @@ rm -f $2 $2-wal $2-shm $2-journal; mv $f $2; chown \$o $2; chmod \$m $2; ls -ln 
 	pgload) # $1=pvc $2=snapshot $3=中のパス $4=deploy $5=user $6=db
 		folder "$1" "$2"
 		f=${3#/}
-		$K -n "$NS" exec "deploy/$4" -- sh -euc "psql -q -U $5 -d $6 -f /var/lib/postgresql/data/$f > /tmp/load.log 2>&1 || true
+		# PVC は apps/{forgejo,rybbit}/postgres.yaml で /var/lib/postgresql/data に付いている。
+		# psql が落ちたらダンプは消さずに残す(流し直せるように)
+		$K -n "$NS" exec "deploy/$4" -- sh -euc "rc=0; psql -q -U $5 -d $6 -f /var/lib/postgresql/data/$f > /tmp/load.log 2>&1 || rc=\$?
 echo errors: \$(grep -c ERROR /tmp/load.log || true); grep ERROR /tmp/load.log | sort | uniq -c | head -5
+[ \$rc = 0 ] || { echo \"psql が \$rc で終わった。/var/lib/postgresql/data/$f は残してある\"; exit \$rc; }
 rm -f /var/lib/postgresql/data/$f" ;;
 	shell) # $1=pvc $2=コマンド
 		helper "$1"
