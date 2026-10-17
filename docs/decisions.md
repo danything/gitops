@@ -101,7 +101,7 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
-| **machine config** | **`bootstrap/` のほぼ全部。** inline が 9 つ(cilium / local-path / metrics-server / `bootstrap-applier` の RBAC / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | machine config 自体が SOPS 済みなので同じ信頼水準 |
+| **machine config** | **`bootstrap/` のほぼ全部。** inline が 8 つ(cilium / local-path / `bootstrap-applier` の RBAC / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | 入力(`talos/secrets.yaml` など)が SOPS 済みで、生成物は git に置かない |
 | **GitHub Actions** | `bootstrap/` の残り(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、平文のもの) | OIDC。**Secret 権限なし・delete なし**の狭い RBAC |
 | **ArgoCD** | `apps/`(**infisical は来ない**。下の「infisical だけは ArgoCD に移せない」) | — |
 
@@ -124,6 +124,18 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 `upgrade-k8s` を流すと走っている Cilium が巻き戻る([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」)。
 流し忘れは [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で live と突き合わせる。
 bootstrap のあとに `helm install` する案は、再構築のたびに「CNI が無いので何も動かない」状態での手作業が増えるので採らない。
+
+**描いた結果はコミットしない(2026-10-17 に再検討)。** 描き出しを git に置いて Renovate の `postUpgradeTasks` に描き直させれば
+当てるのは「重ねるだけ」になるが、採らない:
+- **infisical の描き出しは秘密を含む。** chart が Redis の接続文字列(`REDIS_URL`)をパスワードごと Deployment の env に書き、
+  外から渡す口が無い(1.11.0 のテンプレートで確認)。ここだけは手元で描くしかなく、描く道具は結局残る
+- 描き出しは machine config で 980 行・310 KB(1 行が長い)。版を上げるたびにその差分が積もる
+- 代わりに **描くたびに変わる値を潰した**(Hubble の証明書・infisical の `postgres-password`・`updatedAt`)。
+  同じ入力なら生成物はバイト単位で同じなので、`apply-config --dry-run` の差分がそのまま「何が変わるか」になる
+
+**起動に要らないものは ArgoCD に置く。** metrics-server は 2026-10-17 に `apps/metrics-server/` へ移した
+(版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
+全 namespace の Certificate が道連れ)。
 
 ## ルーティングの選定(2026-09-06)
 

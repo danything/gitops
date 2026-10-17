@@ -54,7 +54,6 @@ ver() { # $1=トップレベルのキー  $2=その下のキー
 TALOS=$(ver talos version)
 SCHEMATIC=$(ver talos schematic)
 K8S=$(ver kubernetes version)
-METRICS=$(ver metricsServer version)
 GWAPI=$(ver gatewayAPI version)
 # bootstrap/<name>/version.yaml の版(Renovate が上げる)
 bver() { sed -n 's/^version: //p' "bootstrap/$1/version.yaml"; }
@@ -62,10 +61,10 @@ CILIUM=$(bver cilium)
 CERTMGR=$(bver cert-manager)
 ARGOCD=$(bver argocd)
 INFISICAL=$(bver infisical)
-for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$GWAPI" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL"; do
+for v in "$TALOS" "$SCHEMATIC" "$K8S" "$GWAPI" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL"; do
 	[ -n "$v" ] || { echo "ERROR: versions.yaml / version.yaml から版を読めなかった" >&2; exit 1; }
 done
-echo "talos=$TALOS k8s=$K8S metrics-server=$METRICS gateway-api=$GWAPI"
+echo "talos=$TALOS k8s=$K8S gateway-api=$GWAPI"
 echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD infisical-standalone=$INFISICAL"
 
 # --- inlineManifest を描く -------------------------------------------------
@@ -79,6 +78,8 @@ inline() { # $1=name  stdin=manifest
 # `# renovate:` の行から、値は values.yaml から読む。値をここに写さない(../docs/decisions.md)。
 # namespace.yaml があれば先頭に付ける。chart は Namespace を描かないし、当てる側の bootstrap-apply.yml は
 # クラスタが立つまで走れないので、machine config が最初に流れる時点では誰も作っていない。
+# `updatedAt` は infisical の chart が描いた時刻を Deployment と Pod に付ける注釈(values では消せない)。
+# 残すと描くたびに差分が出て、当て直すたびに infisical が再起動するので落とす。
 chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 	_n=$1 _ns=$2
 	shift 2
@@ -92,6 +93,7 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 		if [ -f "$_d/namespace.yaml" ]; then cat "$_d/namespace.yaml"; echo ---; fi
 		helm template "$_n" "$_n/$_chart" \
 			--version "$(bver "$_n")" -n "$_ns" -f "$_d/values.yaml" "$@" --kube-version "$K8S" \
+			| sed '/^ *updatedAt: "/d' \
 			| awk -v ns="$_ns" -f talos/add-namespace.awk
 	} | inline "$_n" > "$WORK/inline-$_n.yaml"
 	echo "  $_n -> $(wc -c < "$WORK/inline-$_n.yaml") バイト"
@@ -187,14 +189,6 @@ name: gateway-api
 url: https://github.com/kubernetes-sigs/gateway-api/releases/download/${GWAPI}/standard-install.yaml
 PATCH
 
-# metrics-server も Talos には無い。無いと `kubectl top` と各 UI の使用量表示が消える。
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
-helm repo update metrics-server >/dev/null 2>&1 || true
-helm template metrics-server metrics-server/metrics-server --version "$METRICS" \
-	-n kube-system -f talos/metrics-server-values.yaml --kube-version "$K8S" \
-	| awk -v ns=kube-system -f talos/add-namespace.awk \
-	| inline metrics-server > "$WORK/inline-metrics-server.yaml"
-
 # --- 組み立て --------------------------------------------------------------
 set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
@@ -217,7 +211,7 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'kind: GatewayClass' io.cilium/gateway-controller \
 	'name: local-path' rancher.io/local-path \
-	'name: metrics-server' system:metrics-server --kubelet-insecure-tls \
+	hubble-generate-certs \
 	'name: apiserver-rbac' bootstrap-applier \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'name: argocd' argocd-server 'name: argocd-application-crd' manifests/crds/applicationset-crd.yaml \
@@ -228,7 +222,7 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	"cert-manager/releases/download/$CERTMGR/cert-manager.crds.yaml" \
 	'kind: Namespace\nmetadata:\n  name: cert-manager' \
 	'name: infisical-secrets' 'name: cloudflare-secret'; do
-	# `--` を忘れないこと(`--kubelet-insecure-tls` を grep がオプションと取る)
+	# `--` を付けておく(`-` で始まる needle を grep がオプションと取る)
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
 # machine.registries のキー。fj.doany.io は StaticHostConfig にも出るので行ごと見る
@@ -244,4 +238,8 @@ for c in argocd cert-manager; do
 	! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-$c.yaml" \
 		|| { echo "ERROR: $c の CRD が inline に入っている" >&2; exit 1; }
 done
+# Hubble の証明書はクラスタの中で作る(bootstrap/cilium/values.yaml の `hubble.tls`)。chart が Secret を描くのは
+# `helm` 方式に戻ったとき
+! grep -q '^    kind: Secret$' "$WORK/inline-cilium.yaml" \
+	|| { echo "ERROR: cilium の inline に Secret(Hubble の証明書)が入っている" >&2; exit 1; }
 talosctl validate --config "$OUT/controlplane.yaml" --mode metal

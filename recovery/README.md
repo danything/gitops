@@ -106,7 +106,7 @@ talosctl get volumestatus    # EPHEMERAL は 64GiB 上限。違ったら入れ�
 ```shell
 talosctl bootstrap         # 単一ノードなので 1 回だけ
 kubectl get nodes          # Ready / control-plane / versions.yaml の kubernetes: の版
-kubectl get pods -A        # cilium・coredns・metrics-server・local-path・argocd・cert-manager・infisical が Running
+kubectl get pods -A        # cilium・coredns・local-path・argocd・cert-manager・infisical が Running
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
 

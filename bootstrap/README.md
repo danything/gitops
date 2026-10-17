@@ -24,8 +24,8 @@ argocd・infisical の版は自動マージしない(`renovate.json` の `bootst
 
 **cilium は [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で見ている**(値が `cilium-config` という
 ConfigMap に出ているので、読むだけの権限で比べられる)。**残りは見ていない。** 当て忘れは `upgrade-k8s` の差分に出るので、
-直したら流す(流し忘れたことは誰も教えてくれない)。`upgrade-k8s` で差分に出るのに害の無いもの
-(描くたびに作り直す証明書とパスワード)は [../talos/README.md](../talos/README.md)「inlineManifests を直したとき」。
+直したら流す(流し忘れたことは誰も教えてくれない)。描くたびに変わる値は潰してあるので、
+`apply-config --dry-run` に出る差分は全部本物([../talos/README.md](../talos/README.md)「inlineManifests を直したとき」)。
 
 ## Secret
 
