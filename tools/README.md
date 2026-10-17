@@ -57,15 +57,15 @@ tools/t.ps1        # 引数なしならシェルに入る
 
 | | 読み取り用(既定) | 管理者(`--admin`) |
 | --- | --- | --- |
-| kubectl / helm | その場で作る。`talos/secrets.yaml` の Kubernetes の CA で、グループ `entra:viewer` の証明書(1 日で切れる) | `os:admin` の talosctl で `talosctl kubeconfig` をその場でもらう |
+| kubectl / helm | その場で作る。`talos/secrets.yaml` の Kubernetes の CA で、グループ `entra:viewer` の証明書(1 日で切れる) | 同じく `system:masters` |
 | talosctl | その場で作る。Talos の CA で `os:reader` の証明書(1 日で切れる) | 同じく `os:admin` |
 
 - 読み取り用の権限は [`../bootstrap/apiserver/rbac.yaml`](../bootstrap/apiserver/rbac.yaml) の `entra:viewer`
   (組み込みの `view` と `readonly-extra`。ログは読めて、Secret は読めない)。Headlamp で Entra の viewer が持つものと同じ
 - **helm はリリースの情報を Secret に持つ**ので、`helm list` や `helm status` も `--admin` を付ける
 - **talosconfig は保存しない**([../docs/decisions.md](../docs/decisions.md)「手で持つもの」)。`secrets.yaml` から毎回作る
-- **管理者の kubeconfig も保存しない。** Talos が出す正式なもの(`talosctl kubeconfig`)を毎回もらうので、
-  作り直しも期限切れも無い。書かれる行き先(10.0.0.2)は下の口に替える
+- **管理者の kubeconfig も保存しない。** 毎回その場で作るので、作り直しも期限切れも無い。
+  `talosctl kubeconfig` は 1 年もつ証明書を呼ぶたびに出す(取り消せない)ので使わない
 - 行き先はどれも `10.10.0.4`(ノードの、作業用 PC の LAN 側の口。`creds.sh` の `ep`)。`talos/render.sh` の `10.0.0.2` は
   クラスタの LAN で手元から届かず、NetBird はクラスタの上で動くので落ちたときに使えない。API は外に開かない。
   外からは mado で作業用 PC に入って打つ。`10.10.0.4` は Talos の証明書の SAN に入っている。`KUBECONFIG` / `TALOSCONFIG` や `--kubeconfig` / `--talosconfig` /
