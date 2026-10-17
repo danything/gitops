@@ -83,10 +83,14 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 	_n=$1 _ns=$2
 	shift 2
 	_d=bootstrap/$_n
-	helm repo add --force-update "$_n" "$(sed -n 's/.* registryUrl=\([^ ]*\).*/\1/p' "$_d/version.yaml")" >/dev/null
+	_repo=$(sed -n 's/.* registryUrl=\([^ ]*\).*/\1/p' "$_d/version.yaml")
+	_chart=$(sed -n 's/.* depName=\([^ ]*\).*/\1/p' "$_d/version.yaml")
+	[ -n "$_repo" ] && [ -n "$_chart" ] \
+		|| { echo "ERROR: $_d/version.yaml の # renovate: の行から chart と repo を読めなかった" >&2; exit 1; }
+	helm repo add --force-update "$_n" "$_repo" >/dev/null
 	{
 		if [ -f "$_d/namespace.yaml" ]; then cat "$_d/namespace.yaml"; echo ---; fi
-		helm template "$_n" "$_n/$(sed -n 's/.* depName=\([^ ]*\).*/\1/p' "$_d/version.yaml")" \
+		helm template "$_n" "$_n/$_chart" \
 			--version "$(bver "$_n")" -n "$_ns" -f "$_d/values.yaml" "$@" --kube-version "$K8S" \
 			| awk -v ns="$_ns" -f talos/add-namespace.awk
 	} | inline "$_n" > "$WORK/inline-$_n.yaml"
