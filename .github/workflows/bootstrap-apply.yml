@@ -57,6 +57,7 @@ jobs:
           # Namespace だけ先に当てる(下の apply)。同じ `kubectl apply` に中身と一緒に渡すと、
           # まっさらなクラスタでは `namespaces "auth" not found` で落ちる(2026-10-17 の初回で踏んだ)
           mapfile -d '' NS < <(printf '%s\0' "${FILES[@]}" | xargs -0 grep -lZ '^kind: Namespace$')
+          [ ${#NS[@]} -gt 0 ] || { echo "::error::Namespace のファイルが見つからない"; exit 1; }
           printf 'ns=%s\n' "$(printf -- '-f %s ' "${NS[@]}")" >> "$GITHUB_OUTPUT"
 
       - name: OIDC トークンを取る

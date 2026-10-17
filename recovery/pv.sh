@@ -121,6 +121,7 @@ case $OP in
 	sqlite) # $1=pvc $2=ファイル名 $3=snapshot $4=中のパス
 		restic_env
 		want=$(restic ls -l "$3" "$4" | awk -v p="$4" '$NF==p{print $4}')
+		[ -n "$want" ] || { echo "スナップショット $3 に $4 が無い(restic ls $3 で経路を見る)" >&2; exit 1; }
 		folder "$1" "$3"
 		helper "$1"
 		f=${4#/}
