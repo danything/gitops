@@ -49,12 +49,13 @@ machine:
 ノードの名前解決で fj.doany.io を中継の ClusterIP に向ける([patches/cluster.yaml](patches/cluster.yaml) の `StaticHostConfig`、
 中継は [../apps/forgejo/node-access.yaml](../apps/forgejo/node-access.yaml))。
 
-`render.sh` はこのファイルがあれば復号して `--config-patch` に足し、**無ければ警告して続ける**。
+`render.sh` はこのファイルを復号して `--config-patch` に足す(**無ければ止まる**)。
 CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通している。
 
-**パッチは PR ごとに CI が検証する。** 使い捨ての秘密で `gen config` して `talosctl validate --mode metal` を通し、生成物に
-想定の設定(`ks.doany.io`・OIDC の issuer・bond の `balance-alb` など)が実際に入っているかまで見る
+**パッチは PR ごとに CI が検証する。** 使い捨ての秘密で `render.sh` を通す。`render.sh` は `talosctl validate --mode metal` に加えて、
+生成物に想定の設定(`ks.doany.io`・OIDC の issuer・bond の `balance-alb` など)が実際に入っているかまで見る
 ── **`gen config` は知らないキーを警告なく捨てることがある**ので、通ったことだけでは足りない。
+needle は `render.sh` の末尾の 1 か所だけに置く。
 
 **適用は CI にやらせない。** machine config の適用は再起動を伴うことがあり、1 ノードでは
 マージが即停止になる。Talos API は mTLS のみで OIDC を受けないため、CI に渡すには

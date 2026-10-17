@@ -6,9 +6,7 @@
 # `upgrade-k8s` は流せば差分を出すが、流し忘れたことは教えてくれない。逆に、
 # クラスタ側だけ手でいじった設定も git には出てこない(`node-port-range` で実際に起きた)。
 #
-# **当てるところまでは自動化しない。** Talos API は mTLS のみで、CI に渡すには
-# os:admin の証明書を置くことになる(talos/README.md「適用は CI にやらせない」)。
-#
+# **当てるところまでは自動化しない**(talos/README.md「適用は CI にやらせない」)。
 # **代わりにズレを見つけるところまでを自動でやる。** 権限は cilium-config の `get` だけ。
 name: cilium drift
 
