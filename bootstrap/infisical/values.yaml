@@ -15,7 +15,7 @@ infisical:
         # mirror.gcr.io から引く(postgresql / redis は chart の既定で mirror.gcr.io)。
         repository: mirror.gcr.io/infisical/infisical
         # The chart's default tag lags releases; pin explicitly.
-        tag: v0.165.2
+        tag: v0.166.8
     # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL live in infisical/secrets.yaml.
     kubeSecretRef: infisical-secrets
     extraEnv:
