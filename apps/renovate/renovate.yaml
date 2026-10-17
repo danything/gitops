@@ -281,8 +281,8 @@ spec:
                   value: doa/*
                 # github.com のリリースノートやタグを読むとき、無いと匿名の回数制限(60 回/時)に当たる。
                 # 権限なしの GitHub のトークンでよい。無ければ空で動く。
-                # 名前は RENOVATE_ 付き。Actions の頃の GITHUB_COM_TOKEN では読まれず、「No github.com token has been
-                # configured」のまま bun などの版を引けずに lock を作れなかった(2026-10-17)
+                # (GITHUB_COM_TOKEN でも読まれる。Secret のキーが github-com-token でないと空のまま
+                # 「No github.com token has been configured」になり、bun などの版を引けずに lock を作れない)
                 - name: RENOVATE_GITHUB_COM_TOKEN
                   valueFrom:
                     secretKeyRef: {name: renovate-secrets, key: github-com-token, optional: true}
