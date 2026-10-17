@@ -17,7 +17,9 @@ case ${1:-} in
 	db)
 		snap=${2:?snapshot}
 		set -a; . "$HOME/.config/restic.env"; set +a
-		# ダンプを先に手元へ取る。取れないまま public を退けると、空の DB と old_public だけが残る
+		# ダンプを先に手元へ取る。取れないまま public を退けると、空の DB と old_public だけが残る。
+		# 中身は Infisical の DB 全体なので、どこで落ちても消す
+		trap 'rm -f "$HOME/infisical.sql"' EXIT
 		restic dump "$snap" /infisical-postgresql.sql > "$HOME/infisical.sql"
 		[ -s "$HOME/infisical.sql" ] || { rm -f "$HOME/infisical.sql"; echo "ダンプが空(スナップショット $snap を見直す)" >&2; exit 1; }
 		wc -c "$HOME/infisical.sql"
