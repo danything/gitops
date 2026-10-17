@@ -4,7 +4,7 @@
 # (talos/patches/apiserver.yaml の KubeAuthenticationConfig)。kubeconfig も age 鍵も置いていない。
 #
 # **`bootstrap/apiserver/ca.crt` はクラスタの CA**(`talos/secrets.yaml` の Kubernetes CA。
-# `talosctl kubeconfig` で出る kubeconfig の `certificate-authority-data` と同じもの)。
+# t.ps1 が作る kubeconfig の `certificate-authority-data` と同じもの)。
 # `secrets.yaml` を作り直すと別の CA になり、ここが TLS で落ちる。cilium-drift も同じファイルを使う。
 #
 # **SOPS で暗号化した 4 ファイルは当てない**(復号鍵を GitHub に置かないため)。

@@ -84,7 +84,7 @@ talosctl upgrade-k8s --endpoint https://10.10.0.4:6443    # ← これが inline
 ```
 
 `render.sh` は出力先を丸ごと消すので、`talos/clusterconfig/` に置いたもの(以前は kubeconfig を置いていた)は消える。
-管理者の kubeconfig は `talos/kubeconfig.yaml`(SOPS)に置く。
+kubeconfig も talosconfig もファイルでは持たない(t.ps1 がその場で作る)。
 
 - **`apply-config` だけでは inlineManifests は動かない。** 起動時にしか読まれない
 - **`upgrade-k8s` は版を上げなくても reconcile する。** SSA とインベントリで**更新も削除も**する

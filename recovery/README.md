@@ -40,7 +40,7 @@ git に無い状態まで一度に戻したいときの近道で、主経路で�
 
 **コマンドは全部 `tools/t.ps1 --admin` で入ったコンテナのシェルで打つ**(`HOME` はリポジトリの `.home/` で、
 age 鍵と restic の資格情報はそこに残る。ノードにシェルは無い)。**talosctl / kubectl の資格情報は t.ps1 が用意する** ──
-talosconfig は `talos/secrets.yaml` からその場で作り、管理者の kubeconfig は `talos/kubeconfig.yaml`(SOPS)を復号する
+talosconfig も管理者の kubeconfig も `talos/secrets.yaml` の CA からその場で作る(ファイルでは持たない)
 ([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。GitHub の操作(5)だけ手元の `gh`。
 
 - **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno4)にしか届かない**(10.0.0.2 は届かない)。t.ps1 の行き先はそこに固定してある
@@ -56,7 +56,7 @@ mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/so
 ```
 
 - **`talos/secrets.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver/ca.crt`・
-  Infisical の Kubernetes auth(7)・`talos/kubeconfig.yaml` が全部合わなくなる
+  Infisical の Kubernetes auth(7)が合わなくなる
 - **`render.sh` は出力先を丸ごと消して作り直す。** `talos/clusterconfig/` に kubeconfig などを置いていたら消える
 - 版は [../talos/versions.yaml](../talos/versions.yaml)。**上げるなら建て直しの日ではない日に**
 
@@ -104,9 +104,7 @@ kubectl get pods -A        # cilium・coredns・metrics-server・local-path・ar
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
 
-`kubectl` の前に管理者の kubeconfig(`talos/kubeconfig.yaml`、SOPS)が要る。`secrets.yaml` が同じなら前のものがそのまま通る
-(CA が同じ。証明書は 1 年で切れる)。無い・切れている・`secrets.yaml` を作り直したときは、ここで `talosctl kubeconfig` から作って
-コミットする(tools/README.md「管理者の kubeconfig の入れ方」)。
+`talosctl kubeconfig` は使わない(取り消せない 1 年の証明書が呼ぶたびに出る)。t.ps1 が `secrets.yaml` の CA でその場で作る。
 
 ## 5. 残りの bootstrap/ を当てる(GitHub Actions)
 
@@ -267,6 +265,6 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
 | 非公開イメージが引けない | `talos/registries.yaml` が machine config に入っているか、Forgejo が戻っているか(8) |
-| bootstrap apply が TLS で落ちる | `secrets.yaml` を作り直した。`bootstrap/apiserver/ca.crt` を kubeconfig の `certificate-authority-data` にする |
+| bootstrap apply が TLS で落ちる | `secrets.yaml` を作り直した。`bootstrap/apiserver/ca.crt` を新しい `secrets.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
 | inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |
