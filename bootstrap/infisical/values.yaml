@@ -11,6 +11,9 @@ infisical:
     fullnameOverride: infisical
     replicaCount: 1
     image:
+        # 既定は Docker Hub(infisical/infisical)。匿名の取得は絞られるので、同じものを
+        # mirror.gcr.io から引く(postgresql / redis は chart の既定で mirror.gcr.io)。
+        repository: mirror.gcr.io/infisical/infisical
         # The chart's default tag lags releases; pin explicitly.
         tag: v0.165.2
     # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL live in infisical/secrets.yaml.

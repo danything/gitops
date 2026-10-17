@@ -72,7 +72,9 @@ spec:
       serviceAccountName: local-path-provisioner-service-account
       containers:
         - name: local-path-provisioner
-          image: rancher/local-path-provisioner:v0.0.37
+          # Docker Hub の匿名の取得は絞られるので mirror.gcr.io(Docker Hub の pull-through キャッシュ。中身は同じ)。
+          # 下の busybox も同じ
+          image: mirror.gcr.io/rancher/local-path-provisioner:v0.0.37
           command: [local-path-provisioner, start, --config, /etc/config/config.json]
           volumeMounts:
             - name: config-volume
@@ -123,7 +125,7 @@ data:
     spec:
       containers:
         - name: helper-pod
-          image: busybox:1.38.0
+          image: mirror.gcr.io/library/busybox:1.38.0
           imagePullPolicy: IfNotPresent
 ---
 apiVersion: storage.k8s.io/v1
