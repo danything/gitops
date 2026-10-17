@@ -1,0 +1,51 @@
+# PT3 をドライバに付け直す(talos/patches/main.yaml の kernel.modules と対)。
+#
+# Talos は kernel.modules を書いた順ではなく名前の順に読むので、earth-pt3 がチューナー
+# (qm1d1c0042 / mxl301rf)より先に入り、`Failed to create FE0` で /dev/dvb/*/frontend0 ができない。
+# チューナーが揃ってから unbind / bind すれば通る(移行当日 2026-10-17 に手で確かめた)。
+# 起動のたびに 1 回だけやって、あとは寝ている。tuner-agent は /dev/dvb ができるまでマウントを再試行する。
+# 付け直しても frontend0 が無ければ落ちて、kubelet の再起動でやり直す(黙って寝ない)。
+# namespace は denpa(PSA privileged。denpa のリポジトリの chart が作る)。PT3 は main にしか無い。
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pt3-rebind
+  namespace: denpa
+spec:
+  selector:
+    matchLabels:
+      app: pt3-rebind
+  template:
+    metadata:
+      labels:
+        app: pt3-rebind
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: main
+      containers:
+        - name: rebind
+          image: busybox:1.38
+          securityContext:
+            privileged: true
+          command:
+            - sh
+            - -c
+            - |
+              d=/sys/bus/pci/drivers/earth_pt3
+              for dev in $(ls $d 2>/dev/null | grep '^0000:'); do
+                if [ -e /dev/dvb/adapter0/frontend0 ]; then echo "frontend0 already there"; break; fi
+                echo "rebind $dev"
+                echo $dev > $d/unbind; sleep 2; echo $dev > $d/bind; sleep 3
+              done
+              [ -e /dev/dvb/adapter0/frontend0 ] || { echo "no frontend0 after rebind"; exit 1; }
+              ls /dev/dvb
+              exec sleep infinity
+          resources:
+            requests: {cpu: 1m, memory: 4Mi}
+            limits: {memory: 16Mi}
+          volumeMounts:
+            - {name: sys, mountPath: /sys}
+            - {name: dev, mountPath: /dev}
+      volumes:
+        - {name: sys, hostPath: {path: /sys}}
+        - {name: dev, hostPath: {path: /dev}}
