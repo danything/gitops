@@ -1,31 +1,23 @@
 # Cilium の Helm 値。これがクラスタの土台。
 #
-# `helm upgrade` する前に必ずここを読むこと
-#
-# 2026-09-07 まで、この値は git に無かった。入れたのは手で `helm install` した一度きりで、
-# 以後の調整は `cilium-config` の ConfigMap を直接いじって当てていた。ConfigMap 直いじりは
-# Helm のリリースに残らないので、素で `helm upgrade` すると黙って元に戻る。
-# 実際に漏れていたのが `node-port-range: "80,443"` で、既定の 30000-32767 に戻ると
-# Gateway の Service の割り当てが無効になり、公開している Web が全部落ちる。
-#
-# このファイルが「あるべき値」。以後の変更はここを直してから
-#
-#   helm upgrade cilium cilium/cilium --version "$(sed -n 's/^version: //p' bootstrap/cilium/version.yaml)" \
-#     -n kube-system -f bootstrap/cilium/values.yaml
-#
-# で当てる。ConfigMap は直接いじらない。
-#
-# Talos に移るときに変わるところ
-#
-# - `k8sServiceHost` / `k8sServicePort` は KubePrism の `localhost:7445` になる
-# - `cgroup.autoMount.enabled: false` と `cgroup.hostRoot: /sys/fs/cgroup` を足す
-# (../docs/decisions.md)
+# このファイルが「あるべき値」。当てるのは talos/render.sh で、ここから `helm template` して
+# machine config の inlineManifest にする(更新は render.sh → apply-config → upgrade-k8s。
+# talos/README.md「上げ方 / 当て直し方」)。`cilium-config` の ConfigMap を直接いじらない ──
+# 次の upgrade-k8s で黙って戻る(2026-09-07 まで値が git に無く、`node-port-range: "80,443"` が
+# ConfigMap 直いじりでしか入っていなかった。戻ると公開している Web が全部落ちる)。
 
-# kube-proxy は使わない(k3s 側で disable-kube-proxy)。
+# kube-proxy は使わない(Talos 側は talos/patches/cni.yaml で止めている)。
 kubeProxyReplacement: true
-# k3s の API サーバはノード上に居るので loopback で足りる。
-k8sServiceHost: 127.0.0.1
-k8sServicePort: 6443
+# KubePrism。Talos が localhost:7445 で API サーバを負荷分散する。
+# ここが違うと Cilium が API サーバに繋げず上がらない(talos-validate が `7445` を見ている)。
+k8sServiceHost: localhost
+k8sServicePort: 7445
+
+# Talos は cgroup を自分で用意する。Cilium に自動マウントさせると衝突する。
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
 
 ipam:
   mode: kubernetes
@@ -73,13 +65,11 @@ nodePort:
   #
   # 帰結が 3 つある:
   #
-  # 1. ここと k3s の `service-node-port-range=80-32767` は外せない
+  # 1. ここと API サーバの `service-node-port-range=80-32767`(talos/patches/apiserver.yaml)は外せない
   # 2. 復元では当て直しが要る。Cilium が Service を作り直すと API サーバが
-  #    範囲内のランダムな値を割り当てる。k3s 期は `recovery/restore.sh` が、
-  #    Talos 期は `.github/workflows/bootstrap-apply.yml` がパッチを当てる
-  # 3. 副作用として、ホスト自身からノードの 80/443 に繋ぐと応答が返らない。
-  #    これは実害を出した(2026-09-08)。ホスト上のスクリプトには使うものが無かったが、
-  #    hostNetwork の Pod も「ホスト自身」で、netbird のルーティングピアが
+  #    範囲内のランダムな値を割り当てる。`.github/workflows/bootstrap-apply.yml` がパッチを当てる
+  # 3. 副作用として、ノード自身からノードの 80/443 に繋ぐと応答が返らない。
+  #    これは実害を出した(2026-09-08)。hostNetwork の Pod も「ノード自身」で、netbird のルーティングピアが
   #    `nb.doany.io:443` に繋げず `Management: Disconnected` で止まった
   #    (VPN 越しの DNS も LAN への RDP も落ちる)。あちらを hostNetwork から外して直した
   #    (apps/netbird/routing-peer.yaml)。hostNetwork の Pod を足すときは必ずこれを思い出すこと。
@@ -108,7 +98,7 @@ gatewayAPI:
   # そこに直接来た接続は通らない。実通信は Cilium の L7LB リダイレクト経由で入る。
   # 詳しくは上の `nodePort.range` のコメント(実測つき)。
   #
-  # したがって `recovery/restore.sh` の当て直しは今も要る(#91 で消したが戻した)。
+  # したがって bootstrap-apply.yml の当て直しは今も要る(#91 で消したが戻した)。
   #
   # ポートの指定は無い。Gateway のリスナー(80 / 443)がそのままホストに bind される。
   # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`

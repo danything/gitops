@@ -10,14 +10,19 @@
 name: talos validate
 
 on:
+  # bootstrap/ の chart の値と版も render.sh が読むので、そこを直したときも見る
   pull_request:
     paths:
       - talos/**
+      - bootstrap/cilium/**
+      - bootstrap/cert-manager/**
       - .github/workflows/talos-validate.yml
   push:
     branches: [main]
     paths:
       - talos/**
+      - bootstrap/cilium/**
+      - bootstrap/cert-manager/**
   workflow_dispatch:
 
 permissions:

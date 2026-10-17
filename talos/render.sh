@@ -12,7 +12,8 @@
 # 終わったら消す(age の鍵が要る)。CI は鍵を持たないので SECRETS / REGISTRIES などの env で
 # 渡し、そのときは復号しない。出力の machine config は秘密を含むので扱いに注意。
 #
-# 移行後は手元の PC(tools/t.ps1 のコンテナ)で回す。k3s 期はサーバでも回していた。
+# 手元の PC(tools/t.ps1 のコンテナ)で回す。**出力先は丸ごと消して作り直す**ので、
+# talos/clusterconfig/ に出したなら kubeconfig は `talosctl kubeconfig` で取り直すこと。
 #
 # `talosctl upgrade-k8s` の前にも実行すること(talos/README.md「inlineManifests を直したとき」)。
 set -eu
@@ -58,7 +59,7 @@ fi
 
 # キーを名前で引く。「1 つ目の version」「最後の version」で数えていると、
 # versions.yaml にブロックが増えた瞬間に静かに別の値を掴む。
-# `yq` は使わない。サーバに入っているのが v3 で構文が違う。
+# `yq` は使わない(版で構文が違うので、どこで回しても同じに動く awk にしてある)。
 ver() { # $1=トップレベルのキー  $2=その下のキー
 	awk -v top="$1:" -v key="  $2: " '$0 == top {f=1; next} /^[^ #]/ {f=0} f && index($0, key) == 1 {print substr($0, length(key)+1); exit}' talos/versions.yaml
 }
@@ -83,16 +84,12 @@ inline() { # $1=name  stdin=manifest
 
 helm repo add cilium https://helm.cilium.io >/dev/null 2>&1 || true
 helm repo update cilium >/dev/null 2>&1 || true
-# 値は 2 枚重ね。正本は bootstrap/cilium/values.yaml で、Talos で変わるところだけを
-# talos/cilium-values.yaml が上書きする(KubePrism と cgroup)。これを忘れると
-# k3s 向けの 127.0.0.1:6443 が埋まったまま出てきて、Talos で Cilium が上がらない。
-#
 # `--api-versions` は GatewayClass `cilium` のため。chart は Gateway API の CRD が「ある」ときだけ
 # GatewayClass を描くが、`helm template` はクラスタを見ないので、渡さないと黙って抜ける。
-# 抜けると Gateway が `Waiting for controller` のまま公開経路が全部死ぬ(移行当日 2026-10-17 に踏んだ。
-# k3s 期は helm install だったので CRD が見えていた)。下の needle で GatewayClass があることを見る。
+# 抜けると Gateway が `Waiting for controller` のまま公開経路が全部死ぬ(2026-10-17 に踏んだ)。
+# 下の needle で GatewayClass があることを見る。
 helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
-	-f bootstrap/cilium/values.yaml -f talos/cilium-values.yaml \
+	-f bootstrap/cilium/values.yaml \
 	--kube-version "$K8S" \
 	--api-versions gateway.networking.k8s.io/v1/GatewayClass \
 	| awk -v ns=kube-system -f talos/add-namespace.awk \
@@ -101,15 +98,14 @@ helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
 
 # bootstrap-applier の RBAC。当のワークフローに当てさせるわけにいかない (自分の権限を
-# 書き換えられる) ので bootstrap-apply.yml は bootstrap/apiserver/ を除外していて、
-# k3s 期は手で当てていた。authentication-config.yaml の方は patches/apiserver.yaml の
-# KubeAuthenticationConfig に移してある。
+# 書き換えられる) ので bootstrap-apply.yml は bootstrap/apiserver/ を除外していて、ここで載せる。
+# authentication-config.yaml の方は patches/apiserver.yaml の KubeAuthenticationConfig に写してある。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
-# --- k3s の HelmChart CR から描く ------------------------------------------
-# argocd と infisical は `bootstrap/` の SOPS 済み `HelmChart` CR が正本。
-# `HelmChart` は k3s 固有で Talos には無いので、同じ chart・同じ値を
-# `helm template` して inlineManifest にする。値をここに写さないのは
+# --- HelmChart の形の CR から描く -------------------------------------------
+# argocd と infisical は `bootstrap/` の SOPS 済み CR(`helm.cattle.io/v1` の HelmChart の形)が正本。
+# クラスタにこの CRD は無く、ここが chart・repo・版・値を読む入れ物として使っているだけ。
+# 同じ chart・同じ値を `helm template` して inlineManifest にする。値をここに写さないのは
 # Cilium と同じ方針(../docs/decisions.md)。
 #
 # infisical はここに来るしかない。chart が DB と Redis のパスワードを
@@ -119,7 +115,7 @@ inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-
 # 生成物は machine config の中にしか出ない。
 
 # CR(復号済み)から spec の 1 つのキー、または spec.values の中身を取り出す。
-# `yq` は使わない。サーバに入っているのが v3 で構文が違う。
+# `yq` は使わない(版で構文が違うので、どこで回しても同じに動く awk にしてある)。
 hc() { # $1=file  $2=キー名 または @values
 	awk -v key="$2" '
 		BEGIN { pfx = "    " key ": " }
@@ -204,9 +200,7 @@ PATCH
 	done
 fi
 
-# cert-manager も bootstrap/ にいる。k3s 期は `helm upgrade --install` で
-# 入れていた(bootstrap/cert-manager/values.yaml の冒頭)。Talos ではこの層が
-# machine config に載るので、ここで描く。無いと証明書が 1 枚も発行されず、
+# cert-manager も bootstrap/ にいる。無いと証明書が 1 枚も発行されず、
 # Gateway の HTTPS リスナーに載せる Secret ができない。
 helm repo add jetstack https://charts.jetstack.io >/dev/null 2>&1 || true
 helm repo update jetstack >/dev/null 2>&1 || true
@@ -214,7 +208,7 @@ helm repo update jetstack >/dev/null 2>&1 || true
 	cat bootstrap/cert-manager/namespace.yaml
 	echo ---
 	helm template cert-manager jetstack/cert-manager --version "$CERTMGR" -n cert-manager \
-		-f bootstrap/cert-manager/values.yaml -f talos/cert-manager-values.yaml \
+		-f bootstrap/cert-manager/values.yaml \
 		--kube-version "$K8S" | awk -v ns=cert-manager -f talos/add-namespace.awk
 } | inline cert-manager > "$WORK/inline-cert-manager.yaml"
 
@@ -241,7 +235,7 @@ inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書�
 inline_secret infisical-secrets bootstrap/infisical/secrets.yaml "${INFISICAL_SECRET:-}"
 inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.yaml "${CLOUDFLARE_SECRET:-}"
 
-# cert-manager の CRD も URL で渡す(理由は talos/cert-manager-values.yaml)。
+# cert-manager の CRD も URL で渡す(理由は bootstrap/cert-manager/values.yaml の `crds`)。
 cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig
@@ -261,7 +255,7 @@ name: gateway-api
 url: https://github.com/kubernetes-sigs/gateway-api/releases/download/${GWAPI}/standard-install.yaml
 PATCH
 
-# metrics-server も Talos には無い。k3s では組み込みのアドオンだった。
+# metrics-server も Talos には無い。無いと `kubectl top` と各 UI の使用量表示が消える。
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
 helm repo update metrics-server >/dev/null 2>&1 || true
 helm template metrics-server metrics-server/metrics-server --version "$METRICS" \
@@ -325,7 +319,7 @@ for n in 'name: cert-manager' 'cert-manager-webhook' 'name: cert-manager-crds' \
 	'kind: Namespace\nmetadata:\n  name: cert-manager'; do
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
-# CRD は URL 側。入ると 1.30 MB 増える(talos/cert-manager-values.yaml)。
+# CRD は URL 側。入ると 1.30 MB 増える(bootstrap/cert-manager/values.yaml)。
 ! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-cert-manager.yaml" \
 	|| { echo "ERROR: cert-manager の CRD が inline に入っている" >&2; exit 1; }
 if [ -f "$WORK/inline-infisical-secrets.yaml" ]; then
