@@ -20,8 +20,12 @@ metadata:
   labels:
     kubernetes.io/service-name: sub-backend
 addressType: IPv4
+# API サーバが足す既定値(`protocol`・`conditions`)も書く。どちらも丸ごと比べるリストなので、
+# 書かないと ArgoCD がずっと OutOfSync と見る(2026-10-17、`bootstrap` に移したときに出た)
 ports:
   - name: http
     port: 80
+    protocol: TCP
 endpoints:
   - addresses: ["10.10.0.2"]
+    conditions: {}
