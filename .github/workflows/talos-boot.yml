@@ -56,7 +56,7 @@ env:
 jobs:
   boot:
     runs-on: ubuntu-latest
-    # 実測で 15 分前後。超えたら何かが止まっている
+    # 実測で 8 分(2026-10-17)。30 分を超えたら何かが止まっている
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -234,7 +234,7 @@ jobs:
           # (u-local-path の上)なので、ここが通れば PV の経路も通っている
           ro infisical deploy/infisical
           kubectl -n infisical wait --for=jsonpath='{.status.phase}'=Bound pvc --all --timeout=1m
-          # talosctl health はノードの側で回るので、10.0.0.2 に届かない runner からでも全部見られる
+          # talosctl health はノードの側で回るので runner から 10.0.0.2 に届かなくてよい(Kubernetes 側の項目は SKIP になるので上で見ている)
           talosctl health --wait-timeout 5m
 
       - name: GatewayClass と Gateway
