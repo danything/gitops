@@ -22,7 +22,7 @@
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
 | [`mado/`](mado/) | **`main` が落ちたときの入口**。JCOM 側の PC(10.10.0.2)で [mado](https://github.com/danything/mado)(OIDC でログインしてブラウザから RDP する exe)を動かす(`md.doany.io`。クラスタの外) |
 | [`recovery/`](recovery/) | **まっさらから建て直す入口**(手順・PV を戻す道具・暗号化した鍵)。git と restic だけで戻す |
-| [`talos/`](talos/) | ノードの machine config(**v1.14 以降の形**。PR ごとに [talos-validate](.github/workflows/talos-validate.yml) が生成物まで検証する)。**`bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
+| [`talos/`](talos/) | ノードの machine config(**v1.14 以降の形**。PR ごとに [talos-boot](.github/workflows/talos-boot.yml) が生成物を検証して VM で起動する)。**`bootstrap/` のほぼ全部がここに載る** ── [render.sh](talos/render.sh) が `helm template` して inlineManifest にする |
 | [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)はコンテナで動かす**。`tools/t.ps1 <コマンド>`(Windows の WSL コンテナ。wslc-compose)。手元にコマンドは入れない |
 | [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[Talos の作法と検証](docs/talos.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Z440 への移行](docs/z440-migration.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
 | [`ROADMAP.md`](ROADMAP.md) | やることと進捗(なぜそうしたかは `docs/decisions.md`) |

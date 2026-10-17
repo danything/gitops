@@ -1,11 +1,11 @@
 # talos/render.sh の machine config を runner の QEMU(KVM)で実際に起動し、クラスタが立つところまで見る。
 #
-# talos-validate は「描けるか・形が合うか」まで。動かして初めて分かる穴は拾えない
+# 描けるか・形が合うか(needle は render.sh)に加えて、動かして初めて分かる穴も拾う
 # (2026-10-17、`helm template` に `--api-versions` が無く GatewayClass `cilium` が描かれず、
-# Gateway が `Waiting for controller` のまま公開経路が全部死んだ。#401)。
+# Gateway が `Waiting for controller` のまま公開経路が全部死んだ。#401)。2026-10-17 に talos-validate をここへまとめた。
 # Renovate が Talos / Kubernetes / Cilium / gateway-api / cert-manager / argo / infisical を上げる PR で効く。
 #
-# **秘密はゼロ。** talos-validate と同じく使い捨ての秘密とダミーで描く。
+# **秘密はゼロ。** 使い捨ての秘密とダミーで描く(本物は SOPS 済みで、age の鍵は CI に渡さない)。
 # **外に副作用を出さない。** ACME・DNS の書き込み・R2・非公開レジストリには触らない:
 #   - ArgoCD は `extraObjects`(app-of-apps と GitHub App の repo-creds)と通知先を抜く
 #   - ClusterIssuer `letsencrypt` は自己署名に差し替える(本物の clusterissuer.yaml は当てない)
@@ -22,6 +22,7 @@ on:
       - bootstrap/argocd/**
       - bootstrap/infisical/**
       - bootstrap/gateway/**
+      - bootstrap/apiserver/**
       - .github/workflows/talos-boot.yml
   push:
     branches: [main]
@@ -32,6 +33,7 @@ on:
       - bootstrap/argocd/**
       - bootstrap/infisical/**
       - bootstrap/gateway/**
+      - bootstrap/apiserver/**
       - .github/workflows/talos-boot.yml
   workflow_dispatch:
 
@@ -107,7 +109,7 @@ jobs:
       - name: machine config を生成する
         run: |
           set -euo pipefail
-          # 秘密の作り方は talos-validate と同じ(本物は SOPS 済みで、age の鍵は CI に渡さない)
+          # 秘密は使い捨てとダミー(上の「秘密はゼロ」)
           talosctl gen secrets -o /tmp/secrets.yaml
           # fj.doany.io は CI からは引かない。経路だけ通す(ghcr.io にダミーを置くと
           # ghcr.io/siderolabs/kubelet の取得が 403 で落ちる)

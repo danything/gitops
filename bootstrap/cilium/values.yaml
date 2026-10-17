@@ -9,7 +9,7 @@
 # kube-proxy は使わない(Talos 側は talos/patches/cni.yaml で止めている)。
 kubeProxyReplacement: true
 # KubePrism。Talos が localhost:7445 で API サーバを負荷分散する。
-# ここが違うと Cilium が API サーバに繋げず上がらない(talos-validate が `7445` を見ている)。
+# ここが違うと Cilium が API サーバに繋げず上がらない(talos-boot が流す render.sh の needle が `7445` を見ている)。
 k8sServiceHost: localhost
 k8sServicePort: 7445
 
