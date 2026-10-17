@@ -34,28 +34,22 @@ git から建て直して restic から戻し、全部のアプリが動いて�
 
 ## Phase 3 — Talos 定常運用
 
-- [ ] **etcd の日次スナップショットが R2 に入ることを見る。** [apps/k8up/etcd-snapshot.yaml](apps/k8up/etcd-snapshot.yaml) を
-      置いた(2026-10-17)。マージされたら 1 回手で回す(`kubectl -n k8up create job --from=cronjob/etcd-snapshot etcd-snapshot-first`)。
-      Talos API への権限は **`os:etcd:backup` だけ**を k8up の namespace に渡している(`talos/patches/etcd-backup.yaml`)
-- [ ] **前のホストのスナップショット(`host=main`)をどうするか決める。** 保持を回していたのはホストのスクリプト自身だったので、
-      **もう誰も forget しない**(k8up の prune は自分の namespace のホストにしか届かない)。移行前の最後の退避でもあるので、
-      要らないと決めたら `restic forget` する(やり方は [apps/k8up/README.md](apps/k8up/README.md)「やめたアプリの残り」)。
-      通知は 8 日の学習窓が閉じる 2026-10-25 ごろに鳴りやむ
-- [ ] **R2 の容量をもう一度見る**(`host=main` を消したあと)。数字は `pulumi` ワークフローの週次の Summary に出る。
-      ホストのスクリプトが PV の置き場を丸ごと取っていたので、k8up の per-PVC の保持設計
-      ([apps/k8up/denpa-encoded-forget.yaml](apps/k8up/denpa-encoded-forget.yaml) を含む)は、あちらが消えて初めて効く
-      ([docs/decisions.md](docs/decisions.md)「バックアップに何を含めるか」)
+- [ ] **R2 の容量が下がり切るのを見る。** `host=main` を消した直後の restic の実データは **5.60 GiB**(圧縮前 8.52 GiB、
+      480 スナップショット。2026-10-17)。denpa の録画の forget([apps/k8up/denpa-encoded-forget.yaml](apps/k8up/denpa-encoded-forget.yaml))は
+      ホストのスナップショットが同じ中身を抱えていたので効いていなかった。日曜の prune のあと、`pulumi` ワークフローの週次の Summary で見る
 - [ ] **復元のリハーサルを四半期ごとに。** ノードにシェルが無いので、前のように本番の上の QEMU では回せない。
       回す場所(手元の PC の VM か、Z440 に移す前の空き)を決める。手順は [recovery/README.md](recovery/README.md) そのもの
-- [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)。PT3 のモジュールの読み順を守る上流の修正(PR 中)が入ったら
-      [apps/pt3/rebind.yaml](apps/pt3/rebind.yaml) を外せるか見る
-- [ ] `bootstrap/argocd/helmchart.yaml`(SOPS)のコメントが消した `docs/restore-drill.md` を指している。次に `sops edit` するときに直す
+- [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)。PT3 のモジュールの読み順を守る上流の修正
+      ([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))が入ったら、[apps/pt3/rebind.yaml](apps/pt3/rebind.yaml) を外して
+      `talos/patches/main.yaml` の並び順だけにする。入ったら dvb-pt3 の extension の README も直す(上流)
 
 ## 済んだこと(記録)
 
 1 行ずつ。詳しいことはリンク先にある。
 
 - **Talos へ移した(2026-10-17)。** git から建て直し、PV を restic から戻した。踏んだ穴は直した場所と [recovery/README.md](recovery/README.md) に
+- **後片付け(2026-10-17)。** Ubuntu 期のホストのスナップショット(`host=main` 10 本)を forget + prune。etcd の日次スナップショットを
+  R2 へ([apps/k8up/etcd-snapshot.yaml](apps/k8up/etcd-snapshot.yaml)、最初の 1 本 `dacc947b` を手で回して確認)
 - **バックアップを restic + k8up に(2026-09-06〜09-08)。** R2 の `doany-restic` へ日次、論理バックアップと PVC の注釈、失敗通知、`restic check`([apps/k8up/README.md](apps/k8up/README.md))。R2 のずれ検知(2026-10-05)
 - **Cilium + Gateway API に(2026-09-06〜07)。** **Talos で後から替えるのが高いのは CNI だけ**なので先に。decisions.md「ルーティングの選定」
 - **Talos の検証(2026-09-06〜10-17)。** QEMU で 7 回([docs/talos.md](docs/talos.md)「VM ブートドリル」)
