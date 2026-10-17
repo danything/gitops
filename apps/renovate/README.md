@@ -6,27 +6,24 @@ Renovate を CronJob で回す(2026-10-16〜)。GitHub の `danything` と `5ym`
 それまでは GitHub Actions(5ym/repo-config の `renovate.yml`)と Forgejo Actions(doa/renovate)で毎時回していたが(どちらも消した)、
 GitHub の schedule は 15〜40 分遅れ、丸ごと飛ばされることもあった。
 
-| CronJob | 対象 | 時刻(毎時) |
-| --- | --- | --- |
-| `renovate-danything` | GitHub の danything | 2・17・32・47 分 |
-| `renovate-5ym` | GitHub の 5ym | 7・22・37・52 分 |
-| `renovate-forgejo` | Forgejo の doa | 12・27・42・57 分 |
+CronJob `renovate` が 15 分おき(毎時 2・17・32・47 分)に Job を 1 つ作り、その中の 3 つの Pod が並んで回る
+(Indexed Job。番号 0・1・2 が GitHub の danything・5ym、Forgejo の doa)。
 
 **Job はいつも成功で終わる**(失敗で CronJob が Degraded になると、ArgoCD が gitops の同期を止めるため。
 [renovate.yaml](renovate.yaml) の冒頭)。うまく動いているかはログで見る:
 
 ```shell
 tools/t.ps1 kubectl -n renovate get jobs
-tools/t.ps1 kubectl -n renovate logs job/<名前>
+tools/t.ps1 kubectl -n renovate logs job/<名前> --all-pods --prefix
 # 待たずに 1 回回す
-tools/t.ps1 --admin kubectl -n renovate create job --from=cronjob/renovate-5ym renovate-5ym-manual
+tools/t.ps1 --admin kubectl -n renovate create job --from=cronjob/renovate renovate-manual
 ```
 
 ## 秘密
 
-Infisical の `/renovate/renovate-secrets`。**どれも無いあいだは、その CronJob は何もせずに終わる。**
+Infisical の `/renovate/renovate-secrets`。**無いあいだは、それを使う Pod は何もせずに終わる。**
 
-| キー | 中身 | 使う CronJob |
+| キー | 中身 | 使う Pod |
 | --- | --- | --- |
 | `github-app-private-key` | GitHub App `doa-renovate` の秘密鍵(PEM をそのまま)。App の設定画面の Private keys で作る | danything・5ym |
 | `forgejo-token` | Forgejo のユーザー `renovate` のトークン(チーム `bots` = 全リポジトリに書き込み) | forgejo |
