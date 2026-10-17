@@ -67,7 +67,7 @@ nodePort:
   #
   # 1. ここと API サーバの `service-node-port-range=80-32767`(talos/patches/apiserver.yaml)は外せない
   # 2. 復元では当て直しが要る。Cilium が Service を作り直すと API サーバが
-  #    範囲内のランダムな値を割り当てる。`.github/workflows/bootstrap-apply.yml` がパッチを当てる
+  #    範囲内のランダムな値を割り当てる。`bootstrap/gateway/nodeport.yaml`(ArgoCD の PostSync)がパッチを当てる
   # 3. 副作用として、ノード自身からノードの 80/443 に繋ぐと応答が返らない。
   #    これは実害を出した(2026-09-08)。hostNetwork の Pod も「ノード自身」で、netbird のルーティングピアが
   #    `nb.doany.io:443` に繋げず `Management: Disconnected` で止まった
@@ -98,7 +98,7 @@ gatewayAPI:
   # そこに直接来た接続は通らない。実通信は Cilium の L7LB リダイレクト経由で入る。
   # 詳しくは上の `nodePort.range` のコメント(実測つき)。
   #
-  # したがって bootstrap-apply.yml の当て直しは今も要る(#91 で消したが戻した)。
+  # したがって nodePort の当て直し(bootstrap/gateway/nodeport.yaml)は今も要る(#91 で消したが戻した)。
   #
   # ポートの指定は無い。Gateway のリスナー(80 / 443)がそのままホストに bind される。
   # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`

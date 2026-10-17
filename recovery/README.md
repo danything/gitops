@@ -35,7 +35,7 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 | 層 | 何で戻すか |
 | --- | --- |
 | ホストの設定 | **machine config**。`talos/render.sh` が repo から描く(`talos/secrets.yaml` が同じなら同じクラスタ CA) |
-| k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config と GitHub Actions が当てる |
+| k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config と Argo CD(Application `bootstrap`)が当てる |
 | Infisical の DB | **手元の restic で直接**(k8up の資格情報 `k8up-global` が Infisical から来るので、k8up では戻せない) |
 | ほかの PV データ | **k8up の `Restore`**([pv.sh](pv.sh)) |
 
@@ -112,17 +112,19 @@ kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting 
 
 `talosctl kubeconfig` は使わない(取り消せない 1 年の証明書が呼ぶたびに出る)。t.ps1 が `secrets.yaml` の CA でその場で作る。
 
-## 5. 残りの bootstrap/ を当てる(GitHub Actions)
+## 5. 残りの bootstrap/ が入るのを見る(ArgoCD)
+
+手ですることは無い。ArgoCD の Application `bootstrap`([../bootstrap/argocd/repos.yaml](../bootstrap/argocd/repos.yaml))が
+`ClusterIssuer`・Gateway・auth・`InfisicalSecret` を当て、最後に Gateway の Service の nodePort を 80/443 に揃える
+([../bootstrap/gateway/nodeport.yaml](../bootstrap/gateway/nodeport.yaml) の PostSync の Job)。
 
 ```shell
-gh workflow run bootstrap-apply.yml -R danything/gitops     # 手元で
+kubectl -n argocd get application bootstrap    # InfisicalSecret の CRD が来るまでは何度か落ちて retry で戻る
+kubectl -n kube-system get svc cilium-gateway-doany   # 80:80 / 443:443。違えば ArgoCD で bootstrap を Sync し直す
+kubectl get certificate -A                      # Gateway に証明書が付く
 ```
 
-- `ClusterIssuer`・Gateway・auth・`InfisicalSecret` が入る。SOPS 済みの 4 ファイルは machine config に入っているので何もしない
-- **最後の nodePort 80/443 の当て直しは、Gateway の Service が無いと警告して飛ばす**(Service は Cilium が Gateway を
-  処理してから現れる)。`kubectl -n kube-system get svc cilium-gateway-doany` が `80:80` / `443:443` でなければもう 1 回流す。
-  ここが 80/443 でないと公開経路が全部死ぬ([../bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml) の `nodePort`)
-- Gateway に証明書が付く(`kubectl get certificate -A`)
+ここが 80/443 でないと公開経路が全部死ぬ([../bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml) の `nodePort`)。
 
 Argo CD はこの間に `apps/` と各リポジトリの `deploy/` を同期しはじめる。**中身はまだ空**なので、
 Infisical の Secret を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。

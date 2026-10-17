@@ -101,16 +101,17 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
-| **machine config** | **`bootstrap/` のほぼ全部。** inline が 8 つ(cilium / local-path / `bootstrap-applier` の RBAC / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | 入力(`talos/secrets.yaml` など)が SOPS 済みで、生成物は git に置かない |
-| **GitHub Actions** | `bootstrap/` の残り(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、平文のもの) | OIDC。**Secret 権限なし・delete なし**の狭い RBAC |
-| **ArgoCD** | `apps/`(**infisical は来ない**。下の「infisical だけは ArgoCD に移せない」) | — |
+| **machine config** | **`bootstrap/` のほぼ全部。** inline が 8 つ(cilium / local-path / `apiserver/rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | 入力(`talos/secrets.yaml` など)が SOPS 済みで、生成物は git に置かない |
+| **ArgoCD** | `bootstrap/` の残り(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、平文のもの。Application `bootstrap`)と `apps/`(**infisical は来ない**。下の「infisical だけは ArgoCD に移せない」) | — |
 
 - **CRD だけ URL で渡すのは大きさの都合。** 埋めると machine config が 341 KB → 4 MB を超える。
   `KubeExternalManifestConfig` は Talos がそのために用意している入口([talos/render.sh](../talos/render.sh))
-- **ArgoCD を CI 側に置かない。** 導入には CRD・ClusterRole・Secret が要る ── 実質 cluster-admin で、
-  CI の RBAC を狭く保つ意味が消える([bootstrap/apiserver/rbac.yaml](../bootstrap/apiserver/rbac.yaml))
-- **SOPS の Secret を machine config に入れる。** CI には age 鍵を渡さないので CI からは当てられない。machine config は
-  もともと SOPS で暗号化して git に置いている(クラスタ CA の秘密鍵を含む)ので信頼水準は変わらず、起動時点で存在する
+- **平文の残りは ArgoCD(2026-10-17 まで GitHub Actions の `bootstrap-apply.yml`)。** 鶏と卵にならない ──
+  ArgoCD が動くのに要るもの(本体・repo の資格情報・入口の `apps`)は全部 machine config にあり、この層に頼っていない。
+  この層が要る CRD も machine config が入れる(`InfisicalSecret` の CRD だけ `apps/` から来るので、最初の何回かは retry)。
+  唯一 git に書けない Gateway の nodePort 80/443 は PostSync の Job([bootstrap/gateway/nodeport.yaml](../bootstrap/gateway/nodeport.yaml))
+- **SOPS の Secret を machine config に入れる。** 復号鍵はクラスタにも CI にも渡さないので、ArgoCD からは当てられない。
+  machine config の入力(`talos/secrets.yaml`)もクラスタ CA の秘密鍵を含む SOPS なので信頼水準は変わらず、起動時点で存在する
 - **Helm を実行する場所はクラスタの外(手元の生成時)だけ。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
   ArgoCD も同じ扱いにすればクラスタ内に Helm コントローラを持たなくて済む。版の追従は Renovate
 
@@ -163,7 +164,7 @@ hostPort ならノードの全アドレスで受けられ、送信元 IP も保�
 
 | 対象 | hostPort |
 | --- | --- |
-| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(`bootstrap/cilium/values.yaml` の `nodePort`)。nodePort 80/443 は bootstrap-apply が当て直す |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(`bootstrap/cilium/values.yaml` の `nodePort`)。nodePort 80/443 は `bootstrap/gateway/nodeport.yaml`(ArgoCD の PostSync)が当て直す |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | matrix の LiveKit | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
@@ -313,8 +314,10 @@ v0.65.0 から management/signal/relay が 1 つの combined コンテナなの�
 (このリポジトリの `apps/<name>/httproute.yaml`、各アプリのリポジトリの `deploy/httproute.yaml`、`bootstrap/` の argocd / auth / redirect-https)。
 ArgoCD は `recurse` で拾い tracking-id 注釈で追跡するので、場所は挙動に影響しない。
 
-**`bootstrap/` に移したものが本題。** `argocd` と `auth` の実体はこの層にあり、ArgoCD は同期していない。
-ArgoCD が自分の公開経路を握っていると、ArgoCD が壊れているときにその経路を直せない。
+**`bootstrap/` に移したものが本題。** `argocd` と `auth` の実体はこの層にある。
+当時は「ArgoCD が自分の公開経路を握ると、ArgoCD が壊れたときに直せない」として GitHub Actions に当てさせていたが、
+2026-10-17 に ArgoCD(Application `bootstrap`)へ移した。ArgoCD が壊れても当たっている経路は消えず、
+直すのは Headlamp か `tools/t.ps1 --admin` の kubectl で足りる。GitHub Actions の書き込みの経路(ワークフロー・RBAC・CEL)が丸ごと消えた。
 外部露出の一覧は `kubectl get httproute,grpcroute -A` が正確で、git を読むより早い(一覧の一枚は作らない)。
 
 **落とさずに動かす**: ArgoCD は「git から消えた + 自分が追跡している」ものを prune する。別リポジトリへは移送先を**先に**マージして

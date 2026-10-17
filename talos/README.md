@@ -74,7 +74,7 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 
 ### inlineManifests を直したとき
 
-**Cilium・local-path・bootstrap-applier の RBAC・ArgoCD・infisical・
+**Cilium・local-path・`apiserver/rbac.yaml`・ArgoCD・infisical・
 cert-manager と、SOPS 済みの Secret 2 つは machine config の中にいる。**
 だから**マニフェストを直しただけでは何も起きない。** 描き直して当てる:
 

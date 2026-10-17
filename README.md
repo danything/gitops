@@ -7,8 +7,8 @@
 [`bootstrap/argocd/repos.yaml`](bootstrap/argocd/repos.yaml) の ApplicationSet が org 内のリポジトリを走査し、
 各リポジトリの `deploy/argocd.yaml` を見つけて Argo CD の Application を生成する。
 このリポジトリがどうデプロイされるか(同期対象パス・autoSync 等)もクラスタ側ではなく
-[`deploy/argocd.yaml`](deploy/argocd.yaml) で決まる。**Argo CD が同期するのは `apps/` 以下と、
-`bootstrap/argocd/repos.yaml` の 1 ファイルだけ**で、`bootstrap/` のほかは同期対象外(下記)。
+[`deploy/argocd.yaml`](deploy/argocd.yaml) で決まる。**Argo CD が同期するのは `apps/` 以下と、`bootstrap/` の平文のマニフェスト**
+(Application `bootstrap`。Helm の値・SOPS のファイル・`apiserver/` は machine config 側なので外してある)。
 
 `repos.yaml` は Argo CD の chart が作る `apps` Application が拾うので、**まっさらなクラスタでも CI を待たずに走りはじめる**
 (詳しくは [`bootstrap/README.md`](bootstrap/README.md))。
@@ -18,7 +18,7 @@
 | | |
 | --- | --- |
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト。**`_` で始まるディレクトリは同期しない** (動かしていないものの置き場。下の「動かしていないもの」) |
-| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある。例外は `argocd/repos.yaml` だけ ── 上の「仕組み」)。Helm で入れるもの・RBAC・SOPS 済みのものは **machine config に載り**(`talos/render.sh`)、残りの平文は **main へのマージで GitHub Actions が当てる** |
+| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。Helm で入れるもの・RBAC・SOPS 済みのものは **machine config に載り**(`talos/render.sh`)、残りの平文は **Argo CD の Application `bootstrap` が当てる**(`argocd/repos.yaml`) |
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
 | [`mado/`](mado/) | **`main` が落ちたときの入口**。JCOM 側の PC(10.10.0.2)で [mado](https://github.com/danything/mado)(OIDC でログインしてブラウザから RDP する exe)を動かす(`md.doany.io`。クラスタの外) |
 | [`recovery/`](recovery/) | **まっさらから建て直す入口**(手順・PV を戻す道具・暗号化した鍵)。git と restic だけで戻す |

@@ -1,14 +1,20 @@
 # bootstrap
 
-クラスタそのものを組む層。**Argo CD は同期しない**(`apps/` の外にあるため)。2 つの経路で当たる
-([docs/decisions.md](../docs/decisions.md)「層の分け方」):
+クラスタそのものを組む層。2 つの経路で当たる([docs/decisions.md](../docs/decisions.md)「層の分け方」):
 
 | | 何を | いつ |
 | --- | --- | --- |
 | **machine config**([../talos/render.sh](../talos/render.sh) が描く) | Helm で入れるもの(cilium・cert-manager・argocd・infisical)、`apiserver/rbac.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |
-| **GitHub Actions**([bootstrap-apply.yml](../.github/workflows/bootstrap-apply.yml)) | 残りの平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など) | main へのマージ(下の「適用は GitHub Actions がやる」) |
+| **ArgoCD**(Application `bootstrap`。[argocd/repos.yaml](argocd/repos.yaml)) | 残りの平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など) | main へのマージ(prune / selfHeal 付き) |
 
-**SOPS(age)で暗号化したファイルは CI が当てない** ── CI に復号鍵を渡さないため。
+2026-10-17 まで 2 つめは GitHub Actions(`bootstrap-apply.yml`)だった。ArgoCD に移しても鶏と卵にならないのは、
+ArgoCD が動くのに要るもの(本体・repo の資格情報・ApplicationSet の入口 `apps`)が全部 machine config にあり、
+この層に何も頼っていないから。逆にこの層が要る CRD(Gateway API・cert-manager)も machine config が入れる。
+`InfisicalSecret` の CRD だけは `apps/infisical-operator/` が入れるので、まっさらなクラスタでは `bootstrap` の同期が
+最初の何回か落ちて retry で戻る。
+
+**SOPS(age)で暗号化したファイルは ArgoCD が当てない** ── 復号鍵をクラスタにも CI にも渡さないため。
+`bootstrap` の `exclude` に並べてある(**足したら exclude にも足す**)。
 `infisical/secrets.yaml`、`cert-manager/cloudflare-secret.yaml`、`{argocd,infisical}/secret-values.yaml`。
 鍵は [`recovery/sops-age.key.age`](../recovery/)。**中を編集するときも `sops edit` を通すこと。** MAC は暗号化して
 いない値も含めて計算されるので、**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる。**
@@ -44,19 +50,13 @@ ConfigMap に出ているので、読むだけの権限で比べられる)。**�
   付けてある)。SA と RBAC は `apps/infisical-operator/rbac.yaml`。
   operator 側に長期の資格情報は無い(`identityId` は秘密ではない)。
 
-### 適用は GitHub Actions がやる(2026-09-07)
+### API サーバの入口(GitHub Actions と人)
 
-**main にマージすると [`.github/workflows/bootstrap-apply.yml`](../.github/workflows/bootstrap-apply.yml)
-がこの層を当てる。** 手で `kubectl apply` する必要は無くなった。
-
-**保存している秘密はゼロ。** GitHub Actions の OIDC トークンを API サーバが直接受ける
-([../talos/patches/apiserver.yaml](../talos/patches/apiserver.yaml) の `KubeAuthenticationConfig`)。
+**GitHub Actions は読むだけ。** cilium-drift.yml の OIDC トークンを API サーバが直接受け
+([../talos/patches/apiserver.yaml](../talos/patches/apiserver.yaml) の `KubeAuthenticationConfig`)、
+権限は `cilium-config` の `get` だけ([apiserver/rbac.yaml](apiserver/rbac.yaml))。
 CA は [apiserver/ca.crt](apiserver/ca.crt)(`talos/secrets.yaml` のクラスタ CA。作り直したら替える)。
-kubeconfig も age 鍵も GitHub に置いていない。トークンは実行のたびに発行され数分で切れ、
-`danything/gitops` の `main` の `bootstrap-apply.yml` からのものだけが通る(CEL で固定)。
-
-権限も cluster-admin ではなく、この層で実際に使う種類だけ([apiserver/rbac.yaml](apiserver/rbac.yaml))。
-**Secret は含まれていない**ので、GitHub 側が落ちても Secret は読まれない。`delete` も渡していない。
+kubeconfig も age 鍵も GitHub に置いていない。
 
 **同じ認証設定と RBAC が人の入口でもある(2026-09-09)。** Entra を 2 つめの issuer として足し、
 Headlamp が利用者本人の id_token を API サーバへ転送する。アプリロール `admin` を持つ人は
@@ -65,17 +65,14 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 ここに置いたのは、ArgoCD も CI も要らずに効く層だから ── 締め出されたときに直せる。
 認証設定([../talos/patches/apiserver.yaml](../talos/patches/apiserver.yaml))も [apiserver/rbac.yaml](apiserver/rbac.yaml) も
 machine config に載っているので、変えたら `render.sh` → `apply-config`(RBAC は inlineManifest なので `upgrade-k8s` まで)。
-**ワークフローには当てさせない**(ClusterRole を作る権限を渡すと、自分の権限を書き換えられる)。
-
-**CI が当てないもの:** SOPS で暗号化した 4 ファイル(判定はファイルの中身を見ているので、暗号化ファイルが増えても自動で除外される。
-4 つとも machine config に載っている)、`values.yaml` / `version.yaml`(Helm の値と版。`render.sh` が読む)、`apiserver/`。
+**ArgoCD には当てさせない**(`bootstrap` の exclude に `apiserver/`。締め出されたときに直せる層に置く)。
 
 ### 公開経路(HTTPRoute)もここにある
 
-**`httproute.yaml` は ArgoCD が同期しない**(GitHub Actions が当てる)。`argocd` と `auth` の HTTPRoute と
-`gateway/redirect-https.yaml` がここにある理由(ArgoCD が自分自身の公開経路を握る層の逆転を解いた。2026-09-07)は
-[docs/decisions.md](../docs/decisions.md)「公開経路(HTTPRoute)をどこに置くか」。アプリ側の経路はアプリと同じ場所
+`argocd` と `auth` の HTTPRoute と `gateway/redirect-https.yaml` はここ。アプリ側の経路はアプリと同じ場所
 (`apps/<name>/httproute.yaml`、または各アプリのリポジトリの `deploy/httproute.yaml`)。
+ArgoCD が壊れても当たっている経路は消えないので、直すのは Headlamp か `tools/t.ps1 --admin` の kubectl
+([docs/decisions.md](../docs/decisions.md)「公開経路(HTTPRoute)をどこに置くか」)。
 
 ### Infisical の中の構成
 
@@ -104,12 +101,8 @@ ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` �
 (CRD を入れる `apps/infisical-operator/` が同じ同期の中にいる。2026-09-08 のドリル 5 回目)。
 仕組みは k8up の `Schedule` と同じで、説明は [apps/k8up/README.md](../apps/k8up/README.md)「CRD がまだ無いクラスタで apps を止めないこと」。
 
-**`bootstrap/` の `InfisicalSecret` には要らない**(`argocd/oidc-secret.yaml`・
-`auth/secrets.yaml`・`infisical/smtp-secret.yaml`)。**ArgoCD が見ていない**ためで、
-これらは GitHub Actions が `kubectl apply` で当てる ── app-of-apps(Argo CD の chart が作る `apps` Application。
-`argocd/values.yaml` の `extraObjects`、prune / selfHeal 付き)は `bootstrap/argocd` の `repos.yaml` **だけ**を `directory.include` で拾っている。
-chart と一緒に入るので、**まっさらなクラスタでも CI を待たずに ApplicationSet が走りはじめる**。CI の `bootstrap-apply` も
-同じファイルを当てるが、中身が同じなので衝突しない。
+`bootstrap/` の `InfisicalSecret`(`argocd/oidc-secret.yaml`・`auth/secrets.yaml`・`infisical/smtp-secret.yaml`)にも付けてある
+(2026-10-17 に ArgoCD の `bootstrap` が見るようになった)。
 
 ### アプリ側の書き方
 

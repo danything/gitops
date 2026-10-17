@@ -1,8 +1,8 @@
 # API サーバの公開まわりと、外から入る人・CI の認証。
 #
-# なぜ要るか: bootstrap/ を GitHub Actions から当てる(ArgoCD に持たせると「ArgoCD が自分の
-# 公開経路を握る」循環になる)。kubeconfig を GitHub に置くとアカウントが落ちた時点で
-# クラスタ全部が落ちるので、**Actions の OIDC トークンを API サーバが直接受ける。**
+# なぜ要るか: cilium-drift.yml が GitHub Actions からクラスタを読む(書き込みは無い。
+# 2026-10-17 まで bootstrap-apply.yml が bootstrap/ を当てていたが ArgoCD に移した)。kubeconfig を GitHub に
+# 置くとアカウントが落ちた時点でクラスタ全部が落ちるので、**Actions の OIDC トークンを API サーバが直接受ける。**
 # 保存する秘密はゼロで、トークンは実行のたびに発行されて数分で切れる。
 # Entra の issuer は Headlamp が利用者本人の id_token を転送してくるぶん(権限の中身は
 # bootstrap/apiserver/rbac.yaml)。
@@ -55,14 +55,10 @@ configuration:
           message: "danything/gitops 以外は受け付けない"
         - expression: 'claims.ref == "refs/heads/main"'
           message: "main 以外のブランチからは受け付けない"
-        # ワークフローのファイルまで固定する。2 つを許している(bootstrap-apply は書き込み、
-        # cilium-drift は読むだけ)。同じ利用者名になるので drift 側も書き込み権限を持つが、
-        # 分けると bootstrap の経路ごと壊しうるうえ、ClusterRole は Secret 無し・delete 無しまで
-        # 絞ってあるので割に合わないと判断した。
+        # ワークフローのファイルまで固定する。許すのは cilium-drift.yml だけ(権限は cilium-config の get だけ)。
         - expression: >-
-            ["bootstrap-apply.yml", "cilium-drift.yml"].exists(w,
-              claims.workflow_ref.startsWith("danything/gitops/.github/workflows/" + w + "@"))
-          message: "bootstrap-apply.yml と cilium-drift.yml 以外のワークフローからは受け付けない"
+            claims.workflow_ref.startsWith("danything/gitops/.github/workflows/cilium-drift.yml@")
+          message: "cilium-drift.yml 以外のワークフローからは受け付けない"
     # Entra ID。Headlamp が利用者本人のトークンを API サーバへ転送する(Headlamp 自身は権限を持たない)。
     - issuer:
         url: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0

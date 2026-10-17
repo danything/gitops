@@ -108,6 +108,44 @@ spec:
           prune: {{ .prune }}
           selfHeal: {{ .selfHeal }}
 ---
+# bootstrap/ の平文のマニフェスト(Gateway・auth・ClusterIssuer・InfisicalSecret など)。2026-10-17 まで
+# GitHub Actions(bootstrap-apply.yml)が当てていた(../../docs/decisions.md「層の分け方」)。
+#
+# **machine config が持つものは外す。** Helm の値と版(`*values.yaml`・`*version.yaml`)、SOPS のファイル、
+# machine config が作る Namespace(argocd・cert-manager・infisical)、`apiserver/`、`cilium/`。
+# このファイル自身は上の `apps`(argocd/values.yaml の extraObjects)が持つので外す。
+# **SOPS のファイルを足したら exclude にも足すこと**(復号できないまま当たって同期が落ちる)。
+# 照合は bootstrap/ からの相対パスで、`*` は `/` もまたぐ(argo-cd の util/glob は区切り文字無しの gobwas/glob)。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/danything/gitops.git
+    targetRevision: main
+    path: bootstrap
+    directory:
+      recurse: true
+      exclude: '{*values.yaml,*version.yaml,apiserver/*,cilium/*,argocd/repos.yaml,argocd/namespace.yaml,cert-manager/namespace.yaml,infisical/namespace.yaml,cert-manager/cloudflare-secret.yaml,infisical/secrets.yaml}'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # InfisicalSecret の CRD は apps/infisical-operator(別の Application)が入れるので、まっさらなクラスタでは
+    # 最初の何回かは落ちる。15s から倍々・上限 5 分・10 回(約 33 分)で自力で戻る(apps/k8up と同じ)。
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+---
 # Forgejo(fj.doany.io)の doa を見る。上の `repos` と分けている理由は上のコメント。
 # **ここが失敗していても上の `repos` は止まらない。** 失敗中は
 # `kubectl -n argocd get applicationset repos-forgejo -o yaml` の `ErrorOccurred` に理由が出る。
