@@ -45,8 +45,8 @@ talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig boo
 talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kubeconfig
 ```
 
-ふだんの kubectl / talosctl は `tools/t.ps1` が資格情報を用意する。管理者の kubeconfig は SOPS で
-`talos/kubeconfig.yaml` に置く(手順は [../tools/README.md](../tools/README.md)「クラスタの資格情報」)。
+ふだんの kubectl / talosctl は `tools/t.ps1` が資格情報を毎回その場で作る。管理者の kubeconfig も
+ファイルでは持たない([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。
 
 `clusterconfig/` と平文の秘密は `.gitignore` 済み。
 

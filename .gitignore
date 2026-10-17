@@ -3,7 +3,7 @@ talos/secrets.plain.yaml
 # **平文のまま置かないこと。** talos/registries.yaml は SOPS 済みのものをコミットする
 # (talos/README.md「fj.doany.io の資格情報」)。書きかけの平文はこの名前に逃がす。
 talos/registries.plain.yaml
-# 平文の kubeconfig / talosconfig も置かない。talos/kubeconfig.yaml は SOPS 済みのものをコミットする
+# 平文の kubeconfig / talosconfig も置かない。どちらも tools/t.ps1 が毎回その場で作る
 # (tools/README.md「クラスタの資格情報」)。talosctl kubeconfig と gen config がこの名前で書き出す
 kubeconfig
 talosconfig

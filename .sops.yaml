@@ -18,8 +18,3 @@ creation_rules:
   # 選り分ける意味が無い(k3s 期の /etc/rancher/k3s/registries.yaml の移し先)。
   - path_regex: ^talos/registries\.yaml$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-  # talos/kubeconfig.yaml(管理者。`talosctl kubeconfig` の出力)も丸ごと。
-  # 中身は証明書と鍵がほとんどで、選り分ける意味が無い。tools/t.ps1 の kubectl がその場で復号して使う
-  # (tools/README.md「クラスタの資格情報」)。
-  - path_regex: ^talos/kubeconfig\.yaml$
-    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r

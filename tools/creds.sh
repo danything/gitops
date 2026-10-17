@@ -5,7 +5,7 @@
 #
 # 既定は読み取り用。管理者は `tools/t.ps1 --admin …`(GITOPS_ADMIN=1)のときだけ。
 #   kubectl / helm  読み取り用は talos/secrets.yaml の CA でその場で証明書を作る(1 日で切れる)。
-#                   管理者は talos/kubeconfig.yaml(SOPS 済み。talosctl kubeconfig の出力)を復号する
+#                   管理者は os:admin の talosctl で talosctl kubeconfig をその場でもらう(ファイルで持たない)
 #   talosctl        同じく CA でその場で作る(os:reader / os:admin)。talosconfig は保存しない
 #                   (docs/decisions.md「手で持つもの」)
 set -eu
@@ -88,16 +88,23 @@ mint() {
 # render.sh の 10.0.0.2 はクラスタの LAN で、手元からは届かない。NetBird はクラスタの上で動くので、
 # クラスタが落ちたときに使えない。10.10.0.4 は Talos の証明書(apid・kube-apiserver)の SAN に入っている
 ep=10.10.0.4
-if [ "$tool" = talosctl ]; then
-	out=$shm/talosconfig-$role
-	if [ ! -s "$out" ]; then
-		if [ $role = admin ]; then os=os:admin; else os=os:reader; fi
-		mint os "/O=$os" "$out.c.$$" ed25519
+
+# talosconfig を $shm に作って置き場所を返す($1 = admin / readonly)。作るのは初回だけ
+talosconfig() {
+	t=$shm/talosconfig-$1
+	if [ ! -s "$t" ]; then
+		if [ "$1" = admin ]; then os=os:admin; else os=os:reader; fi
+		mint os "/O=$os" "$t.c.$$" ed25519
 		(umask 077 && printf 'context: doany\ncontexts:\n  doany:\n    endpoints: [%s]\n    nodes: [%s]\n    ca: %s\n    crt: %s\n    key: %s\n' \
-			"$ep" "$ep" "$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
-		rm -f "$out.c.$$".*
+			"$ep" "$ep" "$(cat "$t.c.$$.ca")" "$(cat "$t.c.$$.crt")" "$(cat "$t.c.$$.key")" >"$t.$$" && mv "$t.$$" "$t")
+		rm -f "$t.c.$$".*
 	fi
-	export TALOSCONFIG="$out"
+	echo "$t"
+}
+
+if [ "$tool" = talosctl ]; then
+	TALOSCONFIG=$(talosconfig $role)
+	export TALOSCONFIG
 	exec "$real" "$@"
 fi
 
@@ -110,13 +117,13 @@ if [ ! -s "$out" ] && [ $role = readonly ]; then
 		"$ep" "$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
 	rm -f "$out.c.$$".*
 elif [ ! -s "$out" ]; then
-	f=talos/kubeconfig.yaml
-	[ -f $f ] || die "$f が無い。作り方は tools/README.md「クラスタの資格情報」"
-	grep -q '^sops:' $f || die "$f が暗号化されていない。git に入れる前に tools/README.md の手順で暗号化する"
-	nokey
-	# talosctl kubeconfig が書く行き先は 10.0.0.2(クラスタの endpoint)なので、手元から届く口に替える
-	(umask 077 && sops -d $f >"$out.$$" && sed -i "s#^\( *server:\) https://.*#\1 https://$ep:6443#" "$out.$$" && mv "$out.$$" "$out") ||
-		{ rm -f "$out.$$"; die "$f を復号できなかった"; }
+	# 管理者は Talos が出す正式な kubeconfig を毎回もらう(talosctl kubeconfig。os:admin の talosconfig で)。
+	# ファイルで持たないので、作り直しも期限切れも無い。行き先は 10.0.0.2(クラスタの endpoint)で書かれるので、
+	# 手元から届く口に替える
+	tc=$(talosconfig admin)
+	(umask 077 && TALOSCONFIG=$tc /usr/local/libexec/gitops/talosctl kubeconfig --force "$out.$$" &&
+		sed -i "s#^\( *server:\) https://.*#\1 https://$ep:6443#" "$out.$$" && mv "$out.$$" "$out") ||
+		{ rm -f "$out.$$"; die "管理者の kubeconfig をもらえなかった(talosctl kubeconfig)"; }
 fi
 export KUBECONFIG="$out"
 exec "$real" "$@"
