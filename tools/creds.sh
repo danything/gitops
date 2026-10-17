@@ -89,10 +89,10 @@ if [ "$tool" = talosctl ]; then
 	out=$shm/talosconfig-$role
 	if [ ! -s "$out" ]; then
 		if [ $role = admin ]; then os=os:admin; else os=os:reader; fi
-		mint os "/O=$os" "$out.c" ed25519
+		mint os "/O=$os" "$out.c.$$" ed25519
 		(umask 077 && printf 'context: doany\ncontexts:\n  doany:\n    endpoints: [10.0.0.2]\n    nodes: [10.0.0.2]\n    ca: %s\n    crt: %s\n    key: %s\n' \
-			"$(cat "$out.c.ca")" "$(cat "$out.c.crt")" "$(cat "$out.c.key")" >"$out.$$" && mv "$out.$$" "$out")
-		rm -f "$out".c.*
+			"$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
+		rm -f "$out.c.$$".*
 	fi
 	export TALOSCONFIG="$out"
 	exec "$real" "$@"
@@ -102,10 +102,10 @@ out=$shm/kubeconfig-$role
 if [ ! -s "$out" ] && [ $role = readonly ]; then
 	# 読み取り用は bootstrap/apiserver/rbac.yaml の entra:viewer(組み込みの view + readonly-extra。Secret は読めない)。
 	# Headlamp で Entra の viewer が持つ権限と同じにするため、同じグループ名を使う
-	mint k8s "/O=entra:viewer/CN=tools-readonly" "$out.c" ec
+	mint k8s "/O=entra:viewer/CN=tools-readonly" "$out.c.$$" ec
 	(umask 077 && printf 'apiVersion: v1\nkind: Config\nclusters:\n- name: doany\n  cluster:\n    server: https://10.0.0.2:6443\n    certificate-authority-data: %s\ncontexts:\n- name: readonly@doany\n  context:\n    cluster: doany\n    user: readonly\ncurrent-context: readonly@doany\nusers:\n- name: readonly\n  user:\n    client-certificate-data: %s\n    client-key-data: %s\n' \
-		"$(cat "$out.c.ca")" "$(cat "$out.c.crt")" "$(cat "$out.c.key")" >"$out.$$" && mv "$out.$$" "$out")
-	rm -f "$out".c.*
+		"$(cat "$out.c.$$.ca")" "$(cat "$out.c.$$.crt")" "$(cat "$out.c.$$.key")" >"$out.$$" && mv "$out.$$" "$out")
+	rm -f "$out.c.$$".*
 elif [ ! -s "$out" ]; then
 	f=talos/kubeconfig.yaml
 	[ -f $f ] || die "$f が無い。作り方は tools/README.md「クラスタの資格情報」"
