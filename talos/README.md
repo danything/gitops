@@ -11,7 +11,7 @@
 **組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分(`patches/`)と、
 他から描いてくる部分(Cilium・cert-manager・argocd・infisical は `bootstrap/<name>/` の version.yaml と values.yaml から、
 local-path-provisioner は `manifests/` から)を 1 か所で組む。**値をどこにも二度書かない**のが目的。
-CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う
+CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を使う
 (別の作り方をすると「CI は通るが実機では通らない」が起きる)。
 
 ```shell
