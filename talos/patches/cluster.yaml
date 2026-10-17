@@ -1,11 +1,11 @@
 # クラスタ共通。v1.14 では型付きドキュメントと v1alpha1 を併記できないので、
-# 項目ごとに書く場所が決まっている(../docs/talos-install-media.md 参照)。
+# 項目ごとに書く場所が決まっている(../docs/talos.md「machine config の作法」)。
 machine:
   sysctls:
     # これが無いと IPv6 の既定経路が消える。Kubernetes が上がると
     # `net.ipv6.conf.{all,bond0}.forwarding` が 1 になり、既定の `accept_ra=1` は
     # 「forwarding が有効なら RA を無視する」なのでカーネルが RA 由来の default route を落とす。
-    # 2 = forwarding でも RA を受ける。Ubuntu 期は NetworkManager が userspace で RA を
+    # 2 = forwarding でも RA を受ける。Ubuntu 期は systemd-networkd(2026-09-24 までは NetworkManager)が userspace で RA を
     # 処理していた(実機は `accept_ra=0` のまま `proto ra` の既定経路が載っている)ので
     # この問題が出なかった。QEMU で再現・修正を確認済み(../docs/talos.md「VM ブートドリル」)。
     net.ipv6.conf.bond0.accept_ra: "2"
@@ -14,10 +14,15 @@ machine:
     # `write /proc/sys/net/ipv6/conf/bond0/addr_gen_mode: invalid argument` で
     # KernelParamSpecController が数秒おきに失敗し続ける(実測)。
     # 3 は再起動ごとに IID が変わる。ブート間で固定したくなったら `stable_secret` を足して 2 に戻す。
-    # 公開する AAAA は下の静的アドレス(::2)。SLAAC のぶんは並んで付くだけ。
-    # 実機の NetworkManager も ipv6.token は使っておらず、静的アドレスを直接書いている
+    # Ubuntu 期も IPv6 のトークンは使っておらず、静的アドレスを直接書いている
     # (`ip token show` はどのインタフェースも `token ::`)。
     net.ipv6.conf.bond0.addr_gen_mode: "3"
+    # **bond0 に SLAAC のアドレスを付けない。** 公開する AAAA は下の静的アドレス(::2)のつもりだが、
+    # cloudflare-ddns の `local.iface.stable:bond0` は一時アドレス以外から選ぶので、SLAAC のアドレスが
+    # あるとそちらを書く(Ubuntu 期の 2026-10-17 に、AAAA が EUI-64 の SLAAC になっているのを見つけた)。
+    # Talos では addr_gen_mode=3 で SLAAC が再起動ごとに変わるので、AAAA も毎回変わってしまう。
+    # autoconf=0 はアドレスを作らないだけで、RA の既定経路(上の accept_ra)はそのまま受ける。
+    net.ipv6.conf.bond0.autoconf: "0"
     # Forgejo の Runner(dind)で vite などがファイル監視を使う。既定の 128 は全コンテナの root で
     # 共有なので足りず、worklog-cloud の e2e が EMFILE で落ちた(2026-09-15)。k3s 期はホストの
     # /etc/sysctl.d/90-inotify.conf に同じ値
@@ -27,34 +32,46 @@ machine:
     net.ipv6.conf.eno4.disable_ipv6: "1"
   network:
     # 名前は main 固定。local-path の PV の nodeAffinity が main を指している。
+    # インタフェースは下の BondConfig / LinkConfig(型付きドキュメント)に書く。v1alpha1 の
+    # machine.network.interfaces は bond の MAC を指定できないため(2026-10-17 に移した)。
     hostname: main
-    interfaces:
-      - interface: bond0
-        bond:
-          interfaces: [eno1, eno2]
-          mode: balance-alb
-          miimon: 100
-        dhcp: false
-        addresses:
-          - 10.0.0.2/24
-          # 実機と同じ静的アドレス。プレフィックスは ISP 由来なので変わりうるが、
-          # それは NetworkManager で運用しているいまも同じリスク。変わったときは
-          # cloudflare-ddns(local.iface.stable:bond0)が実際のアドレスを公開する。
-          - 240f:6d:842b:1::2/64
-        routes:
-          # IPv6 の既定経路は RA 由来(`default via fe80::… proto ra`)なので書かない。
-          # 上の `accept_ra: "2"` とセット。Kubernetes が上がったあとに
-          # `talosctl get routes -o yaml` で `protocol: ra` の `dst: ""` が残っていることを確かめること
-          # (クラスタ起動前だけ見ても意味が無い。forwarding が 1 になるのはそのあと)。
-          - network: 0.0.0.0/0
-            gateway: 10.0.0.1
-      - interface: eno4
-        dhcp: false
-        addresses:
-          - 10.10.0.4/24
-        routes:
-          - network: 10.10.0.0/24
-            gateway: 10.10.0.1
+---
+# 10.0 側。**MAC は e6:2c:1b:1a:a0:39 に固定する。** ルーターの IPv6 ホスト公開のエントリがこの MAC を
+# 指している(docs/router.md)。指定しないと bond は links の先頭(eno1)の MAC を引き継ぎ、
+# Talos に替えた日と Z440 に移した日に変わって、外からの IPv6 が全部止まる。
+# Ubuntu 期も netplan に macaddress を書いて同じ値に固定する(2026-10-17。それまでは指定が無く、
+# 再起動で 3a:43:95:a9:3e:b1 に変わっていた)。
+apiVersion: v1alpha1
+kind: BondConfig
+name: bond0
+links:
+    - eno1
+    - eno2
+bondMode: balance-alb
+miimon: 100
+hardwareAddr: e6:2c:1b:1a:a0:39
+addresses:
+    - address: 10.0.0.2/24
+    # 実機と同じ静的アドレス。プレフィックスは ISP 由来なので変わりうる(Ubuntu 期も同じリスク)。
+    # 変わったときは cloudflare-ddns(local.iface.stable:bond0)が実際のアドレスを公開する。
+    - address: 240f:6d:842b:1::2/64
+routes:
+    # destination を書かないと gateway の側の既定経路になる。
+    # IPv6 の既定経路は RA 由来(`default via fe80::… proto ra`)なので書かない。
+    # 上の `accept_ra: "2"` とセット。Kubernetes が上がったあとに
+    # `talosctl get routes -o yaml` で `protocol: ra` の `dst: ""` が残っていることを確かめること
+    # (クラスタ起動前だけ見ても意味が無い。forwarding が 1 になるのはそのあと)。
+    - gateway: 10.0.0.1
+---
+# 10.10 側。DHCP は DHCPv4Config / DHCPv6Config を書かない限り無効(明示の設定が 1 つでもあれば既定の DHCP は止まる)
+apiVersion: v1alpha1
+kind: LinkConfig
+name: eno4
+addresses:
+    - address: 10.10.0.4/24
+routes:
+    - destination: 10.10.0.0/24
+      gateway: 10.10.0.1
 ---
 apiVersion: v1alpha1
 kind: KubeNetworkConfig

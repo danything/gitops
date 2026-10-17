@@ -32,7 +32,7 @@ const bucket = new cloudflare.R2Bucket(
   {
     accountId,
     name,
-    // decisions.md「リモートは Cloudflare R2 のバケット doany-restic(APAC、Standard)」
+    // docs/decisions.md「ツール選定(比較の結論)」(R2 のバケット doany-restic、APAC、Standard)
     location: "apac",
     storageClass: "Standard",
   },

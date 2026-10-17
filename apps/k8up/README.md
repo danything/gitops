@@ -13,29 +13,10 @@ k8up は Pod として同じ restic リポジトリ(Cloudflare R2 の `doany-res
 git に載る。代わりに **operator の環境変数(グローバル設定)**に寄せて、`backend` を持たない
 `Backup` はそこへ落ちるようにしてある。
 
-Secret は手で作る(値が手元を通らないよう、ホストの env ファイルから割って入れる):
-
-```shell
-sudo sh -c '. /etc/k3s-backup/env
-  raw="${RESTIC_REPOSITORY#s3:}"
-  k3s kubectl -n k8up create secret generic k8up-global \
-    --from-literal=endpoint="${raw%/*}" \
-    --from-literal=bucket="${raw##*/}" \
-    --from-literal=accessKeyId="$AWS_ACCESS_KEY_ID" \
-    --from-literal=secretAccessKey="$AWS_SECRET_ACCESS_KEY" \
-    --from-literal=repoPassword="$RESTIC_PASSWORD" \
-    --from-literal=mattermostWebhook="$MATTERMOST_WEBHOOK" \
-    --dry-run=client -o yaml | k3s kubectl apply -f -'
-```
-
-`/etc/k3s-backup/env` は `recovery/restore.sh` が復元する。**復元時はスクリプトが
-この Secret も作り直すので手作業は要らない**(2026-09-07 に追加。それまでは作られず、
-operator が `CreateContainerConfigError` で上がらなかった)。
-**Talos に移ったら Infisical に移す**(ホストに env ファイルが無くなるため)。
-受け皿は [k8up-secrets.yaml](k8up-secrets.yaml)。**Infisical の `/k8up/k8up-global` に
-6 つのキーを入れてから**でないと当ててはいけない(operator は Infisical にあるものだけを
-書くので、足りないと**バックアップが全部落ちる**)。**2026-09-08 に入れて、
-別名の Secret に一度出してから本物と 6 つとも突き合わせて確認した。**
+**Secret `k8up-global` の正本は Infisical**(`/k8up/k8up-global`)。[k8up-secrets.yaml](k8up-secrets.yaml) の
+`InfisicalSecret` が作る。キーは `endpoint` / `bucket` / `accessKeyId` / `secretAccessKey` / `repoPassword` /
+`mattermostWebhook` の 6 つで、**足りないとバックアップが全部落ちる**(operator は Infisical にあるものだけを書く)。
+2026-09-08 に入れて、手で作っていた Secret と 6 つとも突き合わせた。**手で作るのは災害復旧のときだけ**(下)。
 
 **値を変えたら `kubectl -n k8up rollout restart deploy/k8up`。** 他のアプリのような
 `auto-reload` の注釈は使えない ── あれは Deployment 自身の注釈に要るが、
@@ -46,6 +27,22 @@ operator が `CreateContainerConfigError` で上がらなかった)。
 Infisical を戻すための `infisical-postgresql.sql` もその R2 にある。まっさらから戻すときは
 `recovery/env.age` を手で復号して `kubectl create secret` する ── **平常時だけ Infisical が正本**、
 という二段構え。`recovery/` はその一度きりのために残す。
+
+```shell
+# env.age の中身は KEY=値 の env ファイル。値を画面にもディスクにも出さずに割って入れる
+( set -a; eval "$(age -d recovery/env.age)"; set +a
+  raw="${RESTIC_REPOSITORY#s3:}"
+  kubectl -n k8up create secret generic k8up-global \
+    --from-literal=endpoint="${raw%/*}" \
+    --from-literal=bucket="${raw##*/}" \
+    --from-literal=accessKeyId="$AWS_ACCESS_KEY_ID" \
+    --from-literal=secretAccessKey="$AWS_SECRET_ACCESS_KEY" \
+    --from-literal=repoPassword="$RESTIC_PASSWORD" \
+    --from-literal=mattermostWebhook="$MATTERMOST_WEBHOOK" \
+    --dry-run=client -o yaml | kubectl apply -f - )
+```
+
+k3s 期は `recovery/restore.sh` がこれをやる(2026-09-07 から。それまでは作られず operator が `CreateContainerConfigError` だった)。
 
 `mattermostWebhook` は [notify.yaml](notify.yaml) が使う。**新しい秘密を増やさないために
 `k8up-global` に相乗りさせている** ── 値は同じ env ファイルの `MATTERMOST_WEBHOOK` で、
@@ -94,15 +91,7 @@ FAILED を出している**ので、そこで気づけなかった、という�
 
 成功時も 1 行投げる。**通知の仕組み自体が生きていることの確認**になる(ホストのスクリプトと同じ考え方)。
 
-本番のリポジトリで実際に流して確かめた(2026-09-08):
-
-```
-追跡 32 系統 / 上位の階層が新しいので無視 2 件
-   無視  29.1h  main/etc/rancher/k3s/config.yaml
-   無視  29.1h  main/etc/rancher/k3s/registries.yaml
-
-[k8up] OK ✅ (32 系統すべて 25 時間以内)
-```
+本番のリポジトリで流して確かめた(2026-09-08。32 系統すべて OK、上の階層で取れている 2 件を無視)。
 
 ## やめたアプリの残り(2026-09-19)
 
@@ -127,7 +116,7 @@ repo をロックする。gitops には置かない(Argo CD が毎回流して�
 `kubectl create -f -` に食わせる。1 時間で自分で消える(`ttlSecondsAfterFinished`)。
 
 ```sh
-sudo k3s kubectl -n k8up create -f - <<'JOB'
+kubectl -n k8up create -f - <<'JOB'
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -164,7 +153,7 @@ spec:
             - name: RESTIC_PASSWORD
               valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
 JOB
-sudo k3s kubectl -n k8up logs -f job/k8up-retire
+kubectl -n k8up logs -f job/k8up-retire
 ```
 
 **2026-10-06 に mattermost・erpnext・zulip も `retired` にした**(チャットは Mattermost → Zulip → Matrix と移して畳み、
@@ -192,8 +181,7 @@ PVC のファイルは `k8up.io/backup: "true"` を付けたものだけ取る�
 `"false"` と**注釈が無いのは同じ意味**(どちらも取らない)。同じファイルに `"true"` が
 並んでいるときだけ、取らない側にも `"false"` を書いて意図を見えるようにしてある。
 
-いまホストの `backup/k3s-backup` と二重に取っているが、restic は内容で重複を除くので
-実際に増えるのはメタデータだけ。**Talos に移る時点でホスト側を畳む**。
+ホストの `backup/k3s-backup` と二重に取っていても、restic は内容で重複を除くので増えるのはメタデータだけ。
 
 Infisical の Postgres は**クラスタで一番失えないデータ**(全アプリの秘密)。DB そのものは
 `ENCRYPTION_KEY` で暗号化されているのでダンプだけ手に入っても読めない ── **復元にはその鍵も要る**。
@@ -207,16 +195,7 @@ Infisical 本体は `bootstrap/` に居るが、Schedule は `apps/` に置い�
   実際に `Fatal: Please specify repository location` で落ちた。
   グローバル設定に寄せる(`backend` を書かない)のが正解。
 - `backend` を持たない `Backup` が R2 へ書けることを、使い捨ての PVC で確認済み(確認後に削除)。
-- **ホストのスクリプトとは衝突しない。** 実測したスナップショットの内訳(当時。erpnext と mattermost はもう無い):
-
-  ```
-     1  host=erpnext      tags=['k8up']      path=/erpnext-gunicorn.sql
-     1  host=infisical    tags=['k8up']      path=/infisical-postgresql.sql
-     1  host=mattermost   tags=['k8up']      path=/mattermost-postgres.sql
-     4  host=main         tags=['k3s-host']  path=/etc/...
-  ```
-
-  **k8up の `hostname` は namespace**、ホストのスクリプトは `main`。
+- **ホストのスクリプトとは衝突しない。** **k8up の `hostname` は namespace**(タグ `k8up`)、ホストのスクリプトは `main`(タグ `k3s-host`)。
   `restic/cli/prune.go` は `--host=<自分の namespace>` を必ず渡すので、
   **prune は他の namespace にもホストのぶんにも届かない**。`tags: [k8up]` は二重の歯止め
   (`--tag` は `retention.tags` があるときだけ渡る)。
@@ -275,21 +254,14 @@ k8up.io/file-extension: .db
 ### netbird はサイドカーで取る
 
 上流イメージ(`netbirdio/netbird-server`)には `sqlite3` が無く、あるのは perl だけ。
-こちらでは変えられないので、**`oven/bun:1.4.2-slim` のサイドカーを足して
+こちらでは変えられないので、**bun の slim イメージ(版は [../netbird/deployment.yaml](../netbird/deployment.yaml)。[notify.yaml](notify.yaml) と同じ)のサイドカーを足して
 `k8up.io/backupcommand-container: backup` でそちらを指している**。
 PVC は `readOnly: true` でマウントする。
 
 `store.db` / `idp.db` / `events.db` の 3 つを `serialize()` して tar 1 本にまとめる。
 同じ PVC の `GeoLite2-City`(65 MB)と `geonames`(7 MB)は**入れない** ── 起動時に落とし直せる。
 
-実際の PVC を読み取り専用でマウントして確認済み:
-
-```
-exit=0 bytes=911360
--rw-r--r-- root/root 745472 ./store.db
--rw-r--r-- root/root  36864 ./events.db
--rw-r--r-- root/root 122880 ./idp.db
-```
+実際の PVC を読み取り専用でマウントして確認済み(3 ファイル入りの tar 約 0.9 MB が出た)。
 
 **ハングした書き込みが残っていると失敗する。** 3 つとも rollback journal モードなので、
 放置された `-journal` があると読み取り専用の接続はロールバックできず `SQLITE_READONLY_ROLLBACK`
@@ -329,15 +301,7 @@ INFO   backup finished  {"new files": 0, "changed files": 0, "errors": 7}
 ### 直し方
 
 Schedule 全部に `podSecurityContext: {runAsUser: 0, runAsGroup: 0}` を付けた。
-実測で `errors: 0` / `new files: 7` になることを確認済み:
-
-```
-$ kubectl -n adguardhome logs backup-perm-fix-probe-0-…
-starting backup for folder  {"foldername": "adguardhome-conf"}
-backup finished  {"new files": 7, "changed files": 0, "errors": 0}
-starting backup for folder  {"foldername": "adguardhome-work"}
-backup finished  {"new files": 6, "changed files": 0, "errors": 0}
-```
+実測で `errors: 0`(adguardhome-conf が `new files: 7`)になることを確認済み。
 
 **Talos の PSA `baseline` でも通る** ── root を禁じるのは `restricted` だけ。
 
@@ -387,21 +351,7 @@ spec:
 - スナップショット ID は `restic snapshots` で見る(`notify.yaml` の initContainer と
   同じ形の使い捨て Job が手っ取り早い)
 
-実測:
-
-```
-$ kubectl -n k8up-drill get restore
-drill-lgtm-db   Succeeded   (18s)
-
-restoring snapshot 999784d1 of [/worklog-worklog.db] … to /restore
-Summary: Restored 1 files/dirs (164.000 KiB) in 0:00
-
-# 戻したものを開いてみる
-file: worklog-worklog.db 167936
-integrity=ok
-tables=13 users,identities,sessions,paywall_hits,…
-rows=108
-```
+実測: worklog の DB(スナップショット `999784d1`)を捨ての namespace に戻し、18 秒で `Succeeded`。開いて `integrity=ok`、13 テーブル・108 行。
 
 ### SQL のダンプは**先にロールを作る**(2026-09-08 に実測)
 
@@ -409,17 +359,7 @@ rows=108
 ロールが無いクラスタに流すと**そこだけ全部落ちる** ── データは入るが、所有者が
 postgres のままになる。
 
-当時の mattermost のダンプ(10.7 MB)を捨てクラスタに流して数えた:
-
-```
-== ロールを作らずに流したとき
-130 role "mattermost" does not exist          ← エラーはこの 1 種類だけ
-118 テーブル / users 5 / posts 11922          ← データ自体は入る
-
-== 先に CREATE ROLE mattermost LOGIN してから
-0 エラー
-118 テーブル / users 5 / posts 11922
-```
+当時の mattermost のダンプで確かめた: ロール無しだと `role "mattermost" does not exist` が 130 件(データは入る)、先にロールを作ると 0 件。
 
 なので順番は **ロール → データベース(`OWNER` 付き) → ダンプ**:
 
@@ -441,7 +381,6 @@ infisical なら `pg_dump -U infisical -d infisicalDB` なので、ロール `in
 ## ファイルの PVC の扱い
 
 ホストの `backup/k3s-backup` が見ていたぶんを k8up に寄せた(2026-09-08 に全部済んだ)。
-残っているのはホストのスクリプトを畳むことだけで、それは Talos に移る時点。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |

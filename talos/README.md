@@ -1,11 +1,10 @@
 # talos
 
 実機(HP ProLiant DL360 Gen9)を Talos Linux に載せ替えるための machine config。
-**v1.14.0 の形で書いてある**(1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
+**v1.14 以降の型付きドキュメントの形で書いてある**(版は [versions.yaml](versions.yaml)。1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
 
 **版と schematic の出どころは [versions.yaml](versions.yaml)。** Renovate がそこを見て、
-新しい Talos が出たら PR を作る。**適用は自動化しない**(ノードが 1 台なので、
-上げることは全停止を伴う再起動になる)。理由と手順は versions.yaml のコメントに書いてある。
+新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」と「上げ方 / 当て直し方」)。
 下のコマンドに埋めてある版と schematic も、変えるときは versions.yaml と揃えること。
 
 talhelper は使わない。`talosctl gen config` にこのディレクトリのパッチを渡すだけで足りる。
@@ -15,17 +14,14 @@ talhelper は使わない。`talosctl gen config` にこのディレクトリの
 local-path-provisioner は `manifests/` から)を 1 か所で組む。**値をどこにも二度書かない**
 のが目的で、版も `versions.yaml` と `bootstrap/cilium/version.yaml` から読む。
 
-**`talosctl upgrade-k8s` の前にも走らせること。** `upgrade-k8s` は inlineManifests を
-reconcile するので、古い machine config のまま流すと**走っている Cilium が巻き戻る**
-(../docs/decisions.md「machine config と Cilium の chart をどう連動させるか」)。
+**`talosctl upgrade-k8s` の前にも走らせること**(理由は下の「inlineManifests を直したとき」)。
 
 CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う。
 **別の作り方をすると「CI は通るが当日は通らない」が起きる**ので、道具は 1 つにしてある。
 
 **当てたあとのズレは [drift.sh](drift.sh) で見る。** git から作った machine config と、
 ノードが実際に持っているもの(`talosctl get machineconfig`)を並べて diff を出す。読むだけで、
-当てはしない ── 適用は再起動を伴うことがあり、Talos API は mTLS だけなので CI には渡さない
-(talos-validate と同じ「検出は自動、適用は手動」)。鍵と証明書は両方から落として比べる。
+当てはしない(下の「適用は CI にやらせない」と同じ理由)。鍵と証明書は両方から落として比べる。
 
 ```shell
 ./talos/drift.sh            # talosconfig の既定のノード
@@ -41,7 +37,7 @@ CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.s
 ./talos/render.sh /tmp/talos-config
 
 # 2) maintenance mode のノードに流す(実機は USB で ISO 起動。
-#    ../docs/talos.md「メディアに載せる」。**VM のドリルだけは raw イメージ**)
+#    ../docs/migration-day.md の 4。**VM のドリルだけは raw イメージ**)
 talosctl apply-config --insecure -n <コンソールに出た IP> -f /tmp/talos-config/controlplane.yaml
 # `UnattendedInstallConfig` があるのでディスクに書かれる。落ち着いたら
 # etcd を初期化(単一ノードなので 1 回だけ):
@@ -64,12 +60,9 @@ talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
 **namespace ごとの `imagePullSecrets` が要らない**という作りで、Talos でも同じにする
 (`machine.registries`)。
 
-**2026-09-15 に ghcr.io を外した。** 非公開のリポジトリ(shadai・tamasagashi・worklog-cloud・noren)を
-Forgejo に移し、ghcr.io に残っているイメージは全部公開になったので、ghcr.io は資格情報なしで取れる。
-代わりに **fj.doany.io**(Forgejo のコンテナレジストリ)を Forgejo のユーザー `info` の
-`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`)で持つ。
-
-**`talos/registries.yaml` は 2026-09-15 に fj.doany.io 用に作り直した**(それまでは ghcr.io の PAT)。
+持つのは **fj.doany.io**(Forgejo のコンテナレジストリ)だけで、Forgejo のユーザー `info` の
+`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`)。無いと非公開のリポジトリ(shadai など)のイメージが引けない
+(2026-09-15 までは ghcr.io の PAT。非公開リポジトリを Forgejo に移し、ghcr.io に残るイメージは全部公開になったので外した)。
 ホストのファイルから値を写して SOPS で暗号化してある(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml))。
 トークンを替えたら、ホストと同じ値でこれも作り直す:
 
@@ -138,8 +131,8 @@ talosctl -n 10.0.0.2 upgrade-k8s          # ← これが inlineManifests を re
 talosctl -n 10.0.0.2 upgrade --image factory.talos.dev/installer/<schematic>:<版>
 ```
 
-**A/B なので失敗すれば前のイメージに戻る。** ノードが 1 台なので再起動 = 全停止
-(なぜ自動化しないかは [versions.yaml](versions.yaml) の冒頭)。
+**A/B なので失敗すれば前のイメージに戻る。** ノードが 1 台なので再起動 = 全停止で、だから自動化しない
+(ノードが増えれば tuppr / system-upgrade-controller に任せられるが、どちらも自分が乗っているノードは上げないので 1 台では成立しない)。
 
 **schematic を変えたとき(拡張やカーネル引数)も同じコマンド。** ISO を焼き直す必要はない。
 
@@ -153,7 +146,6 @@ talosctl -n 10.0.0.2 upgrade --image factory.talos.dev/installer/<schematic>:<�
 ## 確認できたこと / できていないこと
 
 `patches/` のインタフェース名とディスクだけを VM 用に読み替えて QEMU で実際に起動した(2026-09-07〜09)。
-確認できたこと(bond0 のフェイルオーバー、静的 IPv6 と `accept_ra: "2"`、カーネル組み込みの wireguard ──
-NetBird も同じものを使う ── など)と、VM では原理的に確かめられないこと(実機の NIC 名 `eno1`/`eno2`/`eno4` と
-tg3、本物のスイッチ相手の balance-alb、ISP の RA、`/dev/sda`、PT3 本体)は
-[../docs/talos.md](../docs/talos.md)「VM ブートドリル」にまとめてある。
+何を確かめて何を直したかは [../docs/talos.md](../docs/talos.md)「VM ブートドリル」(wireguard がカーネル組み込みで、
+NetBird も同じものを使う、など)。VM では原理的に確かめられないこと(実機の NIC 名とディスク、本物のスイッチ相手の
+balance-alb、ISP の RA、PT3)は [../docs/migration-day.md](../docs/migration-day.md) の 4・9 で当日見る。

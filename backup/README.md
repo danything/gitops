@@ -1,5 +1,7 @@
 # backup
 
+**k3s 期だけ。Talos 移行で廃止**(ホストにシェルが無い)。後継は [`../apps/k8up/`](../apps/k8up/)。
+
 ホストを丸ごと restic で Cloudflare R2 に取る。**毎日 04:00 JST**、systemd timer(`k3s-backup.timer`)。
 戻し方は [`../recovery/`](../recovery/)、設計の理由は [`../docs/decisions.md`](../docs/decisions.md)。
 

@@ -67,12 +67,8 @@ age -p -o recovery/env.age /etc/k3s-backup/env
 | `restic` | 戻すスナップショットの ID を選ぶ |
 | `helm` | `render.sh` が中で使う |
 
-**GitHub Actions で代わりにはならない。** `bootstrap/` を当てるところは既に
-[bootstrap-apply.yml](../.github/workflows/bootstrap-apply.yml) がやっていて、API サーバも
-`ks.doany.io:6443` で外から届く。**が、そこへ辿り着くまでが手元にしかできない** ──
-Talos の API はポート 50000 で LAN からしか届かず、そもそも OIDC の信頼は
-machine config を当てて初めて存在する。**復旧はその machine config を当てるところから
-始まる**ので、GitHub 側の経路は最初から使えない。
+**GitHub Actions で代わりにはならない。** Talos の API(50000)は LAN からしか届かず、CI の OIDC の信頼も
+machine config を当てて初めてできる。**復旧はその machine config を手元から当てるところから始まる。**
 
 **`env.age` は Talos 期も要る。** Infisical がまだ空の段階で `k8up-global` の Secret を
 手で作る必要があり、その値の出どころがこれ

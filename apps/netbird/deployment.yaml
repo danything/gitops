@@ -1,5 +1,5 @@
 # NetBird の combined サーバ + ダッシュボード。VPN はこれ 1 本(wg-easy は 2026-09-07 に撤去)。
-# 選定の理由と比較は docs/decisions.md「VPN を何にするか」。
+# 選定の理由と比較は docs/decisions.md「VPN を wg-easy から NetBird にした」。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

@@ -5,6 +5,7 @@
 
 **なぜこの順番か**が要るなら [ROADMAP.md](../ROADMAP.md) の Phase 2 と
 [decisions.md](decisions.md)「Talos の起動順序をどう組むか」。
+**移行は今の DL360 でやる。** Z440 へ移すのはそのあと([talos.md](talos.md)「Z440 に移すときに変わるもの」)。
 
 ---
 
@@ -14,27 +15,28 @@
       (`valid for metal mode` まで出ること)
 - [ ] 生成物に **inline 9 つ + CRD の URL 5 つ**が入っている
       ([talos/README.md](../talos/README.md)「上げ方 / 当て直し方」)
-- [ ] `talos/versions.yaml` の版が意図どおり(**上げるなら今日ではない日に**)
+- [ ] `talos/versions.yaml` の版が意図どおり(**上げるなら今日ではない日に**)。
+      Kubernetes は k3s の v1.36.2 ではなく **`versions.yaml` の `kubernetes:` の版**で建つ。
+      git から建て直す(k3s は sqlite で etcd を持ち越さない)ので、版が上がっても in-place の飛び級ではない
 - [ ] **作業中は何も見せない。** 決定済み(ROADMAP の Phase 2)。メンテナンス画面は用意しない
+- [ ] **やめどきの時刻を決めておく**(下の「やめどき・戻せないこと」)
 - [ ] **手元の PC に道具がそろっている。** 移行後は**ノードにシェルが無い**ので
       `ssh main 'kubectl …'` が使えなくなる。5 以降は全部手元から叩く
 
       | | 用途 |
       | --- | --- |
       | `talosctl` | 3〜5。版はクラスタに合わせなくてよい |
-      | `kubectl` | 5〜9。**クラスタと同じ v1.36.2** |
+      | `kubectl` | 5〜9。**`versions.yaml` の `kubernetes:` と同じ版**(tools の Dockerfile が同じ depName で揃えている) |
       | `restic` | 8 でスナップショット ID を選ぶ |
       | `helm` / `sops` / `age` | 3(`render.sh`)と調べもの |
       | `jq` | 調べもの(手元に winget で入れてある。tools のコンテナには無い) |
 
-      2026-09-10 に全部そろえた(`~/.local/bin`)。
+      jq 以外は [tools/t.ps1](../tools/t.ps1) のコンテナに入っている([tools/README.md](../tools/README.md))。
+      **コンテナの `/tmp` は実行ごとに消える**ので、t.ps1 で `render.sh` を回すなら出力先は
+      `talos/clusterconfig/`(`.gitignore` 済み)にする。
 
-      **6 は GitHub Actions がやる**ので手元は要らない。5・7・9 の確認も
-      ワークフローに寄せられなくはないが(API サーバは `ks.doany.io:6443` で
-      外から届く)、**3〜5 の `talosctl` は寄せられない** ── Talos の API は
-      ポート 50000 で **LAN からしか届かない**うえ、USB とコンソールは物理。
-      **8 も寄せない** ── PVC に書き戻す操作を GitHub から実行できる状態は
-      作らない(CI に `delete` を渡していないのと同じ理由)。
+      **6 は GitHub Actions がやる。** 3〜5 は Talos の API(50000)が LAN からしか届かず USB とコンソールが物理なので、
+      8 は PVC に書き戻す操作を GitHub から実行できる状態を作らないため、どちらもワークフローに寄せない。
 
 ## 1. 経路の確保
 
@@ -66,8 +68,10 @@ sudo systemctl start k3s-backup.service     # ホストのぶん
 
 ## 4. 焼く
 
-**前もって USB を作っておく**([talos.md](talos.md)「メディアに載せる」)。ハイブリッド ISO なので
-そのまま書けばよい。Windows なら Rufus の **DD イメージモード**。
+**前もって USB を作っておく。** ISO はハイブリッドなのでそのまま書けばよい。
+Windows なら Rufus で ISO を選び、**DD イメージモード**(balenaEtcher でもよい)。
+WSL からは USB が見えない(usbipd で渡す必要がある)ので Windows 側でやる方が早い。
+URL の版と schematic は [talos/versions.yaml](../talos/versions.yaml) と揃える(下は 2026-10-13 の値)。
 
 ```shell
 curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca/v1.15.0-alpha.1/metal-amd64.iso
@@ -82,18 +86,21 @@ sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
 - [ ] **Secure Boot が Disabled** であること(RBSU は POST 中に F9 →
       Server Security → Secure Boot Settings)。通常 ISO は署名されていない。
       Boot Mode は UEFI のまま
-- [ ] USB を挿して電源を入れ、POST 中に **F11(Boot Menu)** で USB を選ぶ
-      (iLO の Virtual Media を使うなら "iLO Virtual USB 3 : iLO Virtual CD-ROM")
+- [ ] USB を挿して電源を入れ、POST 中に **F11(Boot Menu)** で USB を選ぶ。
+      iLO の Virtual Media を使うなら、Remote Console → Virtual Drives → Image File CD-ROM/DVD で ISO を選び
+      (factory の URL を直接貼ってもよい)、Power → Reset して F11 で "iLO Virtual USB 3 : iLO Virtual CD-ROM"
 - [ ] maintenance mode の IP をコンソールで確認
 - [ ] `talosctl get links --insecure -n <IP> -e <IP>` で**インタフェース名が
       `eno1` / `eno2` / `eno4` であること**を確かめる。違ったら
       `talos/patches/cluster.yaml` を直して 3 に戻る
+- [ ] `talosctl get disks --insecure -n <IP> -e <IP>` で**インストール先が `/dev/sda`(447 GB の SSD)であること**を確かめる。
+      違ったら `talos/patches/main.yaml` の `diskSelector` を直して 3 に戻る(**書いたら消える**)
 
 ```shell
 talosctl apply-config --insecure -n <IP> -f /tmp/talos-config/controlplane.yaml
 ```
 
-**`UnattendedInstallConfig` があるのでディスクに書かれる。**
+**`UnattendedInstallConfig` があるのでディスクに書かれる。** ここから先は k3s に戻せない(下の「やめどき・戻せないこと」)。
 
 - [ ] **書き終わって再起動したら USB を抜く。** 挿したままだと、ブート順によっては
       また maintenance mode で上がってくる
@@ -108,10 +115,10 @@ talosctl --talosconfig $TC -n 10.0.0.2 -e 10.0.0.2 kubeconfig
 
 - [ ] `talosctl get volumestatus` に **EPHEMERAL(64GiB 上限)と u-local-path** が出る。
       **ここが違ったら入れ直すしかない**([talos/patches/volumes.yaml](../talos/patches/volumes.yaml))
-- [ ] `kubectl get nodes` が **Ready / control-plane / v1.36.2**
+- [ ] `kubectl get nodes` が **Ready / control-plane / `versions.yaml` の `kubernetes:` の版**
 - [ ] `kubectl get pods -A` で **cilium・coredns・metrics-server・local-path・
       argocd・cert-manager・infisical** が Running
-      (ドリル 4 回目と同じ絵。[talos.md](talos.md))
+      ([talos.md](talos.md)「ブートドリル 4 回目」と同じ絵)
 
 ## 6. 残りの bootstrap/ を当てる
 
@@ -205,9 +212,19 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 - [ ] **上の表と同じ形になる**
 - [ ] Infisical → operator → 各アプリの `Secret` が埋まる
       (`kubectl get infisicalsecret -A` が全部 `Synced`)
-- [ ] DNS(cloudflare-ddns が A/AAAA を書く)
+- [ ] `talosctl get links bond0` の MAC が **`e6:2c:1b:1a:a0:39`**(ルーターの IPv6 ホスト公開がこの MAC を指している。
+      [talos/patches/cluster.yaml](../talos/patches/cluster.yaml))
+- [ ] **別の回線の IPv6 だけで 443 に届く**(A レコードもあるので、ブラウザで名前を開くだけでは IPv4 に落ちて確かめにならない。モバイル回線で `https://[240f:6d:842b:1::2]/` を開いて証明書の警告まで出れば届いている。[router.md](router.md)「IPv6 はノードだけを公開する」)
+- [ ] `talosctl get routes -o yaml | grep -B10 'protocol: ra'` に `dst: ""` が残っている(IPv6 の既定経路。クラスタが上がってから見る)
+- [ ] DNS(cloudflare-ddns が A/AAAA を書く)。**AAAA が `::2`** で、SLAAC のアドレスではないこと(`bond0` の `autoconf=0` が効いていれば SLAAC は付かない。Ubuntu 期は SLAAC を書いていた)。**sysctl より先に RA が届くと SLAAC が一度付いて残りうる**ので、`talosctl get addresses` を起動直後・数分後・再起動後の 3 回見る
 - [ ] netbird(外から VPN に入れる)。**ここだけブラウザでは確かめられない**
 - [ ] AdGuard の公開リゾルバ(`dig @10.10.0.4 example.com`)
+- [ ] **`/dev/dvb/adapter*` と B-CAS リーダーが見える**(`talosctl ls /dev/dvb`、`talosctl ls /dev/bus/usb`)。
+      denpa の tuner-agent が上がって録画できる。**PT3 のために alpha に乗せている**ので、ここが通らなければ意味が無い
+      ([decisions.md](decisions.md)「PT3 チューナー」)
+- [ ] bond0 の片方を抜いて通信が続き、挿し直して `/proc/net/bonding/bond0` の両方が `MII Status: up` に戻る
+      (`talosctl read /proc/net/bonding/bond0`。復旧方向は VM で確かめられていない)
+- [ ] Renovate の CronJob が次の回で動く(`kubectl -n renovate get jobs`。[apps/renovate/](../apps/renovate/README.md))
 
 ## 10. 後始末
 
@@ -233,6 +250,15 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 - [ ] **`bootstrap/apiserver/ca.crt` から k3s の CA(1 枚目、`CN=k3s-server-ca@…`)を消す**
 
 ---
+
+## やめどき・戻せないこと
+
+- **4 の `apply-config` で SSD が上書きされる。** k3s をその場で戻す手は無い。それより前なら USB を抜いて再起動すれば Ubuntu に戻る
+- **やめどきの時刻を前日に決めておく**(例: 開始から何時間)。その時刻に 7 が終わっていなければ、どちらかを選ぶ:
+  - **Talos のまま直して進む**(既定)。git と restic は手つかずなので、詰まったところだけ直せばよい
+  - **Ubuntu を入れ直して restic から戻す**([recovery/README.md](../recovery/README.md) の `restore.sh`。k3s 期のホストを丸ごと戻す)。
+    2 の最終バックアップが戻り先になる
+- 迷ったら前者。後者は Ubuntu の導入からやり直しで、当日中に終わる保証が無い
 
 ## 詰まったときに見るところ
 

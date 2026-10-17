@@ -10,15 +10,36 @@
 | --- | --- |
 | restic リポジトリ形式・パスフレーズ・バケット | ホスト側 backup スクリプト + systemd timer |
 | local-path provisioner の PV ディレクトリ構造(`pvc-<uid>_<ns>_<name>`。**親のパスは変わる** ── k3s は `/var/lib/rancher/k3s/storage`、Talos は user volume の `/var/mnt/local-path`) | state.db の sqlite `.backup` スナップショット |
-| `bootstrap/` の中身(Argo CD・Infisical・Cilium・cert-manager・auth の定義)。Talos では machine config の `cluster.inlineManifests` に載せる(下記) | |
-| 公開の復元手順(秘密を含まない、`curl \| sh` できる)という**性質** | setup-network.sh / k3s-server-config.yaml / init.sh / **restore.sh**(k3s 期専用。Talos 期は machine config + etcd + k8up の Job に置き換わる) |
+| `bootstrap/` の中身(Argo CD・Infisical・Cilium・cert-manager・auth の定義)。Talos では、入れるもの(Helm と SOPS の Secret)は machine config の `cluster.inlineManifests`、平文で当てるものは CI(下記「層の分け方」) | |
+| 公開の復元手順(秘密を含まない、`curl \| sh` できる)という**性質** | setup-network.sh / k3s-server-config.yaml / init.sh / **restore.sh**(k3s 期専用。Talos 期は machine config + git からの再構築 + k8up の Job に置き換わる) |
 | Infisical のデータ(Postgres PVC)と `ENCRYPTION_KEY` | HelmChart CRD(helm.cattle.io)、k3s 同梱の Traefik / ServiceLB |
 | ArgoCD + ApplicationSet(repos.yaml)+ 各 repo の `deploy/argocd.yaml` | firewalld 無効化などホストの手作業 |
 | | **Traefik**(k3s 同梱だから使っていただけ。IngressRoute / Middleware(forward-auth)/ mydnschallenge ACME は Talos では持ち込まない) |
 
-Talos ではホストに触れないので、「k8s オブジェクト」は etcd スナップショット、「ホスト設定」は machine config(git 管理)、
-「PV データ」だけが従来どおりバックアップツールの仕事になる。**ツール選定は PV データの部分にしか効かない。**
+Talos ではホストに触れないので、「k8s オブジェクト」は **git から ArgoCD で再構築**(etcd スナップショットは近道)、
+「ホスト設定」は machine config(git 管理)、「PV データ」だけが従来どおりバックアップツールの仕事になる。
+**ツール選定は PV データの部分にしか効かない。**
 
+## 移行の順番: Talos を先に、Z440 は後(2026-10-17)
+
+当初は「HP Z440 へ Ubuntu のまま移してから Talos」の順だった。**逆にした:先にいまの DL360 の上で k3s → Talos
+(Phase 2、[migration-day.md](migration-day.md))、そのあと Talos のまま Z440 へ(Phase 2.5、[z440-migration.md](z440-migration.md))。**
+
+- **Z440 は単体の GPU が無いと POST しない**(Xeon E5 に内蔵 GPU は無い)ので、ヘッドレスで組めない。
+  Intel Arc A310 を常設する(UEFI + CSM 無効が要る)。これが denpa の QSV / AV1 エンコードも兼ねる
+- Z440 の遠隔管理は **AMT 9.x(電源と SOL だけ、KVM なし)**。一番危ない OS の入れ替えは、
+  **iLO(10.0.0.3)で画面まで見える DL360** でやる
+- Talos に移ってしまえば、箱の違いは schematic(GPU の extension、SOL 用の `console=`)と NIC の名前に閉じる
+
+## bond0 の MAC を固定する(2026-10-17)
+
+ルーターの IPv6 ホスト公開はノードを **bond0 の MAC(`e6:2c:1b:1a:a0:39`)で指している**
+([router.md](router.md)「IPv6 はノードだけを公開する」)。Ubuntu では bond0 の MAC を固定しておらず、
+**2026-10-17 に再起動のあと `3a:43:95:a9:3e:b1` に変わっているのを見つけた**(このままだとエントリから外れる)。
+
+- Ubuntu: netplan で固定した(ネットワークは 2026-09-24 から netplan → systemd-networkd。それまでは NetworkManager)
+- Talos: [talos/patches/cluster.yaml](../talos/patches/cluster.yaml) を型付きの `BondConfig` / `LinkConfig` に移し、
+  `hardwareAddr: e6:2c:1b:1a:a0:39` を書いた。**bond に固定値を与えるので、Talos への移行でも Z440 への移設でも変わらない**
 
 ## ツール選定(比較の結論)
 
@@ -29,7 +50,7 @@ Talos ではホストに触れないので、「k8s オブジェクト」は etc
 | --- | --- | --- | --- |
 | **restic** | systemd timer で直接 | **k8up**(restic の operator)か restic イメージの CronJob | ◎ 両期で同じ repo 形式。手動復元も `restic restore` 1 本 |
 | kopia | 同上 | Velero の node-agent が kopia だが Velero 固有のレイアウトで、kopia CLI からの手動復元が素直でない | ○ 単体性能は上だが後継が繋がらない |
-| Velero | 使えない(ホスト対象外) | k8s オブジェクトも一緒に取れる | △ Talos では etcd スナップショットと役割が被り、復元に Velero 自体の導入が要る |
+| Velero | 使えない(ホスト対象外) | k8s オブジェクトも一緒に取れる | △ Talos では git からの再構築と役割が被り、復元に Velero 自体の導入が要る |
 | k8up 単体 | 使えない | ○ | k3s 期のホスト側(state.db、`/etc`)を別途どうにかする必要がある |
 | tar + rclone crypt | ○ | 使えない | △ 変更最小だが Talos に持っていけない、整合性 `check` が無い |
 | borg / duplicacy | ○ | 使えない or ライセンス | × |
@@ -168,10 +189,8 @@ CI からは当てられない。一方 machine config は**もともと SOPS �
 **Helm を実行する場所がクラスタの外(手元の生成時)だけ**になり、クラスタ内に Helm コントローラを
 持たなくて済む。版の追従は `talos/versions.yaml` と同じく Renovate に見せる。
 
-**当初の見立てとのずれ。** 最初は「machine config が inlineManifests を持てば手で apply する層は消える」
-と見ていたが、外れた。実際は上の二段になり、平文のぶんは GitHub Actions が当てる。
-「inlineManifests は create-once で reconcile されない」と書いたのも半分誤りで、
-`talosctl upgrade-k8s` を通せば更新も削除もされる(2026-09-08 に VM で実測。[talos.md](talos.md))。
+**当初の見立てとのずれ**: 「手で apply する層は消える」「inlineManifests は reconcile されない」はどちらも外れ
+(上の二段になり、`talosctl upgrade-k8s` を通せば更新も削除もされる。[talos.md](talos.md))。
 
 ## machine config と Cilium の chart をどう連動させるか(2026-09-08 決定)
 
@@ -224,7 +243,7 @@ LoadBalancer は k3s 組み込みの ServiceLB(Klipper)。
 
 **Talos で後から替えるのが高いのは CNI だけ**なので、そこを先に決める。Ingress コントローラ・LB・証明書は
 Gateway API に寄せてあれば後から差し替えられる。単一ノードのうちは Cilium は過剰に見えるが、
-ハイブリッド化の見込みがあるならここで払うのが一番安い。**VM で実際に組んで動くことを確認済み**(下記)。
+ハイブリッド化の見込みがあるならここで払うのが一番安い。**VM で実際に組んで動くことを確認済み**(2026-09-06)。
 
 | | 選択 | 置き換わるもの |
 | --- | --- | --- |
@@ -239,47 +258,18 @@ Gateway API に寄せてあれば後から差し替えられる。単一ノー�
 Cookie に載せる方式は 4096 バイトの壁に当たる。oauth2-proxy なら Cookie はセッション ID だけなのでトークン長に依存しない。
 これは実装選択と独立に効く判断。
 
-### 検証結果(2026-09-06、QEMU/KVM の k3s で実機同等の CIDR)
-
-`flannel-backend: none` + `disable-kube-proxy` + `disable: [servicelb, traefik]` で k3s を入れ、Cilium 1.20.1 を Helm で導入。
-
-- `KubeProxyReplacement: True`、デュアルスタックの IPAM(IPv4 `10.42.0.0/24` / IPv6 `fd42::/64`)
-- **GatewayClass `cilium` が Accepted、Gateway が Programmed**、`CiliumLoadBalancerIPPool` から
-  LoadBalancer Service に IP が払い出される(ServiceLB の代替になる)
-- **HTTPRoute 経由で実際に HTTP 200**(Host 不一致は 404)。L2 announcement も動作
-
-**詰まった点**: Cilium 1.20 は **Gateway API v1.6.1** の CRD を要求する。v1.4.0 を入れていると
-operator が `Required GatewayAPI resources are not found` を出して GatewayClass が `Waiting for controller` のまま止まる。
-必要なのは gatewayclasses / gateways / httproutes / referencegrants / grpcroutes / **backendtlspolicies** / **tlsroutes**
-(v1.6.1 では TLSRoute が standard チャネルに入っている)。本番では k3s の Traefik が v1.5.1 を入れていたので
-`--server-side --force-conflicts` で上書きし、**cilium-operator の再起動**も要った。
-
-**メモの訂正**: 引き継ぎメモには「Cilium は TLSRoute のみ。TCPRoute / UDPRoute は非対応」とあったが、
-**1.20 のドキュメントは TCPRoute / UDPRoute を optional but supported として挙げていて、CRD も適用できた**。
-(ただし 3proxy は TCPRoute では移せなかった。下の「3proxy(TLS 終端 + 素の TCP)」)
+**Cilium 1.20 は Gateway API v1.6.1 の CRD を要求する**(backendtlspolicies / tlsroutes を含む)。古いと
+GatewayClass が `Waiting for controller` のまま止まる。上書きは `--server-side --force-conflicts` と cilium-operator の再起動。
 
 ### 本番での実施結果(段階 1、2026-09-06)
 
-k3s の config に `flannel-backend: none` / `disable-network-policy` / `disable-kube-proxy` を足して再起動し、
-Cilium 1.20.1 を Helm で導入。**Traefik と Ingress はこの段階では触っていない。**
+k3s のまま flannel と kube-proxy を外して Cilium 1.20.1 を入れた(30 分ほど)。詰まりは 2 つ:
 
-- ノードが Ready に戻り、`KubeProxyReplacement: True`、IPAM はデュアルスタックで 45 アドレス払い出し、
-  全 50 Pod が Running、外形も全サイト 200/302。**所要は 30 分ほど**(うち大半は下の 2 つの詰まり)
-- **詰まり 1: flannel の残骸が Cilium の VXLAN と衝突する。** `flannel.1` / `flannel-v6.1` / `cni0` が
-  インターフェースとして残っていると、Cilium が `cilium_vxlan` を作れず `address already in use` で
-  datapath 初期化が延々とリトライする。Pod は `FailedCreatePodSandBox` で止まったまま。
-  `ip link delete` で 3 つ消したら即座に復旧した。**CNI 設定ファイル(`10-flannel.conflist`)を退避するだけでは足りない。**
-- **詰まり 2: `terminationGracePeriodSeconds` が長い Pod は Recreate 戦略と組み合わさると復帰しない。**
-  denpa と tuner-agent(21900 秒 = 6 時間)が Terminating のまま残り、通信は既に死んでいるのに
-  新しい Pod が作られない。**強制削除(`--grace-period=0 --force`)が要る。** 猶予は「録画を最後まで流す」ためだが、
-  CNI を抜いた時点でネットワークは死んでいるので待つ意味は無い。
-- **残った差異: ノード自身と Pod から `10.10.0.4`(eno4 の LAN IP)に届かない。** LAN の他のマシンからは届く。
-  AdGuard の split-horizon でこの IP に解決される名前だけ、ノード内から引けなくなった。
-  ServiceLB(klipper)の hostPort と Cilium の socket-LB の組み合わせが原因と見られる。
-  **段階 2 でほぼ解消した**(2026-09-07 実測)。hostPort と Gateway の hostNetwork に寄せた結果、
-  Pod からは `10.10.0.4` のどのポートにも届く。ノード自身から届かないのは **80/443 だけ**で、
-  これは Gateway の nodePort が L7LB リダイレクトとして載っているため(同上の `nodePort`)。
-  そのリダイレクトは**外から来る通信の経路そのもの**なので外せない。
+- **flannel の残骸**(`flannel.1` / `flannel-v6.1` / `cni0`)が Cilium の VXLAN と衝突する。`ip link delete` で消す(conflist の退避だけでは足りない)
+- **`terminationGracePeriodSeconds` が長い Pod**(denpa と tuner-agent、6 時間)は Recreate と組むと戻らない。`--grace-period=0 --force` で消す
+
+**ノード自身からは 80/443 に届かない。** Gateway の nodePort が L7LB リダイレクトとして載っているためで、
+それが外から来る通信の経路そのものなので外せない(他のポートと、Pod からは届く)。
 
 ### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
 
@@ -307,87 +297,47 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
 3. **hostPort と RollingUpdate は両立しない。** 新旧の Pod が同じホストポートを奪い合い、新しい方が Pending で止まる。
    AdGuard と 3proxy は `strategy: Recreate` にして解決した(当時の Traefik は `deployment.kind: DaemonSet`)。
 
-### Gateway API の土台で分かったこと(2026-09-06)
-
-- CRD の版は上の「検証結果」の詰まった点を参照(v1.6.1 が要る)。
-- **Gateway はアドレスが付くまで `Programmed=False` のまま**で、Envoy にリスナーが載らない。
-  当初は LB-IPAM + L2 アナウンスでアドレスを払い出していたが、**`gatewayAPI.hostNetwork` に
-  したらノードの IP がそのまま `status.addresses` に入った**ので、どちらも外した(2026-09-07)。
-- cert-manager は `config.enableGatewayAPI=true` で Gateway の `cert-manager.io/cluster-issuer` 注釈を見る。
-  Cloudflare のトークンは **cert-manager の namespace にも** Secret が要る(ClusterIssuer は自分の namespace しか読まない)。
+**Gateway はアドレスが付くまで `Programmed=False`** で、Envoy にリスナーが載らない。`gatewayAPI.hostNetwork` に
+したらノードの IP がそのまま `status.addresses` に入ったので、LB-IPAM と L2 アナウンスは外した(2026-09-07)。
+cert-manager の Cloudflare トークンは **cert-manager の namespace にも** Secret が要る。
 
 ### 3proxy(TLS 終端 + 素の TCP)は Cilium の Gateway では素直に移せない
 
-Traefik では `IngressRouteTCP` が `HostSNI(px.doany.io)` で受けて **TLS をここで終端し、中身を素の TCP として
-3proxy:3128 に流して**いた。Gateway API で同じことをしようとすると詰まる。
-
-- `protocol: TLS` + `mode: Terminate` のリスナーに **TCPRoute は付けられない**
-  (`No matching listener protocol; route requires one of: [TCP]`)
-- Cilium はそのリスナーに **TLSRoute しか許さず**、TLSRoute は本来 passthrough 用
-  (`Listener not valid. None of the Allowed Route Kinds are supported.`)
-
-**なぜ Traefik では 443 のまま両立できていたのか。** Traefik は 443 のエントリポイントが 1 つあり、
-接続ごとに TLS の ClientHello を覗いて **SNI で HTTP ルーターと TCP ルーターに振り分けて**いた。
-Gateway API では TLS の扱いが**リスナーの属性**なので、同じポートに Terminate と Passthrough を同居させると
-どちらとして扱うか決まらず **ProtocolConflict** になる(実際に試して 443 の `https` リスナーごと落ちた)。
-
-**ただし仕様上は 443 のままでも書ける。** `protocol: TLS` + `mode: Terminate` のリスナーに TCPRoute を付ける形は
-Traefik と同じ意味で、終端するリスナーが 1 つあるだけなので他の HTTPS リスナーとも衝突しない。
-**通らないのは Cilium がその組み合わせを実装していないから**で、ポートの制約ではない。
-Envoy Gateway はこれを実装しているので、443 のままにしたいなら選択肢になる。
+Traefik では `IngressRouteTCP` が `HostSNI(px.doany.io)` で TLS を終端し、中身を素の TCP として 3proxy:3128 に流していた。
+Gateway API では `protocol: TLS` + `mode: Terminate` のリスナーに TCPRoute を付ける形が同じ意味になるが、
+**Cilium はそのリスナーに TLSRoute しか許さない**(仕様上は書けるが実装が無い。Envoy Gateway は実装している)。
+同じ 443 に Terminate と Passthrough を同居させると **ProtocolConflict** になり、443 の `https` リスナーごと落ちた。
 
 **採った形(2026-09-06): Gateway を使わず、Pod のサイドカーがホストのポートを直接受ける。**
-
-- 3proxy の Pod に nginx(stream)のサイドカーを足し、`3129` で TLS を終端して `127.0.0.1:3128` に渡す
-- 証明書は cert-manager が `px.doany.io` で発行し、サイドカーがマウントする(Traefik 内蔵 ACME の置き換え)
-- サイドカーは **hostPort 3129** で公開する。443 は Gateway が使うため。当初は 8444 だったが
-  (8443 は Mattermost calls が先に取っている)分かりにくいので、3proxy の平文 3128 の隣に移した(2026-09-07)
-- **クライアント側の設定変更が要る**(`px.doany.io:443` → `px.doany.io:3129`)。
-  SNI で振り分けるより**ポートで分ける方が構成として素直**なので、これを本採用とした(2026-09-06 判断)。
-  443 のままにしたい場合の代案は、px 専用の IP を LB-IPAM で払い出してルータ側で振り分けるか、
-  Envoy Gateway に替えて TLS 終端リスナー + TCPRoute を使うか
+3proxy の Pod に nginx(stream)のサイドカーを足し、**hostPort 3129** で TLS を終端して `127.0.0.1:3128` に渡す。
+証明書は cert-manager が `px.doany.io` で発行してマウントする。クライアントは `px.doany.io:3129` に向け直した ──
+SNI で振り分けるより**ポートで分ける方が構成として素直**なので本採用。
 
 ### クライアント IP(2026-09-07 確認、`Cluster` のままでよい)
 
-Gateway の Service は `externalTrafficPolicy: Cluster`(Cilium の `gateway-api-service-externaltrafficpolicy`)。
-一般には `Cluster` は別ノードへ回すときに SNAT するが、**単一ノードでは backend が必ず同じノードに居るので
-SNAT されない**。実際にクライアント IP は端まで届いている。
-
-確かめ方(どちらも実測):
-
-- **denpa** は `TRUSTED_NETWORKS=10.10.0.0/16` と `ADDRESS_HEADER=x-forwarded-for` で動いている。
-  公開側から `dp.doany.io` を叩くと **401**、LAN から叩くと **200**。SNAT されていれば
-  X-Forwarded-For がノードの `10.10.0.4` になり、公開側からでも通ってしまう。**通らない**ので届いている。
-- **AdGuard の DoH** のクエリログに、Gateway 経由でも端末のグローバル IPv6 がそのまま残っている。
-  サイドカーは `$http_x_forwarded_for` をそのまま渡し、AdGuard は `trusted_proxies` に
-  `127.0.0.0/8` を持っているので、loopback からの接続でもヘッダ側を採る。
+Gateway の Service は `externalTrafficPolicy: Cluster`。**単一ノードでは backend が必ず同じノードに居るので
+SNAT されない**。実測: denpa は公開側からだと 401・LAN からだと 200(SNAT されていれば公開側も通る)、
+AdGuard の DoH のクエリログに端末のグローバル IPv6 が残る。
 
 **ノードを足すときにやること**: `externalTrafficPolicy: Local` に変える
 (Cilium の Helm 値 `gatewayAPI.externalTrafficPolicy`)。そうしないと Envoy が居ないノードに
 届いたぶんが SNAT されて、AdGuard のクライアント別統計と denpa の住所判定が壊れる。
-`Local` にすると Envoy の居るノードだけが応答するので、外側の振り分けもそれに合わせる
-(いまは Envoy が hostNetwork でノードの 80/443 を直接掴んでいるので、宛先はノードの IP そのもの)。
+`Local` にすると Envoy の居るノードだけが応答するので、外側の振り分けもそれに合わせる。
 
 ### AdGuard の DoH は backend が HTTPS でないと出ない(2026-09-07 障害)
 
 **切り替えの翌朝、ブラウザの名前解決が全部死んだ。** 原因は d.doany.io の backend を平文の 80 にしたこと。
 AdGuard は **DoH(`/dns-query`)を HTTPS の口(443)でしか出さない**。80 は 404 を返す。
-Edge の「セキュア DNS」に `https://d.doany.io/dns-query` を入れていたので、DoH が死んだ時点で
-そのブラウザからは何も引けなくなった。クエリログでは 06:34 を最後に DoH の問い合わせが止まっている
-(DoT と plain は生きていたので、OS の名前解決は動いたまま**ブラウザだけ**死ぬ、という分かりにくい形になった)。
+Edge の「セキュア DNS」に DoH を入れていたので、DoT と plain は生きたまま**ブラウザだけ**死ぬ、という分かりにくい形になった。
+Traefik では backend にも HTTPS で繋いでいた。その置き換えを「クラスタ内なので平文でよい」と判断したのが誤り。
+**DoH は平文の口には出ない。**
 
-Traefik では `serversscheme: https` + `insecureSkipVerify` の `ServersTransport` で backend も HTTPS に繋いでいた。
-その置き換えを「クラスタ内なので平文でよい」と判断したのが誤り。**DoH は平文の口には出ない。**
-
-試して駄目だったもの:
-
-| 案 | 結果 |
+| 試して駄目だった案 | 結果 |
 | --- | --- |
-| `BackendTLSPolicy`(Gateway API 標準) | **Cilium 1.20.1 は Accepted にするだけで実装していない。** Envoy の cluster に `transport_socket` が付かず、backend へ平文のまま繋ぐ。`sectionName` をポート名にしても番号にしても同じ。Web UI まで 400 になった |
-| AdGuard の `tls.allow_unencrypted_doh: true` | **AdGuard は停止時に設定ファイルを書き直す**ので、Pod を止めずに足した値は消える。入れるには Pod を止めてから編集する必要がある |
+| `BackendTLSPolicy`(Gateway API 標準) | **Cilium 1.20.1 は Accepted にするだけで実装していない。** backend へ平文のまま繋ぎ、Web UI まで 400 になった |
+| AdGuard の `tls.allow_unencrypted_doh: true` | **AdGuard は停止時に設定ファイルを書き直す**ので、Pod を止めずに足した値は消える |
 
-**採った形: nginx のサイドカーを足して `/dns-query` だけをそこへ回す。** サイドカーは同じ Pod の
-`https://127.0.0.1:443` へ渡す(loopback なので証明書の検証はしない)。Web UI は 80 のまま。
+**採った形: nginx のサイドカーを足して `/dns-query` だけをそこへ回す**(同じ Pod の `https://127.0.0.1:443` へ)。
 3proxy と同じ形なので、Cilium が `BackendTLSPolicy` を実装したら両方まとめて消せる。
 
 **教訓**: 前段の置き換えでは「同じ URL が同じものを返すか」だけでなく、**その backend が
@@ -395,83 +345,41 @@ Traefik では `serversscheme: https` + `insecureSkipVerify` の `ServersTranspo
 
 ### 認証は Cilium の Gateway では賄えない(2026-09-06 調査)
 
-「Entra 側でトークンを小さくして Cilium の Envoy 機能で OIDC を賄う」案を検討したが、**Cilium には
-Gateway API の OIDC が無い**。トークンの大きさ以前に機能が無い。
-
-- `CiliumEnvoyConfig` で Envoy の `oauth2` フィルタを直接書く道は、公式に未サポートで
-  「フィルタの型を解決できない」という報告がある(cilium/cilium#24848)。HTTPRoute と併用するのも難しい(#30587)
-- HTTPRoute の `ExternalAuth`(GEP-1494)は**まだ未実装**で issue が開いたまま(cilium/cilium#45704)。
-  引き継ぎメモの「1.20 pre-release で入った」は誤り
-- Keycloak で OAuth2 を組もうとした事例も未解決のまま(cilium/cilium#38889)
-
-したがって forward-auth が要るルートは、**oauth2-proxy を「前段のプロキシ」として置く**
-(HTTPRoute → oauth2-proxy → アプリ)か、そのルートだけ Traefik か Envoy Gateway に残す。
-幸い forward-auth を使っているのは Traefik ダッシュボードと `sub` の 2 本だけで、
+**Cilium には Gateway API の OIDC が無い。** `CiliumEnvoyConfig` で Envoy の `oauth2` フィルタを書く道は未サポート
+(cilium/cilium#24848、#30587)、HTTPRoute の `ExternalAuth`(GEP-1494)も未実装(cilium/cilium#45704)。
+forward-auth が要るルートは **oauth2-proxy を前段のプロキシとして置く**(HTTPRoute → oauth2-proxy → アプリ)。
 アプリ側(ArgoCD、denpa、NetBird など)はそれぞれ自前で OIDC を持っている。
-
-**Entra 側でトークンを小さくすること自体は独立して価値がある。** グループクレームを全部載せるのをやめて
-**アプリロール**に切り替えると `roles: ["admin"]` の数十バイトで済む。将来 Envoy Gateway の内蔵 OIDC を
-使う場合の前提にもなる。
+**Entra のトークンを小さくする(グループクレーム → アプリロール)こと自体は独立して価値がある**([entra.md](entra.md))。
 
 ### 切り替え本番と Traefik の撤去(2026-09-06 / 2026-09-07)
 
-Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**同時にしかできない**(片方が握っている間は
-もう片方が Pending になる)。Gateway 側は `CiliumGatewayClassConfig` ではなく Service の 80/443 を
-**nodePort として開く**形にした。これでノードのどのアドレスでも受けられる。
+Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**同時にしかできない**。Gateway 側は Service の 80/443 を
+**nodePort として開く**形にした。詰まった点:
 
-**詰まった点 2 つ:**
+1. **Cilium は nodePort の範囲に入っている hostPort を張らない。** 範囲を `80-32767` に広げたら 853・8443・3proxy が
+   一斉に落ちた。**`nodePort.range` を `80,443` の 2 つだけに絞る**ことで両立する。
+2. **Traefik を消したあとも Service に残った `externalIPs: [10.10.0.4]` が 80/443 を黒穴にする。**
+   `service.kubernetes.io/load-balancer-cleanup` finalizer を null にして消した。
+3. **自分で配っている chart の `IngressRoute` を取りこぼした。** denpa は chart で公開していたので `dp.doany.io` が 404 に。
+   chart に `httpRoute.enabled` を足した(denpa#70)。gitops の `Ingress` を数えるだけでは足りない。
 
-1. **Cilium は nodePort の範囲に入っている hostPort を張らない。** nodePort の範囲を `80-32767` に広げたら、
-   AdGuard の 853 と当時の Mattermost calls の 8443、3proxy の TLS ポートが一斉に落ちた。範囲を `80,443` の
-   2 つだけに絞る(`nodePort.range`)ことで両立する。
-2. **Traefik を消したあとも Service に残った `externalIPs: [10.10.0.4]` が 10.10.0.4:80/443 を黒穴にする。**
-   DaemonSet を消しても Service は残り、Cilium はそのまま宛先無しの転送先を作り続ける。
-   削除は `service.kubernetes.io/load-balancer-cleanup` finalizer で止まるので、finalizer を null にして消した。
-
-**自分で配っている Helm chart の分を取りこぼした(2026-09-07)。** denpa は gitops 側の `Ingress` ではなく
-**chart(`charts/denpa`)の `IngressRoute`** で公開していたので、Traefik の CRD を消した時点で
-`dp.doany.io` が 404 になっていた。gitops の `Ingress` を数えるだけでは足りない。
-chart に `httpRoute.enabled` を足して移した(denpa#70)。`ingress.enabled` と `traefik.enabled` は
-外にも配っている chart なので残してある。yosegaki の chart も同じ形にした。
-宅内向けの `dp.l.doany.io` は 2 段のワイルドカードなので、`*.l.doany.io` のリスナーと証明書を別に足した。
-
-翌 2026-09-07 に `Ingress` 15 本・`IngressRoute` 4 本・`Middleware` 4 つ・`IngressRouteTCP` 1 本と
-PVC `traefik-acme` を削除し、gitops とアプリ 6 repo からマニフェストも消した。
-Traefik が持っていた ACME(`mydnschallenge`)は cert-manager の ClusterIssuer `letsencrypt` が引き継いでいる。
-`bootstrap/traefik/` にあった `sub-backend` の Service と EndpointSlice は `bootstrap/auth/sub-backend.yaml` へ、
-Cloudflare のトークンは `bootstrap/cert-manager/cloudflare-secret.yaml` へ移した。
+2026-09-07 に Traefik のマニフェストと PVC `traefik-acme` を全部消した。ACME は cert-manager の ClusterIssuer `letsencrypt` が引き継いだ。
 
 ### Traefik の sticky cookie に代替が無い(2026-09-07 調査)
 
-撤去した Traefik の Middleware / IngressRoute のうち、**Service の sticky cookie
-(`traefik.ingress.kubernetes.io/service.sticky.cookie.*`)だけは Cilium 側に受け皿が無い。**
-使っていたのは tamasagashi(`ts.doany.io`)1 本で、ローリング更新中に新旧 2 Pod が同時に配信される窓で
-「HTML を新 Pod から受けたブラウザが、ハッシュ付きの CSS/JS を旧 Pod に取りに行って 404」を防ぐためのものだった。
+**Service の sticky cookie だけは Cilium 側に受け皿が無い。** 使っていたのは tamasagashi(`ts.doany.io`)1 本で、
+ローリング更新中に「HTML を新 Pod から受けたブラウザが、ハッシュ付きの CSS/JS を旧 Pod に取りに行って 404」を防ぐためのもの。
 
-- **Gateway API の session persistence(GEP-1619、`HTTPRoute.spec.rules[].sessionPersistence`)は使えない。**
-  入っている Gateway API CRD は **v1.6.1 の standard チャネル**で、`httproutes` の v1 の rule には
-  `backendRefs / filters / matches / name / timeouts` しか無い。`BackendLBPolicy` の CRD も入っていない
-  (どちらも experimental チャネル限定)
-- **Cilium 1.20.1 が未実装。** v1.20.1 タグのソースに `SessionPersistence` の文字が無く、ドキュメントのページも無い。
-  実装は cilium/cilium#48029 で 2026-09-01 に main へマージ(v1.20.1 のリリースは 2026-08-18)なので **1.21 から**。
-  GatewayClass `cilium` の `status.supportedFeatures` にも該当 feature は載っていない
-- **`Service.spec.sessionAffinity: ClientIP` は Gateway 経路には効かない。** 生成される
-  `CiliumEnvoyConfig/cilium-gateway-doany` の cluster は **type EDS**(lbPolicy 既定 = ROUND_ROBIN)で、
-  Envoy が EndpointSlice の Pod IP を直接見て振り分ける。sessionAffinity を実装している ClusterIP のデータパスを通らない。
-  仮に通っても Envoy から見た送信元 IP は全クライアント同じ(Gateway の Pod)なので per-client の固定にならない。
-  `service.cilium.io/affinity`(clustermesh の local/remote)や `service.cilium.io/lb-algorithm`(eBPF の random/maglev)も同じ理由で無関係
+- **Gateway API の session persistence(GEP-1619)は experimental チャネル限定**で、入っている v1.6.1 standard には無い
+- **Cilium 1.20.1 が未実装。** cilium/cilium#48029 で main に入ったので **1.21 から**
+- **`Service.spec.sessionAffinity: ClientIP` は Gateway 経路には効かない。** Envoy が EndpointSlice を直接見て振り分け、
+  送信元も全クライアント同じ(Gateway の Pod)になる
 
-**いまは穴が開いたまま受け入れている。** tamasagashi は replicas 1・状態なしで、影響は更新中の 15 秒ほどの窓に限られ、
-アプリ側の SvelteKit の版チェックと Cloudflare の Browser Cache TTL 設定で緩和してある(danything/tamasagashi の `deploy/README.md`)。
-**Cilium 1.21 に上げるときに、Gateway API CRD を experimental チャネルへ入れ替えたうえで
-tamasagashi の HTTPRoute(`danything/tamasagashi` の `deploy/httproute.yaml`)に
-`sessionPersistence` を足す**のが本筋。
-CRD 入れ替えの際は、いまの Gateway API CRD が Traefik 撤去後も `traefik-crd` の Helm リリース所有のまま
-(`helm.sh/resource-policy: keep` で残存)であることに注意。
-
-**Cookie を使う他のアプリ(auth の oauth2-proxy など)は影響を受けない。** どれも replicas 1 で、
-セッションは Cookie 自体か外部ストアに入っていて Pod のメモリに無い。**将来どれかを複数 replica にするなら、
-Cilium 1.21 未満のあいだは Gateway 越しのセッション固定が無いことを先に確認すること。**
+**いまは穴が開いたまま受け入れている**(replicas 1・状態なし。影響は更新中の 15 秒ほど。緩和は danything/tamasagashi の `deploy/README.md`)。
+**Cilium 1.21 に上げるときに、Gateway API CRD を experimental チャネルへ入れ替えて
+tamasagashi の HTTPRoute に `sessionPersistence` を足す**のが本筋。いまの CRD は `traefik-crd` の Helm リリース所有のまま
+(`helm.sh/resource-policy: keep` で残存)なので、入れ替えの際は注意。
+**将来どれかのアプリを複数 replica にするなら、1.21 未満のあいだは Gateway 越しのセッション固定が無いことを先に確認すること。**
 
 ### 却下した案
 
@@ -482,22 +390,13 @@ Cilium 1.21 未満のあいだは Gateway 越しのセッション固定が無�
 | ingress-nginx | EOL |
 | HAProxy / Kong / Istio | 単一ノードに過剰、または Gateway API 対応で劣る |
 
-### 参考: Envoy Gateway を選ぶ場合に確認が要ること
-
-いまは採らないが、将来 Cilium で足りなくなったときのために残す。Envoy Gateway の OIDC は
-トークンをブラウザの Cookie に保存するので、既知の問題がある。
+将来 Envoy Gateway を選ぶなら、OIDC はトークンを Cookie に保存するので次の既知の問題を先に見る:
 
 | Issue | 内容 |
 | --- | --- |
 | envoyproxy/gateway#7315 | トークンが **4096 文字を超えるとブラウザが Cookie をセットせず**、認証がループする。**Envoy 側にエラーログが出ない** |
 | envoyproxy/gateway#8441 | OIDC Discovery が失敗すると毎リクエスト token introspection にフォールバック。IdP 停止時に白画面 |
 | envoyproxy/gateway#8649 | Gateway レベルとルートレベルで SecurityPolicy を二重掛けすると CSRF 検証で落ちる |
-
-`cookieDomain` はサブドメイン間で共有するなら root domain(`.doany.io`)。後から変えると
-ブラウザに残った古い Cookie が優先されて認証が壊れるので、変更時は Cookie クリアが要る。
-
-Envoy Gateway 自体はマイナーが 2 週間強に 1 回出てサポート窓も短い。
-**Talos / Kubernetes / Gateway API CRD / Envoy Gateway の 4 つのバージョンマトリクス**を回す前提でコストを見る。
 
 ## chart を配るときと、chart で入れるとき(2026-09-07)
 
@@ -513,8 +412,7 @@ Envoy Gateway 自体はマイナーが 2 週間強に 1 回出てサポート窓
 chart が悪いのではなく、**入れ方**が合わなくなった。
 
 - **k3s 固有で Talos に無い。** OS を替える時点で全部書き直しになる
-- **CR を消すと helm がアンインストールされる。** finalizer 駆動なので外しても付け直される。
-  CRD を `templates/` に置く chart だと CRD ごと消えて CR が巻き添えになる
+- **CR を消すと helm がアンインストールされる**(下の「HelmChart CRD から ArgoCD の Application へ」)
 - **ArgoCD と二重管理になる。** 同じリソースを 2 つのリコンサイラが見ることになり、
   差分も同期状態も prune の制御も ArgoCD 側から見えない
 - **Job で走るので chart 側の事情が漏れる。** erpnext(2026-10-06 に撤去)は Job 名に描き出した時刻を入れるので、
@@ -545,11 +443,10 @@ Flux の `HelmRelease` でも同じものが入るのが正しい。**このク�
 ## HelmChart CRD から ArgoCD の Application へ(2026-09-07)
 
 `HelmChart`(`helm.cattle.io`)は k3s の helm-controller が提供するもので **Talos には無い**。
-OS 交換時の変数を減らすため、k3s のうちに ArgoCD の `Application` へ移す。
+OS 交換時の変数を減らすため、k3s のうちに ArgoCD の `Application` へ移した。
 
 **移す前に必ず `helm template` の出力と live を突き合わせる。** リリース名まで揃えれば
-描き出されるものは一致し、引き取っても Pod は入れ替わらない(実測: cloudflare-ddns・
-infisical-operator・infisical-push-bridge の 3 つとも `kubectl diff` が空、Pod の AGE も変わらなかった)。
+描き出されるものは一致し、引き取っても Pod は入れ替わらない。
 `secrets-operator` のように名前を切り詰める chart があるので、**リリース名を変えると別物として作り直しになる**。
 
 ### **CR を消すと helm がアンインストールされる**
@@ -560,32 +457,9 @@ CRD を `crds/` ではなく `templates/` に置いているため、**アンイ
 `InfisicalSecret` 15 本が巻き添えになる**(Secret は `creationPolicy: Orphan` なので残るが、
 値の同期は止まる)。
 
-**手順(この順番でやる)**:
-
-```shell
-# 1. Application を先に作って Synced になるのを確かめる(diff が空なら Pod は入れ替わらない)
-kubectl apply -f apps/<name>/application.yaml
-# 2. helm のリリース Secret を消す。これでアンインストールが「対象なし」になる
-kubectl -n <targetNamespace> delete secret -l owner=helm,name=<releaseName>
-# 3. HelmChart CR を消す。削除ジョブは走るが何も消さない
-kubectl -n kube-system delete helmchart <name>
-```
-
-`apps/` に置いたものは ArgoCD が prune するので、git から消すだけで CR も消える。
-その場合はアンインストールが走るので、**状態を持つものでは必ず先に 2 をやる**
-(cloudflare-ddns では手を抜いて走らせたら Deployment が一度消えて、ArgoCD が数秒で作り直した)。
-
-### 残り
-
-| chart | 状態 | 扱い |
-| --- | --- | --- |
-| cloudflare-ddns | 移行済み | `apps/cloudflare-ddns/application.yaml` |
-| infisical-secrets-operator | 移行済み | `apps/infisical-operator/` |
-| infisical-push-bridge | 移行済み | `apps/infisical-push-bridge/` |
-| yosegaki | 移行済み | blog リポジトリの `deploy/yosegaki-application.yaml`。PVC 持ちなので上の手順で移した |
-| erpnext | 移行済み(2026-10-06 に撤去) | Job 名に時刻が入る chart だったので、`jobs.createSite` と `jobs.configure` を止めて移した(描き出しの差はその 2 つの Job だけで、Pod は入れ替わらなかった) |
-| infisical | **移さない**(2026-09-08 に確定) | chart が DB と Redis のパスワードを **Deployment の平文 env に焼き込む**ので、値を git に置けない。理由は下記 |
-| argocd | 移さない | 自分自身。Talos では machine config の `inlineManifests` に載せる |
+**移し方は 3 段**: Application を先に作って Synced を確かめる → helm のリリース Secret
+(`owner=helm,name=<releaseName>`)を消して、アンインストールを「対象なし」にする → HelmChart CR を消す。
+cloudflare-ddns・infisical-operator・infisical-push-bridge・yosegaki・erpnext を移し終えた。argocd と infisical は移さない(下記)。
 
 ### infisical だけは ArgoCD に移せない(2026-09-08、chart を読んで確定)
 
@@ -623,59 +497,43 @@ REDIS_URL          redis://default:<パスワード>@redis-master:6379
 
 ## ghcr の pull 認証
 
-repo が private なのでパッケージも private。もとは名前空間ごとに `ghcr-pull`(PAT の dockerconfigjson)を
-Infisical から作って `imagePullSecrets` で参照していた(tamasagashi、worklog)。アプリを足すたびに同じものが増える。
-
-| 案 | 中身 | 評価 |
-| --- | --- | --- |
-| **node 単位の資格情報**(推奨) | k3s なら `/etc/rancher/k3s/registries.yaml`、Talos なら machine config の `machine.registries.config."ghcr.io".auth`。全 namespace に効く | `imagePullSecrets` と `ghcr-pull` の CR が全部消える。Talos では SOPS 暗号化した machine config に載るので、秘密の置き場も統一される。**Talos 移行と同時にやるのが自然** |
-| パッケージだけ public にする | GHCR のパッケージ可視性は repo の可視性と独立。public にすれば資格情報ゼロ | いちばん簡単。ただしイメージの中身(ビルド済みのアプリ)が誰でも pull できる |
-| GitHub App の短命トークン | CronJob で 1 時間ごとにトークンを発行して Secret を書き換える | いちばん安全だが、動く部品が増える。単一ノードの自宅クラスタには過剰 |
-| そのまま(PAT を Infisical に) | 当時の形 | 動いてはいる。ローテーションは Infisical 側 1 回で済む |
-
-**結論: node 単位へ寄せた(2026-09-06、Talos を待たず k3s 側で実施)。** アプリを足すたびに Secret を
-用意する必要が無くなった。Talos では同じ値が `talos/registries.yaml`(SOPS 済み)に入る
-([talos/README.md](../talos/README.md))。
-
-**その後(2026-09-15): ghcr の資格情報そのものが要らなくなった。** 非公開のリポジトリを GitHub から Forgejo に移し
-(apps/forgejo/README.md)、ghcr.io に残るイメージは全部公開。ノードの `registries.yaml` から ghcr.io を外し、
-代わりに fj.doany.io を同じ node 単位の形で持つ。ghcr.io の PAT はどこでも使っていない(Infisical の `/worklog/ghcr-pull` も既に無い)。
-
+もとは名前空間ごとに `ghcr-pull` を `imagePullSecrets` で参照していた。2026-09-06 にノード単位の資格情報へ寄せ、
+**2026-09-15 からは ghcr.io の資格情報そのものが要らない** ── 非公開のリポジトリを Forgejo に移し(apps/forgejo/README.md)、
+ghcr.io に残るイメージは全部公開。**ノード単位で持つのは fj.doany.io の資格情報だけ**(`talos/registries.yaml`、[talos/README.md](../talos/README.md))。
 
 ## PT3 チューナー(Talos で動かすための算段)
 
 実機には Earthsoft PT3(`earth_pt3`、Altera 1172:4c15)が刺さっていて、Talos のカーネルは `CONFIG_DVB_PT3` を
-有効にしておらず、公式 extension にも無い。denpa の tuner-agent はこの箱の `/dev/dvb` と B-CAS リーダーに依存している。
-**余っている箱は無い**(2026-09-06 本人談)ので、次の 2 本立てで進めていた。
+有効にしておらず、公式 extension にも無かった。denpa の tuner-agent はこの箱の `/dev/dvb` と B-CAS リーダーに依存している。
 
-**結論(2026-10-13): 1 が通った。** pkgs#1682 は v1.15.0-alpha.1 に入り、`siderolabs/dvb-pt3` が Image Factory の
-公式 extension に出た。本番の schematic を `96371c8f…`(dvb-pt3 + intel-ucode + IOMMU の引数)に作り直し、
-Talos を v1.15.0-alpha.1 に上げた(`talos/versions.yaml`)。extension は `earth_pt3` を blacklist して配るので、
-`talos/patches/main.yaml` の `machine.kernel.modules` で読ませる。2 の vfio は PT3 をホストのドライバと取り合うので外した。
-alpha をノード 1 台の本番に乗せることになるが、1.15.0 の正式版を待つより PT3 を先に取った。
+**結論(2026-10-13): 上流に入った。** [siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682)
+(`CONFIG_DVB_PT3=m`)が v1.15.0-alpha.1 に入り、`siderolabs/dvb-pt3` が Image Factory の公式 extension に出た。
+本番の schematic を `96371c8f…`(dvb-pt3 + intel-ucode + IOMMU の引数)に作り直し、Talos を v1.15.0-alpha.1 に上げた
+(`talos/versions.yaml`)。extension は `earth_pt3` を blacklist して配るので、`talos/patches/main.yaml` の
+`machine.kernel.modules` で読ませる。alpha をノード 1 台の本番に乗せることになるが、正式版を待つより PT3 を先に取った。
 
-1. **上流に PR 済み(本命)**: [siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682)
-   (`CONFIG_DVB_PT3=m` の 1 行。依存する tc90522 / qm1d1c0042 / mxl301rf は既に `m`)と
-   [siderolabs/extensions#1238](https://github.com/siderolabs/extensions/pull/1238)(`dvb/pt3` extension、cx23885 と同じ形)。
-   後者は前者が入って Talos のリリースに乗るまでビルドできないので順番待ち。取り込まれれば Talos 側は素のままで済む。
-   DCO の Signed-off-by は git config の `Ruk Doe <info@doany.io>`。conform が GPG 署名も求めるので、必要なら本人の鍵で作り直す。
-   extension の `compatibility.talos.version` は `>= v1.15.0` と当て推量。
-2. **入らなかった場合の保険: KubeVirt の VM にパススルー。** 実機で確認済み — VT-d 有効(IOMMU グループ 66 個)、
-   PT3(05:00.0)は**グループ 36 に単独**、B-CAS は USB(Gemalto GemPC Twin 08e6:3437)。Talos のカーネルは
-   `vfio-pci` / `vfio_iommu_type1` / KVM を持っている(`intel_iommu=on` は schematic に残してある。vfio は 2026-10-13 に `talos/patches/main.yaml` から外したので、この道に戻るなら足し直す)。
-   tuner-agent だけ VM(Ubuntu)で動かせば Talos 本体は素のまま、アップグレードも Image Factory のままでいける。
+**駄目だったときの保険: KubeVirt の VM にパススルー。** 実機で確認済み — VT-d 有効、PT3(05:00.0)は
+**IOMMU グループ 36 に単独**、B-CAS は USB(Gemalto GemPC Twin 08e6:3437)。tuner-agent だけ VM(Ubuntu)で動かせば
+Talos 本体は素のまま。`intel_iommu=on` は schematic に残してあるが、vfio は 2026-10-13 に
+`talos/patches/main.yaml` から外した(PT3 をホストのドライバと取り合う)ので、この道に戻るなら足し直す。
 
-自前 extension を `imager` で焼く案は、Image Factory から外れてアップグレードのたびに自前ビルドになるので採らない。
-
+**自前 extension を `imager` で焼く案は採らない。** Image Factory から外れて、アップグレードのたびに自前ビルドになる。
 
 ## 依存の更新をどこまで自動で入れるか(2026-09-07)
 
 Renovate は共有プリセット(`5ym/repo-config`。2026-10-07 に `5ym/renovate` から改名)を使っていて、**全部を 1 つの PR にまとめて自動マージ**する
 設定だった。`separateMajorMinor: false` も付いていたので、**postgres 17 → 18 が nginx のパッチと
-同じ PR に入り、自動マージの対象になっていた**(danything/gitops#7)。そのまま入っていたら当時の Mattermost が落ちていた。
+同じ PR に入り、自動マージの対象になっていた**(danything/gitops#7)。
 
-**直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/renovate#2)。
+**直したこと**: プリセット側でメジャーを別の PR に分け、`automerge: false` にした(5ym/repo-config#2)。
 パッチとマイナーはこれまでどおり 1 つにまとめて自動マージする。小さくて頻繁で、タグを戻せば済むため。
+
+**SOPS で暗号化したファイルは Renovate に触らせない**(2026-09-08)。argo-cd 10.8.2 の PR が暗号文の中の `version: 10.8.1` を
+平文置換して自動マージされ、MAC が壊れて `sops -d` が通らなくなった(コミットから戻した)。`renovate.json` の `ignorePaths` で外し、
+その 2 ファイルの版は人が見る([../bootstrap/README.md](../bootstrap/README.md))。
+
+Renovate 自体は **2026-10-16 から k8s の CronJob([apps/renovate/](../apps/renovate/))で動かしている**
+(GitHub Actions の workflow と Forgejo Actions の `doa/renovate` は 2026-10-17 に削除)。
 
 いまの自動マージの範囲(プリセット `5ym/repo-config`):
 
@@ -685,25 +543,21 @@ Renovate は共有プリセット(`5ym/repo-config`。2026-10-07 に `5ym/renova
 | `major dependencies` | しない |
 | `helm charts`(更新の種類を問わない) | しない |
 
-**PostgreSQL は 17 の線に固定した**(`renovate.json` の `allowedVersions: "<18"`)。きっかけは Mattermost
-(公表しているのが下限の 14.0+ だけだった。2026-10-06 に撤去)だが、規則は `postgres` のイメージ全部に効いている。
-外さない理由はもう 1 つのほう ── **PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れる。**
-イメージのタグを差し替えると `database files are incompatible with server` で起動を拒否する。上げるには
+**PostgreSQL は 17 の線に固定した**(`renovate.json` の `allowedVersions: "<18"`)。
+**PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れる。**
+イメージのタグを差し替えると `database files are incompatible with server` で起動を拒否し、上げるには
 dump と restore が要る。17 のサポートは 2029-11 まであるので急がない。
 
 ### メジャーを分けるだけでは足りない(2026-09-07 実例)
 
-プリセットを直した直後に Renovate が #7 を作り直し、**自分でマージした**。残ったのは
-postgres 17.10 → 17.11(パッチ、無害)と **erpnext の chart 8.0.15 → 8.0.78**。後者は版の付け方が
-パッチなので、メジャーを分ける設定では止まらない。中身はキャッシュとキューの Dragonfly → Valkey の
-入れ替え(Service 名も `erpnext-dragonfly-*` → `erpnext-valkey-*` に変わる)で、values に書いてあった
-Dragonfly のチューニングが丸ごと無効になり、valkey は `resources: {}` で上限も無かった。
+プリセットを直した直後、Renovate は erpnext の chart 8.0.15 → 8.0.78 を自動マージした。版の付け方はパッチだが、
+中身は Dragonfly → Valkey の入れ替えで、values に書いてあったチューニングが丸ごと無効になった。
 
 **版の番号は中身の大きさを表さない。** chart の場合はとくにそうで、自動マージに任せる範囲を
 決めるときは「メジャーかどうか」だけでは足りない。
 
 **そこでプリセット側で `helm` の datasource を丸ごと自動マージから外した**
-(5ym/renovate#3)。chart は更新の種類を問わず人が見る。`helm charts` という別の
+(5ym/repo-config#3)。chart は更新の種類を問わず人が見る。`helm charts` という別の
 グループにしてあるのは、chart を止めることで `all dependencies` の PR まで自動マージ
 されなくなるのを避けるため。
 
@@ -724,10 +578,10 @@ Dragonfly のチューニングが丸ごと無効になり、valkey は `resourc
 マニフェストを消すのは git のレビューを通るが、Application の削除は UI のボタン 1 つで済む。
 そこの重みは違う、という点は残る。
 
-**`storageClassName` はバインド済み PVC では変更も削除もできない**(API が拒否する)。
-既存ぶんは `local-path-retain` のままで、PV の `persistentVolumeReclaimPolicy` を `Delete` に
-パッチして挙動だけ揃えた。マニフェストから消せるのは **Talos の再構築時**で、
-そのとき既定の `local-path`(reclaim は `Delete`)になる。
+**`storageClassName` はバインド済み PVC では変更も削除もできない**(API が拒否する)ので、
+2026-10-05 に k3s のうちに付け替えた: 28 本の PVC を止め、PV を `Retain` にして古い PVC を消し、
+PV の `claimRef` を外して `storageClassName` を `local-path` に書き換え、新しい PVC を `volumeName` で同じ PV に結んだ
+(**データはコピーしていない**)。`local-path-retain` はもう使っていない([../ROADMAP.md](../ROADMAP.md))。
 
 ## バックアップに何を含めるか
 
@@ -736,14 +590,7 @@ R2 の無料枠は 10 GB。**もう超えている。**
 | 日付 | リポジトリの実サイズ | できごと |
 | --- | --- | --- |
 | 2026-09-06 | 3.3 GiB | |
-| 2026-09-07 | 13.92 GiB | `denpa-recorded` が 14 GB まで育っていた → 除外した |
-| **2026-09-08** | **23.2 GiB** | **`denpa-library` が 972 MB → 7.9 GB に育った**(圧縮後 10.1 GiB) |
-| 2026-09-10 | 33.5 GiB | R2 の表示は 36.05 GB(GiB との差)。うち 18.15 GiB が `denpa-library` の 3 世代 |
-| 2026-10-05 | 88.6 GiB | ライブラリが 39.66 GiB に育ち、ホストのスクリプトの 10 世代がそれを掴んでいた → ホスト側から外した(下の表の「録画データ」) |
-| 2026-10-05 | **37.3 GiB** | ホストの 10 本から録画を抜き(`restic rewrite`)、改名前のパスの 1 本を消して prune。録画はエンコード済みの 1 世代(約 35 GiB)だけ |
-
-**除外では解決しない。** `denpa-recorded` を外した効果は保持世代が回れば出るが、
-今度は「取ると決めた」`denpa-library` そのものが伸びている。
+| 2026-10-05 | **37.3 GiB** | 途中 88.6 GiB まで育った(下)。録画はエンコード済みの 1 世代(約 35 GiB)だけにした |
 
 **決定(2026-09-08): 有料でも取る。** 無料枠に収めることを目的にすると録画を捨てることになり、
 本末転倒。R2 は下り(egress)が無料なので、復元のたびに費用が跳ねる心配も無い。
@@ -751,24 +598,17 @@ R2 の無料枠は 10 GB。**もう超えている。**
 
 **ホストのスクリプトが全部を二重に持っている(2026-09-10 に気づいた)。**
 `backup/k3s-backup` は `/var/lib/rancher/k3s/storage` を丸ごと取るので、**k8up が PVC ごとに
-取っているものと同じ中身**が `host=main` のスナップショットにも入っている(除外しているのは
-`denpa-recorded` だけ)。restic は重複を除くので容量は二重にならないが、**片方で世代を減らしても
-もう片方が同じ blob を掴んでいるので解放されない。**
+取っているものと同じ中身**が `host=main` のスナップショットにも入っている。restic は重複を除くので容量は二重にならないが、
+**片方で世代を減らしてももう片方が同じ blob を掴んでいるので解放されない。**
 
 実際、`denpa-library` を 3 世代 → 1 世代にしても**解放されたのは 36 MiB だけ**だった
 (狙っていたのは 10 GiB)。`restic stats --mode raw-data <snapshot>` が返すのは
 「そのスナップショットが参照する量」で「そのスナップショットだけが持つ量」ではない、
 という読み違い。**per-PVC の保持設計はホストのスクリプトがある間は効かない。**
+これは**移行で消える**(Talos にはシェルが無い)。`host=main` が保持から落ちきったところで解放される。
 
-これは**移行で消える** ── Talos にはシェルが無いのでホストのスクリプトは持っていけない。
-`host=main` のスナップショットが保持(`keep-daily 7 / keep-weekly 4 / keep-monthly 2`)から
-落ちきったところで、溜まっていたぶんが解放される。
-
-**料金の見かた(2026-09-10 に確かめた)。** R2 のストレージは「いまのサイズ」ではなく
-**期間中の日次ピークの平均(GB-month)**で、無料枠は 10 GB-month。リポジトリは 9/6 生まれで
-請求期間(8/23〜9/23)の前半は空だったので、この期間の平均はまだ 4 GB-month ほど。
-だから 33.5 GiB あっても請求は **$0.00** のまま。丸ごと入る次の期間で **月 $0.4 前後**になる。
-操作のほうは桁違いに余っている(Class A 5.09k / 100万、Class B 14.34k / 1000万)。
+**料金**: R2 のストレージは**期間中の日次ピークの平均(GB-month)**で課金され、無料枠は 10 GB-month。
+いまの規模で月 $0.4 前後(2026-09-10 の見積もり)。操作の回数は桁違いに余っている。
 
 容量を削るために外した / 外さなかったもの:
 
@@ -786,24 +626,15 @@ wg-easy を使う理由は **プライバシー(全部を自宅経由にする)�
 どれも「自宅の LAN に入れれば済む」もの。UI に不満はあったが、**スマホを足すときの QR は実際よく使う**ので
 UI を捨てる方向は取らなかった。
 
-比較したもの:
-
 | | 結論 |
 | --- | --- |
 | **wg-easy 続投** | 動いてはいる。ただし自前の認証を切れず(要望 [wg-easy#1923](https://github.com/wg-easy/wg-easy/issues/1923) が 2025-06 から open)、SSO の後ろに置いても**二重ログイン**が残る |
-| **wg-portal** | star は少ないが機能は足りる。ただし乗り換える動機が wg-easy 比で薄い |
-| **Headscale** | 完成度は高い。**が、FAQ が「headscale を動かすマシンをサブネットルータにするな」と明記している。** ノードが 1 台のこの構成では回避できない。コンテナは「サポート対象外」だが放置ではなく(コンテナ/プロキシ関連の PR は 48 本マージ済み、[#3292](https://github.com/juanfont/headscale/pull/3292) は reverse-proxy のドキュメントを書き直している)、境界の引き方の問題 |
+| **wg-portal** | 機能は足りる。ただし乗り換える動機が wg-easy 比で薄い |
+| **Headscale** | 完成度は高い。**が、FAQ が「headscale を動かすマシンをサブネットルータにするな」と明記している。** ノードが 1 台のこの構成では回避できない |
 | **NetBird** | **採用。** routing peer が独立した概念で、コンテナで動かす前提のドキュメントがある。1 台構成でも上の問題が起きない |
 
-star は headscale が 43.6k、netbird が 29.0k で headscale のほうが多い。**が、動いている量は netbird が上**
-(2026-09-07 時点、直近 30 日のコミット 119 対 45、作者 21 人対 10 人、直近 90 日のマージ済み PR 399 対 51、
-1 年のリリース 109 対 16)。netbird の open issue 1,583 は放置ではなく分母の差で、
-GUI クライアント・IdP 連携・ポリシーまで同じリポジトリに入っている。
-
 **公式 Helm chart は使わない。** [netbirdio/helms](https://github.com/netbirdio/helms) の `charts/netbird` は
-2026-04-24 から更新が止まっていて appVersion `0.46.0`(本体は `0.78.1`)。
-[#39](https://github.com/netbirdio/helms/issues/39) で指摘され、中の人が「combined に寄せるか両対応か」と
-返したきり半年動いていない。archived ではないので廃止ではなく**宙に浮いている**。
+更新が止まっていて appVersion が本体から大きく遅れている([#39](https://github.com/netbirdio/helms/issues/39))。
 上流は v0.65.0 で management/signal/relay を 1 つにまとめた **combined コンテナ**に移っており、
 素の Deployment で足りる(`apps/netbird/`)。
 
@@ -823,13 +654,12 @@ GUI クライアント・IdP 連携・ポリシーまで同じリポジトリに
 ## 公開経路(HTTPRoute)をどこに置くか(2026-09-07)
 
 `apps/gateway-routes/` に全部まとめていたのをやめ、**それぞれが公開しているものと同じ場所**に置いた。
-
-ArgoCD は `sourcePath` 配下を `recurse` で拾い、追跡は `argocd.argoproj.io/tracking-id` 注釈
-(`<app名>:<GVK>:<ns>/<name>`)で行うので、**ファイルの場所は挙動に影響しない**。純粋に読み手の都合。
+ArgoCD は `sourcePath` 配下を `recurse` で拾い、追跡は `argocd.argoproj.io/tracking-id` 注釈で行うので、
+**ファイルの場所は挙動に影響しない**。純粋に読み手の都合。
 
 | 行き先 | 対象 |
 | --- | --- |
-| このリポジトリの `apps/<name>/httproute.yaml` | adguardhome / forgejo / headlamp / infisical / matrix / mta-sts / netbird / rybbit など(当時は erpnext と mattermost も) |
+| このリポジトリの `apps/<name>/httproute.yaml` | adguardhome / forgejo / headlamp / infisical / matrix / mta-sts / netbird / rybbit など |
 | 各アプリのリポジトリの `deploy/httproute.yaml` | blog / yosegaki / lgtm / tamasagashi / worklog / xool / yuzuriha |
 | `bootstrap/` | argocd / auth ×3 / redirect-https |
 
@@ -838,20 +668,12 @@ ArgoCD は `sourcePath` 配下を `recurse` で拾い、追跡は `argocd.argopr
 ArgoCD が壊れているときにその経路を ArgoCD 経由でしか直せない、という順序の逆転があった。
 
 **まとめて 1 か所に置く利点(公開しているものの一覧になる)は失う。** 代わりに
-`apps/gateway-routes/README.md` …ではなく、この表と `bootstrap/README.md` が索引になる。
-外部露出を一覧したいときは `kubectl get httproute,grpcroute -A` が正確で、git を読むより早い。
+この表と `bootstrap/README.md` が索引。外部露出を一覧したいときは `kubectl get httproute,grpcroute -A` が
+正確で、git を読むより早い(一覧の一枚は作らない、2026-09-09)。
 
-### 落とさずに動かす手順
-
-ArgoCD は「git から消えた + 自分が追跡している」ものを prune する。単に移すと**移動の瞬間に
-公開経路が落ちる**。使った回避は 2 通り:
-
-- **別リポジトリへ移すもの** — 移送先を**先に**マージする。そのアプリの Application が同じ
-  ルートを apply した時点で tracking-id が書き換わり、元の Application の管理から外れる。
-  そのあと元から消せば prune は起きない。7 本とも移動後に tracking-id を確認してから消した
-- **`bootstrap/` へ移すもの** — 引き取り手が居ないのでこの手が使えない。先に
-  `argocd.argoproj.io/sync-options: Prune=false` を live に効かせておき、そのあと移す。
-  移し終えたら live の tracking-id 注釈を剥がして、`Prune=false` も外す
+**落とさずに動かす**: ArgoCD は「git から消えた + 自分が追跡している」ものを prune する。別リポジトリへは
+移送先を**先に**マージして tracking-id が書き換わってから元を消す。`bootstrap/` へは引き取り手が居ないので、
+先に live に `Prune=false` を効かせてから移し、tracking-id 注釈を剥がして `Prune=false` も外す。
 
 ## DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける(2026-10-06)
 
@@ -866,12 +688,9 @@ ArgoCD は「git から消えた + 自分が追跡している」ものを prune
 アプリのリポジトリの 2 か所を直すことになる。ExternalDNS は HTTPRoute の注釈だけで決まり、自分が作ったレコード
 (所有の印の TXT 付き)にしか触れないので、メールや DDNS の apex と同居できる。
 
-比べたもの(2026-10-06 時点の GitHub のスター):ExternalDNS 9,104(kubernetes-sigs)/ DNSControl 3,961 / OctoDNS 3,772 /
-Cloudflare の Terraform provider 1,342 / cloudflare-operator 695(トンネルが主) / k8s_gateway 356(自前の DNS サーバーで、
-1 年以上止まっている) / Crossplane の Cloudflare provider 10。疎結合にできるのは ExternalDNS・cloudflare-operator・Crossplane だけで、
-その中で DNS が主役で利用者が多いのは ExternalDNS。
+比べたもの:ExternalDNS / DNSControl / OctoDNS / Cloudflare の Terraform provider / cloudflare-operator / k8s_gateway /
+Crossplane。疎結合にできるのは ExternalDNS・cloudflare-operator・Crossplane だけで、その中で DNS が主役で利用者が多いのは ExternalDNS。
 
 **Entra のリダイレクト URI は中央(`pulumi/entra.ts`)のまま。** 共用のアプリ登録 1 つに全アプリの URI が入るので、
 そもそも中央に集まる性質のもの。アプリごとに分けるにはアプリ登録を分ける必要があり、それを Kubernetes から作る
 手軽な道具がまだ無い。
-

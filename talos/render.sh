@@ -8,11 +8,13 @@
 #
 #   ./talos/render.sh /tmp/talos-config
 #
-# 秘密は talos/secrets.yaml(SOPS)。復号は呼び出し側でやる。このスクリプトは
-# 平文を書き出さない。
+# 秘密(talos/secrets.yaml などの SOPS ファイル)は自分で復号して作業用の一時ディレクトリに置き、
+# 終わったら消す(age の鍵が要る)。CI は鍵を持たないので SECRETS / REGISTRIES などの env で
+# 渡し、そのときは復号しない。出力の machine config は秘密を含むので扱いに注意。
 #
-# `talosctl upgrade-k8s` の前にも実行すること。upgrade-k8s は inlineManifests を
-# reconcile するので、古い machine config のまま流すと Cilium が巻き戻る。
+# 移行後は手元の PC(tools/t.ps1 のコンテナ)で回す。k3s 期はサーバでも回していた。
+#
+# `talosctl upgrade-k8s` の前にも実行すること(talos/README.md「inlineManifests を直したとき」)。
 set -eu
 
 OUT=${1:?usage: render.sh <output-dir>}
@@ -39,13 +41,7 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
-# fj.doany.io(Forgejo のコンテナレジストリ)の pull 資格情報。k3s 期はホストの
-# /etc/rancher/k3s/registries.yaml にあるもので、ノード単位で持つので namespace ごとの
-# imagePullSecrets が要らない。無いと非公開のリポジトリ(shadai など)のイメージが引けない。
-# 値は Forgejo のユーザー info の read:package だけのトークン(k3s-registry-pull)。
-# ghcr.io は 2026-09-15 に外した(残るイメージは全部公開)。
-#
-# 平文は書き出さないので、talos/registries.yaml(SOPS で丸ごと暗号化)を復号して渡す。
+# fj.doany.io のイメージ取得の資格情報(talos/README.md「fj.doany.io の資格情報」)。
 # CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通す。
 REGISTRIES=${REGISTRIES:-}
 if [ -z "$REGISTRIES" ]; then
@@ -131,7 +127,7 @@ hc() { # $1=file  $2=キー名 または @values
 	' "$1"
 }
 
-# $1=名前(argocd / infisical)。復号は呼び出し側で済ませて $2 に渡す。
+# $1=名前(argocd / infisical)。$2 は復号済みの CR(下の decrypt_cr が作る)。
 helmchart_inline() { # $1=name  $2=復号済み CR
 	_name=$1
 	_cr=$2
@@ -164,7 +160,7 @@ helmchart_inline() { # $1=name  $2=復号済み CR
 	echo "  $_name: chart $_chart $_ver -> $(wc -c < "$WORK/inline-$_name.yaml") バイト"
 }
 
-# 復号は呼び出し側で。CI には age の鍵を渡さないので、`ARGOCD_CHART` /
+# 復号してパスを返す。CI には age の鍵を渡さないので、`ARGOCD_CHART` /
 # `INFISICAL_CHART` にダミーを入れて経路だけ通す(SECRETS / REGISTRIES と同じ)。
 decrypt_cr() { # $1=name  $2=env で渡された上書き
 	if [ -n "$2" ]; then echo "$2"; return 0; fi

@@ -3,18 +3,9 @@
 # ここは Renovate が書き換える。手で触るのは schematic を変えたときだけ
 # (拡張やカーネル引数を足したら Image Factory で新しい ID が出る)。
 #
-# 上げること自体は自動化しない。このクラスタはノードが 1 台なので、Talos の
-# アップグレードは「唯一のノードの再起動 = 全停止」になる。無人で走らせる種類の作業ではない。
-# Renovate の PR は新しい版が出たという通知として使い、適用は自分の都合のいい時間に
-#
-#   talosctl upgrade --image factory.talos.dev/installer/<schematic>:<version>
-#
-# で行う。Talos のアップグレードは A/B なので、失敗すれば前のイメージに戻る。
-# Kubernetes は再起動を伴わない(`talosctl upgrade-k8s --to <version>`)。
-#
-# ノードが増えたらコントローラに任せる道が開く(tuppr / system-upgrade-controller)。
-# どちらも「自分が乗っているノードは自分で上げない」設計なので、1 台では成立しない。
-# 手順は ../docs/talos.md。
+# 上げること自体は自動化しない(ノード 1 台なので Talos の upgrade は全停止)。Renovate の PR は
+# 新しい版が出たという通知として使い、適用は自分の都合のいい時間に手で。
+# 理由と手順は README.md「上げ方 / 当て直し方」。
 
 talos:
   # Talos のリリースを追う。Image Factory はどの版でもその場で installer を作るので、
@@ -32,9 +23,9 @@ talos:
 kubernetes:
   # `gen config` に `--kubernetes-version` で渡すこと。渡さないと Talos の既定
   # (v1.14.0 なら v1.37.0)になり、ここに書いた値は無視される。2026-09-07 の Talos ブート
-  # ドリルで、生成物が v1.37.0 になっているのを見つけた。移行当日に意図せず
-  # 1.36 → 1.37 の飛び級をするところだった。
-  # いまの k3s は v1.36.2+k3s1。
+  # ドリルで、生成物が v1.37.0 になっているのを見つけた(render.sh が渡し、needle で見ている)。
+  # いまの k3s は v1.36.2+k3s1。Talos のクラスタは git から建て直す(k3s は sqlite で etcd を持ち越さない)ので、
+  # ここが k3s より 1 つ新しくても in-place の飛び級にはならない。手元の kubectl は tools/Dockerfile が同じ depName で揃える。
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   version: v1.37.1
 
