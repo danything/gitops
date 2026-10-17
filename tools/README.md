@@ -9,6 +9,8 @@ Linux 用の `tools/t`(docker compose)は、手元が Windows に移ったので
 tools/t.ps1 cf r2 buckets list
 tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml
 $env:INFISICAL_PROFILE = 'info@doany.io--doa'; tools/t.ps1 infisical secrets --env prod --path /matrix/matrix
+tools/t.ps1 kubectl get pods -A           # クラスタは読み取り用で繋ぐ
+tools/t.ps1 --admin kubectl apply -f x.yaml  # 書くときだけ管理者(下の「クラスタの資格情報」)
 tools/t.ps1        # 引数なしならシェルに入る
 ```
 
@@ -17,7 +19,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 | cf | Cloudflare(R2 など) |
 | sops / age | `bootstrap/` と `talos/` の暗号化したファイル |
 | infisical | 秘密の読み書き |
-| kubectl / talosctl / helm | クラスタ(Talos の移行後は手元から直接) |
+| kubectl / talosctl / helm | クラスタ(資格情報は下の「クラスタの資格情報」) |
 | restic | R2 のバックアップの中身を見る・戻す |
 | pulumi / bun | `pulumi/`(ふだんは CI が流す) |
 
@@ -29,19 +31,55 @@ tools/t.ps1        # 引数なしならシェルに入る
 - [../compose.yaml](../compose.yaml) の `tools` を `wslc-compose run` で動かす(`winget` で入る wslc-compose)。リポジトリは `/repo` に置く
 - **ログインと鍵はリポジトリの `.home/` に置く**(コンテナの中の `HOME`。`.gitignore` 済み)。手元のホームは汚さない。
   cf のログイン(`.config/cloudflare`)、sops の age 鍵(`.config/sops/age/keys.txt`)、infisical のログイン
-  (`.infisical` と `infisical-keyring`)、pulumi(`.pulumi`)、kubectl / talosctl(`.kube` / `.talos`)がここに入る。
-  kubeconfig と talosconfig は今は無い(k3s の間はノードに ssh して kubectl を使うため。Talos に移ったら置く)。
+  (`.infisical` と `infisical-keyring`)、pulumi(`.pulumi`)がここに入る。
+  クラスタの資格情報はここにも置かない(下の「クラスタの資格情報」)。
   `.home/` は本人だけが読める ACL にする
 - **`git clean -fdx` で消える**(無視しているファイルも消すため)。age 鍵は `recovery/sops-age.key.age` から戻せる
   (README「Infisical より下の層」)、ほかはログインし直せば戻る
 - Dockerfile を変えると、次の `tools/t.ps1` でイメージを作り直す(変わっていなければキャッシュで一瞬)
 - パイプやリダイレクトのときは TTY を付けない(`tools/t.ps1` が見分ける)
-- PowerShell でパイプしたもの(`tools/t.ps1 sops -d … | tools/t.ps1 kubectl apply -f -`)は、`t.ps1` がコンテナの標準入力に流し直す。
+- PowerShell でパイプしたもの(`tools/t.ps1 sops -d … | tools/t.ps1 --admin kubectl apply -f -`)は、`t.ps1` がコンテナの標準入力に流し直す。
   行を LF でつないだ UTF-8 にして渡す(PowerShell のまま流すと CRLF になり、5.1 では日本語が `?` に化けるため、
   base64 で包んでコンテナの中で戻す)。PowerShell のパイプは行(文字列)単位なので、バイナリは通らない。
   バイナリはファイルに書いてリポジトリの中から読ませる
 - `t.ps1` は **BOM 付きの UTF-8** にしてある。BOM が無いと Windows PowerShell 5.1 が Shift_JIS として読み、
   日本語のコメントで構文が壊れる(2026-10-07 まで 5.1 では動かなかった)
+
+## クラスタの資格情報
+
+**kubectl・talosctl・helm は、クラスタに繋ぐときだけ資格情報をコンテナの中で作るか復号して渡す**(2026-10-17。
+[creds.sh](creds.sh))。置き場はコンテナの `/dev/shm`(tmpfs)で、コンテナと一緒に消える。
+**平文は手元のディスクにも `.home/` にも残らない。** age 鍵(上の「仕組み」)が無いと止まる。
+
+**既定は読み取り用。管理者は `tools/t.ps1 --admin …` と書いたときだけ。** 書く操作(`apply`・`delete`・
+`create job` など)は `--admin` を付ける。`--admin` はシェルにも効く(`tools/t.ps1 --admin`)。
+**誤操作を防ぐための分け方で、権限の境界ではない**(どちらも同じ age 鍵から作れる)。
+
+| | 読み取り用(既定) | 管理者(`--admin`) |
+| --- | --- | --- |
+| kubectl / helm | その場で作る。`talos/secrets.yaml` の Kubernetes の CA で、グループ `entra:viewer` の証明書(1 日で切れる) | `talos/kubeconfig.yaml`(SOPS 済み)を復号する |
+| talosctl | その場で作る。Talos の CA で `os:reader` の証明書(1 日で切れる) | 同じく `os:admin` |
+
+- 読み取り用の権限は [`../bootstrap/apiserver/rbac.yaml`](../bootstrap/apiserver/rbac.yaml) の `entra:viewer`
+  (組み込みの `view` と `readonly-extra`。ログは読めて、Secret は読めない)。Headlamp で Entra の viewer が持つものと同じ
+- **helm はリリースの情報を Secret に持つ**ので、`helm list` や `helm status` も `--admin` を付ける
+- **talosconfig は保存しない**([../docs/decisions.md](../docs/decisions.md)「手で持つもの」)。`secrets.yaml` から毎回作る
+- 管理者の kubeconfig だけはファイルで持つ。Talos が出す正式なもの(`talosctl kubeconfig`)を使い、証明書は 1 年で切れる。
+  中身は `secrets.yaml` の CA で作れるものなので、置いても開けられる範囲は今と変わらない
+- 行き先はどれも `10.0.0.2`(`talos/render.sh` と同じ)。`KUBECONFIG` / `TALOSCONFIG` や `--kubeconfig` / `--talosconfig` /
+  `--server` を自分で渡したときは何もしない。繋がないもの(`kubectl kustomize`、`helm template`、`talosctl gen`、`--client` など)も同じ
+
+**管理者の kubeconfig の入れ方**(作り直すときも同じ。切れる前に):
+
+```powershell
+tools/t.ps1 --admin sh -c 'talosctl kubeconfig /dev/shm/k && sops -e --filename-override talos/kubeconfig.yaml /dev/shm/k > talos/kubeconfig.yaml'
+tools/t.ps1 --admin kubectl get nodes   # 確かめる
+git add talos/kubeconfig.yaml           # 暗号化済み(`sops:` がある)ことを見てからコミットする
+```
+
+`talosctl kubeconfig` が書き出す先も暗号化の入力も `/dev/shm` なので、平文は一度もディスクに出ない。
+規則は [`../.sops.yaml`](../.sops.yaml)。平文の `kubeconfig` / `talosconfig` という名前のファイルは `.gitignore` 済みで、
+`creds.sh` も暗号化されていない `talos/kubeconfig.yaml` は使わずに止まる。
 
 ## wslc の制限
 

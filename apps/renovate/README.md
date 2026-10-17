@@ -19,7 +19,7 @@ GitHub の schedule は 15〜40 分遅れ、丸ごと飛ばされることもあ
 tools/t.ps1 kubectl -n renovate get jobs
 tools/t.ps1 kubectl -n renovate logs job/<名前>
 # 待たずに 1 回回す
-tools/t.ps1 kubectl -n renovate create job --from=cronjob/renovate-5ym renovate-5ym-manual
+tools/t.ps1 --admin kubectl -n renovate create job --from=cronjob/renovate-5ym renovate-5ym-manual
 ```
 
 ## 秘密

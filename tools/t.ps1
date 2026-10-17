@@ -1,6 +1,8 @@
 ﻿# 運用のコマンドを wslc (WSL コンテナ) で動かす。中身は compose.yaml の tools を wslc-compose run する。例:
 #   tools/t.ps1 infisical login --domain https://il.doany.io/api
 #   tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml
+#   tools/t.ps1 kubectl get pods -A          # クラスタは読み取り用で繋ぐ
+#   tools/t.ps1 --admin kubectl apply -f x   # 書くときだけ管理者 (tools/README.md「クラスタの資格情報」)
 # 引数が無ければシェルに入る。Dockerfile を変えたら次の実行で作り直す (変わっていなければキャッシュで一瞬)。
 #
 # wslc の制限:
@@ -126,9 +128,15 @@ function Test-NulStdin {
 $piped = $MyInvocation.ExpectingInput
 $opts = @('--rm')
 if ($piped -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { $opts += '-T' }
+# 先頭の --admin は t.ps1 が受け取る。コンテナの中の kubectl / talosctl / helm が管理者の資格情報を使う (tools/creds.sh)
+$rest = @($args)
+if ($rest.Count -and $rest[0] -eq '--admin') {
+    $opts += '-e', 'GITOPS_ADMIN=1'
+    $rest = @($rest | Select-Object -Skip 1)
+}
 # 引数が 1 つのときも配列にする (if の値は 1 要素の配列が中身に展開され、$cmd[0] が 1 文字目になる。
 # 2026-10-07 まで `'x' | tools/t.ps1 cat` が `c: not found` で落ちていた)
-$cmd = @(if ($args.Count) { $args } else { 'bash' })
+$cmd = @(if ($rest.Count) { $rest } else { 'bash' })
 
 $relay = $null
 $browserLogin = $cmd.Count -ge 2 -and $cmd[0] -eq 'infisical' -and $cmd[1] -eq 'login' -and
