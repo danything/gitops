@@ -84,6 +84,9 @@ FAILED を出している**ので、そこで気づけなかった、という�
 | tar | 展開できる。netbird は 3 つの DB を SQLite と同じく、matrix は `backups/meta/<番号>` が指すファイルが全部あるか |
 | ファイルの PVC・etcd | `restic ls` が通って合計が 0 バイトでない(取り出さない) |
 
+FAILED でも exit 0 で自分で投稿するが、OOMKilled や期限切れでは投稿まで届かない。そちらは日次の notify が
+k8up の namespace の CronJob を見て、最後に予定された回より最後に成功した回が古ければ鳴らす(etcd-snapshot なども同じ)。
+
 restic は全部 `--no-lock`(リポジトリに何も書かない)。ロールを作らずに流すと 3 本とも `role … does not exist` で
 FAILED になることも確かめた(2026-10-17。本番は 27 件すべて OK、2 分ほど)。
 
