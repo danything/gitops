@@ -86,9 +86,15 @@ helm repo update cilium >/dev/null 2>&1 || true
 # 値は 2 枚重ね。正本は bootstrap/cilium/values.yaml で、Talos で変わるところだけを
 # talos/cilium-values.yaml が上書きする(KubePrism と cgroup)。これを忘れると
 # k3s 向けの 127.0.0.1:6443 が埋まったまま出てきて、Talos で Cilium が上がらない。
+#
+# `--api-versions` は GatewayClass `cilium` のため。chart は Gateway API の CRD が「ある」ときだけ
+# GatewayClass を描くが、`helm template` はクラスタを見ないので、渡さないと黙って抜ける。
+# 抜けると Gateway が `Waiting for controller` のまま公開経路が全部死ぬ(移行当日 2026-10-17 に踏んだ。
+# k3s 期は helm install だったので CRD が見えていた)。下の needle で GatewayClass があることを見る。
 helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
 	-f bootstrap/cilium/values.yaml -f talos/cilium-values.yaml \
 	--kube-version "$K8S" \
+	--api-versions gateway.networking.k8s.io/v1/GatewayClass \
 	| awk -v ns=kube-system -f talos/add-namespace.awk \
 	| inline cilium > "$WORK/inline-cilium.yaml"
 
@@ -281,6 +287,7 @@ echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 # 生成物では manifest が 1 行のエスケープ文字列になるので、引用符は \" で探す。
 for n in 'name: cilium' 'name: local-path' 'cilium-operator' 'rancher.io/local-path' \
 	'KUBERNETES_SERVICE_PORT' 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
+	'kind: GatewayClass' 'io.cilium/gateway-controller' \
 	'name: metrics-server' 'system:metrics-server' '--kubelet-insecure-tls' \
 	'/var/mnt/local-path' 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
 	'name: apiserver-rbac' 'bootstrap-applier' 'entra:admin' 'entra:viewer' \

@@ -18,7 +18,14 @@ provisioning:
 # PT3 のドライバ(../docs/decisions.md「PT3 チューナー」)。dvb-pt3 extension は earth_pt3 を blacklist して
 # 配っているので、ここで明示的に読ませる。読めば /dev/dvb/adapter* が出る。
 # KubeVirt にパススルーする保険(vfio_pci / vfio_iommu_type1)は、ホストのドライバと PT3 を取り合うので外した。
+#
+# 復調(tc90522)とチューナー(qm1d1c0042 / mxl301rf)も先に読ませる。earth_pt3 は probe のときに
+# これらを request_module で引くが、Talos にはそれを満たす modprobe が無く `Failed to create FE0` で
+# 止まり、/dev/dvb ができなかった(移行当日 2026-10-17)。earth_pt3 より前に並べること。
 machine:
   kernel:
     modules:
+      - name: tc90522
+      - name: qm1d1c0042
+      - name: mxl301rf
       - name: earth-pt3
