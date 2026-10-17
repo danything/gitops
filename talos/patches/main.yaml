@@ -19,9 +19,10 @@ provisioning:
 # 配っているので、ここで明示的に読ませる。読めば /dev/dvb/adapter* が出る。
 # KubeVirt にパススルーする保険(vfio_pci / vfio_iommu_type1)は、ホストのドライバと PT3 を取り合うので外した。
 #
-# 復調(tc90522)とチューナー(qm1d1c0042 / mxl301rf)も先に読ませる。earth_pt3 は probe のときに
-# これらを request_module で引くが、Talos にはそれを満たす modprobe が無く `Failed to create FE0` で
-# 止まり、/dev/dvb ができなかった(移行当日 2026-10-17)。earth_pt3 より前に並べること。
+# 復調(tc90522)とチューナー(qm1d1c0042 / mxl301rf)も読ませる。earth_pt3 は probe のときに
+# これらを request_module で引くが、Talos にはそれを満たす modprobe が無い。**並べた順には読まれない**
+# (名前の順なので earth-pt3 が先頭)ため、それでも `Failed to create FE0` で /dev/dvb/*/frontend0 が
+# できない。チューナーが揃ったあとで付け直すのは ../../apps/pt3/rebind.yaml(移行当日 2026-10-17)。
 machine:
   kernel:
     modules:
