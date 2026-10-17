@@ -3,7 +3,7 @@
 ルーターには API が無いので、設定はここに書いて持つ(IaC にはできない)。これまで decisions.md・apps/matrix/README.md・
 docs/talos.md に散らばっていたものを 1 つにまとめた(2026-10-07)。**ルーターの設定を変えたら、ここも直す。**
 
-値は 2026-10-07 に管理画面(クイック設定Web)と `ssh main` で読んだもの。
+値は 2026-10-07 に管理画面(クイック設定Web)とノードで読んだもの。
 
 ## 機器
 
@@ -21,7 +21,7 @@ docs/talos.md に散らばっていたものを 1 つにまとめた(2026-10-07)
 | 項目 | 値 |
 | --- | --- |
 | LAN | `10.0.0.0/24`、ルーターは `10.0.0.1` |
-| ノード `main` | `10.0.0.2`(bond0)、`240f:6d:842b:1::2`。**ノード側の静的設定**(Ubuntu 期: `/etc/netplan/00-main.yaml` / Talos 後: `talos/patches/cluster.yaml`。DHCP は使わない。既定経路は `10.0.0.1`、IPv6 は RA を受ける) |
+| ノード `main` | `10.0.0.2`(bond0)、`240f:6d:842b:1::2`。**ノード側の静的設定**(`talos/patches/cluster.yaml`。DHCP は使わない。既定経路は `10.0.0.1`、IPv6 は RA を受ける) |
 | 別の LAN | `10.10.0.0/24`(ゲートウェイ `10.10.0.1`)。ノードの eno4 が `10.10.0.4`(静的。既定経路には使わない) |
 | DHCP | ルーターが配る。`10.0.0.10` から 128 個、リース 24 時間。固定割り当て・除外は 0 件。DHCPv6 のアドレス割り当ては自動 |
 | DNS | **ルーターの DHCP には DNS の欄が無い**(配るのはルーター自身の `10.0.0.1`)。AdGuard Home を使うのは、端末側で指定したものと、NetBird の端末(NetBird の DNS 設定で AdGuard を引く。pulumi/netbird.ts) |
@@ -56,17 +56,16 @@ AdGuard Home は問い合わせ元を絞っておらず(apps/adguardhome/config.
 「IPv6ホスト公開設定」の既定を「遮断」にし、ノード `main` だけをエントリで公開している(2026-10-07。それまでは既定が「公開」で、
 LAN の全端末に外から IPv6 で直接届いていた)。
 
-- **エントリは MAC アドレスで指す**(bond0 の `e6:2c:1b:1a:a0:39`。Ubuntu 期は `ssh main ip -br link show bond0`、Talos 後は `talosctl -n 10.0.0.2 get links bond0` で見る。ルーターの「接続端末 情報画面」にも同じ値が出る)。IPv6 アドレスで指すと、RA のプレフィックスが変わったときに外れる
-- **この MAC はノードの設定で固定している**: Ubuntu 期: `/etc/netplan/00-main.yaml` の bond0 の `macaddress` / Talos 後: `talos/patches/cluster.yaml` の `BondConfig` の `hardwareAddr`。
-  **Ubuntu 期は固定していなかった**(netplan → systemd-networkd。2026-09-24 までは NetworkManager)ので、2026-10-16 の再起動で
-  `3a:43:95:a9:3e:b1` に変わってエントリが外れた。それで netplan に書いた。Talos に替えても Z440 に移しても、この値は変わらない
-- **公開している AAAA は、いまは SLAAC のアドレス**(2026-10-17 に気づいた)。cloudflare-ddns の `local.iface.stable:bond0` は一時アドレス以外から選ぶので、
-  静的な `::2` ではなく EUI-64 の SLAAC(MAC から作る。MAC を固定したので再起動後は `…:e42c:1bff:fe1a:a039`)を書いている。
-  Talos では `bond0` の `autoconf=0`(talos/patches/cluster.yaml)で SLAAC を付けないので、AAAA は `::2` になる
+- **エントリは MAC アドレスで指す**(bond0 の `e6:2c:1b:1a:a0:39`。`talosctl -n 10.0.0.2 get links bond0` で見る。ルーターの「接続端末 情報画面」にも同じ値が出る)。IPv6 アドレスで指すと、RA のプレフィックスが変わったときに外れる
+- **この MAC はノードの設定で固定している**(`talos/patches/cluster.yaml` の `BondConfig` の `hardwareAddr`)。固定していなかった頃は
+  再起動で `3a:43:95:a9:3e:b1` に変わってエントリが外れた。NIC を替えても Z440 に移しても、この値は変わらない
+- **公開する AAAA は静的な `::2`。** cloudflare-ddns の `local.iface.stable:bond0` は一時アドレス以外から選ぶので、SLAAC のアドレスがあると
+  そちらを書いてしまう。`bond0` は `autoconf=0`(talos/patches/cluster.yaml)で SLAAC を付けない
 - 公開の中身は DMZ と同じ(IPv6 すべて・ポート any)。ノードで受けているものは IPv6 でも全部外に出る
-- `fj` / `nb` / `m` / `ks` / `lk` / `ssh` などの AAAA はノード(上のとおり Ubuntu 期は SLAAC、Talos 後は `240f:6d:842b:1::2`)を指すので、**このエントリを消すと IPv6 の利用者から直接つなぐアプリが見えなくなる**
-- 変えたあと、別の回線の IPv6 から 443・6443・19198 に届くこと、`https://fj.doany.io` が 200 を返すことを確かめた
-- ノードの設定で bond0 の MAC を変えたら、エントリも直す(NIC の交換・Talos への移行・Z440 への移設では、上の固定があるので変わらない)
+- `fj` / `nb` / `m` / `ks` / `lk` などの AAAA はノード(`240f:6d:842b:1::2`)を指すので、**このエントリを消すと IPv6 の利用者から直接つなぐアプリが見えなくなる**
+- 確かめ方: 別の回線の IPv6 から名前で開く(アドレス直打ちは SNI が無く Gateway が切る)。J:COM 側の PC から
+  `curl -6 -so /dev/null -w "%{http_code} %{remote_ip}\n" https://fj.doany.io/` で `200 240f:6d:842b:1::2`
+- ノードの設定で bond0 の MAC を変えたら、エントリも直す
 
 ## ヘアピン NAT(NAT ループバック)
 

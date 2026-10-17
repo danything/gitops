@@ -14,3 +14,8 @@ https://il.doany.io -- セルフホストの Infisical。中身の説明は上�
 
 初期化で一緒に作られる "Instance Admin Identity"(root 相当の Machine Identity)は
 セットアップ後に削除してある。必要なら UI の Organization Settings > Identities で作り直す。
+
+## 戻し方
+
+DB は手元の restic から直接戻す(k8up の資格情報が Infisical から来るので)。戻したら operator の
+Kubernetes auth の CA も差し替える。手順は [../../recovery/README.md](../../recovery/README.md) の 6・7。

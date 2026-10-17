@@ -2,63 +2,49 @@
 
 なぜこの技術・この形を選んだかをここに置く。手順と進捗は [`../ROADMAP.md`](../ROADMAP.md)。
 
-## 移行の前後で変わらないもの・捨てるもの
+## 層ごとに戻し方を分ける
 
-移行の途中でバックアップの互換性が切れないように、「不変にするもの」を先に決める。
+ノードにシェルが無いので、「k8s オブジェクト」は **git から ArgoCD で再構築**(etcd スナップショットは近道)、
+「ホスト設定」は machine config(git 管理)、「PV データ」だけがバックアップツールの仕事になる
+(手順は [../recovery/README.md](../recovery/README.md))。**ツール選定は PV データの部分にしか効かない。**
 
-| 不変(移行をまたいで同じ) | 捨てる(k3s 期限定) |
-| --- | --- |
-| restic リポジトリ形式・パスフレーズ・バケット | ホスト側 backup スクリプト + systemd timer |
-| local-path provisioner の PV ディレクトリ構造(`pvc-<uid>_<ns>_<name>`。**親のパスは変わる** ── k3s は `/var/lib/rancher/k3s/storage`、Talos は user volume の `/var/mnt/local-path`) | state.db の sqlite `.backup` スナップショット |
-| `bootstrap/` の中身(Argo CD・Infisical・Cilium・cert-manager・auth の定義)。Talos では、入れるもの(Helm と SOPS の Secret)は machine config の `cluster.inlineManifests`、平文で当てるものは CI(下記「層の分け方」) | |
-| 公開の復元手順(秘密を含まない、`curl \| sh` できる)という**性質** | setup-network.sh / k3s-server-config.yaml / init.sh / **restore.sh**(k3s 期専用。Talos 期は machine config + git からの再構築 + k8up の Job に置き換わる) |
-| Infisical のデータ(Postgres PVC)と `ENCRYPTION_KEY` | HelmChart CRD(helm.cattle.io)、k3s 同梱の Traefik / ServiceLB |
-| ArgoCD + ApplicationSet(repos.yaml)+ 各 repo の `deploy/argocd.yaml` | firewalld 無効化などホストの手作業 |
-| | **Traefik**(k3s 同梱だから使っていただけ。IngressRoute / Middleware(forward-auth)/ mydnschallenge ACME は Talos では持ち込まない) |
+変えないと決めてあるもの: restic のリポジトリ形式・パスフレーズ・バケット、local-path の PV ディレクトリ構造
+(`pvc-<uid>_<ns>_<name>`)、Infisical のデータと `ENCRYPTION_KEY`、ArgoCD + ApplicationSet + 各 repo の `deploy/argocd.yaml`、
+**復元手順は公開で秘密を含まない**という性質。
 
-Talos ではホストに触れないので、「k8s オブジェクト」は **git から ArgoCD で再構築**(etcd スナップショットは近道)、
-「ホスト設定」は machine config(git 管理)、「PV データ」だけが従来どおりバックアップツールの仕事になる。
-**ツール選定は PV データの部分にしか効かない。**
+## Z440 へは Talos のまま移す(2026-10-17)
 
-## 移行の順番: Talos を先に、Z440 は後(2026-10-17)
-
-当初は「HP Z440 へ Ubuntu のまま移してから Talos」の順だった。**逆にした:先にいまの DL360 の上で k3s → Talos
-(Phase 2、[migration-day.md](migration-day.md))、そのあと Talos のまま Z440 へ(Phase 2.5、[z440-migration.md](z440-migration.md))。**
+OS の入れ替え(Talos への移行)は DL360 で済ませ、Z440 へは Talos のノードとして移す([z440-migration.md](z440-migration.md))。
 
 - **Z440 は単体の GPU が無いと POST しない**(Xeon E5 に内蔵 GPU は無い)ので、ヘッドレスで組めない。
   Intel Arc A310 を常設する(UEFI + CSM 無効が要る)。これが denpa の QSV / AV1 エンコードも兼ねる
 - Z440 の遠隔管理は **AMT 9.x(電源と SOL だけ、KVM なし)**。一番危ない OS の入れ替えは、
-  **iLO(10.0.0.3)で画面まで見える DL360** でやる
-- Talos に移ってしまえば、箱の違いは schematic(GPU の extension、SOL 用の `console=`)と NIC の名前に閉じる
+  **iLO(10.0.0.3)で画面まで見える DL360** でやった
+- Talos なら、箱の違いは schematic(GPU の extension、SOL 用の `console=`)と NIC の名前に閉じる
 
 ## bond0 の MAC を固定する(2026-10-17)
 
 ルーターの IPv6 ホスト公開はノードを **bond0 の MAC(`e6:2c:1b:1a:a0:39`)で指している**
-([router.md](router.md)「IPv6 はノードだけを公開する」)。Ubuntu では bond0 の MAC を固定しておらず、
-**2026-10-17 に再起動のあと `3a:43:95:a9:3e:b1` に変わっているのを見つけた**(このままだとエントリから外れる)。
-
-- Ubuntu: netplan で固定した(ネットワークは 2026-09-24 から netplan → systemd-networkd。それまでは NetworkManager)
-- Talos: [talos/patches/cluster.yaml](../talos/patches/cluster.yaml) を型付きの `BondConfig` / `LinkConfig` に移し、
-  `hardwareAddr: e6:2c:1b:1a:a0:39` を書いた。**bond に固定値を与えるので、Talos への移行でも Z440 への移設でも変わらない**
+([router.md](router.md)「IPv6 はノードだけを公開する」)。固定しないと bond は先頭のメンバーの MAC を引き継ぎ、
+**再起動で `3a:43:95:a9:3e:b1` に変わってエントリから外れたことがある。**
+[talos/patches/cluster.yaml](../talos/patches/cluster.yaml) の `BondConfig` に `hardwareAddr: e6:2c:1b:1a:a0:39` を書いた。
+**bond に固定値を与えるので、NIC の交換でも Z440 への移設でも変わらない。**
 
 ## ツール選定(比較の結論)
 
-判断基準は、(1) k3s 期は ホスト側で、Talos 期は in-cluster で動かせること、(2) その両方で **同じリポジトリ・同じ復元コマンド** が使えること、
+判断基準は、(1) in-cluster で動かせること、(2) **手元からも同じリポジトリを同じコマンドで読める**こと、
 (3) 復元の依存物が「バイナリ 1 つ + 秘密 1 組」で済むこと、の 3 つ。
 
-| 候補 | k3s 期(ホスト) | Talos 期(in-cluster) | 判定 |
-| --- | --- | --- | --- |
-| **restic** | systemd timer で直接 | **k8up**(restic の operator)か restic イメージの CronJob | ◎ 両期で同じ repo 形式。手動復元も `restic restore` 1 本 |
-| kopia | 同上 | Velero の node-agent が kopia だが Velero 固有のレイアウトで、kopia CLI からの手動復元が素直でない | ○ 単体性能は上だが後継が繋がらない |
-| Velero | 使えない(ホスト対象外) | k8s オブジェクトも一緒に取れる | △ Talos では git からの再構築と役割が被り、復元に Velero 自体の導入が要る |
-| k8up 単体 | 使えない | ○ | k3s 期のホスト側(state.db、`/etc`)を別途どうにかする必要がある |
-| tar + rclone crypt | ○ | 使えない | △ 変更最小だが Talos に持っていけない、整合性 `check` が無い |
-| borg / duplicacy | ○ | 使えない or ライセンス | × |
-| Longhorn 等のストレージ層バックアップ | ストレージ入れ替え | ○ | × 単一ノードには過剰 |
+| 候補 | 判定 |
+| --- | --- |
+| **restic** | ◎ **k8up**(restic の operator)か restic イメージの CronJob。手動復元も `restic restore` 1 本 |
+| kopia | ○ 単体性能は上だが、Velero の node-agent は Velero 固有のレイアウトで、kopia CLI からの手動復元が素直でない |
+| Velero | △ git からの再構築と役割が被り、復元に Velero 自体の導入が要る |
+| tar + rclone crypt / borg / duplicacy | × in-cluster に持っていけない、整合性 `check` が無い、ライセンス |
+| Longhorn 等のストレージ層バックアップ | × 単一ノードには過剰 |
 
-**結論: restic。** k3s 期はホストの systemd timer、Talos 期は k8up に乗り換えるが、リポジトリもパスフレーズも復元コマンドも変えない。
-k8up の中身は素の restic なので、k8up が気に入らなければ CronJob + restic イメージに落とせるし、k8up の取った
-スナップショットも手元の restic CLI で読める。将来 rustic(restic 互換の Rust 実装)へ逃げる道もある。
+**結論: restic(k8up)。** k8up の中身は素の restic なので、k8up が気に入らなければ CronJob + restic イメージに落とせるし、
+k8up の取ったスナップショットも手元の restic CLI で読める(Infisical はそうやって戻す)。将来 rustic(restic 互換の Rust 実装)へ逃げる道もある。
 
 ### 手で持つもの(根っこ)
 
@@ -124,19 +110,15 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 
 ## DB の整合性の取り方
 
-- **k3s 期**: ホストの `backup/k3s-backup` が、対象 namespace を scale down してからコピーする。
-- **Talos 期**: **scale down しない。** k8up の `k8up.io/backupcommand` で論理バックアップを取る。
-  **2026-09-08 に全 11 namespace で完了**(RDBMS 3 つは `pg_dump` / `mariadb-dump`、SQLite 6 つは
-  `bun:sqlite` の `serialize()`、ファイルの PVC は注釈)。**どれが何で取れているかの一覧は
-  [../apps/k8up/README.md](../apps/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
-
+**scale down しない。** k8up の `k8up.io/backupcommand` で論理バックアップを取る
+(RDBMS は `pg_dump`、SQLite は `bun:sqlite` の `serialize()`、ファイルの PVC は注釈)。**どれが何で取れているかの一覧は
+[../apps/k8up/README.md](../apps/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
 
 ## Talos の起動順序をどう組むか(2026-09-07)
 
-k3s の `HelmChart` CRD(`helm.cattle.io/v1`)は **Talos に無い**。いま `bootstrap/` に残っている
-argocd と infisical はどちらもそれで入れているので、移行時に置き換えが要る。
-「inlineManifests に載せる」と一言で書いていたが、**inlineManifests は Helm を実行できない**ので
-そのままでは移せない。
+argocd と infisical は `bootstrap/` に `HelmChart` CR(`helm.cattle.io/v1`)の形で持っているが、
+Talos にその CRD(helm-controller)は無く、**inlineManifests は Helm を実行できない。**
+そこで手元の `render.sh` が `helm template` して載せる(下の「層の分け方」)。
 
 ### 前提の確認: ArgoCD は Infisical 無しで起動する
 
@@ -159,7 +141,7 @@ if !ok {
 **Cilium → ArgoCD 起動 → ArgoCD が Infisical を入れる → operator が Secret を作る → SSO が効くようになる**
 
 **承知しておくこと**: `admin.enabled: false` にしてあるので、**この窓の間は UI に誰も入れない**
-(SSO 未解決 + ローカル admin 無効)。困ることがあれば `kubectl` で見る。移行当日に UI が要るなら、
+(SSO 未解決 + ローカル admin 無効)。困ることがあれば `kubectl` で見る。建て直しの最中に UI が要るなら、
 一時的に `admin.enabled` を戻す。
 
 ### 層の分け方
@@ -216,13 +198,11 @@ machine config は毎回そこから描き直されるだけで、追従の作�
 
 したがって **`upgrade-k8s` の前には必ず machine config を描き直す**。手順の一部として書くこと。
 
-### 帰結: Talos 期は `helm upgrade` を使わなくなる
+### 帰結: `helm upgrade` を使わない
 
-Cilium の更新経路は「`values.yaml` を直す → machine config を描き直す → `upgrade-k8s`」になる。
-**`bootstrap/cilium/values.yaml` が正本なのは変わらない**が、当てる道具が替わる。
-`upgrade-k8s` 自身も差分を出す(`< configured ...` と diff)。
-[cilium-drift.yml](../.github/workflows/cilium-drift.yml) は Talos でも続ける(2026-10-05 から、サーバの版で
-k3s / Talos を見分けて `talos/cilium-values.yaml` を重ねる)。
+Cilium の更新経路は「`values.yaml` を直す → machine config を描き直す → `upgrade-k8s`」。
+`upgrade-k8s` 自身も差分を出す(`< configured ...` と diff)が、流し忘れたことは教えてくれないので
+[cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で live と突き合わせる。
 
 ### 採らなかった案
 
@@ -232,9 +212,8 @@ Sidero は inline manifest を production 推奨、CLI での install を "least
 
 ## ルーティングの選定(2026-09-06)
 
-移行前に Traefik に依存していたもの: 標準 `Ingress` 15、`IngressRoute` 4、`IngressRouteTCP` 1(3proxy)、
-`Middleware` 4、ACME は Traefik 内蔵(Cloudflare DNS-01)。forward-auth の先は oauth2-proxy + redis(IdP は Entra ID)。
-LoadBalancer は k3s 組み込みの ServiceLB(Klipper)。
+それまでは Traefik(標準 `Ingress` 15、`IngressRoute` 4、`IngressRouteTCP` 1、`Middleware` 4、ACME 内蔵)と
+組み込みの ServiceLB だった。forward-auth の先は oauth2-proxy + redis(IdP は Entra ID)。
 
 前提: `Ingress` API は凍結済みで、**ingress-nginx は 2026-03-24 に retire**(read-only、CVE 修正なし)。
 新規に組むなら Gateway API。F5/NGINX Inc. の `nginxinc/kubernetes-ingress` は別プロジェクトで継続中。
@@ -261,29 +240,23 @@ Cookie に載せる方式は 4096 バイトの壁に当たる。oauth2-proxy な
 **Cilium 1.20 は Gateway API v1.6.1 の CRD を要求する**(backendtlspolicies / tlsroutes を含む)。古いと
 GatewayClass が `Waiting for controller` のまま止まる。上書きは `--server-side --force-conflicts` と cilium-operator の再起動。
 
-### 本番での実施結果(段階 1、2026-09-06)
-
-k3s のまま flannel と kube-proxy を外して Cilium 1.20.1 を入れた(30 分ほど)。詰まりは 2 つ:
-
-- **flannel の残骸**(`flannel.1` / `flannel-v6.1` / `cni0`)が Cilium の VXLAN と衝突する。`ip link delete` で消す(conflist の退避だけでは足りない)
-- **`terminationGracePeriodSeconds` が長い Pod**(denpa と tuner-agent、6 時間)は Recreate と組むと戻らない。`--grace-period=0 --force` で消す
-
 **ノード自身からは 80/443 に届かない。** Gateway の nodePort が L7LB リダイレクトとして載っているためで、
 それが外から来る通信の経路そのものなので外せない(他のポートと、Pod からは届く)。
+**`terminationGracePeriodSeconds` が長い Pod**(denpa と tuner-agent、6 時間)は Recreate と組むと入れ替わらない。`--grace-period=0 --force` で消す。
 
 ### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
 
-Talos には k3s の ServiceLB(klipper)が無いので、その差分を k3s のうちに埋めた。**hostPort を選んだ。**
+Talos に ServiceLB 相当は無い。**hostPort を選んだ。**
 
-ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:1::2`)をそのまま EXTERNAL-IP にする作りで、
-ルータの DMZ 転送先と AdGuard の split-horizon がこの IP に固定されている。Cilium LB-IPAM で仮想 IP を払い出すと
+ルータの DMZ 転送先と AdGuard の split-horizon が**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:1::2`)に
+固定されている。Cilium LB-IPAM で仮想 IP を払い出すと
 **クラスタ外(ルータと DNS)の変更が必要**になり、IPv6 のプレフィックスは RA 由来で変わりうるため `externalIPs` への
-固定書きも危うい。hostPort ならノードの全アドレスで受けられ、送信元 IP も保たれ、Talos でも同じ形が使える。
+固定書きも危うい。hostPort ならノードの全アドレスで受けられ、送信元 IP も保たれる。
 ノードが増えたときに VIP が要るなら、そのとき LB-IPAM に移ればよい。
 
 | 対象 | hostPort |
 | --- | --- |
-| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(2026-09-08 実測。`bootstrap/cilium/values.yaml` の `nodePort`)。手で当てた 80/443 は今も要る |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(2026-09-08 実測。`bootstrap/cilium/values.yaml` の `nodePort`)。nodePort 80/443 は bootstrap-apply が当て直す |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | matrix の LiveKit(Element Call。もとは Mattermost Calls の番号) | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
@@ -295,7 +268,7 @@ ServiceLB は**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` / `240f:6d:842b:
    確認は `cilium-dbg service list | grep HostPort`。
 2. **hostPort は Pod のサンドボックス作成時に設定される。** 設定を有効にしたあと、対象の Pod を作り直す必要がある。
 3. **hostPort と RollingUpdate は両立しない。** 新旧の Pod が同じホストポートを奪い合い、新しい方が Pending で止まる。
-   AdGuard と 3proxy は `strategy: Recreate` にして解決した(当時の Traefik は `deployment.kind: DaemonSet`)。
+   AdGuard と 3proxy は `strategy: Recreate` にして解決した。
 
 **Gateway はアドレスが付くまで `Programmed=False`** で、Envoy にリスナーが載らない。`gatewayAPI.hostNetwork` に
 したらノードの IP がそのまま `status.addresses` に入ったので、LB-IPAM と L2 アナウンスは外した(2026-09-07)。
@@ -351,19 +324,12 @@ forward-auth が要るルートは **oauth2-proxy を前段のプロキシとし
 アプリ側(ArgoCD、denpa、NetBird など)はそれぞれ自前で OIDC を持っている。
 **Entra のトークンを小さくする(グループクレーム → アプリロール)こと自体は独立して価値がある**([entra.md](entra.md))。
 
-### 切り替え本番と Traefik の撤去(2026-09-06 / 2026-09-07)
+### Gateway の 80/443 は nodePort で開く(2026-09-06)
 
-Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**同時にしかできない**。Gateway 側は Service の 80/443 を
-**nodePort として開く**形にした。詰まった点:
-
-1. **Cilium は nodePort の範囲に入っている hostPort を張らない。** 範囲を `80-32767` に広げたら 853・8443・3proxy が
-   一斉に落ちた。**`nodePort.range` を `80,443` の 2 つだけに絞る**ことで両立する。
-2. **Traefik を消したあとも Service に残った `externalIPs: [10.10.0.4]` が 80/443 を黒穴にする。**
-   `service.kubernetes.io/load-balancer-cleanup` finalizer を null にして消した。
-3. **自分で配っている chart の `IngressRoute` を取りこぼした。** denpa は chart で公開していたので `dp.doany.io` が 404 に。
-   chart に `httpRoute.enabled` を足した(denpa#70)。gitops の `Ingress` を数えるだけでは足りない。
-
-2026-09-07 に Traefik のマニフェストと PVC `traefik-acme` を全部消した。ACME は cert-manager の ClusterIssuer `letsencrypt` が引き継いだ。
+Gateway は Service の 80/443 を **nodePort として開く**。**Cilium は nodePort の範囲に入っている hostPort を張らない**ので
+(範囲を `80-32767` に広げたら 853・8443・3proxy が一斉に落ちた)、**`nodePort.range` を `80,443` の 2 つだけに絞る**
+([bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml))。前段を入れ替えるときは、自分で配っている chart の
+入口(denpa の `httpRoute`)も数えること ── gitops の `Ingress` を数えるだけでは取りこぼした。
 
 ### Traefik の sticky cookie に代替が無い(2026-09-07 調査)
 
@@ -377,8 +343,8 @@ Traefik の hostPort 80/443 を外すのと Gateway をそこへ出すのは**�
 
 **いまは穴が開いたまま受け入れている**(replicas 1・状態なし。影響は更新中の 15 秒ほど。緩和は danything/tamasagashi の `deploy/README.md`)。
 **Cilium 1.21 に上げるときに、Gateway API CRD を experimental チャネルへ入れ替えて
-tamasagashi の HTTPRoute に `sessionPersistence` を足す**のが本筋。いまの CRD は `traefik-crd` の Helm リリース所有のまま
-(`helm.sh/resource-policy: keep` で残存)なので、入れ替えの際は注意。
+tamasagashi の HTTPRoute に `sessionPersistence` を足す**のが本筋(CRD は `talos/render.sh` が `standard-install.yaml` の
+URL で渡しているので、そこを experimental に替える)。
 **将来どれかのアプリを複数 replica にするなら、1.21 未満のあいだは Gateway 越しのセッション固定が無いことを先に確認すること。**
 
 ### 却下した案
@@ -404,21 +370,8 @@ tamasagashi の HTTPRoute に `sessionPersistence` を足す**のが本筋。い
 
 | | 何か | この構成での扱い |
 | --- | --- | --- |
-| `HelmChart` CRD(`helm.cattle.io/v1`) | **k3s の入れ方**。helm-controller が CR を見て helm を Job で走らせる | **やめた**(下記) |
+| `HelmChart` CRD(`helm.cattle.io/v1`) | helm-controller が CR を見て helm を Job で走らせる入れ方 | **やめた**。ArgoCD と二重管理になる(差分も同期状態も prune も ArgoCD から見えない)うえ、Talos に無い。argocd と infisical の CR は `render.sh` が chart・版・値を読む入れ物として残っているだけ |
 | Helm chart そのもの | **配る形**。`Chart.yaml` + `templates/` を OCI で push する | **続ける**。denpa と yosegaki は今も配っている |
-
-### `HelmChart` CRD をやめた理由
-
-chart が悪いのではなく、**入れ方**が合わなくなった。
-
-- **k3s 固有で Talos に無い。** OS を替える時点で全部書き直しになる
-- **CR を消すと helm がアンインストールされる**(下の「HelmChart CRD から ArgoCD の Application へ」)
-- **ArgoCD と二重管理になる。** 同じリソースを 2 つのリコンサイラが見ることになり、
-  差分も同期状態も prune の制御も ArgoCD 側から見えない
-- **Job で走るので chart 側の事情が漏れる。** erpnext(2026-10-06 に撤去)は Job 名に描き出した時刻を入れるので、
-  同期のたびに作り直された
-
-ArgoCD が居ない k3s 単体なら悪い選択ではない。**居るなら重複でしかない。**
 
 ### 配る chart で気を付けること
 
@@ -440,26 +393,8 @@ chart 側は入れ方を知らなくていい。`helm install` でも ArgoCD の
 Flux の `HelmRelease` でも同じものが入るのが正しい。**このクラスタは ArgoCD の
 `Application` に統一した。**
 
-## HelmChart CRD から ArgoCD の Application へ(2026-09-07)
-
-`HelmChart`(`helm.cattle.io`)は k3s の helm-controller が提供するもので **Talos には無い**。
-OS 交換時の変数を減らすため、k3s のうちに ArgoCD の `Application` へ移した。
-
-**移す前に必ず `helm template` の出力と live を突き合わせる。** リリース名まで揃えれば
-描き出されるものは一致し、引き取っても Pod は入れ替わらない。
-`secrets-operator` のように名前を切り詰める chart があるので、**リリース名を変えると別物として作り直しになる**。
-
-### **CR を消すと helm がアンインストールされる**
-
-helm-controller は `wrangler.cattle.io/on-helm-chart-remove` finalizer で削除ジョブを走らせる。
-finalizer を先に外しても**すぐ付け直される**ので効かない。しかも `secrets-operator` は
-CRD を `crds/` ではなく `templates/` に置いているため、**アンインストールすると CRD ごと消えて
-`InfisicalSecret` 15 本が巻き添えになる**(Secret は `creationPolicy: Orphan` なので残るが、
-値の同期は止まる)。
-
-**移し方は 3 段**: Application を先に作って Synced を確かめる → helm のリリース Secret
-(`owner=helm,name=<releaseName>`)を消して、アンインストールを「対象なし」にする → HelmChart CR を消す。
-cloudflare-ddns・infisical-operator・infisical-push-bridge・yosegaki・erpnext を移し終えた。argocd と infisical は移さない(下記)。
+**chart を別のリリース名で入れ直すと別物として作り直しになる**(`secrets-operator` のように名前を切り詰める chart がある)。
+入れ方を替えるときは `helm template` の出力と live を先に突き合わせる。
 
 ### infisical だけは ArgoCD に移せない(2026-09-08、chart を読んで確定)
 
@@ -490,7 +425,7 @@ REDIS_URL          redis://default:<パスワード>@redis-master:6379
 (`root` / `mysecretpassword`)で URI を組み立て、**自分のデータベースに繋げなくなる。**
 実際に `helm template` して確認した。
 
-**なので `bootstrap/` に残す。** Talos では ArgoCD 本体と同じく machine config の
+**なので `bootstrap/` に残す。** ArgoCD 本体と同じく machine config の
 `inlineManifests` に載せる ── [talos/render.sh](../talos/render.sh) は age の鍵を持っている
 ので、SOPS 済みの値を復号して `helm template` に渡せる。**生成物は machine config の中に
 しか出ないので、git には平文が残らない。**
@@ -571,17 +506,16 @@ dump と restore が要る。17 のサポートは 2029-11 まであるので急
 | StorageClass `local-path-retain`(`reclaimPolicy: Retain`) | **追われない状態を作る。** 実際、35 日と 44 日放置された Released の PV が 3 本あった(2026-09-07 の掃除で発見) |
 
 **代わりの後ろ盾はバックアップ。** 日次の restic(R2)に加えて、DB は k8up が論理バックアップを取る。
-誤って消したときの最大損失は 24 時間ぶん。**この判断は復元リハーサルが Cilium 構成で通ってから**行った
-([docs/restore-drill.md](restore-drill.md))。通らなければ守りを外す根拠が無かった。
+誤って消したときの最大損失は 24 時間ぶん。**この判断は復元リハーサルが通ってから**行った
+(通らなければ守りを外す根拠が無かった。2026-10-17 には実際にこれで全部戻した)。
 
 **承知しておくこと**: `Delete=false` も外したので、**Argo CD の Application を消すと PVC も消える**。
 マニフェストを消すのは git のレビューを通るが、Application の削除は UI のボタン 1 つで済む。
 そこの重みは違う、という点は残る。
 
-**`storageClassName` はバインド済み PVC では変更も削除もできない**(API が拒否する)ので、
-2026-10-05 に k3s のうちに付け替えた: 28 本の PVC を止め、PV を `Retain` にして古い PVC を消し、
-PV の `claimRef` を外して `storageClassName` を `local-path` に書き換え、新しい PVC を `volumeName` で同じ PV に結んだ
-(**データはコピーしていない**)。`local-path-retain` はもう使っていない([../ROADMAP.md](../ROADMAP.md))。
+**`storageClassName` はバインド済み PVC では変更も削除もできない**(API が拒否する)。変えるときは PVC を止め、
+PV を `Retain` にして古い PVC を消し、PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で同じ PV に結ぶ
+(2026-10-05 に 28 本をこれで `local-path` に付け替えた。データはコピーしていない)。
 
 ## バックアップに何を含めるか
 
@@ -596,16 +530,13 @@ R2 の無料枠は 10 GB。**もう超えている。**
 本末転倒。R2 は下り(egress)が無料なので、復元のたびに費用が跳ねる心配も無い。
 **無料枠は制約ではなく目安**として扱う。容量そのものが問題になるのは、桁が変わったとき(数百 GB)。
 
-**ホストのスクリプトが全部を二重に持っている(2026-09-10 に気づいた)。**
-`backup/k3s-backup` は `/var/lib/rancher/k3s/storage` を丸ごと取るので、**k8up が PVC ごとに
-取っているものと同じ中身**が `host=main` のスナップショットにも入っている。restic は重複を除くので容量は二重にならないが、
-**片方で世代を減らしてももう片方が同じ blob を掴んでいるので解放されない。**
-
-実際、`denpa-library` を 3 世代 → 1 世代にしても**解放されたのは 36 MiB だけ**だった
-(狙っていたのは 10 GiB)。`restic stats --mode raw-data <snapshot>` が返すのは
-「そのスナップショットが参照する量」で「そのスナップショットだけが持つ量」ではない、
-という読み違い。**per-PVC の保持設計はホストのスクリプトがある間は効かない。**
-これは**移行で消える**(Talos にはシェルが無い)。`host=main` が保持から落ちきったところで解放される。
+**前のホストのスクリプト(`host=main`)が全部を二重に持っている(2026-09-10 に気づいた)。**
+PV の置き場を丸ごと取っていたので、**k8up が PVC ごとに取っているものと同じ中身**が入っている。
+restic は重複を除くので容量は二重にならないが、**片方で世代を減らしてももう片方が同じ blob を掴んでいるので解放されない**
+(`denpa-library` を 3 世代 → 1 世代にしても解放されたのは 36 MiB だけ。`restic stats --mode raw-data <snapshot>` は
+「そのスナップショットが参照する量」で「そのスナップショットだけが持つ量」ではない)。
+**per-PVC の保持設計は `host=main` を消すまで効かない。** 保持を回していたのはスクリプト自身なので、
+いまは誰も forget しない(消すかどうかは [../ROADMAP.md](../ROADMAP.md) の Phase 3)。
 
 **料金**: R2 のストレージは**期間中の日次ピークの平均(GB-month)**で課金され、無料枠は 10 GB-month。
 いまの規模で月 $0.4 前後(2026-09-10 の見積もり)。操作の回数は桁違いに余っている。
@@ -615,7 +546,7 @@ R2 の無料枠は 10 GB。**もう超えている。**
 | 対象 | 判断 |
 | --- | --- |
 | AdGuard のクエリログ(`querylog.json`) | **保持を 90d → 7d に短縮**(2026-09-06)。単体で 2.0 GB あった。純粋な計測データで、復元時に無くても困らない。いま 8.8 MB |
-| 録画データ | **エンコード済み(`denpa-encoded`、旧 `denpa-library`)だけを含める。** 放送は取り直せないので容量より価値を優先する(2026-09-06 本人判断)。ただし**世代は持たない**(2026-09-10、[../apps/k8up/denpa-encoded-forget.yaml](../apps/k8up/denpa-encoded-forget.yaml))── 中身が入れ替わるので、古い世代が消えたファイルを抱え続ける。**2026-10-05 にホストのスクリプトからも外した** ── 世代を持つ側が録画を掴んでいて、ライブラリ 39.66 GiB がリポジトリを 90 GiB まで押し上げていた。過去 10 本からも `restic rewrite` で抜いた |
+| 録画データ | **エンコード済み(`denpa-encoded`、旧 `denpa-library`)だけを含める。** 放送は取り直せないので容量より価値を優先する(2026-09-06 本人判断)。ただし**世代は持たない**(2026-09-10、[../apps/k8up/denpa-encoded-forget.yaml](../apps/k8up/denpa-encoded-forget.yaml))── 中身が入れ替わるので、古い世代が消えたファイルを抱え続ける。**2026-10-05 に前のホストのスクリプトからも外した** ── 世代を持つ側が録画を掴んでいて、ライブラリ 39.66 GiB がリポジトリを 90 GiB まで押し上げていた。過去 10 本からも `restic rewrite` で抜いた |
 | `denpa-recorded`(生 TS の作業領域) | **除外した(2026-09-07)。** 1.6 GB だったものが **14 GB** まで育ち、リポジトリ実サイズが 13.92 GiB と **R2 の無料枠 10 GB を超えていた**。エンコードが終われば消える置き場で、中身は数時間で入れ替わるので日次のスナップショットに残す意味も薄い |
 | 保持世代 | 17 → **13**(`--keep-daily 7 --keep-weekly 4 --keep-monthly 2`)。遡れる範囲は約 2 か月 |
 | 消した namespace の PV(epg / vpn / opengist、541 MiB) | 退避のうえ削除済み。バックアップ対象外 |

@@ -1,9 +1,6 @@
 # Talos に移したノード main を SSD ごと Z440 に移す
 
-DL360 Gen9 で動いている `main` を、**SSD ごと** HP Z440 に移す計画(2026-10-11 にまとめ、2026-10-17 に順番を入れ替えた)。
-
-**Talos への移行が先。** k3s → Talos は今の DL360 の上でやる([migration-day.md](migration-day.md)。コンソールは iLO 10.0.0.3)。
-Z440 へはそのあと、**Talos のノードとして**移す(ROADMAP の Phase 2.5)。Ubuntu のまま移す案はやめた。
+DL360 Gen9 で動いている `main`(2026-10-17 から Talos)を、**SSD ごと** HP Z440 に移す計画(ROADMAP の Phase 2.5)。
 あとで小さいサーバ(Talos)に 10.0 と 10.10 のあいだのルーターを任せ、Z440 は 10.0 側だけにする予定(「終わったら」)。
 
 ## 構成と、Z440 での扱い
@@ -110,7 +107,7 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 1. **k8up のバックアップが成功している**こと: 夜のぶん(03:00 JST の通知)が OK ✅。手で確かめるなら
    `kubectl -n k8up create job --from=cronjob/k8up-notify notify-manual`([../apps/k8up/README.md](../apps/k8up/README.md))
 2. 計画停止を知らせる(止まるもの: 全部の Web、DNS、NetBird、Matrix、録画)
-3. Z440 用の config を置く: `render.sh` → `talosctl -n 10.0.0.2 apply-config --mode=staged -f /tmp/talos-config/controlplane.yaml`
+3. Z440 用の config を置く: `render.sh` → `talosctl -n 10.0.0.2 apply-config --mode=staged -f talos/clusterconfig/controlplane.yaml`
 4. `talosctl -n 10.0.0.2 shutdown`
 
 ## 5. 載せ替え
@@ -146,7 +143,7 @@ DL360 の `eno2`(bond の 2 本目)のように、片方の機械にしか無い
 
 - [router.md](router.md)・この文書の構成表を Z440 に直す
 - 「iLO(10.0.0.3)」と書いてあるところを AMT(10.0.0.5)に直す: apps/netbird/routing-peer.yaml のコメント、ROADMAP.md、
-  docs/decisions.md、docs/migration-day.md(作業の入口)。docs/talos.md は DL360 での検証の記録なので直さない
+  docs/decisions.md、recovery/README.md(建て直しの入口。ISO の起動と Secure Boot の手順も AMT の IDE-R に)、docs/talos.md の対象の行
 - **10.10 側を外す**(小さいサーバをルーターにしたあと): `talos/patches/cluster.yaml` の 10.10 側の `LinkConfig`・別名・
   `disable_ipv6` の sysctl を消し、AdGuard の 10.10.0.4 の待ち受け(apps/adguardhome/service-dns.yaml)を外し、
   10.10 側の機器の DNS を 10.0.0.2 にする。NetBird の 10.10.0.0/24 の経路は、BL1500HM の静的ルーティングで届くのでそのままでよい

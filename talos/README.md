@@ -1,73 +1,38 @@
 # talos
 
-実機(HP ProLiant DL360 Gen9)を Talos Linux に載せ替えるための machine config。
-**v1.14 以降の型付きドキュメントの形で書いてある**(版は [versions.yaml](versions.yaml)。1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
+ノード `main`(HP ProLiant DL360 Gen9)の machine config。**v1.14 以降の型付きドキュメントの形で書いてある**
+(版は [versions.yaml](versions.yaml)。1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
+**入れ方(まっさらから建てる手順)は [../recovery/README.md](../recovery/README.md)。** ここは組み立てと当て直し。
 
 **版と schematic の出どころは [versions.yaml](versions.yaml)。** Renovate がそこを見て、
-新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」と「上げ方 / 当て直し方」)。
-下のコマンドに埋めてある版と schematic も、変えるときは versions.yaml と揃えること。
-
-talhelper は使わない。`talosctl gen config` にこのディレクトリのパッチを渡すだけで足りる。
+新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」)。
+コマンドに埋めてある版と schematic も、変えるときは versions.yaml と揃えること。talhelper は使わない。
 
 **組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分(`patches/`)と、
-他から描いてくる部分(Cilium は `bootstrap/cilium/values.yaml` から、
-local-path-provisioner は `manifests/` から)を 1 か所で組む。**値をどこにも二度書かない**
-のが目的で、版も `versions.yaml` と `bootstrap/cilium/version.yaml` から読む。
-
-**`talosctl upgrade-k8s` の前にも走らせること**(理由は下の「inlineManifests を直したとき」)。
-
-CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う。
-**別の作り方をすると「CI は通るが当日は通らない」が起きる**ので、道具は 1 つにしてある。
-
-**当てたあとのズレは [drift.sh](drift.sh) で見る。** git から作った machine config と、
-ノードが実際に持っているもの(`talosctl get machineconfig`)を並べて diff を出す。読むだけで、
-当てはしない(下の「適用は CI にやらせない」と同じ理由)。鍵と証明書は両方から落として比べる。
+他から描いてくる部分(Cilium・cert-manager は `bootstrap/` の values.yaml から、argocd・infisical は SOPS 済みの CR から、
+local-path-provisioner は `manifests/` から)を 1 か所で組む。**値をどこにも二度書かない**のが目的。
+CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う
+(別の作り方をすると「CI は通るが実機では通らない」が起きる)。
 
 ```shell
-./talos/drift.sh            # talosconfig の既定のノード
-./talos/drift.sh 10.0.0.2   # ノードを指定。一致 0 / ズレ 1
+./talos/render.sh talos/clusterconfig     # 出力先は丸ごと消して作り直す(.gitignore 済み)
 ```
 
-**秘密は 2 つとも作ってコミット済み**(2026-09-08)── [secrets.yaml](secrets.yaml) は
-クラスタの CA 一式、[registries.yaml](registries.yaml) は fj.doany.io のイメージ取得の資格情報。
-**`secrets.yaml` を作り直すと別のクラスタになる**ので触らない。作り方は下記。
-
-```shell
-# 1) machine config を作る
-./talos/render.sh /tmp/talos-config
-
-# 2) maintenance mode のノードに流す(実機は USB で ISO 起動。
-#    ../docs/migration-day.md の 4。**VM のドリルだけは raw イメージ**)
-talosctl apply-config --insecure -n <コンソールに出た IP> -f /tmp/talos-config/controlplane.yaml
-# `UnattendedInstallConfig` があるのでディスクに書かれる。落ち着いたら
-# etcd を初期化(単一ノードなので 1 回だけ):
-talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig bootstrap
-talosctl -n 10.0.0.2 -e 10.0.0.2 --talosconfig /tmp/talos-config/talosconfig kubeconfig
-```
-
-ふだんの kubectl / talosctl は `tools/t.ps1` が資格情報を毎回その場で作る。管理者の kubeconfig も
-ファイルでは持たない([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。
-
-`clusterconfig/` と平文の秘密は `.gitignore` 済み。
-
-**作り直すとき**(まっさらから組む場合だけ):
+**秘密は 2 つともコミット済み** ── [secrets.yaml](secrets.yaml) はクラスタの CA 一式、
+[registries.yaml](registries.yaml) は fj.doany.io のイメージ取得の資格情報。
+**`secrets.yaml` を作り直すと別のクラスタになる**(`bootstrap/apiserver/ca.crt` と Infisical の Kubernetes auth の CA も
+替えることになる)ので触らない。まっさらから組むときだけ:
 
 ```shell
 talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
-# registries.yaml は下の「fj.doany.io の資格情報」
 ```
 
 ## fj.doany.io の資格情報
 
-**k3s 期はホストの `/etc/rancher/k3s/registries.yaml` にある。** ノード単位で持つので
-**namespace ごとの `imagePullSecrets` が要らない**という作りで、Talos でも同じにする
-(`machine.registries`)。
-
+ノード単位で持つので **namespace ごとの `imagePullSecrets` が要らない**(`machine.registries`)。
 持つのは **fj.doany.io**(Forgejo のコンテナレジストリ)だけで、Forgejo のユーザー `info` の
-`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`)。無いと非公開のリポジトリ(shadai など)のイメージが引けない
-(2026-09-15 までは ghcr.io の PAT。非公開リポジトリを Forgejo に移し、ghcr.io に残るイメージは全部公開になったので外した)。
-ホストのファイルから値を写して SOPS で暗号化してある(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml))。
-トークンを替えたら、ホストと同じ値でこれも作り直す:
+`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`。作った頃の名前のまま)。無いと非公開のリポジトリの
+イメージが引けない。ghcr.io に残るイメージは全部公開。SOPS で暗号化してある(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml)):
 
 ```yaml
 # talos/registries.yaml (暗号化前)
@@ -80,28 +45,25 @@ machine:
           password: …
 ```
 
-**fj.doany.io はこれだけでは取れない。** ホストからノードの 443(Gateway)に繋がらないので、
-ホストの名前解決で fj.doany.io を中継の ClusterIP に向ける([../apps/forgejo/node-access.yaml](../apps/forgejo/node-access.yaml))。
-k3s 期は `/etc/hosts` に `10.43.200.10 fj.doany.io`。Talos では [patches/cluster.yaml](patches/cluster.yaml) の
-`StaticHostConfig`(秘密ではないのでパッチに書いてある)。
+**fj.doany.io はこれだけでは取れない。** ノードからノードの 443(Gateway)に繋がらないので、
+ノードの名前解決で fj.doany.io を中継の ClusterIP に向ける([patches/cluster.yaml](patches/cluster.yaml) の `StaticHostConfig`、
+中継は [../apps/forgejo/node-access.yaml](../apps/forgejo/node-access.yaml))。
 
-`render.sh` はこのファイルがあれば復号して `--config-patch` に足し、**無ければ警告して続ける**
-(作る前でも他の作業は進められる)。CI には age の鍵を渡さないので、
-`REGISTRIES` にダミーを入れて経路だけ通している。
+`render.sh` はこのファイルがあれば復号して `--config-patch` に足し、**無ければ警告して続ける**。
+CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通している。
 
-**パッチは PR ごとに CI が検証する**([../.github/workflows/talos-validate.yml](../.github/workflows/talos-validate.yml))。
-使い捨ての秘密で `gen config` して `talosctl validate --mode metal` を通し、生成物に
+**パッチは PR ごとに CI が検証する。** 使い捨ての秘密で `gen config` して `talosctl validate --mode metal` を通し、生成物に
 想定の設定(`ks.doany.io`・OIDC の issuer・bond の `balance-alb` など)が実際に入っているかまで見る
 ── **`gen config` は知らないキーを警告なく捨てることがある**ので、通ったことだけでは足りない。
 
 **適用は CI にやらせない。** machine config の適用は再起動を伴うことがあり、1 ノードでは
 マージが即停止になる。Talos API は mTLS のみで OIDC を受けないため、CI に渡すには
-`os:admin` のクライアント証明書を置くことになる。**検出は自動、適用は手動**
-(`versions.yaml` の Renovate と同じ方針)。
+`os:admin` のクライアント証明書を置くことになる。**検出は自動、適用は手動**。
 
 ## 上げ方 / 当て直し方
 
-**3 つの経路があり、混ぜない。** どれを使うかは「何を変えたか」で決まる。
+**3 つの経路があり、混ぜない。** どれを使うかは「何を変えたか」で決まる。下のコマンドは `tools/t.ps1 --admin` のシェルで打つ
+(talosctl / kubectl の資格情報と行き先 10.10.0.4 は t.ps1 が用意する。[../tools/README.md](../tools/README.md)「クラスタの資格情報」)。
 
 | 変えたもの | やること | 停止 |
 | --- | --- | --- |
@@ -116,39 +78,34 @@ cert-manager と、SOPS 済みの Secret 2 つは machine config の中にいる
 だから**マニフェストを直しただけでは何も起きない。** 描き直して当てる:
 
 ```shell
-./talos/render.sh /tmp/talos-config
-talosctl -n 10.0.0.2 apply-config -f /tmp/talos-config/controlplane.yaml
-talosctl -n 10.0.0.2 upgrade-k8s          # ← これが inlineManifests を reconcile する
+./talos/render.sh talos/clusterconfig
+talosctl apply-config -f talos/clusterconfig/controlplane.yaml
+talosctl upgrade-k8s --endpoint https://10.10.0.4:6443    # ← これが inlineManifests を reconcile する
 ```
 
+`render.sh` は出力先を丸ごと消すので、`talos/clusterconfig/` に置いたもの(以前は kubeconfig を置いていた)は消える。
+管理者の kubeconfig は `talos/kubeconfig.yaml`(SOPS)に置く。
+
 - **`apply-config` だけでは inlineManifests は動かない。** 起動時にしか読まれない
-- **`upgrade-k8s` は版を上げなくても reconcile する。** 同じ版を指しても走る。SSA と
-  インベントリで**更新も削除も**する(2026-09-08 に VM で実測。
-  [../docs/talos.md](../docs/talos.md)「inlineManifests は「更新できない」ではない」)
-- **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。**
-  古い machine config のまま流すと**走っている Cilium が巻き戻る**
+- **`upgrade-k8s` は版を上げなくても reconcile する。** SSA とインベントリで**更新も削除も**する
+  ([../docs/talos.md](../docs/talos.md)「inlineManifests は「更新できない」ではない」)
+- **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。** 古い machine config のまま流すと**走っている Cilium が巻き戻る**
+- **何も変えていなくても差分が出るものがある。** chart が描くたびに作り直す値で、Cilium の Hubble の CA と証明書 3 つ、
+  infisical の `postgres-password`(Postgres の superuser。使うのは初期化のときだけ)。当て直しても害は無い
 
 ### Talos 本体
 
 ```shell
-talosctl -n 10.0.0.2 upgrade --image factory.talos.dev/installer/<schematic>:<版>
+talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>
 ```
 
 **A/B なので失敗すれば前のイメージに戻る。** ノードが 1 台なので再起動 = 全停止で、だから自動化しない
-(ノードが増えれば tuppr / system-upgrade-controller に任せられるが、どちらも自分が乗っているノードは上げないので 1 台では成立しない)。
-
+(tuppr / system-upgrade-controller はどちらも自分が乗っているノードは上げないので 1 台では成立しない)。
 **schematic を変えたとき(拡張やカーネル引数)も同じコマンド。** ISO を焼き直す必要はない。
 
 ### 当てても効かないもの
 
 - **ディスクの割り方**(`patches/volumes.yaml`)。ボリュームは**まだ確保されていないときにしか
   効かない**ので、あとから `apply-config` しても黙って無視される。変えるには入れ直し
-- **`talosctl upgrade-k8s` は Kubernetes の API に直接繋ぎに行く。** `talosconfig` だけでなく
-  kubeconfig 側の到達性も要る(VM で SLIRP 越しに試すときは `--endpoint` を渡す)
-
-## 確認できたこと / できていないこと
-
-`patches/` のインタフェース名とディスクだけを VM 用に読み替えて QEMU で実際に起動した(2026-09-07〜09)。
-何を確かめて何を直したかは [../docs/talos.md](../docs/talos.md)「VM ブートドリル」(wireguard がカーネル組み込みで、
-NetBird も同じものを使う、など)。VM では原理的に確かめられないこと(実機の NIC 名とディスク、本物のスイッチ相手の
-balance-alb、ISP の RA、PT3)は [../docs/migration-day.md](../docs/migration-day.md) の 4・9 で当日見る。
+- **`talosctl upgrade-k8s` は Kubernetes の API に直接繋ぎに行く。** 既定ではクラスタの endpoint(10.0.0.2)へ行き、
+  作業用 PC からは届かないので `--endpoint https://10.10.0.4:6443` を渡す

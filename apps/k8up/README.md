@@ -1,11 +1,8 @@
 # k8up
 
-Talos に移ったあとのバックアップの担い手。いまの `backup/k3s-backup` は
-「サーバに入って PVC のディレクトリを restic に流す」形なので、**ホストにシェルが無い Talos では成立しない**。
-k8up は Pod として同じ restic リポジトリ(Cloudflare R2 の `doany-restic`)に書く。
-
-**論理バックアップもファイルの PVC も、もう k8up が取っている**(2026-09-08 に全 11 namespace で成功を確認)。
-ホストのスクリプトはまだ並走していて、畳むのは Talos に移る時点。
+バックアップの担い手。ノードにシェルが無いので、Pod として restic リポジトリ(Cloudflare R2 の `doany-restic`)に書く。
+論理バックアップもファイルの PVC も k8up が取り、etcd のスナップショットも同じリポジトリへ([etcd-snapshot.yaml](etcd-snapshot.yaml))。
+**戻す手順は [../../recovery/README.md](../../recovery/README.md)**(Infisical は 6、ほかは 8)。
 
 ## 秘密の渡し方
 
@@ -23,37 +20,18 @@ git に載る。代わりに **operator の環境変数(グローバル設定)**
 **k8up の chart は `podAnnotations` しか公開していない**。理由と例外
 (`mattermostWebhook` は再起動不要)は [k8up-secrets.yaml](k8up-secrets.yaml) に書いた。
 
-**災害復旧のときだけ順番が逆になる。** この Secret の中身は R2 の資格情報そのもので、
-Infisical を戻すための `infisical-postgresql.sql` もその R2 にある。まっさらから戻すときは
-`recovery/env.age` を手で復号して `kubectl create secret` する ── **平常時だけ Infisical が正本**、
-という二段構え。`recovery/` はその一度きりのために残す。
-
-```shell
-# env.age の中身は KEY=値 の env ファイル。値を画面にもディスクにも出さずに割って入れる
-( set -a; eval "$(age -d recovery/env.age)"; set +a
-  raw="${RESTIC_REPOSITORY#s3:}"
-  kubectl -n k8up create secret generic k8up-global \
-    --from-literal=endpoint="${raw%/*}" \
-    --from-literal=bucket="${raw##*/}" \
-    --from-literal=accessKeyId="$AWS_ACCESS_KEY_ID" \
-    --from-literal=secretAccessKey="$AWS_SECRET_ACCESS_KEY" \
-    --from-literal=repoPassword="$RESTIC_PASSWORD" \
-    --from-literal=mattermostWebhook="$MATTERMOST_WEBHOOK" \
-    --dry-run=client -o yaml | kubectl apply -f - )
-```
-
-k3s 期は `recovery/restore.sh` がこれをやる(2026-09-07 から。それまでは作られず operator が `CreateContainerConfigError` だった)。
+**建て直しのときは k8up で Infisical を戻せない。** この Secret の中身(R2 の資格情報)が Infisical から来るのに、
+Infisical を戻すための `infisical-postgresql.sql` はその R2 にある。なので Infisical だけは手元の restic で
+`recovery/env.age`(同じ値)を使って戻す([../../recovery/README.md](../../recovery/README.md) の 6)。
+戻れば operator がこの Secret を作り、k8up が動き出す。
 
 `mattermostWebhook` は [notify.yaml](notify.yaml) が使う。**新しい秘密を増やさないために
-`k8up-global` に相乗りさせている** ── 値は同じ env ファイルの `MATTERMOST_WEBHOOK` で、
-ホストの `backup/k3s-backup` が使っているものと同じ。名前は据え置きで、中身はいま Matrix の部屋 `server`
+`k8up-global` に相乗りさせている**(`env.age` の `MATTERMOST_WEBHOOK` と同じ値)。名前は据え置きで、中身はいま Matrix の部屋 `server`
 の webhook([../matrix/README.md](../matrix/README.md)「通知のルーム」)。
 
 ## 失敗したときに気づけるようにする
 
-**k8up には通知が無い。** ホストの `backup/k3s-backup` には最初からあるので
-(`notify()` が webhook に投げる)、**バックアップを全部 k8up に移した時点で穴になった。**
-[notify.yaml](notify.yaml) の CronJob が日次(18:00 UTC)でそれを埋める。
+**k8up には通知が無い。** [notify.yaml](notify.yaml) の CronJob が日次(18:00 UTC)でそれを埋める。
 
 その 30 分後に [denpa-encoded-forget.yaml](denpa-encoded-forget.yaml) が走る。
 録画データだけ世代を持たないための forget で、理由は
@@ -73,7 +51,7 @@ k8up のイメージに restic が入っている(`/usr/local/bin/restic`)ので
 
 | | 何を捕まえる | 減衰 | なぜ要るか |
 | --- | --- | --- | --- |
-| 履歴(過去 8 日に出てきた `(host, path)`。最新が 25 時間以内か) | **経路ごと**の退行(PVC 1 本だけ落ちた、など) | 8 日 | 一覧を人が書き写さなくても、PVC や namespace が増えれば勝手に追いつく。ホストの `host=main` も同じ物差しで見られる |
+| 履歴(過去 8 日に出てきた `(host, path)`。最新が 25 時間以内か) | **経路ごと**の退行(PVC 1 本だけ落ちた、など) | 8 日 | 一覧を人が書き写さなくても、PVC や namespace が増えれば勝手に追いつく。etcd(`host=etcd`)も同じ物差しで見られる |
 | `Schedule`(`backup` を持つ namespace には、その名前のホストのスナップショットが 25 時間以内にあるはず) | namespace が**丸ごと**無音になった | しない | 履歴は 8 日で忘れるので、止まったまま 8 日を過ぎた経路は無音に戻る |
 | `summary.total_bytes_processed` | 走ってはいるが**何も読めていない** | しない | 新しいのに中身が 0 バイト、が実際に起きていた(下の「空のスナップショット」) |
 | PVC / Pod の注釈(`k8up.io/backup` と `k8up.io/backupcommand` の両方)× `Schedule` の namespace | **一度も取られたことがない** PVC・Pod | しない | 注釈を付けても `Schedule` が無ければ**ジョブ自体が作られず、エラーも出ない**(2026-09-08 に `yuzuriha-data` が落ちていた) |
@@ -83,13 +61,13 @@ k8up のイメージに restic が入っている(`/usr/local/bin/restic`)ので
 FAILED を出している**ので、そこで気づけなかった、という形でしか起きない。
 
 **やめた経路を失敗と呼ばない。** 取る対象を広げると古い経路が履歴に残る
-(`/etc/rancher/k3s/config.yaml` を個別に取るのをやめて `/etc/rancher/k3s` ごと取るようにした、など)。
+(個別のファイルを取るのをやめてディレクトリごと取るようにした、など)。
 **同じホストでより上の階層が新しく取れているなら、その中身も取れている**ので黙って落とす。
 
 あわせて `Backup` / `Prune` / `Check` / `Restore` の `Completed` 条件も見て、
 残っていれば失敗の理由まで書く。
 
-成功時も 1 行投げる。**通知の仕組み自体が生きていることの確認**になる(ホストのスクリプトと同じ考え方)。
+成功時も 1 行投げる。**通知の仕組み自体が生きていることの確認**になる。
 
 本番のリポジトリで流して確かめた(2026-09-08。32 系統すべて OK、上の階層で取れている 2 件を無視)。
 
@@ -181,8 +159,6 @@ PVC のファイルは `k8up.io/backup: "true"` を付けたものだけ取る�
 `"false"` と**注釈が無いのは同じ意味**(どちらも取らない)。同じファイルに `"true"` が
 並んでいるときだけ、取らない側にも `"false"` を書いて意図を見えるようにしてある。
 
-ホストの `backup/k3s-backup` と二重に取っていても、restic は内容で重複を除くので増えるのはメタデータだけ。
-
 Infisical の Postgres は**クラスタで一番失えないデータ**(全アプリの秘密)。DB そのものは
 `ENCRYPTION_KEY` で暗号化されているのでダンプだけ手に入っても読めない ── **復元にはその鍵も要る**。
 Infisical 本体は `bootstrap/` に居るが、Schedule は `apps/` に置いて Argo CD に見てもらっている
@@ -195,9 +171,9 @@ Infisical 本体は `bootstrap/` に居るが、Schedule は `apps/` に置い�
   実際に `Fatal: Please specify repository location` で落ちた。
   グローバル設定に寄せる(`backend` を書かない)のが正解。
 - `backend` を持たない `Backup` が R2 へ書けることを、使い捨ての PVC で確認済み(確認後に削除)。
-- **ホストのスクリプトとは衝突しない。** **k8up の `hostname` は namespace**(タグ `k8up`)、ホストのスクリプトは `main`(タグ `k3s-host`)。
+- **ほかのホスト名とは衝突しない。** **k8up の `hostname` は namespace**(タグ `k8up`)。etcd は `etcd`、前のホストのスクリプトは `main`。
   `restic/cli/prune.go` は `--host=<自分の namespace>` を必ず渡すので、
-  **prune は他の namespace にもホストのぶんにも届かない**。`tags: [k8up]` は二重の歯止め
+  **prune は他の namespace にも etcd や `main` にも届かない**。`tags: [k8up]` は二重の歯止め
   (`--tag` は `retention.tags` があるときだけ渡る)。
   **同じ理由で prune は namespace ごとに要る** ── 1 本にまとめても他には効かない。
 
@@ -221,7 +197,7 @@ Application が先に通る。
 
 ## SQLite を整合したまま取る(2026-09-07 実施)
 
-ホストのスクリプトは **scale down してから** PVC を写している。k8up は**動いたまま**取るので、
+k8up は**動いたまま**取るので、
 ファイルをそのままコピーすると **本体と `-wal`(または `-journal`)が別の瞬間のものになりうる**。
 アプリのデータはほぼ全部 SQLite なので、ここを先に片付けた。
 
@@ -323,68 +299,28 @@ Schedule 全部に `podSecurityContext: {runAsUser: 0, runAsGroup: 0}` を付け
 確かめて、空でよいなら放っておくしかない(いまのところそんな PVC は無い)。
 `summary` を持たない古いスナップショットは黙って見送る。
 
-## 戻し方(検証済み、2026-09-08)
+## 戻し方
 
-k8up の `Restore` を作るだけ。**バックエンドは書かない**(バックアップと同じで
-operator のグローバル設定を使う)。
+**手順は [../../recovery/README.md](../../recovery/README.md) の 8、道具は [../../recovery/pv.sh](../../recovery/pv.sh)。** 要点だけ:
 
-```yaml
-apiVersion: k8up.io/v1
-kind: Restore
-metadata:
-  name: restore-worklog-db
-  namespace: <戻す先の namespace>
-spec:
-  snapshot: 999784d1          # 省略すると最新。**移行当日は必ず指定する**
-  restoreMethod:
-    folder:
-      claimName: <戻す先の PVC 名>
-```
-
-- **`folder` は PVC にそのまま書き戻す。** restic の `--target /restore` に PVC が
-  マウントされる。`trimPath: true` なので、`/data/<pvc>` で取ったものは
-  **`/data/<pvc>` の階層を落として**PVC の直下に出る(k8up が
-  `<snapshot>:/data/<pvc>` を指定するため)
-- **`backupcommand` で取ったもの**(SQLite・pg_dump)は 1 個のファイルとして出る。
-  `/worklog-worklog.db` なら PVC 直下に `worklog-worklog.db`。**そのままでは
-  アプリのファイル名ではない**ので、置き換えるときに名前を直すこと
-- スナップショット ID は `restic snapshots` で見る(`notify.yaml` の initContainer と
-  同じ形の使い捨て Job が手っ取り早い)
-
-実測: worklog の DB(スナップショット `999784d1`)を捨ての namespace に戻し、18 秒で `Succeeded`。開いて `integrity=ok`、13 テーブル・108 行。
-
-### SQL のダンプは**先にロールを作る**(2026-09-08 に実測)
-
-`pg_dump` は `--no-owner` を付けていないので、**`ALTER … OWNER TO <ロール>` が入っている。**
-ロールが無いクラスタに流すと**そこだけ全部落ちる** ── データは入るが、所有者が
-postgres のままになる。
-
-当時の mattermost のダンプで確かめた: ロール無しだと `role "mattermost" does not exist` が 130 件(データは入る)、先にロールを作ると 0 件。
-
-なので順番は **ロール → データベース(`OWNER` 付き) → ダンプ**:
-
-```shell
-psql -U postgres -c 'CREATE ROLE <ロール> LOGIN'
-psql -U postgres -c 'CREATE DATABASE <DB> OWNER <ロール>'
-psql -U postgres -d <DB> -f /restore/<namespace>-postgres.sql
-```
-
-infisical なら `pg_dump -U infisical -d infisicalDB` なので、ロール `infisical`・DB `infisicalDB`。
-
-**アプリを普通に起動してから流すのが一番早い。** chart が Postgres を初期化して
-ロールもデータベースも作るので、その中身をダンプで上書きするだけで済む。
-
-**`Succeeded` は「中身が戻った」の意味ではない。** 上の空スナップショットを戻したときも
-`Succeeded` で、ログだけが `Restored 0 files/dirs (0 B)` と言っていた。
-**戻したあとは必ず中身を見ること。**
+- k8up の `Restore` を作る。**バックエンドは書かない**(operator のグローバル設定を使う)。**`podSecurityContext: {runAsUser: 0, runAsGroup: 0}` を付ける**
+  (Schedule と同じ理由。無いと mkdir が permission denied で、それでも `Succeeded`)。`xattr.LRemove … security.selinux` のエラーは害が無い
+- **`folder` は PVC にそのまま書き戻す。** `/data/<pvc>` で取ったものは `/data/<pvc>` の階層を落として PVC の直下に出る(`trimPath`)
+- **`backupcommand` で取ったもの**(SQLite・pg_dump・tar)は 1 個のファイルとして PVC の直下に出る。`/worklog-worklog.db` なら
+  `worklog-worklog.db`。**そのままではアプリのファイル名ではない**ので付け替える(`-wal` / `-shm` / `-journal` も消す)
+- **バイナリを `kubectl exec -i` の標準入力で流さない。** 末尾が欠ける(2026-10-17 に SQLite で 237568 → 98304 バイト)
+- **SQL のダンプは、アプリを普通に起動してから流す。** `pg_dump` は `--no-owner` を付けていないので `ALTER … OWNER TO <ロール>` が入っていて、
+  ロールが無いとそこだけ全部落ちる(データは入るが所有者が postgres のまま)。chart が初期化すればロールも DB もある
+- **`Succeeded` は「中身が戻った」の意味ではない。** 空のスナップショットを戻したときも `Succeeded` で、ログだけが
+  `Restored 0 files/dirs (0 B)` と言っていた。**戻したあとは必ず中身を見ること**
 
 ## ファイルの PVC の扱い
 
-ホストの `backup/k3s-backup` が見ていたぶんを k8up に寄せた(2026-09-08 に全部済んだ)。
+ファイルとして取っている PVC と、取らない PVC(2026-09-08 に揃えた)。
 
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
-| `adguardhome-*` `netbird-routing-peer-data` `forgejo-repos` | ファイル | gitops にあるのでここで `"true"` |
+| `adguardhome-conf` `adguardhome-work` `netbird-routing-peer-data` `forgejo-repos` | ファイル | gitops にあるのでここで `"true"` |
 | `denpa-encoded`(旧 `denpa-library`) `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` | ファイル | 各アプリのリポジトリ側で `"true"`(lgtm#26 / xool#136 / yuzuriha#12 / denpa#85) |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` | SQLite だけ | **済み**(上の `backupcommand`)。PVC 側は `false` のまま ── ファイルとして二重に取らない |
 | `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`。DB は `backupcommand` で取っているので**ファイルとしては除外**し、`logos/` だけを取る。**この注釈は JSON でパースされる**(`backupcommand` の `qsplit` とは別の経路。`operator/backupcontroller/executor.go`)。**パースに失敗すると `continue` でその PVC が黙って飛ばされる**ので、変えたら実物を見ること |
