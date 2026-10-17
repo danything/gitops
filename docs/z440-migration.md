@@ -92,6 +92,7 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
    新しい schematic ID で `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>`(再起動する)。
    カーネル引数は machine config に書けない(`talos/patches/main.yaml` の注、[talos.md](talos.md))。
    schematic ID は `talos/versions.yaml` と `main.yaml` の注も揃える。**Arc の extension を足すのも同じ手順**なので一緒にやる
+   (`siderolabs/i915` で足りるか要確認。Arc B シリーズなどは `siderolabs/xe`。**両方は入れない** ── 同じ GPU を取り合う)
 
 ### つなぎ方
 
@@ -126,7 +127,7 @@ LAN は「2. NIC と bond0」のとおりにつなぐ。最初の起動はモニ
 - [ ] DNS: 10.0.0.2 と 10.10.0.4 の両方で引ける
 - [ ] NetBird がつながり、10.10.0.0/24 に届く
 - [ ] PT3: `talosctl ls /dev/dvb` に adapter0〜3、録画が動く。B-CAS のカードリーダーが見える
-- [ ] Arc が見える(`talosctl ls /dev/dri`。extension を入れたあと)
+- [ ] Arc が見える(`talosctl ls /dev/dri` に `renderD128`、`talosctl dmesg` に GuC / HuC。extension を入れたあと)。denpa 側は何もしなくてよい(ffmpeg は QSV / VA-API 入り、chart は `/dev/dri` をマウント済み)
 - [ ] 次の k8up のバックアップ(03:00 JST の通知)が OK ✅
 
 ## 戻し方

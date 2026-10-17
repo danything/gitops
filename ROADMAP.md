@@ -13,24 +13,13 @@ git から建て直して restic から戻し、全部のアプリが動いて�
 
 ## Phase 2.5 — HP Z440 へ移す(Talos のまま)
 
-**手順は [docs/z440-migration.md](docs/z440-migration.md)。** Talos の machine config は宣言的なので、
-箱の違いは schematic と NIC の名前に閉じ込める。bond0 の MAC は設定で固定してあるので、ルーターは触らない。
+**手順と確かめることは [docs/z440-migration.md](docs/z440-migration.md)。** 箱の違いは schematic と NIC の名前に閉じ込め、
+bond0 の MAC は設定で固定してあるのでルーターは触らない。
 
-- [ ] **Intel Arc A310 を買う(常設)。** Xeon E5 に内蔵 GPU は無く、**Z440 は単体の GPU が無いと POST しない。**
-      ロープロファイル・補助電源なし・AV1 のハードウェアエンコード可で、denpa の QSV もこれで賄う
-      (いまの DL360 の画面は iLO の Matrox G200 だけで、denpa の Pod に `renderD*` が無い)。
-      **Arc は UEFI + CSM 無効が要る。**
-- [ ] **BIOS を 02.62 に上げてから E5-2696 v4 を載せる。** 上げるまでは仮の CPU と、DL360 から借りた RDIMM 1 枚で起こす。
-- [ ] **AMT を設定する(9.x、10.0.0.5)。** 電源と SOL だけで KVM は無い。iLO のように画面は見えない。
-- [ ] **Z440 用の schematic。** Intel GPU の extension(**`siderolabs/i915` で足りるか要確認**。新しい世代の Arc B シリーズなどは
-      `siderolabs/xe`。**両方は入れない** ── 同じ GPU を取り合う)と、SOL に出すための `console=` のカーネル引数。
-      変えたら `talos/versions.yaml` の ID と depName を差し替える。
-- [ ] **NIC を MAC で名付ける(`LinkAliasConfig`)。** 箱が替わるとインタフェース名が変わるので、bond のメンバーは名前でなく MAC で指す。
-- [ ] Z440 用の machine config を先に描いて置いておき、移す。
-- [ ] 移したら: `talosctl ls /dev/dri` に `renderD128`、`talosctl dmesg` に GuC / HuC の読み込みが出ること。
-      **denpa 側は何もしなくてよい**(イメージの ffmpeg は QSV / VA-API 入りで、chart は `/dev/dri` をマウント済み)。
-      `talosctl get links bond0` の MAC と、外からの IPv6 も見る([recovery/README.md](recovery/README.md) の 9)。
-- [ ] docs の「iLO(10.0.0.3)」を AMT(10.0.0.5)に直す(recovery/README.md・talos.md・router.md など)。
+- [ ] Intel Arc A310 を買う(常設。無いと POST しない。denpa の QSV / AV1 も兼ねる)
+- [ ] BIOS を 02.62 に上げてから E5-2696 v4 を載せる
+- [ ] AMT(10.0.0.5)、Z440 用の schematic(GPU の extension と SOL の `console=`)、NIC の別名(`LinkAliasConfig`)
+- [ ] 移して確かめる。docs の「iLO(10.0.0.3)」を AMT に直す
 
 ## Phase 3 — Talos 定常運用
 
@@ -53,6 +42,6 @@ git から建て直して restic から戻し、全部のアプリが動いて�
   初回 27 件すべて OK)。ホストの設定は [.github/workflows/talos-boot.yml](.github/workflows/talos-boot.yml) が描いた machine config を QEMU で起動する
 - **バックアップを restic + k8up に(2026-09-06〜09-08)。** R2 の `doany-restic` へ日次、論理バックアップと PVC の注釈、失敗通知、`restic check`([apps/k8up/README.md](apps/k8up/README.md))。R2 のずれ検知(2026-10-05)
 - **Cilium + Gateway API に(2026-09-06〜07)。** **Talos で後から替えるのが高いのは CNI だけ**なので先に。decisions.md「ルーティングの選定」
-- **Talos の検証(2026-09-06〜10-17)。** QEMU で 7 回([docs/talos.md](docs/talos.md)「VM ブートドリル」)
+- **Talos の検証(2026-09-06〜10-17)。** QEMU で 7 回、いまは PR ごとに自動([docs/talos.md](docs/talos.md)「VM ブートドリル」)
 - **運用まわり(2026-09-07〜)。** Cilium の値を git に、Entra をアプリロールに([docs/entra.md](docs/entra.md))、自動マージの範囲(decisions.md「依存の更新をどこまで自動で入れるか」)、Talos の更新は検知だけ自動([talos/versions.yaml](talos/versions.yaml))、通信の可視化は Hubble(`hl.doany.io`)
 - **PVC を守る仕掛けをやめた(2026-09-07、`local-path-retain` の撤去は 2026-10-05)** ── decisions.md「PVC を守る仕掛けをやめた」
