@@ -9,11 +9,6 @@
             "**/*.yaml"
         ]
     },
-    "description": "**SOPS で暗号化したファイルは Renovate に触らせない。** 2026-09-08 に argo-cd 10.8.2 の PR が `version: 10.8.1` を平文置換して自動マージされ、**MAC が壊れて `sops -d` が通らなくなった**(復旧はコミットから戻した)。暗号文の中の 1 行を書き換える以上、どんな正規表現でも安全にはならない。**版の追跡はあきらめて、再現性(固定されていること)を取る** ── 新しい版は Helm のリリースノートを人が見る。",
-    "ignorePaths": [
-        "bootstrap/argocd/helmchart.yaml",
-        "bootstrap/infisical/helmchart.yaml"
-    ],
     "customManagers": [
         {
             "description": "手元のコマンドのイメージ(tools/Dockerfile)。`# renovate: datasource=… depName=…` の次の行の `ARG 名前=版` を見る。**managerFilePatterns の正規表現は `/…/` で囲む。** 囲まないと glob と読まれて何にも当たらない (2026-10-07 まで customManagers は 3 つとも空振りで、kubectl・talosctl・Talos・chart の版は追われていなかった)。",
@@ -127,6 +122,22 @@
                 "kubernetes-sigs/gateway-api",
                 "ghcr.io/siderolabs/talosctl",
                 "siderolabs/talos"
+            ]
+        },
+        {
+            "description": "argo-cd と infisical-standalone の chart (bootstrap/{argocd,infisical}/version.yaml) は自動マージしない。ArgoCD は全アプリの入口、infisical は全 Secret の出どころで、壊れると直す道具ごと止まる。PR は通知として使い、talos-boot が VM で起動まで見たうえで人がマージし、render.sh → apply-config → upgrade-k8s で当てる (talos/README.md)。2026-09-08 には SOPS 済みの CR の中の版を平文置換した PR が自動マージされて MAC が壊れた。版はいまは平文の version.yaml にある。",
+            "matchDatasources": [
+                "helm"
+            ],
+            "matchDepNames": [
+                "argo-cd",
+                "infisical-standalone"
+            ],
+            "groupName": "bootstrap charts",
+            "groupSlug": "bootstrap-charts",
+            "automerge": false,
+            "addLabels": [
+                "needs-review"
             ]
         },
         {

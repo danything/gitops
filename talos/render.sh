@@ -56,12 +56,17 @@ SCHEMATIC=$(ver talos schematic)
 K8S=$(ver kubernetes version)
 METRICS=$(ver metricsServer version)
 GWAPI=$(ver gatewayAPI version)
-CILIUM=$(sed -n 's/^version: \(.*\)$/\1/p' bootstrap/cilium/version.yaml)
-CERTMGR=$(sed -n 's/^version: \(.*\)$/\1/p' bootstrap/cert-manager/version.yaml)
-for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$CILIUM" "$GWAPI" "$CERTMGR"; do
-	[ -n "$v" ] || { echo "ERROR: versions.yaml から版を読めなかった" >&2; exit 1; }
+# bootstrap/<name>/version.yaml の版(Renovate が上げる)
+bver() { sed -n 's/^version: //p' "bootstrap/$1/version.yaml"; }
+CILIUM=$(bver cilium)
+CERTMGR=$(bver cert-manager)
+ARGOCD=$(bver argocd)
+INFISICAL=$(bver infisical)
+for v in "$TALOS" "$SCHEMATIC" "$K8S" "$METRICS" "$GWAPI" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL"; do
+	[ -n "$v" ] || { echo "ERROR: versions.yaml / version.yaml から版を読めなかった" >&2; exit 1; }
 done
-echo "talos=$TALOS k8s=$K8S cilium=$CILIUM metrics-server=$METRICS gateway-api=$GWAPI cert-manager=$CERTMGR"
+echo "talos=$TALOS k8s=$K8S metrics-server=$METRICS gateway-api=$GWAPI"
+echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD infisical-standalone=$INFISICAL"
 
 # --- inlineManifest を描く -------------------------------------------------
 # `helm template` の出力をそのまま KubeInlineManifestConfig に包む。
@@ -70,18 +75,33 @@ inline() { # $1=name  stdin=manifest
 	sed 's/^/    /'
 }
 
-helm repo add cilium https://helm.cilium.io >/dev/null 2>&1 || true
-helm repo update cilium >/dev/null 2>&1 || true
+# bootstrap/<name>/ の chart を描いて inlineManifest にする。chart と repo は version.yaml の
+# `# renovate:` の行から、値は values.yaml から読む。値をここに写さない(../docs/decisions.md)。
+# namespace.yaml があれば先頭に付ける。chart は Namespace を描かないし、当てる側の bootstrap-apply.yml は
+# クラスタが立つまで走れないので、machine config が最初に流れる時点では誰も作っていない。
+chart() { # $1=name  $2=namespace  残り=helm template に足す引数
+	_n=$1 _ns=$2
+	shift 2
+	_d=bootstrap/$_n
+	_repo=$(sed -n 's/.* registryUrl=\([^ ]*\).*/\1/p' "$_d/version.yaml")
+	_chart=$(sed -n 's/.* depName=\([^ ]*\).*/\1/p' "$_d/version.yaml")
+	[ -n "$_repo" ] && [ -n "$_chart" ] \
+		|| { echo "ERROR: $_d/version.yaml の # renovate: の行から chart と repo を読めなかった" >&2; exit 1; }
+	helm repo add --force-update "$_n" "$_repo" >/dev/null
+	{
+		if [ -f "$_d/namespace.yaml" ]; then cat "$_d/namespace.yaml"; echo ---; fi
+		helm template "$_n" "$_n/$_chart" \
+			--version "$(bver "$_n")" -n "$_ns" -f "$_d/values.yaml" "$@" --kube-version "$K8S" \
+			| awk -v ns="$_ns" -f talos/add-namespace.awk
+	} | inline "$_n" > "$WORK/inline-$_n.yaml"
+	echo "  $_n -> $(wc -c < "$WORK/inline-$_n.yaml") バイト"
+}
+
 # `--api-versions` は GatewayClass `cilium` のため。chart は Gateway API の CRD が「ある」ときだけ
 # GatewayClass を描くが、`helm template` はクラスタを見ないので、渡さないと黙って抜ける。
 # 抜けると Gateway が `Waiting for controller` のまま公開経路が全部死ぬ(2026-10-17 に踏んだ)。
 # 下の needle で GatewayClass があることを見る。
-helm template cilium cilium/cilium --version "$CILIUM" -n kube-system \
-	-f bootstrap/cilium/values.yaml \
-	--kube-version "$K8S" \
-	--api-versions gateway.networking.k8s.io/v1/GatewayClass \
-	| awk -v ns=kube-system -f talos/add-namespace.awk \
-	| inline cilium > "$WORK/inline-cilium.yaml"
+chart cilium kube-system --api-versions gateway.networking.k8s.io/v1/GatewayClass
 
 inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
 
@@ -90,77 +110,27 @@ inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.y
 # 認証の側(OIDC の issuer)は patches/apiserver.yaml の KubeAuthenticationConfig。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
-# --- HelmChart の形の CR から描く -------------------------------------------
-# argocd と infisical は `bootstrap/` の SOPS 済み CR(`helm.cattle.io/v1` の HelmChart の形)が正本。
-# クラスタにこの CRD は無く、ここが chart・repo・版・値を読む入れ物として使っているだけ。
-# 同じ chart・同じ値を `helm template` して inlineManifest にする。値をここに写さないのは
-# Cilium と同じ方針(../docs/decisions.md)。
+# 値のうち秘密だけは secret-values.yaml(SOPS)にあり、復号して values.yaml の上に重ねる。
+# CI は鍵を持たないので `ARGOCD_SECRET_VALUES` / `INFISICAL_SECRET_VALUES` にダミーを渡す
+# (SECRETS / REGISTRIES と同じ)。
 #
 # infisical はここに来るしかない。chart が DB と Redis のパスワードを
 # Deployment の平文 env に焼き込むので、ArgoCD の Application には置けない
 # (../docs/decisions.md「infisical だけは ArgoCD に移せない」)。
-# render.sh は age の鍵を持っているので、復号した値をそのまま helm に渡せる。
-# 生成物は machine config の中にしか出ない。
-
-# CR(復号済み)から spec の 1 つのキー、または spec.values の中身を取り出す。
-# `yq` は使わない(版で構文が違うので、どこで回しても同じに動く awk にしてある)。
-hc() { # $1=file  $2=キー名 または @values
-	awk -v key="$2" '
-		BEGIN { pfx = "    " key ": " }
-		key != "@values" {
-			if (index($0, pfx) == 1) { print substr($0, length(pfx)+1); exit }
-			next
-		}
-		/^    values:$/ { inv = 1; next }
-		inv && /^[^ ]/  { exit }          # sops: など、トップレベルに戻ったら終わり
-		inv             { print substr($0, 9) }
-	' "$1"
-}
-
-# $1=名前(argocd / infisical)。$2 は復号済みの CR(下の decrypt_cr が作る)。
-helmchart_inline() { # $1=name  $2=復号済み CR
-	_name=$1
-	_cr=$2
-	_chart=$(hc "$_cr" chart)
-	_repo=$(hc "$_cr" repo)
-	_ver=$(hc "$_cr" version)
-	_ns=$(hc "$_cr" targetNamespace)
-	[ -n "$_ver" ] || { echo "ERROR: $_name の CR に version: が無い" >&2; exit 1; }
-	hc "$_cr" @values > "$WORK/$_name-values.yaml"
-	helm repo add "$_name" "$_repo" >/dev/null 2>&1 || true
-	helm repo update "$_name" >/dev/null 2>&1 || true
-	# namespace を先頭に付ける。chart は Namespace を描かないし、
-	# `bootstrap/<name>/namespace.yaml` を当てているのは GitHub Actions
-	# (bootstrap-apply.yml)で、クラスタが立っていないと走れない。
-	# machine config が最初に流れる時点では誰も作っていないので、ここで一緒に入れる
-	# (local-path が自分の namespace を同梱しているのと同じ)。
-	{
-		cat "bootstrap/$_name/namespace.yaml"
-		echo ---
-		helm template "$_name" "$_name/$_chart" --version "$_ver" -n "$_ns" \
-			-f "$WORK/$_name-values.yaml" -f "talos/$_name-values.yaml" \
-			--kube-version "$K8S" | awk -v ns="$_ns" -f talos/add-namespace.awk
-	} | inline "$_name" > "$WORK/inline-$_name.yaml"
-	echo "  $_name: chart $_chart $_ver -> $(wc -c < "$WORK/inline-$_name.yaml") バイト"
-}
-
-# 復号してパスを返す。CI には age の鍵を渡さないので、`ARGOCD_CHART` /
-# `INFISICAL_CHART` にダミーを入れて経路だけ通す(SECRETS / REGISTRIES と同じ)。
-decrypt_cr() { # $1=name  $2=env で渡された上書き
+secret_values() { # $1=name  $2=env の上書き
 	if [ -n "$2" ]; then echo "$2"; return 0; fi
-	sops -d "bootstrap/$1/helmchart.yaml" > "$WORK/$1-chart.yaml"
-	echo "$WORK/$1-chart.yaml"
+	sops -d "bootstrap/$1/secret-values.yaml" > "$WORK/$1-secret-values.yaml"
+	echo "$WORK/$1-secret-values.yaml"
 }
+# 先に変数に取る。`chart … -f "$(secret_values …)"` だと復号の失敗を `set -e` が拾わない
+ARGOCD_SV=$(secret_values argocd "${ARGOCD_SECRET_VALUES:-}")
+INFISICAL_SV=$(secret_values infisical "${INFISICAL_SECRET_VALUES:-}")
+chart argocd argocd -f "$ARGOCD_SV"
+chart infisical infisical -f "$INFISICAL_SV"
 
-ARGOCD_CR=$(decrypt_cr argocd "${ARGOCD_CHART:-}")
-INFISICAL_CR=$(decrypt_cr infisical "${INFISICAL_CHART:-}")
-helmchart_inline argocd "$ARGOCD_CR"
-helmchart_inline infisical "$INFISICAL_CR"
-
-# ArgoCD の CRD は URL で渡す(理由は talos/argocd-values.yaml)。
+# ArgoCD の CRD は URL で渡す(理由は bootstrap/argocd/values.yaml の `crds`)。
 # 版は chart の appVersion をそのまま使う。版を 2 つ持つと必ずずれる。
-ARGOCD_APP=$(helm show chart "argocd/$(hc "$ARGOCD_CR" chart)" \
-	--version "$(hc "$ARGOCD_CR" version)" 2>/dev/null \
+ARGOCD_APP=$(helm show chart argocd/argo-cd --version "$ARGOCD" 2>/dev/null \
 	| sed -n 's/^appVersion: *//p' | tr -d "\"'")
 [ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
 echo "  argocd の CRD: $ARGOCD_APP"
@@ -176,15 +146,7 @@ done
 
 # cert-manager も bootstrap/ にいる。無いと証明書が 1 枚も発行されず、
 # Gateway の HTTPS リスナーに載せる Secret ができない。
-helm repo add jetstack https://charts.jetstack.io >/dev/null 2>&1 || true
-helm repo update jetstack >/dev/null 2>&1 || true
-{
-	cat bootstrap/cert-manager/namespace.yaml
-	echo ---
-	helm template cert-manager jetstack/cert-manager --version "$CERTMGR" -n cert-manager \
-		-f bootstrap/cert-manager/values.yaml \
-		--kube-version "$K8S" | awk -v ns=cert-manager -f talos/add-namespace.awk
-} | inline cert-manager > "$WORK/inline-cert-manager.yaml"
+chart cert-manager cert-manager
 
 # SOPS 済みの Secret も入れる。infisical/secrets.yaml は infisical の起動に要る
 # (kubeSecretRef)ので、CI が当てるのでは間に合わない。cloudflare-secret.yaml は
@@ -276,7 +238,7 @@ grep -qx '            fj.doany.io:' "$OUT/controlplane.yaml" \
 for n in KubeFlannelCNIConfig /var/local-path-provisioner; do
 	! grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に残っている" >&2; exit 1; }
 done
-# CRD は URL 側。入ると argocd は 1.83 MB、cert-manager は 1.30 MB 増える(talos/argocd-values.yaml、
+# CRD は URL 側。入ると argocd は 1.83 MB、cert-manager は 1.30 MB 増える(bootstrap/argocd/values.yaml、
 # bootstrap/cert-manager/values.yaml)。生成物は 1 行のエスケープ文字列になるので、包む前のファイルを見る。
 for c in argocd cert-manager; do
 	! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-$c.yaml" \

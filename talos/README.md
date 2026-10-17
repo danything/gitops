@@ -9,7 +9,7 @@
 コマンドに埋めてある版と schematic も、変えるときは versions.yaml と揃えること。talhelper は使わない。
 
 **組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分(`patches/`)と、
-他から描いてくる部分(Cilium・cert-manager は `bootstrap/` の values.yaml から、argocd・infisical は SOPS 済みの CR から、
+他から描いてくる部分(Cilium・cert-manager・argocd・infisical は `bootstrap/<name>/` の version.yaml と values.yaml から、
 local-path-provisioner は `manifests/` から)を 1 か所で組む。**値をどこにも二度書かない**のが目的。
 CI([talos-validate](../.github/workflows/talos-validate.yml))も同じ `render.sh` を使う
 (別の作り方をすると「CI は通るが実機では通らない」が起きる)。
@@ -70,7 +70,7 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 | --- | --- | --- |
 | `versions.yaml` の `talos:`(または schematic) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>` | **再起動** |
 | `versions.yaml` の `kubernetes:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
-| `patches/` / `manifests/` / `bootstrap/` のほぼ全部(cilium・cert-manager・apiserver/rbac.yaml・{argocd,infisical}/helmchart.yaml・SOPS の Secret 2 つ) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
+| `patches/` / `manifests/` / `bootstrap/` のほぼ全部(cilium・cert-manager・apiserver/rbac.yaml・{argocd,infisical}/ の values・SOPS の Secret 2 つ) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
 
 ### inlineManifests を直したとき
 

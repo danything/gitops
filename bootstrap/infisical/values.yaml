@@ -1,0 +1,75 @@
+# infisical-standalone の chart の値。版は version.yaml、DB と Redis のパスワードは
+# secret-values.yaml(SOPS)。描いて machine config に載せるのは talos/render.sh
+# (ArgoCD に置けない理由は docs/decisions.md「infisical だけは ArgoCD に移せない」)。
+#
+# https://github.com/Infisical/infisical/tree/main/helm-charts/infisical-standalone-postgres
+# Bundles Postgres + Redis (bitnami subcharts). Single node, so one replica
+# and in-cluster databases are fine (the Postgres dump is k8up's, see podAnnotations below).
+infisical:
+    # Otherwise the Deployment/Service come out as
+    # infisical-infisical-standalone-infisical (release + chart + component).
+    fullnameOverride: infisical
+    replicaCount: 1
+    image:
+        # The chart's default tag lags releases; pin explicitly.
+        tag: v0.165.2
+    # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL live in infisical/secrets.yaml.
+    kubeSecretRef: infisical-secrets
+    extraEnv:
+        # Kubernetes auth makes Infisical call https://kubernetes.default.svc
+        # (TokenReview); its SSRF guard refuses cluster-internal IPs unless
+        # told otherwise.
+        - name: ALLOW_INTERNAL_IP_CONNECTIONS
+          value: "true"
+        # Outgoing mail via Exchange Online SMTP AUTH on the info@doany.io
+        # mailbox, same as mattermost/erpnext (STARTTLS on 587 is Infisical's
+        # default, SMTP_REQUIRE_TLS=true). The password is the one value here
+        # that lives in Infisical itself (/infisical/infisical-smtp, pulled by
+        # smtp-secret.yaml), hence optional: on a from-scratch install the
+        # pod comes up mail-less, the operator fills the Secret once Infisical answers,
+        # and a rollout restart turns mail on.
+        - name: SMTP_HOST
+          value: smtp.office365.com
+        - name: SMTP_PORT
+          value: "587"
+        - name: SMTP_USERNAME
+          value: info@doany.io
+        - name: SMTP_FROM_ADDRESS
+          value: info@doany.io
+        - name: SMTP_FROM_NAME
+          value: Infisical
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+                name: infisical-smtp
+                key: SMTP_PASSWORD
+                optional: true
+ingress:
+    # Exposed through the Cilium Gateway instead; the HTTPRoute lives in
+    # apps/infisical/httproute.yaml.
+    enabled: false
+    nginx:
+        # Also the on/off switch for the bundled ingress-nginx subchart.
+        enabled: false
+postgresql:
+    enabled: true
+    auth:
+        username: infisical
+        database: infisicalDB
+    primary:
+        persistence:
+            # 既定の local-path(reclaim は Delete。2026-10-05 に local-path-retain から寄せた)。
+            # chart を消しても PVC は残る ── StatefulSet の volumeClaimTemplates が作った
+            # PVC は StatefulSet を消しても消えない。後ろ盾は k8up の日次 pg_dump。
+            storageClass: local-path
+            size: 5Gi
+        podAnnotations:
+            k8up.io/backupcommand: /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" /opt/bitnami/postgresql/bin/pg_dump -U infisical -d infisicalDB --clean --if-exists'
+            k8up.io/file-extension: .sql
+redis:
+    enabled: true
+    auth:
+    master:
+        persistence:
+            # Queue/cache only; nothing worth keeping across restarts.
+            enabled: false

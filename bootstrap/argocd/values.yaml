@@ -1,0 +1,169 @@
+# argo-cd の chart の値。版は version.yaml、秘密の値(通知の webhook と GitHub App の鍵)は
+# secret-values.yaml(SOPS)。描いて machine config に載せるのは talos/render.sh。
+#
+# CRD は chart から描かせない。3 つで 1.83 MB あり、描き出しの 95%。
+# render.sh が `KubeExternalManifestConfig` で URL を渡す
+# (なぜ URL なのかは docs/decisions.md「層の分け方」)。
+crds:
+    install: false
+# Native OIDC straight to Entra ID (same tenant/app registration as
+# auth/deployment.yaml, gitlab, erpnext) instead of Dex.
+dex:
+    enabled: false
+configs:
+    params:
+        # TLS is terminated at the Cilium Gateway (cert-manager), so argocd-server
+        # talks plain HTTP internally to avoid a double-TLS redirect loop.
+        server.insecure: true
+    cm:
+        url: https://ac.doany.io
+        # Local admin superuser disabled now that Entra ID OIDC login works;
+        # the Entra "admins" group has role:admin via RBAC below (shared
+        # with auth/deployment.yaml's oauth2-proxy --allowed-groups).
+        accounts.admin.enabled: "false"
+        # The chart default is admin.enabled: true; without this override every
+        # helm upgrade would re-enable the admin login it fought argocd-server's
+        # field ownership over.
+        admin.enabled: "false"
+        oidc.config: |
+            name: Microsoft Entra ID
+            issuer: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
+            clientID: b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
+            # Secret argocd-oidc, built by oidc-secret.yaml from Infisical.
+            clientSecret: $argocd-oidc:client-secret
+            requestedScopes:
+              - openid
+              - profile
+              - email
+        # Secret は ArgoCD の管理対象から外す。git に平文 Secret は置かない方針なので ArgoCD が Secret を
+        # 作ることは無く、一方で Infisical operator が作る Secret には CR からコピーされた tracking-id が
+        # 付くため、ArgoCD が「git に無い管理対象」と見なして sync 時に prune してしまう
+        # (2026-09-06 の復元リハーサルで踏んだ)。
+        resource.exclusions: |
+            - apiGroups: [""]
+              kinds: ["Secret"]
+              clusters: ["*"]
+    rbac:
+        policy.default: role:readonly
+        policy.csv: |
+            g, admin, role:admin
+        scopes: '[roles, email]'
+notifications:
+    secret:
+        # Helm's own empty placeholder secret would fight any externally
+        # managed argocd-notifications-secret for ownership, so let Helm skip it.
+        create: false
+    # notifiers/templates/triggers/subscriptions live here (not in a
+    # separately-applied ConfigMap) because the chart owns and re-renders
+    # argocd-notifications-cm on every release sync with notifications.cm.create
+    # true by default; anything applied out-of-band gets wiped the next time
+    # the chart is re-rendered.
+    #
+    # notifiers は secret-values.yaml(`service.webhook.mattermost`)。送り先は Matrix の部屋 argocd
+    # (スペース「通知」)の hookshot の webhook(2026-10-06 に Mattermost → Zulip → Matrix と移した)。
+    # 名前は mattermost のまま ── テンプレートと subscriptions が参照している。
+    # 送るのは {"text": …}(Slack 互換)。hookshot の変換のスクリプト(apps/matrix/hookshot.yaml)が読む
+    templates:
+        # Succeeded is back: Progressing -> Healthy flips too fast to read as a
+        # "deploy complete" signal, so sync-result gives that its own clear ping.
+        template.app-sync-result: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.operationState.phase}} {{if eq .app.status.operationState.phase \"Succeeded\"}}✅{{else if eq .app.status.operationState.phase \"Running\"}}\U0001F680{{else}}❌{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
+        # Shared by both on-health-change branches, so all six health.status values
+        # need an emoji here (Healthy/Progressing included).
+        template.app-health-status: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.health.status}} {{if eq .app.status.health.status \"Healthy\"}}\U0001F49A{{else if eq .app.status.health.status \"Progressing\"}}\U0001F504{{else if eq .app.status.health.status \"Degraded\"}}\U0001F494{{else if eq .app.status.health.status \"Suspended\"}}⏸️{{else if eq .app.status.health.status \"Missing\"}}❓{{else}}❔{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
+    triggers:
+        # 'Running' sits between syncs as an intermediate phase, so this condition
+        # still flips false -> true on every new sync even though it's one `when`.
+        # Running and Succeeded both get oncePer (like the Healthy health-status
+        # branch below) so they fire once per revision instead of on every
+        # reconcile, while Error/Failed still notify every time.
+        trigger.on-sync-result: |
+            - when: app.status.operationState.phase == 'Running'
+              oncePer: app.status.sync.revision
+              send: [app-sync-result]
+            - when: app.status.operationState.phase in ['Error', 'Failed']
+              send: [app-sync-result]
+            - when: app.status.operationState.phase == 'Succeeded'
+              oncePer: app.status.sync.revision
+              send: [app-sync-result]
+        # Healthy dropped: on-sync-result's Succeeded already covers the
+        # "deploy completed fine" case, so this stays for anomalies only.
+        trigger.on-health-change: |
+            - when: app.status.health.status == 'Progressing'
+              oncePer: app.status.sync.revision
+              send: [app-health-status]
+            - when: app.status.health.status in ['Degraded', 'Suspended', 'Missing', 'Unknown']
+              send: [app-health-status]
+    # Applies to every Application automatically (current and future, eg. via
+    # ApplicationSet) without needing per-app annotations.
+    subscriptions:
+        - recipients:
+            - mattermost
+          triggers:
+            - on-sync-result
+            - on-health-change
+# The seed that makes ArgoCD start managing itself. It rides along with this
+# chart install precisely so there's nothing extra to kubectl apply. The
+# chart renders each entry through `tpl`, so anything put here must not
+# contain Go template braces -- the ApplicationSet does, which is why it
+# lives in argocd/repos.yaml and is pulled from git instead.
+extraObjects:
+    # The GitHub App credential that lets ArgoCD read danything/* -- both the
+    # private repos (this one included) and the SCM Provider generator's org
+    # scan in argocd/repos.yaml. It genuinely can't be fetched from
+    # git, since it's what makes fetching from git possible, so it ships with
+    # the install instead. Created through the UI originally, hence the
+    # generated name: keeping that name means applying this adopts the
+    # existing secret instead of leaving two sets of credentials for the same
+    # URL behind. Plaintext because this is the one credential that can't
+    # come from Infisical: ArgoCD syncing is how Infisical itself gets
+    # deployed and recovered -- this repo is private.
+    #
+    # 中身は下の githubAppRepoCreds(鍵だけ secret-values.yaml にあり、helm が map として重ねる)。
+    # extraObjects はリストなので、そのままでは値ファイルを重ねると丸ごと置き換わる。
+    # 文字列の要素は chart が `tpl` に通すので、ここで toYaml して 1 つの要素にする。
+    - '{{ toYaml .Values.githubAppRepoCreds }}'
+    # The anchor, and the only thing here that has to be applied by hand
+    # (which the ArgoCD install already is). It syncs argocd/repos.yaml out of
+    # this repo, that ApplicationSet discovers the app repos, and each repo's
+    # own argocd.yaml decides how it gets deployed -- so changing any of that
+    # is a push, not a kubectl command.
+    #
+    # An Application syncs a whole directory, and this directory also holds
+    # the values that install ArgoCD, so the include below is what keeps
+    # ArgoCD out of its own management. Widening it (say to '*.yaml') would
+    # put this file under prune/selfHeal: deleting it would then uninstall
+    # ArgoCD, and values couldn't be tried out with kubectl any more.
+    - apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: apps
+        namespace: argocd
+      spec:
+        project: default
+        source:
+            repoURL: https://github.com/danything/gitops.git
+            targetRevision: main
+            path: bootstrap/argocd
+            directory:
+                include: repos.yaml
+        destination:
+            server: https://kubernetes.default.svc
+            namespace: argocd
+        syncPolicy:
+            automated:
+                prune: true
+                selfHeal: true
+githubAppRepoCreds:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+        name: creds-2776534691
+        namespace: argocd
+        labels:
+            argocd.argoproj.io/secret-type: repo-creds
+    type: Opaque
+    stringData:
+        url: https://github.com/danything
+        githubAppID: "4434943"
+        githubAppInstallationID: "150067651"
+        # githubAppPrivateKey は secret-values.yaml

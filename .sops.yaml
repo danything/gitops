@@ -3,10 +3,14 @@
 #   tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
 # のあと `tools/t.ps1 sops -d`(tools/t.ps1 の中の ~ はリポジトリの .home/)。
 creation_rules:
-  # bootstrap/ は「そのキーだけ」を暗号化する。マニフェストの構造は git で読めたほうが
+  # bootstrap/*/secret-values.yaml(chart の値のうち秘密だけ)は丸ごと暗号化する。
+  # 秘密しか入れない約束なので選り分けない。値の残りは同じ場所の平文の values.yaml。
+  - path_regex: ^bootstrap/[^/]+/secret-values\.yaml$
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+  # 残りの bootstrap/ は「そのキーだけ」を暗号化する。マニフェストの構造は git で読めたほうが
   # レビューできるため。
   - path_regex: ^bootstrap/.*\.yaml$
-    encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN|githubAppPrivateKey|service\.webhook\.mattermost|password)$
+    encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
   # talos/secrets.yaml は丸ごと暗号化する。`talosctl gen secrets` の出力は
   # 全部が秘密(Talos の CA、Kubernetes の CA、etcd の CA、bootstrap token)で、
