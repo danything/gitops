@@ -189,9 +189,9 @@ yui のもの(repo-config)は画面(設定 → 承認済みインテグレーシ
 
 ## ノードからイメージを取る
 
-ホストからは Gateway の 443 に繋がらないので、[node-access.yaml](node-access.yaml) の中継 + ホストの `/etc/hosts`
-(`10.43.200.10 fj.doany.io`)+ `/etc/rancher/k3s/registries.yaml` の資格情報(info の `read:package`)。
-アプリ側に `imagePullSecrets` は要らない。Talos では [../../talos/README.md](../../talos/README.md)。
+ノードからは Gateway の 443 に繋がらないので、[node-access.yaml](node-access.yaml) の中継 + ノードの名前解決
+(`10.43.200.10 fj.doany.io`。`talos/patches/cluster.yaml` の `StaticHostConfig`)+ `talos/registries.yaml` の資格情報
+(info の `read:package`)。アプリ側に `imagePullSecrets` は要らない([../../talos/README.md](../../talos/README.md)「fj.doany.io の資格情報」)。
 
 ## マージはスカッシュ
 

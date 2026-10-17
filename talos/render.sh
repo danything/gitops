@@ -99,7 +99,7 @@ inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.y
 
 # bootstrap-applier の RBAC。当のワークフローに当てさせるわけにいかない (自分の権限を
 # 書き換えられる) ので bootstrap-apply.yml は bootstrap/apiserver/ を除外していて、ここで載せる。
-# authentication-config.yaml の方は patches/apiserver.yaml の KubeAuthenticationConfig に写してある。
+# 認証の側(OIDC の issuer)は patches/apiserver.yaml の KubeAuthenticationConfig。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
 # --- HelmChart の形の CR から描く -------------------------------------------

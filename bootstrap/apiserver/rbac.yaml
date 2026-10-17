@@ -2,7 +2,7 @@
 #
 # 当てるのは人か machine config。ワークフローではない。bootstrap-apply.yml は
 # `bootstrap/apiserver/` を除外している。ここを当てられるとワークフローが自分の
-# 権限を書き換えられてしまう。k3s 期は手で当てていた。Talos ではこのファイルを
+# 権限を書き換えられてしまう。このファイルは
 # [../../talos/render.sh](../../talos/render.sh) が inlineManifest に描くので、
 # machine config を当てた時点で入っている(このファイルが正本で、写しは作らない)。
 #
@@ -59,14 +59,14 @@ roleRef:
   kind: ClusterRole
   name: bootstrap-applier
 subjects:
-  # authentication-config.yaml の claimMappings.username.expression が作る名前。
+  # talos/patches/apiserver.yaml の claimMappings.username.expression が作る名前。
   # `sub` は組織 ID / リポジトリ ID 入りの形に変わったので使っていない。
   - apiGroup: rbac.authorization.k8s.io
     kind: User
     name: "gha:danything/gitops:refs/heads/main"
 ---
 # ここから下は人。Entra の id_token を Headlamp が API サーバへ転送してくる
-# (authentication-config.yaml の 2 つめの issuer)。アプリロール admin を持つ人は
+# (talos/patches/apiserver.yaml の 2 つめの issuer)。アプリロール admin を持つ人は
 # entra:admin、それ以外は entra:viewer のグループになって届く。
 #
 # CI と同じくこのファイルは machine config に載るので、クラスタを作り直した

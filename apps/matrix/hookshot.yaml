@@ -62,7 +62,7 @@ data:
     # 投稿は全部 m.notice(bot の発言)。スマホに通知するかと音は、Element の「bot のメッセージ」の設定と
     # 部屋ごとの通知の設定で決める(人の会話は音あり、bot は音無しで通知、要らない部屋はメンションのみ)
     connections:
-      # 部屋 server: k8up の通知、ホストのバックアップ(backup/k3s-backup)
+      # 部屋 server: k8up の通知
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_SERVER}
         roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"

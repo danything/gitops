@@ -1,7 +1,7 @@
 # bootstrap/ を main へのマージ時にクラスタへ当てる。
 #
 # **保存している秘密はゼロ。** GitHub Actions の OIDC トークンを API サーバが直接受ける
-# (bootstrap/apiserver/authentication-config.yaml)。kubeconfig も age 鍵も置いていない。
+# (talos/patches/apiserver.yaml の KubeAuthenticationConfig)。kubeconfig も age 鍵も置いていない。
 #
 # **`bootstrap/apiserver/ca.crt` はクラスタの CA**(`talos/secrets.yaml` の Kubernetes CA。
 # `talosctl kubeconfig` で出る kubeconfig の `certificate-authority-data` と同じもの)。
@@ -43,9 +43,7 @@ jobs:
           #                        名前で外す ── ディレクトリ名で並べていたら
           #                        cert-manager が増えたときに取りこぼした(2026-09-08)
           #   apiserver/           **ここを当てさせない。** rbac.yaml を当てられると
-          #                        ワークフローが自分の権限を書き換えられてしまう。
-          #                        authentication-config.yaml はそもそも k8s の
-          #                        リソースではない(API サーバに渡すファイル)
+          #                        ワークフローが自分の権限を書き換えられてしまう
           #   `sops:` を含むもの   SOPS で暗号化済み。復号鍵を GitHub に置かない
           mapfile -d '' FILES < <(
             find bootstrap -name '*.yaml' \

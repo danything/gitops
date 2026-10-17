@@ -22,7 +22,7 @@ provisioning:
 # 復調(tc90522)とチューナー(qm1d1c0042 / mxl301rf)も読ませる。earth_pt3 は probe のときに
 # これらを request_module で引くが、Talos にはそれを満たす modprobe が無い。**並べた順には読まれない**
 # (名前の順なので earth-pt3 が先頭)ため、それでも `Failed to create FE0` で /dev/dvb/*/frontend0 が
-# できない。チューナーが揃ったあとで付け直すのは ../../apps/pt3/rebind.yaml(移行当日 2026-10-17)。
+# できない。チューナーが揃ったあとで付け直すのは ../../apps/pt3/rebind.yaml(2026-10-17)。順を守る上流の修正は PR 中。
 machine:
   kernel:
     modules:

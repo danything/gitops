@@ -1,9 +1,5 @@
-# k8up。Talos に移ったあとのバックアップの担い手。いまホストで動いている
-# backup/k3s-backup は「サーバに入って PVC のディレクトリを丸ごと restic に流す」形なので、
-# ホストにシェルが無い Talos では成立しない。k8up は Pod として同じ restic リポジトリに書く。
-#
-# いまはまだ Schedule を持たせていない。本番のバックアップは引き続きホストのスクリプト。
-# ここでは operator を置いて、認証情報の渡し方と実際に R2 へ書けることの確認まで済ませてある。
+# k8up。バックアップの担い手(Talos のノードにはシェルが無いので、Pod として restic に書く)。
+# Schedule は schedules.yaml、取る中身は README.md「何をどう取っているか」。
 #
 # 秘密は git に置かない。endpoint(アカウント ID を含む)も含めて全部 Secret から渡す。
 # Secret の作り方は README.md。
@@ -25,10 +21,8 @@ spec:
       releaseName: k8up
       valuesObject:
         k8up:
-          # 注釈の無い PVC は取らない。k8up には論理バックアップ
-          # (backupcommand の出力)だけ取らせて、PVC のファイルは引き続き
-          # ホストの backup/k3s-backup に任せる。Talos に移ってホストの
-          # スクリプトが使えなくなったら false に戻して PVC も k8up に寄せる。
+          # 注釈の無い PVC は取らない。`k8up.io/backup: "true"` が「取る」という宣言そのもの
+          # (README.md「何をどう取っているか」)。
           #
           # envVars で BACKUP_SKIP_WITHOUT_ANNOTATION を渡してはいけない。
           # chart が同じ env を必ず出すので二重定義になり、ArgoCD が
@@ -49,7 +43,7 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # CRD より先に同期しにいくと既定の 5 回で諦める(migration-day の 7)。
+    # CRD より先に同期しにいくと既定の 5 回で諦める。15s から倍々・上限 5 分・10 回(約 33 分)で自力で戻る。
     retry:
       limit: 10
       backoff:

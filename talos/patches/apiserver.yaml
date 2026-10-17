@@ -1,12 +1,11 @@
-# API サーバの公開まわり。k3s 期の /etc/rancher/k3s/config.yaml と
-# bootstrap/apiserver/authentication-config.yaml をここへ持ってきたもの。
+# API サーバの公開まわりと、外から入る人・CI の認証。
 #
-# Talos には専用の設定ドキュメントがあるので、ホストにファイルを置いたり
-# extraVolumes でマウントしたりする必要はない(`machine.files` は非推奨でもある)。
-#
-# なぜこれが要るかは [../../bootstrap/apiserver/authentication-config.yaml](../../bootstrap/apiserver/authentication-config.yaml)
-# に書いてある。要点だけ言うと、bootstrap 層を GitHub Actions から当てるためで、
-# kubeconfig を GitHub に置かずに済ませる唯一の方法。
+# なぜ要るか: bootstrap/ を GitHub Actions から当てる(ArgoCD に持たせると「ArgoCD が自分の
+# 公開経路を握る」循環になる)。kubeconfig を GitHub に置くとアカウントが落ちた時点で
+# クラスタ全部が落ちるので、**Actions の OIDC トークンを API サーバが直接受ける。**
+# 保存する秘密はゼロで、トークンは実行のたびに発行されて数分で切れる。
+# Entra の issuer は Headlamp が利用者本人の id_token を転送してくるぶん(権限の中身は
+# bootstrap/apiserver/rbac.yaml)。
 ---
 apiVersion: v1alpha1
 kind: KubeAPIServerConfig
@@ -15,7 +14,6 @@ kind: KubeAPIServerConfig
 certExtraSANs:
   - ks.doany.io
 extraArgs:
-  # k3s の `service-node-port-range=80-32767` をここへ持ってきたもの。
   # Gateway の Service は nodePort 80/443 を持っていて、そこが公開経路そのもの
   # (Cilium の L7LB リダイレクト。bootstrap/cilium/values.yaml の `nodePort` に実測あり)。
   # 既定の 30000-32767 のままだと 80/443 を Service に入れられず、復元後の
@@ -40,34 +38,40 @@ configuration:
   jwt:
     - issuer:
         url: https://token.actions.githubusercontent.com
+        # ワークフロー側で `&audience=` に同じ値を指定する。既定の audience
+        # (リポジトリ所有者の URL)のままにしないこと — 他のワークフローと共有されるため
         audiences:
           - https://ks.doany.io
       claimMappings:
-        # `sub` は組織 ID / リポジトリ ID 入りの形に変わったので使わない。
-        # 経緯は bootstrap/apiserver/authentication-config.yaml
+        # `sub` をそのまま使わない。`repo:danything@143234231/gitops@1311609465:ref:…` のように
+        # 組織 ID とリポジトリ ID が埋め込まれる形に変わっており、形式が変わると RBAC が黙って
+        # 効かなくなる。要る情報から組み立てる(例: gha:danything/gitops:refs/heads/main)。
         username:
           expression: '"gha:" + claims.repository + ":" + claims.ref'
-      # issuer は誰でもトークンを取れる公開の IdP。効いているのはここ
+      # issuer は世界中の GitHub Actions が使う公開の IdP。issuer を信じるだけでは誰でも入れる。
+      # 効いているのはここで、緩めると即座に穴になる。
       claimValidationRules:
         - expression: 'claims.repository == "danything/gitops"'
           message: "danything/gitops 以外は受け付けない"
         - expression: 'claims.ref == "refs/heads/main"'
           message: "main 以外のブランチからは受け付けない"
-        # bootstrap/apiserver/authentication-config.yaml と同じ内容にすること。
-        # 2 つのワークフローを許している(bootstrap-apply は書き込み、cilium-drift は読むだけ)。
+        # ワークフローのファイルまで固定する。2 つを許している(bootstrap-apply は書き込み、
+        # cilium-drift は読むだけ)。同じ利用者名になるので drift 側も書き込み権限を持つが、
+        # 分けると bootstrap の経路ごと壊しうるうえ、ClusterRole は Secret 無し・delete 無しまで
+        # 絞ってあるので割に合わないと判断した。
         - expression: >-
             ["bootstrap-apply.yml", "cilium-drift.yml"].exists(w,
               claims.workflow_ref.startsWith("danything/gitops/.github/workflows/" + w + "@"))
           message: "bootstrap-apply.yml と cilium-drift.yml 以外のワークフローからは受け付けない"
-    # Entra ID。Headlamp が利用者本人のトークンを API サーバへ転送する。
-    # bootstrap/apiserver/authentication-config.yaml と同じ内容にすること。
+    # Entra ID。Headlamp が利用者本人のトークンを API サーバへ転送する(Headlamp 自身は権限を持たない)。
     - issuer:
         url: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
-        # oauth2-proxy と同じアプリ登録。この組で出た id_token はどれも
-        # クラスタの資格情報になる(経緯は bootstrap 側の同ファイル)。
+        # oauth2-proxy と同じアプリ登録。**この組で出た id_token はどれもクラスタの資格情報になる**
+        # (a.doany.io や hl.doany.io の認証で出たものも通る)。分けたくなったら audiences を差し替える。
         audiences:
           - b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
       claimMappings:
+        # gha: と混ざらないように接頭辞を付ける。
         username:
           expression: '"entra:" + claims.preferred_username'
         # アプリロール admin を持つ人だけ entra:admin、それ以外は entra:viewer。

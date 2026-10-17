@@ -9,16 +9,14 @@
 # - `SkipDryRunOnMissingResource` は必須。k8up の CRD がまだ無いクラスタだと、
 #   これが無いと `apps/` の同期が丸ごと落ちる(README「CRD がまだ無いクラスタで〜」)
 # - `tags: [k8up]` を付ける。prune は `--host=<namespace>` で自分の namespace の
-#   スナップショットしか消さない(`restic/cli/prune.go`)ので、ホストのスクリプトの
-#   ぶん(`host=main` / `tag=k3s-host`)には元から届かない。タグは二重の歯止め
+#   スナップショットしか消さない(`restic/cli/prune.go`)ので、ほかのホスト名
+#   (`etcd`、以前のホストのスクリプトの `main`)には届かない。タグは二重の歯止め
 # - prune は namespace ごとに要る。上と同じ理由で、1 本にまとめても他の
 #   namespace には効かない
-# - 時刻はホストのスクリプト(19:00 UTC = 04:00 JST)を避ける。restic は
-#   リポジトリをロックするので、重なると片方が待たされる。
-#   バックアップは 15:00〜17:45 UTC、prune は日曜の 20:00〜22:45 UTC に置いてある。
-#   後ろは詰まっている。18:00 UTC に notify.yaml、18:30 UTC に
-#   denpa-encoded-forget.yaml の CronJob が走り、19:00 UTC がホストのスクリプト。
-#   これ以上うしろに足すならそれらもずらすこと
+# - 時刻を重ねない。restic はリポジトリをロックするので、重なると片方が待たされる。
+#   バックアップは 13:30〜17:45 UTC、prune は日曜の 20:00〜23:45 UTC に置いてある。
+#   前後も埋まっている: 13:00 UTC に etcd-snapshot.yaml、18:00 UTC に notify.yaml、
+#   18:30 UTC に denpa-encoded-forget.yaml の CronJob が走る。足すならそれらと突き合わせること
 # - 保持は全部 `keepDaily 7 / keepWeekly 4 / keepMonthly 6`
 # - `check` だけは 1 本でよい。`restic check` はリポジトリ全体を見るもので、
 #   prune と違って namespace には縛られない(`restic/cli/check.go` は `--host` を渡さない)
@@ -260,7 +258,7 @@ spec:
       tags: [k8up]
 ---
 # forgejo。DB は postgres の backupcommand(pg_dump)、リポジトリは PVC forgejo-repos をファイルとして。
-# 15:00〜17:45 UTC の枠が埋まっているので、その手前の 14:45 UTC に置く(ホストのスクリプトとは離れている)。
+# 15:00〜17:45 UTC の枠が埋まっているので、その手前の 14:45 UTC に置く。
 # prune は日曜の枠(20:00〜22:45 UTC)も埋まっているので check(23:00 UTC)の後ろ。
 # 重なっても check と prune は排他で、後から来た側が 30 秒ごとに待つ(下の check の説明)
 apiVersion: k8up.io/v1
@@ -361,8 +359,6 @@ spec:
       tags: [k8up]
 ---
 # リポジトリの健全性チェック。これだけ 1 本。
-# ホストの `backup/k3s-backup` が `restic check --read-data-subset=5%` を回していたぶんで、
-# Talos に移るとあれが無くなるので k8up 側に置いておく。
 # k8up の `check` は素の `restic check`(データの読み直しはせず、構造とインデックスを見る)。
 #
 # 日曜の prune(20:00〜22:30 UTC)がすべて終わったあとに置く。重なっても壊れない。

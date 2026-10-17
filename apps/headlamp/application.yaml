@@ -5,7 +5,7 @@
 #
 # 認証は Entra の OIDC。Headlamp は利用者の id_token を API サーバへ転送するだけで、
 # 権限を持たない。誰が何をできるかは apiserver 側で決まる
-# (bootstrap/apiserver/{authentication-config,rbac}.yaml)。アプリロール admin を
+# (talos/patches/apiserver.yaml と bootstrap/apiserver/rbac.yaml)。アプリロール admin を
 # 持つ人は cluster-admin、それ以外は読み取り専用。
 #
 # コールバックは Headlamp が要求のホストから組み立てる(Envoy が x-forwarded-proto を
@@ -69,7 +69,7 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # CRD より先に同期しにいくと既定の 5 回で諦める(migration-day の 7)。
+    # CRD より先に同期しにいくと既定の 5 回で諦める。15s から倍々・上限 5 分・10 回(約 33 分)で自力で戻る。
     retry:
       limit: 10
       backoff:
