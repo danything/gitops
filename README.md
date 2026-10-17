@@ -17,7 +17,7 @@
 
 | | |
 | --- | --- |
-| `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト。**`_` で始まるディレクトリ (`apps/_glitchtip/` など) は同期しない** (動かしていないもの。下の表) |
+| `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト。**`_` で始まるディレクトリは同期しない** (動かしていないものの置き場。下の「動かしていないもの」) |
 | [`bootstrap/`](bootstrap/) | クラスタそのものを組む層(Argo CD 本体・Infisical・cert-manager・Gateway・auth)。**Argo CD は触らない**(`apps/` の外にある。例外は `argocd/repos.yaml` だけ ── 上の「仕組み」)。Helm で入れるもの・RBAC・SOPS 済みのものは **machine config に載り**(`talos/render.sh`)、残りの平文は **main へのマージで GitHub Actions が当てる** |
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
 | [`mado/`](mado/) | **`main` が落ちたときの入口**。JCOM 側の PC(10.10.0.2)で [mado](https://github.com/danything/mado)(OIDC でログインしてブラウザから RDP する exe)を動かす(`md.doany.io`。クラスタの外) |
@@ -53,7 +53,7 @@ tools/t.ps1 sops -d bootstrap/infisical/secrets.yaml      # 中を見る(画面�
 
 | アプリ名 | 規則 | 結果 |
 | --- | --- | --- |
-| 2 語以上 | **それぞれの頭文字** | ERPNext → `en`、Mattermost(Matter + most)→ `mm`(どちらも今は無い)、NetBird(Net + Bird)→ `nb`、GlitchTip(Glitch + Tip)→ `gt`、Argo CD → `ac`、AdGuard Home → `ah` |
+| 2 語以上 | **それぞれの頭文字** | NetBird(Net + Bird)→ `nb`、Argo CD → `ac`、AdGuard Home → `ah` |
 | 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
@@ -86,11 +86,8 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 
 **動かしていないもの**は `apps/_<name>/` に置いてある。`_` で始まるディレクトリは Argo CD が同期しない
 ([bootstrap/argocd/repos.yaml](bootstrap/argocd/repos.yaml) の `directory.exclude`。全リポジトリ共通の決まり)ので、
-クラスタには何も作らない。動かすときは `git mv apps/_<name> apps/<name>`。
-
-| ディレクトリ | 内容 |
-| --- | --- |
-| [`_glitchtip/`](apps/_glitchtip/) | GlitchTip(Sentry 互換のエラー収集)+ PostgreSQL。`gt.doany.io` の予定。**動かす手順は [apps/_glitchtip/README.md](apps/_glitchtip/README.md)** |
+クラスタには何も作らない。動かすときは `git mv apps/_<name> apps/<name>`。いまは無い
+(GlitchTip を置いていたが、動かさないまま 2026-10-17 に消した。戻すなら git の履歴から)。
 
 **アプリの多くはこのリポジトリに無い。** 各アプリのリポジトリの `deploy/` に置いてあり、
 `bootstrap/argocd/repos.yaml` の ApplicationSet が拾う(上の「仕組み」)。
