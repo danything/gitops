@@ -37,8 +37,6 @@ git から建て直して restic から戻し、全部のアプリが動いて�
 - [ ] **R2 の容量が下がり切るのを見る。** `host=main` を消した直後の restic の実データは **5.60 GiB**(圧縮前 8.52 GiB、
       480 スナップショット。2026-10-17)。denpa の録画の forget([apps/k8up/denpa-encoded-forget.yaml](apps/k8up/denpa-encoded-forget.yaml))は
       ホストのスナップショットが同じ中身を抱えていたので効いていなかった。日曜の prune のあと、`pulumi` ワークフローの週次の Summary で見る
-- [ ] **復元のリハーサルを四半期ごとに。** ノードにシェルが無いので、前のように本番の上の QEMU では回せない。
-      回す場所(手元の PC の VM か、Z440 に移す前の空き)を決める。手順は [recovery/README.md](recovery/README.md) そのもの
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)。PT3 のモジュールの読み順を守る上流の修正
       ([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))が入ったら、[apps/pt3/rebind.yaml](apps/pt3/rebind.yaml) を外して
       `talos/patches/main.yaml` の並び順だけにする。入ったら dvb-pt3 の extension の README も直す(上流)
@@ -50,6 +48,9 @@ git から建て直して restic から戻し、全部のアプリが動いて�
 - **Talos へ移した(2026-10-17)。** git から建て直し、PV を restic から戻した。踏んだ穴は直した場所と [recovery/README.md](recovery/README.md) に
 - **後片付け(2026-10-17)。** Ubuntu 期のホストのスナップショット(`host=main` 10 本)を forget + prune。etcd の日次スナップショットを
   R2 へ([apps/k8up/etcd-snapshot.yaml](apps/k8up/etcd-snapshot.yaml)、最初の 1 本 `dacc947b` を手で回して確認)
+- **四半期ごとの手動の復元リハーサルをやめて自動に(2026-10-17)。** データは月次の CronJob が最新のスナップショットを取り出して開く
+  ([apps/k8up/restore-check.yaml](apps/k8up/restore-check.yaml)。SQLite の integrity_check、pg_dump を使い捨ての postgres に流す、tar の中身。
+  初回 27 件すべて OK)。ホストの設定は [.github/workflows/talos-boot.yml](.github/workflows/talos-boot.yml) が描いた machine config を QEMU で起動する
 - **バックアップを restic + k8up に(2026-09-06〜09-08)。** R2 の `doany-restic` へ日次、論理バックアップと PVC の注釈、失敗通知、`restic check`([apps/k8up/README.md](apps/k8up/README.md))。R2 のずれ検知(2026-10-05)
 - **Cilium + Gateway API に(2026-09-06〜07)。** **Talos で後から替えるのが高いのは CNI だけ**なので先に。decisions.md「ルーティングの選定」
 - **Talos の検証(2026-09-06〜10-17)。** QEMU で 7 回([docs/talos.md](docs/talos.md)「VM ブートドリル」)

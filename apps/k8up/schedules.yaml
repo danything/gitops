@@ -16,7 +16,8 @@
 # - 時刻を重ねない。restic はリポジトリをロックするので、重なると片方が待たされる。
 #   バックアップは 13:30〜17:45 UTC、prune は日曜の 20:00〜23:45 UTC に置いてある。
 #   前後も埋まっている: 13:00 UTC に etcd-snapshot.yaml、18:00 UTC に notify.yaml、
-#   18:30 UTC に denpa-encoded-forget.yaml の CronJob が走る。足すならそれらと突き合わせること
+#   18:30 UTC に denpa-encoded-forget.yaml の CronJob が走る。足すならそれらと突き合わせること。
+#   restore-check.yaml(毎月 1 日 06:00 UTC)はロックを取らないので、重ねないのは中身を消す prune のため
 # - 保持は全部 `keepDaily 7 / keepWeekly 4 / keepMonthly 6`
 # - `check` だけは 1 本でよい。`restic check` はリポジトリ全体を見るもので、
 #   prune と違って namespace には縛られない(`restic/cli/check.go` は `--host` を渡さない)
