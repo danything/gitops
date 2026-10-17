@@ -2,7 +2,7 @@
 # PV のデータを restic(R2)から戻す道具。手順は recovery/README.md の 8。
 # 2026-10-17 の建て直しで使ったものを、namespace ごとの決め打ちを外して引数にした。
 #
-#   tools/t.ps1 sh recovery/pv.sh <namespace> <操作> [引数…]
+#   tools/t.ps1 --admin sh recovery/pv.sh <namespace> <操作> [引数…]
 #
 #   argo-pause / argo-resume   Argo CD の application-controller を 0 / 1 にする。止めないと selfHeal が
 #                              replicas を戻して、戻している最中にアプリが起き上がる
@@ -22,7 +22,8 @@
 # **バイナリを `kubectl exec -i` の標準入力で流さない。** 末尾が欠ける(SQLite で 237568 → 98304
 # バイト。テキストの SQL はたまたま揃っていた)。だから全部 k8up の Restore で PVC に置いてから触る。
 #
-# 前提: ~/.kube/config がこのクラスタを指している(README の 4)、~/.config/restic.env がある(README の 6)。
+# 前提: tools/t.ps1 --admin で動かす(kubectl の管理者の資格情報。tools/README.md「クラスタの資格情報」)、
+# ~/.config/restic.env がある(README の 6)。
 set -eu
 NS=${1:?usage: pv.sh <namespace> <操作> [引数…]}
 OP=${2:?usage: pv.sh <namespace> <操作> [引数…]}

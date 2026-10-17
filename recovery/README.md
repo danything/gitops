@@ -38,13 +38,13 @@ git に無い状態まで一度に戻したいときの近道で、主経路で�
 
 ## 道具と経路
 
-**コマンドは全部 [tools/t.ps1](../tools/t.ps1) のコンテナで打つ**(引数なしで入るとシェルになる。`HOME` はリポジトリの `.home/`
-で、鍵・kubeconfig・restic の資格情報はそこに残る。[../tools/README.md](../tools/README.md))。ノードにシェルは無い。
-下のコマンドはそのシェルの中の形で書いてある。GitHub の操作(5)だけ手元の `gh`。
+**コマンドは全部 `tools/t.ps1 --admin` で入ったコンテナのシェルで打つ**(`HOME` はリポジトリの `.home/` で、
+age 鍵と restic の資格情報はそこに残る。ノードにシェルは無い)。**talosctl / kubectl の資格情報は t.ps1 が用意する** ──
+talosconfig は `talos/secrets.yaml` からその場で作り、管理者の kubeconfig は `talos/kubeconfig.yaml`(SOPS)を復号する
+([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。GitHub の操作(5)だけ手元の `gh`。
 
-- **LAN(10.0.0.2)か iLO(10.0.0.3)から。** J:COM 側の PC からは **10.10.0.4(eno4)にしか届かない**ので、
-  下の `10.0.0.2` を `10.10.0.4` に読み替える(Talos API も Kubernetes API もそこで受ける)
-- iLO の Remote Console(HTML5)で、ブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す
+- **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno4)にしか届かない**(10.0.0.2 は届かない)。t.ps1 の行き先はそこに固定してある
+- iLO(10.0.0.3)の Remote Console(HTML5)で、ブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す
 - **GitHub Actions では代わりにならない。** Talos の API(50000)は LAN からしか届かず、CI の OIDC の信頼も
   machine config を当てて初めてできる
 
@@ -56,8 +56,8 @@ mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/so
 ```
 
 - **`talos/secrets.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver/ca.crt`・
-  Infisical の Kubernetes auth(7)・手元の kubeconfig が全部合わなくなる
-- **`render.sh` は出力先を丸ごと消して作り直す。** `talos/clusterconfig/` に kubeconfig を置いていたなら消える(4 で取り直す)
+  Infisical の Kubernetes auth(7)・`talos/kubeconfig.yaml` が全部合わなくなる
+- **`render.sh` は出力先を丸ごと消して作り直す。** `talos/clusterconfig/` に kubeconfig などを置いていたら消える
 - 版は [../talos/versions.yaml](../talos/versions.yaml)。**上げるなら建て直しの日ではない日に**
 
 ## 2. ISO で起動する
@@ -92,22 +92,20 @@ talosctl apply-config --insecure -n $IP -e $IP -f talos/clusterconfig/controlpla
 また maintenance mode で上がる):
 
 ```shell
-TC=talos/clusterconfig/talosconfig N=10.0.0.2
-talosctl --talosconfig $TC -n $N -e $N get volumestatus    # EPHEMERAL は 64GiB 上限。違ったら入れ直すしかない
+talosctl get volumestatus    # EPHEMERAL は 64GiB 上限。違ったら入れ直すしかない
 ```
 
 ## 4. クラスタを起こす
 
 ```shell
-talosctl --talosconfig $TC -n $N -e $N bootstrap      # 単一ノードなので 1 回だけ
-talosctl --talosconfig $TC -n $N -e $N kubeconfig     # ~/.kube/config に入る(render.sh で消えない)
-kubectl config set-cluster doany --server https://10.10.0.4:6443   # J:COM 側の PC から打つときだけ
+talosctl bootstrap         # 単一ノードなので 1 回だけ
 kubectl get nodes          # Ready / control-plane / versions.yaml の kubernetes: の版
 kubectl get pods -A        # cilium・coredns・metrics-server・local-path・argocd・cert-manager・infisical が Running
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
 
-`talosconfig` は保存しない。`secrets.yaml` から毎回出る派生物(使い捨て)。
+`secrets.yaml` が同じなら `talos/kubeconfig.yaml` は前のクラスタのものがそのまま通る(CA が同じ。証明書は 1 年で切れる)。
+切れていたり `secrets.yaml` を作り直したりしたときは、`talosctl kubeconfig` から作り直す(tools/README.md「管理者の kubeconfig の入れ方」)。
 
 ## 5. 残りの bootstrap/ を当てる(GitHub Actions)
 
@@ -225,8 +223,7 @@ kubectl -n <ns> rollout restart deploy     # 戻した namespace ごと
 
 ## 9. 確かめる
 
-公開している名前を全部叩く(手元の PC のコンテナから。ノードの上からは 80/443 に届かない)。
-`talosctl` には 3 と同じ `--talosconfig $TC -n $N -e $N` を付ける。
+公開している名前を全部叩く(作業用 PC のコンテナから。ノードの上からは 80/443 に届かない)。
 
 ```shell
 kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.hostnames[*]}{@}{"\n"}{end}{end}' \

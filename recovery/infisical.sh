@@ -1,9 +1,9 @@
 #!/bin/sh
 # Infisical を戻す道具。手順は recovery/README.md の 6・7。2026-10-17 の建て直しで使ったもの。
 #
-#   tools/t.ps1 sh recovery/infisical.sh db <snapshot>   pg_dump で DB を置き換えて Infisical を起こす
-#   tools/t.ps1 sh recovery/infisical.sh drop-old        db で退けた old_public を消す(起きたのを見てから)
-#   tools/t.ps1 sh recovery/infisical.sh ca [apply]      Kubernetes auth の CA を見る / 新しいクラスタのものにする
+#   tools/t.ps1 --admin sh recovery/infisical.sh db <snapshot>   pg_dump で DB を置き換えて Infisical を起こす
+#   tools/t.ps1 --admin sh recovery/infisical.sh drop-old        db で退けた old_public を消す(起きたのを見てから)
+#   tools/t.ps1 --admin sh recovery/infisical.sh ca [apply]      Kubernetes auth の CA を見る / 新しいクラスタのものにする
 #
 # **k8up では戻せない。** k8up の資格情報(k8up-global)が Infisical から来るので、Infisical だけは
 # 手元の restic で戻す(~/.config/restic.env。README の 6)。
