@@ -278,7 +278,7 @@ sudo ip6tables -I OUTPUT 1 -m owner --uid-owner qemudrill -d 2000::/3 -j REJECT
 - **起動は script にする。** `nohup … > log` のリダイレクトは**呼び出し側の権限**で開かれるので、qemudrill が所有するディレクトリには書けない
 - `/var/tmp/drill` を qemudrill 所有にすると **`kubeconfig` を書き出せない。** 出力先は別の場所にする
 
-## VM ブートドリル(2026-09-06〜09、6 回)
+## VM ブートドリル(2026-09-06〜10-17、7 回)
 
 `talos/patches/` を本番サーバ上の QEMU で実際に起動して確かめた記録。**直したものは直した場所に理由を書いてある**ので、ここは索引。
 
@@ -292,13 +292,14 @@ sudo ip6tables -I OUTPUT 1 -m owner --uid-owner qemudrill -d 2000::/3 -j REJECT
 | 09-08 | inlineManifests の更新と削除 | 下の「inlineManifests は「更新できない」ではない」 |
 | 09-08(5 回目) | app-of-apps まで同期 | `InfisicalSecret` の CRD が無くて `apps/` が丸ごと止まる → `SkipDryRunOnMissingResource`([apps/k8up/README.md](../apps/k8up/README.md))。5 回失敗した Application は自動では戻らない → ArgoCD の `retry`([migration-day.md](migration-day.md) の 7) |
 | 09-09(6 回目) | ディスク 140 GB・本番と同じ値で。Entra の issuer と groups の CEL、RBAC、`EPHEMERAL` ちょうど 64.0 GiB、`u-local-path` 72 GiB | 無し |
+| 10-17(7 回目) | v1.15.0-alpha.1 と型付きの `BondConfig` / `LinkConfig`。`render.sh` の出力から外へ書くもの(argocd・cert-manager・infisical・2 つの Secret)を抜いて bootstrap まで。`bond0` の MAC が `hardwareAddr` の `e6:2c:1b:1a:a0:39` になる。`autoconf=0` で SLAAC が付かず、k8s が上がって forwarding=1 になっても RA の既定経路が残る。再起動の直後と 2 分後も同じ | 無し |
 
 ほかに残しておくこと:
 
 - **bond のフェイルオーバーは 8 秒以内**(片方の carrier を落とすと `Currently Active Slave` が移り、`talosctl` は途切れない)。
   balance-alb らしくメンバー間で MAC が入れ替わる。**復旧方向は QEMU では確かめられていない**(`set_link … on` でゲストの carrier が戻らない)
-- `addr_gen_mode: "3"` は再起動ごとに IID が変わる。cloudflare-ddns(`local.iface.stable:bond0`)が ::2 ではなく SLAAC 側を拾うようなら
-  `stable_secret` を足して 2 に戻す(当日の 9 で ::2 が出ていることを見る)
+- `addr_gen_mode: "3"` は再起動ごとに IID が変わるが、`autoconf=0` で SLAAC のグローバルアドレス自体を付けないので
+  効くのはリンクローカルだけ。cloudflare-ddns(`local.iface.stable:bond0`)が拾うのは ::2 しか無い(7 回目で確認)
 - **wireguard はカーネル組み込み**(`/sys/module/wireguard/version` が 1.0.0)。privileged + hostNetwork の Pod から `wg-quick up` が通る。
   Ubuntu で要った AppArmor の回避は Talos には無い(LSM が SELinux)
 - `net.ipv6.conf.eno4.disable_ipv6: "1"` は効く。`bond0` の sysctl は Talos が bond を作ったあとに当たる。`/proc/cmdline` に schematic の引数が載る

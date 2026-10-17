@@ -213,7 +213,7 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 - [ ] Infisical → operator → 各アプリの `Secret` が埋まる
       (`kubectl get infisicalsecret -A` が全部 `Synced`)
 - [ ] `talosctl get links bond0` の MAC が **`e6:2c:1b:1a:a0:39`**(ルーターの IPv6 ホスト公開がこの MAC を指している。
-      [talos/patches/cluster.yaml](../talos/patches/cluster.yaml))
+      [talos/patches/cluster.yaml](../talos/patches/cluster.yaml)。VM では効いた([talos.md](talos.md) のドリル 7 回目)。実機の NIC でも同じかをここで見る)
 - [ ] **別の回線の IPv6 だけで 443 に届く**(A レコードもあるので、ブラウザで名前を開くだけでは IPv4 に落ちて確かめにならない。アドレスを直接開くのも駄目で、SNI が無いと Gateway が TLS を切る(2026-10-17 に確かめた)。J:COM 側の PC から `curl -6 -so /dev/null -w "%{http_code} %{remote_ip}\n" https://fj.doany.io/` で `200 240f:6d:842b:1::2` が出れば届いている。[router.md](router.md)「IPv6 はノードだけを公開する」)
 - [ ] `talosctl get routes -o yaml | grep -B10 'protocol: ra'` に `dst: ""` が残っている(IPv6 の既定経路。クラスタが上がってから見る)
 - [ ] DNS(cloudflare-ddns が A/AAAA を書く)。**AAAA が `::2`** で、SLAAC のアドレスではないこと(`bond0` の `autoconf=0` が効いていれば SLAAC は付かない。Ubuntu 期は SLAAC を書いていた)。**sysctl より先に RA が届くと SLAAC が一度付いて残りうる**ので、`talosctl get addresses` を起動直後・数分後・再起動後の 3 回見る
