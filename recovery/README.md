@@ -11,7 +11,11 @@
 | [pv.sh](pv.sh) | PV のデータを k8up の `Restore` で戻す道具(下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
-**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次のリハーサルか建て直しで最初に確かめる。
+**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる。
+
+**手動のリハーサルは回さない。** 「バックアップが戻せる中身か」は月次の CronJob が確かめる
+([../apps/k8up/restore-check.yaml](../apps/k8up/restore-check.yaml))。「描いた machine config で起動するか」は
+[../.github/workflows/talos-boot.yml](../.github/workflows/talos-boot.yml) が QEMU で確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
 
 手で持つのは **age のパスフレーズ 1 つだけ**。GitHub へのログインは要らない
 (置き場の考え方は [../docs/decisions.md](../docs/decisions.md)「そのパスフレーズをどこに置くか」)。

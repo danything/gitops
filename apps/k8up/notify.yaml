@@ -34,6 +34,11 @@ rules:
   - apiGroups: [""]
     resources: [persistentvolumeclaims, pods]
     verbs: [list]
+  # k8up の namespace の CronJob(etcd-snapshot・restore-check など)が最後まで走ったか。
+  # status しか読まない
+  - apiGroups: [batch]
+    resources: [cronjobs]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -273,7 +278,23 @@ data:
       ),
     ];
 
+    // **同じ namespace の CronJob が最後まで走ったか。** restore-check(月次)は FAILED でも
+    // 自分で投稿するが、OOMKilled や期限切れ、Secret の欠落では投稿まで届かずに黙って落ちる。
+    // 最後に予定された回より最後に成功した回が古ければ拾う。走っている最中(自分も)は見ない
+    const unfinished = (
+      await fetchAll("https://kubernetes.default.svc/apis/batch/v1/namespaces/k8up/cronjobs", "cronjobs")
+    )
+      .filter(({ status: s = {} }) =>
+        s.lastScheduleTime && !(s.active ?? []).length &&
+        !(s.lastSuccessfulTime && Date.parse(s.lastSuccessfulTime) >= Date.parse(s.lastScheduleTime)),
+      )
+      .map((c) => `${c.metadata.name} (${c.status.lastScheduleTime} の回)`);
+
     const lines = [];
+    if (unfinished.length) {
+      lines.push(`**最後の回が成功していない CronJob**`);
+      for (const u of unfinished) lines.push(`- ${u}`);
+    }
     if (stale.length) {
       lines.push(`**${stale.length} 件が ${WINDOW_H} 時間以上更新されていない**`);
       for (const s of stale.slice(0, 15)) lines.push(`- ${s.key} (${s.h.toFixed(0)} 時間前)`);
