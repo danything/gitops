@@ -6,7 +6,7 @@
 # 正本で、machine config はそこから描いた派生物にする。手で合わせない
 # (../docs/decisions.md「machine config と Cilium の chart をどう連動させるか」)。
 #
-#   ./talos/render.sh /tmp/talos-config
+#   ./talos/render.sh talos/clusterconfig
 #
 # 秘密(talos/secrets.yaml などの SOPS ファイル)は自分で復号して作業用の一時ディレクトリに置き、
 # 終わったら消す(age の鍵が要る)。CI は鍵を持たないので SECRETS / REGISTRIES などの env で
