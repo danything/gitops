@@ -39,6 +39,9 @@ spec:
               valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
             - name: BACKUP_GLOBALREPOPASSWORD
               valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+            # 終わったジョブを残す数(既定は 3 / 3)。Schedule ごとに書かずにここで揃える
+            - {name: BACKUP_GLOBAL_SUCCESSFUL_JOBS_HISTORY_LIMIT, value: "1"}
+            - {name: BACKUP_GLOBAL_FAILED_JOBS_HISTORY_LIMIT, value: "2"}
   syncPolicy:
     automated:
       prune: true

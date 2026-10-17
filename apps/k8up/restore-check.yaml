@@ -165,7 +165,7 @@ data:
     const pgdump = (file, name) => {
       startPg();
       // **ロールを先に作る。** ダンプは --no-owner ではないので `OWNER TO <ロール>` が入っていて、
-      // ロールが無いとそこだけ全部 ERROR になる(apps/k8up/README.md「戻し方」)。
+      // ロールが無いとそこだけ全部 ERROR になる(データは入るが所有者が postgres のまま)。
       // ダンプは grep で読む(丸ごとメモリに載せない。同じ Pod に postgres が居る)
       const hits = run(["sh", "-c", `grep -ohE '(OWNER TO|^GRANT .* TO) "?[A-Za-z0-9_-]+"?;' "$1" || true`, "sh", file]).out;
       const roles = new Set(hits.split("\n").filter(Boolean).map((l) => l.split(" ").at(-1).replace(/[";]/g, "")));
