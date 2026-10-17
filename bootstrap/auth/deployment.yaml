@@ -61,7 +61,7 @@ spec:
             # Same admin-only restriction the email whitelist gave us, but
             # via the Entra app role "admin" -- anyone else in the tenant can
             # still complete OIDC login but gets rejected here before reaching
-            # *.s.doany.io. Shared with ArgoCD's RBAC (see argocd/helmchart.yaml).
+            # *.s.doany.io. Shared with ArgoCD's RBAC (see argocd/values.yaml).
             #
             # Moved off the group claim on 2026-09-07 (docs/entra.md): the
             # group Object IDs made the ID token big enough that the session

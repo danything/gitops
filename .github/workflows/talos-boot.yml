@@ -7,7 +7,7 @@
 #
 # **秘密はゼロ。** talos-validate と同じく使い捨ての秘密とダミーで描く。
 # **外に副作用を出さない。** ACME・DNS の書き込み・R2・非公開レジストリには触らない:
-#   - ArgoCD は CR から `extraObjects`(app-of-apps と GitHub App の repo-creds)と通知先を抜く
+#   - ArgoCD は `extraObjects`(app-of-apps と GitHub App の repo-creds)と通知先を抜く
 #   - ClusterIssuer `letsencrypt` は自己署名に差し替える(本物の clusterissuer.yaml は当てない)
 #   - infisical は SMTP の env を抜く
 # 手順の元は docs/talos.md「VM ブートドリル」。
@@ -120,16 +120,14 @@ jobs:
                     username: ci-dummy
                     password: ci-dummy
           PATCH
-          # **argocd / infisical は本物の CR から作る。** SOPS は決まったキーしか暗号化しないので
-          # (.sops.yaml の encrypted_regex)、chart・版・値は平文で読める。暗号文だけダミーに替える。
-          # -I4 は render.sh の hc() が 4 字下げを前提にしているため。
-          dummy='(.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"'
+          # **argocd / infisical の値は本物の values.yaml。** 秘密の側(secret-values.yaml)だけダミーに替えて重ねる。
+          # 通知の送り先は secret-values.yaml にしか無いので、渡さなければ通知も出ない。
           # extraObjects は app-of-apps(`apps`)と GitHub App の repo-creds。CI で本物を同期させない
-          yq -I4 "del(.sops) | del(.spec.values.extraObjects) | del(.spec.values.notifications.notifiers) | $dummy" \
-            bootstrap/argocd/helmchart.yaml > /tmp/argocd-chart.yaml
-          # SMTP は外(smtp.office365.com)に繋ぎに行くので抜く
-          yq -I4 "del(.sops) | del(.spec.values.infisical.extraEnv[] | select(.name | test(\"^SMTP_\"))) | $dummy" \
-            bootstrap/infisical/helmchart.yaml > /tmp/infisical-chart.yaml
+          echo 'extraObjects: []' > /tmp/argocd-secret-values.yaml
+          # SMTP は外(smtp.office365.com)に繋ぎに行くので抜く(リストなので丸ごと置き換える)
+          yq '{"infisical": {"extraEnv": [.infisical.extraEnv[] | select(.name | test("^SMTP_") | not)]},
+            "postgresql": {"auth": {"password": "ci-dummy"}}, "redis": {"auth": {"password": "ci-dummy"}}}' \
+            bootstrap/infisical/values.yaml > /tmp/infisical-secret-values.yaml
           # ENCRYPTION_KEY は 16 バイトの hex でないと infisical が起動しない
           yq -I4 "del(.sops) | del(.stringData.CLIENT_ID_GITHUB_LOGIN) | del(.stringData.CLIENT_SECRET_GITHUB_LOGIN)
             | .stringData.ENCRYPTION_KEY = \"$(openssl rand -hex 16)\"
@@ -137,12 +135,11 @@ jobs:
             | .stringData.TELEMETRY_ENABLED = \"false\"" \
             bootstrap/infisical/secrets.yaml > /tmp/infisical-secret.yaml
           yq -I4 "del(.sops) | $dummy" bootstrap/cert-manager/cloudflare-secret.yaml > /tmp/cloudflare-secret.yaml
-          for f in /tmp/argocd-chart.yaml /tmp/infisical-chart.yaml /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
+          for f in /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done
-          ! grep -q 'name: apps$' /tmp/argocd-chart.yaml || { echo "::error::app-of-apps が残っている"; exit 1; }
           SECRETS=/tmp/secrets.yaml REGISTRIES=/tmp/registries.yaml \
-            ARGOCD_CHART=/tmp/argocd-chart.yaml INFISICAL_CHART=/tmp/infisical-chart.yaml \
+            ARGOCD_SECRET_VALUES=/tmp/argocd-secret-values.yaml INFISICAL_SECRET_VALUES=/tmp/infisical-secret-values.yaml \
             INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
             ./talos/render.sh /tmp/out
           # 外からは hostfwd の 127.0.0.1 で入る

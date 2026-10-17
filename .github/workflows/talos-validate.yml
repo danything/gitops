@@ -7,15 +7,13 @@ on:
   pull_request:
     paths:
       - talos/**
-      - bootstrap/cilium/**
-      - bootstrap/cert-manager/**
+      - bootstrap/**
       - .github/workflows/talos-validate.yml
   push:
     branches: [main]
     paths:
       - talos/**
-      - bootstrap/cilium/**
-      - bootstrap/cert-manager/**
+      - bootstrap/**
   workflow_dispatch:
 
 permissions:
@@ -54,38 +52,9 @@ jobs:
                     username: ci-dummy
                     password: ci-dummy
           PATCH
-          # **argocd / infisical の HelmChart CR もダミーで渡す。** 本物は SOPS 済みで、
-          # age の鍵は CI に渡さない。値は既定のままでよく、**確かめたいのは
-          # 「CR から chart/repo/version/values を取り出して helm template まで通るか」**と、
-          # **CRD が URL 側に出て inline に入らないこと**。
-          cat > /tmp/argocd-chart.yaml <<'PATCH'
-          apiVersion: helm.cattle.io/v1
-          kind: HelmChart
-          metadata:
-              name: argocd
-          spec:
-              chart: argo-cd
-              repo: https://argoproj.github.io/argo-helm
-              version: 10.8.1
-              targetNamespace: argocd
-              values:
-                  dex:
-                      enabled: false
-          PATCH
-          cat > /tmp/infisical-chart.yaml <<'PATCH'
-          apiVersion: helm.cattle.io/v1
-          kind: HelmChart
-          metadata:
-              name: infisical
-          spec:
-              chart: infisical-standalone
-              repo: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
-              version: 1.10.0
-              targetNamespace: infisical
-              values:
-                  infisical:
-                      fullnameOverride: infisical
-          PATCH
+          # 値の秘密の部分(secret-values.yaml)もダミーで。鍵の名前だけ合わせる
+          printf 'githubAppRepoCreds:\n  stringData:\n    githubAppPrivateKey: ci-dummy\n' > /tmp/argocd-secret-values.yaml
+          printf 'postgresql:\n  auth:\n    password: ci-dummy\nredis:\n  auth:\n    password: ci-dummy\n' > /tmp/infisical-secret-values.yaml
           # **SOPS 済みの Secret もダミーで。** 中身は見ないので、名前と形だけ合わせる。
           cat > /tmp/infisical-secret.yaml <<'PATCH'
           apiVersion: v1
@@ -108,6 +77,6 @@ jobs:
             CF_DNS_API_TOKEN: ci-dummy
           PATCH
           SECRETS=/tmp/secrets.yaml REGISTRIES=/tmp/registries.yaml \
-            ARGOCD_CHART=/tmp/argocd-chart.yaml INFISICAL_CHART=/tmp/infisical-chart.yaml \
+            ARGOCD_SECRET_VALUES=/tmp/argocd-secret-values.yaml INFISICAL_SECRET_VALUES=/tmp/infisical-secret-values.yaml \
             INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
             ./talos/render.sh /tmp/out

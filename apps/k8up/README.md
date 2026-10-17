@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | forgejo | postgres の `pg_dump` + リポジトリの PVC(ファイル) | [../forgejo/postgres.yaml](../forgejo/postgres.yaml) |
 | rybbit | postgres の `pg_dump` + ClickHouse の PVC(ファイル。パートは追記だけなので動いたまま取る) | [../rybbit/postgres.yaml](../rybbit/postgres.yaml) / [../rybbit/clickhouse.yaml](../rybbit/clickhouse.yaml) |
-| infisical | postgres の `pg_dump` | `bootstrap/infisical/helmchart.yaml` の `postgresql.primary.podAnnotations`(**SOPS 済みなので編集は `sops set`**) |
+| infisical | postgres の `pg_dump` | `bootstrap/infisical/values.yaml` の `postgresql.primary.podAnnotations` |
 | lgtm / xool / worklog / denpa / blog / todoroku | SQLite を `serialize()` した 1 ファイル | 各アプリのリポジトリの `deploy/`(denpa と yosegaki は chart) |
 | netbird | `store.db` / `idp.db` / `events.db` を tar 1 本に(bun のサイドカー) | [../netbird/deployment.yaml](../netbird/deployment.yaml) |
 | matrix | Tuwunel 自身のバックアップと `media/` を tar 1 本に(DB は動いたまま写さない) | [../matrix/tuwunel.yaml](../matrix/tuwunel.yaml) |

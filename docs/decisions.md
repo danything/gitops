@@ -196,7 +196,7 @@ Gateway API の session persistence は experimental チャネル限定、Cilium
 ## chart を配るときと、chart で入れるとき(2026-09-07)
 
 **`HelmChart` CRD(helm-controller)はやめた。** ArgoCD と二重管理になり(差分も同期状態も prune も見えない)、Talos に無い。
-argocd と infisical の CR は `render.sh` が chart・版・値を読む入れ物として残っているだけ。**Helm chart を配る(OCI で push する)のは続ける**(denpa と yosegaki)。
+argocd と infisical も `bootstrap/<name>/` の version.yaml・values.yaml から `render.sh` が描く。**Helm chart を配る(OCI で push する)のは続ける**(denpa と yosegaki)。
 入れ方は利用者に選ばせる(`helm install` でも `Application` でも同じものが入るのが正しい)。このクラスタは ArgoCD の `Application` に統一した。
 
 配る chart でやらないこと(踏んだもの。自分の chart はどれも該当しない):
@@ -242,7 +242,7 @@ ghcr.io に残るイメージは全部公開。**ノード単位で持つのは 
 
 共有プリセット `5ym/repo-config` で、**パッチとマイナーは 1 つの PR にまとめて自動マージ、メジャーと Helm chart は人が見る**
 (postgres 17 → 18 が nginx のパッチと同じ PR で自動マージされかけた danything/gitops#7、chart のパッチ更新で中身が入れ替わった件から)。
-PostgreSQL は 17 の線に固定(メジャーでデータディレクトリの互換が切れ、dump / restore が要る)、SOPS 済みのファイルは Renovate に触らせない。
+PostgreSQL は 17 の線に固定(メジャーでデータディレクトリの互換が切れ、dump / restore が要る)、argo-cd と infisical-standalone の chart は自動マージしない。
 理由はそれぞれ [../renovate.json](../renovate.json) の `description`。Renovate 自体は [apps/renovate/](../apps/renovate/) の CronJob で動く。
 
 ## PVC を守る仕掛けをやめた(2026-09-07)

@@ -1,8 +1,0 @@
-# render.sh が描くときだけ重ねる差分。正本は bootstrap/argocd/helmchart.yaml の `spec.values`
-# (SOPS 済み)で、ここは開かずに足せる口。
-#
-# CRD を chart から描かせない。3 つで 1.83 MB あり、描き出しの 95%。
-# `KubeExternalManifestConfig` で URL を渡す([../talos/render.sh](../talos/render.sh))。
-# なぜ URL なのかは [../docs/decisions.md](../docs/decisions.md)「層の分け方」。
-crds:
-  install: false

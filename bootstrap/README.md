@@ -8,39 +8,17 @@
 | **machine config**([../talos/render.sh](../talos/render.sh) が描く) | Helm で入れるもの(cilium・cert-manager・argocd・infisical)、`apiserver/rbac.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |
 | **GitHub Actions**([bootstrap-apply.yml](../.github/workflows/bootstrap-apply.yml)) | 残りの平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など) | main へのマージ(下の「適用は GitHub Actions がやる」) |
 
-**SOPS(age)で暗号化した 4 ファイルは CI が当てない** ── CI に復号鍵を渡さないため。
-`infisical/secrets.yaml`、`infisical/helmchart.yaml`、`argocd/helmchart.yaml`、
-`cert-manager/cloudflare-secret.yaml`。鍵は [`recovery/sops-age.key.age`](../recovery/)。
-**中を編集するときも sops を通すこと**(下の「Helm で入れるもの」に手順)。MAC は暗号化して
+**SOPS(age)で暗号化したファイルは CI が当てない** ── CI に復号鍵を渡さないため。
+`infisical/secrets.yaml`、`cert-manager/cloudflare-secret.yaml`、`{argocd,infisical}/secret-values.yaml`。
+鍵は [`recovery/sops-age.key.age`](../recovery/)。**中を編集するときも `sops edit` を通すこと。** MAC は暗号化して
 いない値も含めて計算されるので、**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる。**
 
 ## Helm で入れるもの
 
-どれも `render.sh` が `helm template` して machine config に載せる。版と値の置き場:
-
-| | 版 | 値 |
-| --- | --- | --- |
-| cilium | [cilium/version.yaml](cilium/version.yaml) | [cilium/values.yaml](cilium/values.yaml) |
-| cert-manager | [cert-manager/version.yaml](cert-manager/version.yaml) | [cert-manager/values.yaml](cert-manager/values.yaml) |
-| argocd / infisical | SOPS 済みの CR の `spec.version` | CR の `spec.values`(+ `talos/{argocd,infisical}-values.yaml`) |
-
-**argocd と infisical の版は固定して人が上げる**(argo-cd 10.8.1 / infisical-standalone 1.10.0。版が無いと作り直すたびに
-別の版になり、Renovate も追えない)。**Renovate はこの 2 ファイルを見ない**(`renovate.json` の `ignorePaths`)。2026-09-08 に暗号文の中の版を平文置換した PR が
-自動マージされ、`sops -d` が通らなくなったため。**版は固定して人が上げる**([docs/decisions.md](../docs/decisions.md)「依存の更新をどこまで自動で入れるか」)。
-
-中を触るときは、位置を選びたいので `sops set` ではなくこの順でやった:
-
-```shell
-f=bootstrap/argocd/helmchart.yaml
-sops -d "$f" > /tmp/before.yaml            # ← 先に「編集前の中身」を取っておく
-sops decrypt --in-place "$f"
-# repo: の次の行に version: を足す
-sops encrypt --in-place "$f"
-sops -d "$f" | diff /tmp/before.yaml -     # 足した 1 行だけが出ること
-rm -f /tmp/before.yaml
-```
-
-**`git diff` では代用できない**(`mac` と `lastmodified` が毎回変わる)。**復号した中身どうしを比べる。**
+どれも `render.sh` が `helm template` して machine config に載せる。どれも同じ形で、
+`<name>/version.yaml`(chart・repo・版。Renovate が上げる)と `<name>/values.yaml`(値)。
+argocd と infisical は、値のうち秘密だけを `<name>/secret-values.yaml`(SOPS、丸ごと暗号化)に分けて上に重ねる。
+argocd・infisical の版は自動マージしない(`renovate.json` の `bootstrap charts`)。
 
 ## git と live がずれていないか
 
@@ -129,7 +107,7 @@ ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` �
 **`bootstrap/` の `InfisicalSecret` には要らない**(`argocd/oidc-secret.yaml`・
 `auth/secrets.yaml`・`infisical/smtp-secret.yaml`)。**ArgoCD が見ていない**ためで、
 これらは GitHub Actions が `kubectl apply` で当てる ── app-of-apps(Argo CD の chart が作る `apps` Application。
-`argocd/helmchart.yaml` の中、prune / selfHeal 付き)は `bootstrap/argocd` の `repos.yaml` **だけ**を `directory.include` で拾っている。
+`argocd/values.yaml` の `extraObjects`、prune / selfHeal 付き)は `bootstrap/argocd` の `repos.yaml` **だけ**を `directory.include` で拾っている。
 chart と一緒に入るので、**まっさらなクラスタでも CI を待たずに ApplicationSet が走りはじめる**。CI の `bootstrap-apply` も
 同じファイルを当てるが、中身が同じなので衝突しない。
 

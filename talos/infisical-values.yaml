@@ -1,5 +1,0 @@
-# render.sh が描くときだけ重ねる差分。正本は bootstrap/infisical/helmchart.yaml の
-# `spec.values`(SOPS 済み)で、ここは開かずに足せる口。
-#
-# いまは何も変えていない。argocd と同じ形で render.sh から `-f` で重ねられるように置いてある。
-{}
