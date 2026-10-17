@@ -36,7 +36,7 @@ Infisical の Postgres は**クラスタで一番失えないデータ**(全ア�
 | PVC | 中身 | どうするか |
 | --- | --- | --- |
 | `adguardhome-conf` `adguardhome-work` `netbird-routing-peer-data` `forgejo-repos` `clickhouse-data`(rybbit) | ファイル | gitops で `"true"` |
-| `denpa-encoded` `agent-config` `lgtm-images` `lgtm-assets` `xool-assets` `yuzuriha-data` `ashi-data` `todoroku-files` | ファイル | 各アプリのリポジトリで `"true"` |
+| `denpa-encoded` `agent-config` `lgtm-images` `xool-assets` `yuzuriha-data` `ashi-data` `todoroku-files` | ファイル | 各アプリのリポジトリで `"true"` |
 | `lgtm-db` `xool-db` `worklog-db` `yosegaki-db` | SQLite だけ | `backupcommand` で取るので PVC は取らない |
 | `denpa-data` | SQLite + ファイル | `"true"` + `k8up.io/backup-restic-args: '["--exclude","denpa.db*"]'`(DB は `backupcommand`)。**この注釈は JSON で、パースに失敗するとその PVC が黙って飛ばされる**(`operator/backupcontroller/executor.go`)ので、変えたら実物を見る |
 | `netbird-data` `tuwunel-data` | DB + 再取得できるファイル | `"false"`。DB はサイドカーの `backupcommand` |
