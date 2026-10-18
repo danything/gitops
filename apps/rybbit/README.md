@@ -2,7 +2,7 @@
 
 アクセス解析。Google Analytics の置き換えで、クッキーを使わない(同意バナーが要らない)。
 トドロク(tk.doany.io)の LP から購入までのどこで離脱するかを、ファネル・ユーザージャーニー・
-セッションリプレイで見るために置いた(2026-09-19)。AGPL-3.0、自分で動かす分には縛りはない。
+セッションリプレイで見るために置いた。AGPL-3.0、自分で動かす分には縛りはない。
 
 上流: <https://github.com/rybbit-io/rybbit>。構成は上流の docker-compose.yml をそのまま k8s に写した。
 
@@ -24,7 +24,7 @@
    入れるまで Pod は `CreateContainerConfigError` で待つ(壊れてはいない)
 2. <https://rt.doany.io> を開き、最初のアカウントを作る(これが管理者)
 3. **すぐに** [rybbit.yaml](rybbit.yaml) の `DISABLE_SIGNUP` と `NEXT_PUBLIC_DISABLE_SIGNUP` を `"true"` にして
-   PR を出す。false のままだと誰でもこのインスタンスにアカウントを作れる(2026-09-19 に済み。
+   PR を出す。false のままだと誰でもこのインスタンスにアカウントを作れる(済み。
    人を足すなら一時的に false に戻すか、画面の招待で。招待メールは Resend が無いので届かない)
 4. 画面で「サイトを追加」→ `tk.doany.io`。出てくるサイト ID をトドロクの `PUBLIC_RYBBIT_SITE_ID`
    (todoroku の `deploy/deployment.yaml`)に入れる。トドロクの root layout が
@@ -41,5 +41,4 @@
   clickhouse.yaml の limit と `resource_limits.xml` は比率なので limit だけ上げればよい
 - **版。** GitHub のリリースの `vX.Y.Z` を 2 つのイメージに同じタグで。Renovate が PR を出す。
   ClickHouse・PostgreSQL・Redis は上流の compose が使っている版に合わせる
-- **PSA は baseline。** privileged にした他の namespace と違い、hostPort も特権も要らない。
-  Talos に移ったときそのまま通る
+- **PSA は baseline。** privileged にした他の namespace と違い、hostPort も特権も要らない

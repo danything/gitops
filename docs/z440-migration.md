@@ -1,6 +1,6 @@
 # Talos に移したノード main を SSD ごと Z440 に移す
 
-DL360 Gen9 で動いている `main`(2026-10-17 から Talos)を、**SSD ごと** HP Z440 に移す計画(ROADMAP の Phase 2.5)。
+DL360 Gen9 で動いている `main`を、**SSD ごと** HP Z440 に移す計画(ROADMAP の Phase 2.5)。
 あとで小さいサーバ(Talos)に 10.0 と 10.10 のあいだのルーターを任せ、Z440 は 10.0 側だけにする予定(「終わったら」)。
 
 ## 構成と、Z440 での扱い
@@ -12,7 +12,7 @@ DL360 Gen9 で動いている `main`(2026-10-17 から Talos)を、**SSD ごと*
 | SSD | SATA の Radeon R7 447GB 1 本。Smart Array 経由(素通し)なので Linux からは `TRAN=sas`・`/dev/sda` に見える | 内蔵の SATA(AHCI)に直結。`ahci` は Talos のカーネルに入っている([talos.md](talos.md)) |
 | 起動 | UEFI、セキュアブート無効 | **UEFI、CSM 無効**(Arc の条件)、セキュアブート無効 |
 | GPU | 無し(画面は iLO の Matrox G200) | **Intel Arc A310 を常設。** Xeon E5 は内蔵 GPU が無く、**Z440 は GPU が無いと POST しない**(画面なしで起動する BIOS の設定は見つからない。兄弟機には隠しの「Headless Mode」があるらしいが Z440 では未確認)。denpa の AV1 のハードウェアエンコードにも使う。Talos では extension が要る(`siderolabs/i915`。**要確認**) |
-| NIC | Broadcom BCM5719 × 4(`tg3`)。`eno1`+`eno2` → `bond0`(10.0.0.2、`240f:6d:842b:1::2`)、`eno4` → 10.10.0.4 | 内蔵の Intel I218-LM 1 ポート(`e1000e`)+ **HP 361T**(Intel I350-T2、`igb`。2026-10-11 に購入)。どちらも Talos のカーネルに入っているはず(**要確認**。talos.md に書いてあるのは tg3・bonding・AHCI だけ) |
+| NIC | Broadcom BCM5719 × 4(`tg3`)。`eno1`+`eno2` → `bond0`(10.0.0.2、`240f:6d:842b:1::2`)、`eno4` → 10.10.0.4 | 内蔵の Intel I218-LM 1 ポート(`e1000e`)+ **HP 361T**(Intel I350-T2、`igb`)。どちらも Talos のカーネルに入っているはず(**要確認**。talos.md に書いてあるのは tg3・bonding・AHCI だけ) |
 | TV チューナー | PT3(PCIe、`earth_pt3`。extension `siderolabs/dvb-pt3`) | PCIe のスロットに差し替える |
 | USB | B-CAS 用の IC カードリーダー(GemPC Twin)、キーボードの受信機 | 差し替える |
 | リモート管理 | iLO(10.0.0.3) | **Intel AMT 9.x**(ME 9.1)。電源とシリアルコンソールは使えるが、画面(KVM)は使えない(「3. リモート管理: Intel AMT」) |
@@ -99,9 +99,7 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 - **Windows**: Intel の [Device Management Toolkit の Console](https://github.com/device-management-toolkit/console) を使う。
   Releases の `console_windows_x64.exe` を落として実行するだけ(Web の UI は同梱。初回だけ `Key Not Found, Generate new key? Y/N` に `Y`)。
   10.0.0.5 を足して、電源の操作・SOL・IDE-R(ISO をつなぐ)を使う。**常駐させない**(使うときだけ手元で起動する)
-  - 選んだ理由(2026-10-17 に調べた): Intel Manageability Commander はサポート終了(2022 年の 2.4 が最後、新しい AMT では動かない報告あり)。
-    Intel EMA は AMT 11.8.79 以降が対象で Windows Server + SQL Server が要る(AMT 9 は対象外)。MeshCommander・MeshCentral は
-    Intel の公式から外れた(MeshCentral は独立した OSS として続いている)。Console は Intel の公式で開発中
+  - 選んだ理由: Intel の公式で開発中なのはこれだけ(Manageability Commander は終了、EMA は AMT 9 が対象外)
   - **未確認**: Console は README で「アルファ版、本番では使わない」としていて、対応する AMT の版も書いていない。**AMT 9 につながるか、
     UEFI(Arc のため CSM 無効)のまま IDE-R の ISO から起動できるかは、AMT の初期設定のあとで最初に試す**。
     つながらなければ [MeshCentral](https://github.com/Ylianst/MeshCentral) を手元で一時的に動かす。IDE-R がだめでも USB を挿せば済む

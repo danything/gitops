@@ -2,8 +2,8 @@
 
 Cloudflare・Entra ID・NetBird の設定を [Pulumi](https://www.pulumi.com/) で持つ。主なもの:
 
-- **R2 の `doany-restic`**(restic の置き場。2026-10-05)── [index.ts](index.ts)
-- **Entra のアプリ登録(共用の 1 つ)のリダイレクト URI**(2026-10-06)── [entra.ts](entra.ts)。
+- **R2 の `doany-restic`**(restic の置き場)── [index.ts](index.ts)
+- **Entra のアプリ登録(共用の 1 つ)のリダイレクト URI** ── [entra.ts](entra.ts)。
   **アプリを足す・消すときは、そのアプリのマニフェストと同じ PR で entra.ts も直す**
 
 | いつ | 何が起きるか | 鍵 |
@@ -39,12 +39,12 @@ Pulumi で表せないものは [report.ts](report.ts) が毎週見る。
 
 **承知していること:** preview の鍵も state バケットには書ける(state のロックに要る)。同じリポジトリから
 PR を出せる人は、ワークフローを書き換えて state をいじれる。ただし R2 の設定(バックアップのバケット)は
-読めるだけで変えられない。書けるのは本人だけ、という前提で受け入れている(2026-10-05)。
+読めるだけで変えられない。書けるのは本人だけ、という前提で受け入れている。
 
 state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレーズで暗号化している。
 **state に秘密は入れていない**(アカウント ID は環境変数で渡す)ので、パスフレーズを失くしても
 `pulumi stack init` からやり直せる。`doany-restic` は `import` で取り込み直される。
-`doany-pulumi` 自体は Pulumi で持っていない(state の置き場を state で持つと鶏卵になる)。2026-10-05 に `cf` で作った。
+`doany-pulumi` 自体は Pulumi で持っていない(state の置き場を state で持つと鶏卵になる)。
 
 | どこ | 何 |
 | --- | --- |
@@ -63,7 +63,7 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 ## DNS とゾーンの設定
 
 [dns.ts](dns.ts)。doany.io の DNS のうち **ExternalDNS が作らないもの**(ワイルドカード・メール・CAA・ドメインの確認)と、
-ゾーンの設定(SSL・常に HTTPS・最低の TLS の版・HSTS)。2026-10-07 に手で作ってあったものを import で取り込んだ。
+ゾーンの設定(SSL・常に HTTPS・最低の TLS の版・HSTS)。
 
 - アプリごとの名前は ExternalDNS(アプリの HTTPRoute から)。apex の A / AAAA は cloudflare-ddns(家の IP が変わる)。
   **どちらもここには書かない**(二重に持つと取り合いになる)
@@ -73,8 +73,7 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 
 [notifications.ts](notifications.ts)。証明書・DDoS・オリジン不達・不正利用の報告・Security Insights を、Matrix の
 部屋 `server`(スペース「通知」。hookshot の受け口 `cloudflare`)に流す。送り先の URL は hookshot の ID を含むので Actions secrets の
-`CLOUDFLARE_NOTIFY_WEBHOOK_URL`(Infisical `/matrix/matrix` の `hook-cloudflare` から作る)。トークンの Notifications の
-権限は 2026-10-07 に足した。
+`CLOUDFLARE_NOTIFY_WEBHOOK_URL`(Infisical `/matrix/matrix` の `hook-cloudflare` から作る)。
 
 ## Entra
 
@@ -88,20 +87,20 @@ CI 用のアプリ登録を 2 つに分けてある(R2 の preview / apply と�
 
 **フェデレーションの subject は番号入りの形**(`repo:danything@143234231/gitops@1311609465:pull_request` など)。
 このリポジトリは「変わらない subject」(`use_immutable_subject`)を使っていて、組織やリポジトリの名前が変わっても
-信頼が崩れない。`repo:danything/gitops:…` で登録すると `AADSTS700213` で入れない(2026-10-06 に踏んだ)。
+信頼が崩れない。`repo:danything/gitops:…` で登録すると `AADSTS700213` で入れない。
 今の形は `gh api repos/danything/gitops/actions/oidc/customization/sub` の `sub_claim_prefix`。
 
 apply 用は「自分が所有者のアプリ登録」しか書けない。所有者になっているのは、共用のアプリ登録(`b0fa498f-…`)と CI 用の 2 つ。
 テナント ID はリポジトリの Variables `AZURE_TENANT_ID`。
 
 持っているのは**リダイレクト URI の一覧**と**アプリロール Admins の定義**(entra.ts)と、**CI 用のアプリ登録 2 つの信頼の設定**(entra-ci.ts。
-2026-10-07 に取り込んだ。apply のサービスプリンシパルを 2 つの所有者にして書けるようにした。消せないよう protect)。クライアントシークレット・
+消せないよう protect)。クライアントシークレット・
 ロールの割り当ては Pulumi の外(`docs/entra.md`)。手元で流すときは `az login` のログインがそのまま使われる。
 
 ## NetBird
 
 [netbird.ts](netbird.ts)。NetBird (https://nb.doany.io) の **DNS (ネームサーバー・ゾーン・レコード)、自宅の LAN への経路
-(ネットワーク・ルーター・リソース)、exit ノードのルート、アクセスのポリシー**。2026-10-07 に画面で作ってあったものを import で取り込んだ。
+(ネットワーク・ルーター・リソース)、exit ノードのルート、アクセスのポリシー**。
 **画面で変えると、次の週次の preview (--refresh) がずれとして落ちる。**
 
 - **持っていないもの:** グループの中身 (ピアはセットアップキーやログインで入る。ID で指すだけ)、ピア、ユーザー、
@@ -111,11 +110,11 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
   SDK (`sdks/`) は **`pulumi install` が作る** (CI も毎回作る)。`bun install` だけでは SDK が無いので、
   clone したら最初に `pulumi install`。版は Renovate が上げる (自動マージしない)
 - **Renovate は `bun.lock` を自分では作らない。** `package.json` は SDK を `file:sdks/netbird` で指していて、SDK を作れない
-  Renovate の `bun install` は落ちる(#304 で「Artifact update failure」になった)。renovate.json で pulumi/ の lock の更新を
+  Renovate の `bun install` は落ちる。renovate.json で pulumi/ の lock の更新を
   止め(`skipArtifactsUpdate: true`)、代わりに Renovate の `postUpgradeTasks` が [renovate-post-upgrade.sh](renovate-post-upgrade.sh)
   を流す。Pulumi の CLI(`.pulumi-version`、公式のチェックサムと照らす)と bun(`.bun-version`)を入れて `pulumi install --no-plugins`
   し、作り直した bun.lock を同じ枝にコミットさせる。手元・CI と同じ `pulumi install` で作るので、CI の lock の確認とずれない。
-  実行の許可は [apps/renovate/renovate.yaml](../apps/renovate/renovate.yaml) の `RENOVATE_ALLOWED_COMMANDS`(2026-10-08。#306 の SDK の package.json の写しはやめた)
+  実行の許可は [apps/renovate/renovate.yaml](../apps/renovate/renovate.yaml) の `RENOVATE_ALLOWED_COMMANDS`
 - `*.doany.io` を家の 10.0.0.2 に向けているのは、exit ノード越しに家の外向きの IPv4 を引くと折り返しで届かないため。
   `nb.doany.io` だけは外向きのアドレスで例外にしている。アドレスは書かず、2 段の名前 `nb.origin.doany.io` (ゾーンのワイルドカードに当たらず Cloudflare で引かれ、cloudflare-ddns が追従させる) に CNAME で向ける
 
@@ -154,10 +153,3 @@ node を探しに行く)。**`cf` の出力は API の封筒を外した `result
 | SDK・provider・`cf` | [bun.lock](bun.lock) | Renovate |
 | NetBird の provider と包むプラグイン | [Pulumi.yaml](Pulumi.yaml) の `packages` | Renovate (自動マージしない) |
 | bun | [.bun-version](.bun-version) | Renovate |
-
-## 経緯
-
-2026-10-05 まで、ここは `r2/` で、`drift.ts` が `cf` で実物を読んで突き合わせるだけだった
-(当てるのは手で、という方針)。本人の判断で「PR で差分、マージで当てる」に切り替えた。
-`doany-restic` の設定はそのとき実物と同じ内容で書き、バケットは `import` で取り込んだ
-(lifecycle・ロック・r2.dev は import できないリソースなので、最初の `up` で同じ内容を書き直した)。

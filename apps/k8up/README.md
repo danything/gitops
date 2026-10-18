@@ -82,8 +82,8 @@ restic は全部 `--no-lock`。OOMKilled や期限切れで投稿まで届かな
 ## 空のスナップショット
 
 **k8up のバックアップ Pod は既定で nonroot(65532)で走り、`0600 root:root` のファイルが読めない。** restic は
-`errors: N` を出しながら 0 バイトのスナップショットを作り、**k8up はそれを `Succeeded` にする**
-(2026-09-08 に adguardhome の 2 本が何週間もこの状態だった)。`0640` はグループ読みで通る。
+`errors: N` を出しながら 0 バイトのスナップショットを作り、**k8up はそれを `Succeeded` にする**。
+`0640` はグループ読みで通る。
 
 Schedule 全部に `podSecurityContext: {runAsUser: 0, runAsGroup: 0}` を付けて直した(PSA `baseline` でも通る。
 `restricted` に寄せるなら、アプリ側がファイルを `0640` で作るようにする)。notify は `summary.total_bytes_processed == 0`
@@ -108,7 +108,3 @@ notify は過去 8 日に出てきた (host, path) を「あるべきもの」�
 - 打つときは k8up のイメージ(`ghcr.io/k8up-io/k8up`、restic 入り)と `k8up-global` の秘密で使い捨ての Job を
   `kubectl -n k8up create -f -` で流す(env の渡し方は [denpa-encoded-forget.yaml](denpa-encoded-forget.yaml) と同じ)
 - forget はリポジトリを排他でロックするので、schedules.yaml の時刻を外す
-
-2026-10-18 までは残しておきたいものに `retired` のタグを付け、notify と restore-check で外していた。そのとき残っていた
-shadai(todoroku の旧名)・zulip と、Talos に移す前の lgtm・xool・todoroku の 66 本は 2026-10-18 に消した
-(重複排除でほとんど共有されていて、空いたのは 42 MiB)。

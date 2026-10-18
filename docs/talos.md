@@ -2,7 +2,7 @@
 
 対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、RDIMM は 6 枚中 5 枚で 40 GB、NIC は BCM5719 ×4)。
 ディスクは **SATA の SSD(Radeon R7、447 GB)を Smart Array(hpsa)越しに**見ている。Linux からは `/dev/sda`(`TRAN=sas` と出るが SAS ではない)。
-版は [talos/versions.yaml](../talos/versions.yaml) が正(2026-10-17 時点で v1.15.0-alpha.1 / Kubernetes v1.37.1)。
+版は [talos/versions.yaml](../talos/versions.yaml) が正。
 入れ方は [recovery/README.md](../recovery/README.md)、組み立てと当て直しは [talos/README.md](../talos/README.md)。
 
 ## Image Factory の schematic
@@ -11,8 +11,7 @@ Talos は必要な system extension を焼き込んだイメージを https://fa
 組み合わせは **schematic** という YAML で表し、その内容のハッシュが schematic ID になる(同じ YAML なら誰が作っても同じ ID)。
 
 この箱に要る extension は intel-ucode と dvb-pt3(BCM5719 の tg3、bonding、AHCI は Talos のカーネルに入っている)。
-dvb-pt3 は PT3 チューナーのドライバで、**v1.15.0-alpha.1 から**ある([decisions.md](decisions.md)「PT3 チューナー」)。
-PT3 のために本番を alpha に乗せている。
+dvb-pt3 は PT3 チューナーのドライバ([decisions.md](decisions.md)「PT3 チューナー」)。
 **カーネル引数もここに入れる。** v1.14 以降は `machine.install` が `UnattendedInstallConfig` と衝突して machine config 側に
 書けないため。
 
@@ -102,8 +101,7 @@ talosctl apply-config --insecure -n <IP> -f controlplane.yaml
 talosctl bootstrap --recover-from=./etcd.snapshot     # etcd が上がるまで `bootstrap is not available yet`。数分待って再試行
 ```
 
-2026-09-06 に空のディスクから通した: Node が同じ名前・同じ作成時刻で Ready に戻り、Namespace・Deployment・PVC/PV の紐付け・
-PSA のラベルまで戻った。**PV の中身は戻らない**(etcd は「PVC がこの PV に紐づいている」という事実しか持っていない)ので、
+**PV の中身は戻らない**(etcd は「PVC がこの PV に紐づいている」という事実しか持っていない)ので、
 このあと PV データを k8up で戻す。順序は etcd が先(PV オブジェクトが無いと戻す先が決まらない)。
 
 **主経路ではない。** 主経路は git から建て直すほう([recovery/README.md](../recovery/README.md)。スナップショットの鮮度に左右されない)。
@@ -115,18 +113,15 @@ restic snapshots --host etcd
 restic dump <ID> /work/etcd.snapshot > etcd.snapshot
 ```
 
-## inlineManifests は「更新できない」ではない(2026-09-08、VM で実測)
+## inlineManifests は「更新できない」ではない(VM で実測)
 
 Sidero のドキュメントの「Talos only creates missing resources from inline manifests」は起動時の適用の話で、
 **`talosctl apply-config` では更新も削除もされないが、`talosctl upgrade-k8s`(同じ版でも)を通せば SSA とインベントリで更新も削除もされる**
-(prune は既定で有効)。プローブ用の `ConfigMap` で確かめた。この実測を根拠に `bootstrap/` の起動に要る層(Cilium・cert-manager・ArgoCD・Infisical と SOPS の Secret)を inlineManifests に載せた。
-残りの平文は ArgoCD の Application `bootstrap` が当てる(2026-10-17 から。[bootstrap/README.md](../bootstrap/README.md))。
-当て直しの手順は [talos/README.md](../talos/README.md)「上げ方 / 当て直し方」。
+(prune は既定で有効)。当て直しの手順は [talos/README.md](../talos/README.md)「上げ方 / 当て直し方」。
 
 ## VM ブートドリル
 
-`talos/patches/` を QEMU で起動して確かめる。2026-09-06〜10-17 に手で 7 回回し、いまは
-[.github/workflows/talos-boot.yml](../.github/workflows/talos-boot.yml) が PR ごとに描いた machine config を起動して見る。
+[.github/workflows/talos-boot.yml](../.github/workflows/talos-boot.yml) が PR ごとに描いた machine config を QEMU で起動して見る。
 見つけた穴は直した場所(`talos/patches/`・`render.sh`・`add-namespace.awk`)に理由を書いてある。
 
 VM では確かめられないもの: PT3 のモジュールの読み順、bond のフェイルオーバーの復旧方向(落とす方向は 8 秒以内で `talosctl` は途切れない)。
@@ -142,9 +137,8 @@ Z440 に移すときに変わるもの(NIC の名前・ディスク・AMT・GPU)
 
 Talos の既定(Flannel + kube-proxy)を止めて **Cilium に替えてある**(decisions.md「ルーティングの選定」。
 CNI の交換は構築時にやる ── 稼働中の差し替えは全 Pod 再起動が前提)。Cilium の値は [bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml)。
+LoadBalancer とクライアント IP も decisions.md「ルーティングの選定」。
 
-- **LoadBalancer の実体は無い。** hostPort と Gateway の hostNetwork で済ませた(decisions.md「LoadBalancer をどう置き換えるか」)
-- **クライアント IP**: 単一ノードなので `externalTrafficPolicy: Cluster` のままで保たれる(decisions.md「クライアント IP」)
 - `NetworkDefaultActionConfig: block` を使うなら、`NetworkRuleConfig` で要るポートを明示的に開ける
 
 ## 管理モデル(3 つのレイヤーを混同しない)

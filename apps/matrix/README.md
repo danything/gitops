@@ -1,7 +1,6 @@
 # matrix
 
-Matrix のサーバー一式(`m.doany.io`)。**Zulip からの移行先**(2026-10-06 に移して、Zulip は畳んだ)。
-Zulip の最後のバックアップ(pg_dump と添付ファイル)は 2026-10-18 に R2 から消した。
+Matrix のサーバー一式(`m.doany.io`)。
 
 | 名前 | 何か | ここで動くか |
 | --- | --- | --- |
@@ -27,10 +26,7 @@ Zulip の最後のバックアップ(pg_dump と添付ファイル)は 2026-10-1
 - **日本語の検索は弱い。** Tuwunel は記号と空白でしか単語を区切らないので、ひらがなや漢字の続きは
   ひとかたまりでしか当たらない(`src/service/rooms/search/mod.rs`)。Synapse も英語用の検索に決め打ちで
   (`to_tsvector('english', …)`)、日本語圏の共通の悩み。**後から見たい情報はメッセージではなくドキュメントに書く**
-  前提で選んだ(本人、2026-10-06)
-- **Zulip の履歴は持ってこない。** Mattermost からも Zulip からも、Matrix への公式の取り込みが無い
-- **通知のルームは暗号化しない。** hookshot は暗号化したルームに書けない(Redis と暗号化の設定が要る)。
-  Element は非公開のルームを既定で暗号化するので、通知のルームは作るときに暗号化を切る
+  前提で選んだ(本人)
 
 ## ログイン
 
@@ -46,19 +42,17 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 ## 通知のルーム
 
-**スペース「通知」**にまとめてある(2026-10-07)。部屋の名前は接頭辞を付けず短く(`server`・`argocd`・`ashi`・
-`todoroku`・`worklog`・`denpa`・`forgejo`・`feed`)。Slack のような `notify-` の接頭辞の代わりにスペースで束ねる
-(名前は表示用で、hookshot も webhook も部屋の ID で動くので、変えても影響しない)。
-2026-10-06 に `notify-*` として 8 つ作り、`notify-github` は 2026-10-07 に畳んだ。Zulip のメッセージは持ってきていない(ほとんどが bot の通知のため)。
+**スペース「通知」**にまとめてある。部屋の名前は接頭辞を付けず短く(`server`・`argocd`・`ashi`・
+`todoroku`・`worklog`・`denpa`・`forgejo`・`feed`)。名前は表示用で、hookshot も webhook も部屋の ID で動くので、変えても影響しない。
 
 - 作ったのは hookshot(`@hookshot:doany.io`)。`@info:doany.io` も作成者(room version 12 の `additional_creators`)
   なので、権限は最上位で外されない
 - **暗号化していない。** hookshot は暗号化したルームに書けない。暗号化を後から入れると戻せないので、入れないこと
+  (Element は非公開のルームを既定で暗号化するので、作るときに切る)
 - webhook は [hookshot.yaml](hookshot.yaml) の `connections`。URL は `https://m.doany.io/webhook/<ID>` で、ID は
   Infisical `/matrix/matrix` の `hook-<部屋>`(公開のリポジトリなので git に置かない)
-- **投稿は全部 m.notice(bot の発言)**(2026-10-07)。通知と音は Element の設定で決める:
+- **投稿は全部 m.notice(bot の発言)**。通知と音は Element の設定で決める:
   グループの会話は「音あり」、bot のメッセージは「オン」(音無しで通知)、要らない部屋は部屋ごとに「メンションのみ」。
-  (以前は通知したい部屋だけ m.text で投稿していたが、グループの会話を音ありにすると bot まで鳴るのでやめた)
 
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |
@@ -77,9 +71,8 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 ## GitHub 連携(hookshot)
 
-**使っていない**(2026-10-07)。GitHub の通知は GitHub のアプリで受ける。GitHub App `doa-hookshot` は消したので、
-hookshot の設定からも `github:` を外した。**App を消して設定を残すと、hookshot が `Integration not found` で
-起動しなくなり、通知が全部止まる**(2026-10-07 に踏んだ)。また入れるなら、GitHub App を作り直して
+**使っていない。** GitHub の通知は GitHub のアプリで受ける。**App を消して設定を残すと、hookshot が `Integration not found` で
+起動しなくなり、通知が全部止まる。**また入れるなら、GitHub App を作り直して
 `github:`・秘密・`/github` の経路・`@_github_` の名前空間を戻す(git の履歴の #243 が手順)。
 
 ## RSS
@@ -88,7 +81,7 @@ hookshot の feeds で RSS / Atom を購読する(10 分おき)。購読はル�
 ルームで `!hookshot feed <URL>` を打つか、hookshot の bot として state
 `uk.half-shot.matrix-hookshot.feed`(state key と本文の `url` に URL)を書く。
 
-流す先はスペース「通知」の **`feed`**(2026-10-07 に作った。暗号化なし、`@info:doany.io` も作成者)。
+流す先はスペース「通知」の **`feed`**(暗号化なし、`@info:doany.io` も作成者)。
 
 | 購読 | URL |
 | --- | --- |
@@ -96,7 +89,7 @@ hookshot の feeds で RSS / Atom を購読する(10 分おき)。購読はル�
 
 ## 通話(LiveKit)
 
-LiveKit が Matrix の通話(Element Call)の音声と映像を中継する。2026-10-06 に入れた。手順の元は Tuwunel の
+LiveKit が Matrix の通話(Element Call)の音声と映像を中継する。手順の元は Tuwunel の
 `docs/calls/matrix_rtc.md`。
 
 | 部品 | 役目 | 在処 |

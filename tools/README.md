@@ -1,9 +1,7 @@
 # tools
 
-手元で使う運用のコマンドを **コンテナで動かす**(2026-10-06 から)。手元の Windows から WSL コンテナで、
-[t.ps1](t.ps1) を通して使う(中身は [../compose.yaml](../compose.yaml) の `tools` を `wslc-compose run`)。
-版は [Dockerfile](Dockerfile) で固定し、Renovate が上げる。
-Linux 用の `tools/t`(docker compose)は、手元が Windows に移ったので消した(2026-10-07)。
+手元で使う運用のコマンドを **コンテナで動かす**。手元の Windows から WSL コンテナで、
+[t.ps1](t.ps1) を通して使う。版は [Dockerfile](Dockerfile) で固定し、Renovate が上げる。
 
 ```powershell
 tools/t.ps1 cf r2 buckets list
@@ -23,7 +21,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 | restic | R2 のバックアップの中身を見る・戻す |
 | pulumi / bun | `pulumi/`(ふだんは CI が流す) |
 
-**jq はここに入れず、手元に置く**(dotfiles の `init.ps1` が winget で入れる。2026-10-07)。上の出力の加工は
+**jq はここに入れず、手元に置く**。上の出力の加工は
 `tools/t.ps1 … | jq …` のようにコンテナの外でする(コンテナを起こすほどではなく、パイプの先で使うことが多いため)。
 
 ## 仕組み
@@ -43,12 +41,11 @@ tools/t.ps1        # 引数なしならシェルに入る
   base64 で包んでコンテナの中で戻す)。PowerShell のパイプは行(文字列)単位なので、バイナリは通らない。
   バイナリはファイルに書いてリポジトリの中から読ませる
 - `t.ps1` は **BOM 付きの UTF-8** にしてある。BOM が無いと Windows PowerShell 5.1 が Shift_JIS として読み、
-  日本語のコメントで構文が壊れる(2026-10-07 まで 5.1 では動かなかった)
+  日本語のコメントで構文が壊れる
 
 ## クラスタの資格情報
 
-**kubectl・talosctl・helm は、クラスタに繋ぐときだけ資格情報をコンテナの中で作るか復号して渡す**(2026-10-17。
-[creds.sh](creds.sh))。置き場はコンテナの `/dev/shm`(tmpfs)で、コンテナと一緒に消える。
+**kubectl・talosctl・helm は、クラスタに繋ぐときだけ資格情報をコンテナの中で作るか復号して渡す**([creds.sh](creds.sh))。置き場はコンテナの `/dev/shm`(tmpfs)で、コンテナと一緒に消える。
 **平文は手元のディスクにも `.home/` にも残らない。** age 鍵(上の「仕組み」)が無いと止まる。
 
 **既定は読み取り用。管理者は `tools/t.ps1 --admin …` と書いたときだけ。** 書く操作(`apply`・`delete`・
@@ -80,14 +77,14 @@ tools/t.ps1        # 引数なしならシェルに入る
   `cf auth login` には対応していない
 - uid は指定しない(Windows のファイルに持ち主の uid は無い)
 - **標準入力が NUL のところ(Claude Code のツールなど)では、`wslc-compose run` がつなぐ標準入力が無効なハンドルになる。**
-  1 秒ほど以上かかるコマンドの出力が落ちて `ERROR_INVALID_HANDLE` で終わるので、`t.ps1` はそのときだけ空のパイプを渡す(2026-10-07)。
+  1 秒ほど以上かかるコマンドの出力が落ちて `ERROR_INVALID_HANDLE` で終わるので、`t.ps1` はそのときだけ空のパイプを渡す。
   NUL かどうかは標準入力の種類(`GetFileType`)で見分けるので、ファイルや外のパイプからの入力は今までどおり届く
 - NetBird の exit ノード越しだと `*.doany.io` を外向きの IPv4 で引いたときに届かないので、NetBird の DNS ゾーンで
   内部の 10.0.0.2 に向けている(`nb.doany.io` だけは例外)
 
 ## 入れるものの確かめ方
 
-**全部、公式が出しているチェックサムと照らし合わせてから入れる**(2026-10-07)。sops は age 鍵を、infisical は秘密を扱うので、
+**全部、公式が出しているチェックサムと照らし合わせてから入れる**。sops は age 鍵を、infisical は秘密を扱うので、
 取得元やミラーで差し替えられても気づけるようにする。一致しなければ組み立てごと止まる。
 
 - kubectl・talosctl・helm・sops・infisical・restic・pulumi: 各リリースのチェックサムのファイル

@@ -1,6 +1,6 @@
 # external-dns
 
-**Cloudflare を通すアプリの DNS レコードを、アプリの HTTPRoute から作る**([ExternalDNS](https://github.com/kubernetes-sigs/external-dns)。2026-10-06)。
+**Cloudflare を通すアプリの DNS レコードを、アプリの HTTPRoute から作る**([ExternalDNS](https://github.com/kubernetes-sigs/external-dns))。
 
 ## 方針
 
@@ -32,17 +32,4 @@ ExternalDNS は**自分が作ったレコードにしか触れない**。作っ�
 
 Cloudflare の Account API token「external-dns (doany.io DNS write)」。権限は **`doany.io` のゾーンだけの Zone Read + DNS Write**。
 Infisical `/external-dns/external-dns` の `cloudflare-api-token`。
-
-## 移した記録
-
-| ホスト | アプリ | 移した日 |
-| --- | --- | --- |
-| `tk.doany.io` | todoroku | 2026-10-06(todoroku#343) |
-| `l.doany.io` | lgtm | 2026-10-06(lgtm#61) |
-| `x.doany.io` | xool | 2026-10-06(xool#164) |
-| `y.doany.io` | yuzuriha | 2026-10-06(yuzuriha#20) |
-| `ts.doany.io` | tamasagashi | 2026-10-06(tamasagashi#100) |
-| `w.doany.io` | worklog | 2026-10-06(worklog-cloud#143) |
-
-**手で作った proxied の CNAME はもう無い。** Cloudflare を通すアプリを足すときは、アプリのリポジトリの HTTPRoute に注釈を付けるだけでよい。
 

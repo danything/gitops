@@ -13,9 +13,8 @@
 
 **2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる。
 
-**手動のリハーサルは回さない。** 「バックアップが戻せる中身か」は月次の CronJob が確かめる
-([../apps/k8up/restore-check.yaml](../apps/k8up/restore-check.yaml))。「描いた machine config で起動するか」は
-[../.github/workflows/talos-boot.yml](../.github/workflows/talos-boot.yml) が QEMU で確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
+**手動のリハーサルは回さない。** 中身は月次の [restore-check](../apps/k8up/restore-check.yaml)、machine config は
+[talos-boot](../.github/workflows/talos-boot.yml) が確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
 
 手で持つのは **age のパスフレーズ 1 つだけ**。GitHub へのログインは要らない
 (置き場の考え方は [../docs/decisions.md](../docs/decisions.md)「そのパスフレーズをどこに置くか」)。
@@ -121,9 +120,6 @@ kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting 
 kubectl -n argocd get application bootstrap    # InfisicalSecret の CRD が来るまでは何度か落ちて retry で戻る
 kubectl get certificate -A                      # Gateway に証明書が付く
 ```
-
-Gateway の Service の nodePort はランダムな値のままでよい(2026-10-18 まではここで 80/443 に揃えていた。
-[../bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml) の `nodePort`)。
 
 Argo CD はこの間に `apps/` と各リポジトリの `deploy/` を同期しはじめる。**中身はまだ空**なので、
 Infisical の Secret を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。

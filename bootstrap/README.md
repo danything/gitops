@@ -7,9 +7,6 @@
 | **machine config**([../talos/render.sh](../talos/render.sh) が描く) | Helm で入れるもの(cilium・cert-manager・argocd・infisical)、`apiserver/rbac.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |
 | **ArgoCD**(Application `bootstrap`。[argocd/repos.yaml](argocd/repos.yaml)) | 残りの平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など) | main へのマージ(prune / selfHeal 付き) |
 
-2026-10-17 まで 2 つめは GitHub Actions(`bootstrap-apply.yml`)だった。ArgoCD に移しても鶏と卵にならないのは、
-ArgoCD が動くのに要るもの(本体・repo の資格情報・ApplicationSet の入口 `apps`)が全部 machine config にあり、
-この層に何も頼っていないから。逆にこの層が要る CRD(Gateway API・cert-manager)も machine config が入れる。
 `InfisicalSecret` の CRD だけは `apps/infisical-operator/` が入れるので、まっさらなクラスタでは `bootstrap` の同期が
 最初の何回か落ちて retry で戻る。
 
@@ -38,14 +35,13 @@ ConfigMap に出ているので、読むだけの権限で比べられる)。**�
 
 平文の Secret はアプリのリポジトリにはコミットしない。値は **Infisical**(https://il.doany.io、このクラスタでセルフホスト)が持ち、
 **Infisical 純正 operator**(`apps/infisical-operator/`)が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
-`secrets.infisical.com/auto-reload` 注釈のある Deployment は Secret 更新時に自動で入れ替わる。
 認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
 
 - `infisical/` … Infisical 本体(chart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
   `secrets.sops.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は既定の `local-path` で、`pg_dump` を k8up が日次で取っている。
-- **operator と push-bridge はここには無い。** ArgoCD の Application に移した(`apps/infisical-operator/`、
-  `apps/infisical-push-bridge/`)。ArgoCD 自身は operator に依存しないので、bootstrap に置く理由がない。
+- **operator と push-bridge はここには無い**(`apps/infisical-operator/`、`apps/infisical-push-bridge/`)。
+  ArgoCD 自身は operator に依存しないので、bootstrap に置く理由がない。
   認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
   Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を
   付けてある)。SA と RBAC は `apps/infisical-operator/rbac.yaml`。
@@ -59,7 +55,7 @@ ConfigMap に出ているので、読むだけの権限で比べられる)。**�
 CA は [apiserver/ca.crt](apiserver/ca.crt)(`talos/secrets.yaml` のクラスタ CA。作り直したら替える)。
 kubeconfig も age 鍵も GitHub に置いていない。
 
-**同じ認証設定と RBAC が人の入口でもある(2026-09-09)。** Entra を 2 つめの issuer として足し、
+**同じ認証設定と RBAC が人の入口でもある。** Entra を 2 つめの issuer として足し、
 Headlamp が利用者本人の id_token を API サーバへ転送する。アプリロール `admin` を持つ人は
 `entra:admin` で cluster-admin、それ以外は `entra:viewer` で読み取り専用(組み込みの `view`
 ＋ CRD とノードぶんの `readonly-extra`)。**振り分けは CEL で、割り当ては Entra 側で完結する。**
@@ -70,9 +66,7 @@ machine config に載っているので、変えたら `render.sh` → `apply-co
 
 ### 公開経路(HTTPRoute)もここにある
 
-`argocd` と `auth` の HTTPRoute と `gateway/redirect-https.yaml` はここ。アプリ側の経路はアプリと同じ場所
-(`apps/<name>/httproute.yaml`、または各アプリのリポジトリの `deploy/httproute.yaml`)。
-ArgoCD が壊れても当たっている経路は消えないので、直すのは Headlamp か `tools/t.ps1 --admin` の kubectl
+`argocd` と `auth` の HTTPRoute と `gateway/redirect-https.yaml` はここ
 ([docs/decisions.md](../docs/decisions.md)「公開経路(HTTPRoute)をどこに置くか」)。
 
 ### Infisical の中の構成
@@ -95,15 +89,14 @@ argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 
 **`Prune=false`** ── operator は CR の annotation を、作った `Secret` にもコピーする。
 ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` を「git に無い管理対象」と
-見なして sync のたびに prune する(復元リハーサル 2026-09-06 で発覚)。
+見なして sync のたびに prune する。
 `Prune=false` も一緒にコピーさせて、prune の対象から外す。
 
 **`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無く、`apps/` の同期が丸ごと落ちる**
-(CRD を入れる `apps/infisical-operator/` が同じ同期の中にいる。2026-09-08 のドリル 5 回目)。
+(CRD を入れる `apps/infisical-operator/` が同じ同期の中にいる)。
 仕組みは k8up の `Schedule` と同じで、説明は [apps/k8up/README.md](../apps/k8up/README.md)「CRD がまだ無いクラスタで apps を止めないこと」。
 
-`bootstrap/` の `InfisicalSecret`(`argocd/oidc-secret.yaml`・`auth/secrets.yaml`・`infisical/smtp-secret.yaml`)にも付けてある
-(2026-10-17 に ArgoCD の `bootstrap` が見るようになった)。
+`bootstrap/` の `InfisicalSecret`(`argocd/oidc-secret.yaml`・`auth/secrets.yaml`・`infisical/smtp-secret.yaml`)にも付けてある。
 
 ### アプリ側の書き方
 
