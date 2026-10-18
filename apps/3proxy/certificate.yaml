@@ -1,5 +1,5 @@
 # px.doany.io の証明書。Gateway は TLS を passthrough するだけなので、終端は Pod 内の
-# サイドカー(tls-terminator)が行う。Traefik が内蔵 ACME で持っていた役目の置き換え。
+# サイドカー(tls-terminator)が行う。
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

@@ -1,4 +1,4 @@
-# **Cloudflare の設定(いまは R2 だけ)を Pulumi で当てる。** 中身は pulumi/。
+# **Cloudflare・Entra・NetBird の設定を Pulumi で当てる。** 中身は pulumi/。
 #
 #   PR       → preview。差分を PR にコメントする(読み取りの鍵だけ)
 #   main     → up。**マージした時点で当たる**(書き込みの鍵は Environment `pulumi-apply` に置き、
@@ -36,14 +36,13 @@ name: pulumi
 
 on:
   pull_request:
-    paths:
+    paths: &paths
       - pulumi/**
       - .github/workflows/pulumi.yml
+      - .github/actions/pulumi-setup/**
   push:
     branches: [main]
-    paths:
-      - pulumi/**
-      - .github/workflows/pulumi.yml
+    paths: *paths
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
@@ -95,25 +94,8 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.PREVIEW_AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: pulumi/.bun-version
-      # CLI だけを入れる (command なし)
-      - uses: pulumi/actions@v7
-        with:
-          pulumi-version-file: pulumi/.pulumi-version
-      # SDK (Pulumi.yaml の packages) を作って bun install まで済ませる。lock がずれたら落とす (--frozen-lockfile の代わり)。
-      # Renovate の枝では postUpgradeTasks が同じ pulumi install で lock を作るので、ずれない (pulumi/README.md)
-      - run: |
-          pulumi install
-          git diff --exit-code -- package.json bun.lock || {
-            echo "::error::pulumi install で package.json / bun.lock が変わった。手元で pulumi install してコミットする"
-            exit 1
-          }
-        working-directory: pulumi
-      # bun は .ts を走らせるだけで型は見ない
-      - run: bun run typecheck
-        working-directory: pulumi
+      # bun・Pulumi の CLI・SDK・型の確認(up と同じ)
+      - uses: ./.github/actions/pulumi-setup
 
       - uses: pulumi/actions@v7
         with:
@@ -156,21 +138,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: pulumi/.bun-version
-      - uses: pulumi/actions@v7
-        with:
-          pulumi-version-file: pulumi/.pulumi-version
-      - run: |
-          pulumi install
-          git diff --exit-code -- package.json bun.lock || {
-            echo "::error::pulumi install で package.json / bun.lock が変わった。手元で pulumi install してコミットする"
-            exit 1
-          }
-        working-directory: pulumi
-      - run: bun run typecheck
-        working-directory: pulumi
+      - uses: ./.github/actions/pulumi-setup
 
       - uses: pulumi/actions@v7
         with:

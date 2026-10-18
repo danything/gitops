@@ -4,10 +4,10 @@
 # 通り道は 2 つ:
 #   - 合図(WebSocket)は lk.doany.io の Gateway 経由(httproute.yaml)
 #   - 音声と映像は **hostPort 8443(UDP、つながらないとき TCP)** でノードに直接。Gateway も Cloudflare も通らない。
-#     ルーターで 8443 の UDP と TCP をノードに転送しておくこと(Mattermost Calls のときと同じ番号・同じ転送)
+#     ルーターは DMZ で全部をノードに向けているので、転送の設定は要らない(docs/router.md)
 #
 # 外から見える IP は STUN で調べて客に教える(use_external_ip)。家の中の端末も外の IP に向けて送るので、
-# ルーターの「NAT ループバック(ヘアピン)」が要る(Mattermost Calls と同じ条件)。
+# ルーターの「NAT ループバック(ヘアピン)」が要る。
 ---
 apiVersion: v1
 kind: ConfigMap

@@ -116,8 +116,8 @@ LiveKit が Matrix の通話(Element Call)の音声と映像を中継する。20
 
 ### ルーターの転送
 
-**8443 の UDP と TCP をノード(10.0.0.2)に転送しておくこと。** Mattermost Calls のときと同じ番号なので、
-その転送をそのまま使う(消していなければ)。Gateway と Cloudflare は通らない。
+**8443 の UDP と TCP がノード(10.0.0.2)に届くこと。** ルーターは DMZ で全部をノードに向けているので、
+転送の設定は要らない(docs/router.md)。Gateway と Cloudflare は通らない。
 
 外から見える IP は LiveKit が STUN で調べる。家の中の端末も外の IP に向けて送るので、ルーターの
 NAT ループバック(ヘアピン)が要る。家の中だけつながらないときはこれを疑う(Tuwunel の docs の Troubleshooting)。

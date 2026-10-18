@@ -18,7 +18,6 @@ spec:
     chart: metrics-server
     targetRevision: 3.14.0
     helm:
-      releaseName: metrics-server
       valuesObject:
         # `args` は chart の `defaultArgs` に足される(置き換えではない)。
         # kubelet の証明書はクラスタ CA では検証できない。Talos の kubelet は自己署名のサービング証明書を

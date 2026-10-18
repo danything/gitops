@@ -47,16 +47,8 @@ externalIPs:
 nodePort:
   enabled: true
   # 範囲は既定(30000-32767)。Gateway の Service の nodePort は API サーバが割り当てるランダムな値のままでよい。
-  # 外からの 80/443 は Envoy が hostNetwork で掴んだソケットに直接届く(下の gatewayAPI.hostNetwork)。
-  #
-  # 2026-09-08〜10-17(k3s の頃)は違った。nodePort 80/443 の L7LB リダイレクトが経路そのもので、port-80 の nodePort を
-  # 30080 にずらすと 80 番が全部死んだ。そのため範囲を `"80,443"`、API サーバの `service-node-port-range` を `80-32767` にし、
-  # nodePort を 80/443 に揃える Job を置いていた。副作用として、ノード自身から 80/443 に繋ぐと応答が返らなかった
-  # (apps/netbird/routing-peer.yaml。fj.doany.io の中継 apps/forgejo/node-access.yaml は 2026-10-18 に消した)。
-  #
-  # 2026-10-18 に Talos で確かめ直した。VM では範囲を既定に戻し nodePort をランダム(32399/32657)にしても、外からも、
-  # ノード自身(hostNetwork の Pod)からも、Pod からも http 301 / https 200。本番でも port-80 の nodePort を 30080 に
-  # ずらして 301 / 200 のままだった。それで 3 つとも外した。
+  # 外からの 80/443 は Envoy が hostNetwork で掴んだソケットに直接届き、ノード自身からも届く(下の gatewayAPI.hostNetwork)。
+  # k3s の頃は nodePort 80/443 の L7LB リダイレクトが経路そのもので、揃える手当てが要った(2026-10-18 に外した。#436)。
   #
   # **範囲を広げないこと。** 範囲に入る hostPort を Cilium は張らない(`80-32767` にしたとき
   # AdGuard の 853、LiveKit の 8443、3proxy の 3129 が一斉に落ちた)。
@@ -75,9 +67,7 @@ gatewayAPI:
   # Gateway の `status.addresses` はノードの `10.0.0.2` になる。
   #
   # Service は消えず NodePort になる(`operator/pkg/model/translation/gateway-api/translator.go`
-  # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。
-  #
-  # nodePort の値は経路に関係しない(上の `nodePort` のコメント。k3s の頃は関係していた)。
+  # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。nodePort の値は経路に関係しない。
   #
   # ポートの指定は無い。Gateway のリスナー(80 / 443)がそのままホストに bind される。
   # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`
@@ -97,7 +87,7 @@ gatewayAPI:
   # 有効にすると全リスナーが「HTTP/2 を試して、駄目なら HTTP/1.1」を広告する。
   # つまりブラウザからの既存サイトも HTTP/2 になる。WebSocket は HTTP/2 上では
   # 拡張 CONNECT が要るが、ブラウザはそれが使えなければ HTTP/1.1 の別接続に落ちるので
-  # Mattermost・ArgoCD・Infisical はそのまま動く(適用後に実際に確認した)。
+  # ArgoCD・Infisical はそのまま動く(適用後に実際に確認した)。
   #
   # チャートの注記どおり appProtocol サポートも一緒に有効になるが、
   # このクラスタに appProtocol を宣言している Service は 1 つも無いので影響しない。

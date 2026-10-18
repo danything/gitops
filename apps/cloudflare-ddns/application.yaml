@@ -17,9 +17,6 @@ spec:
     chart: cloudflare-ddns
     targetRevision: 0.1.0
     helm:
-      # HelmChart CRD 時代と同じリリース名にしておくと、描き出されるものが一致して
-      # そのまま引き取れる(実際に helm template と live の diff が空なのを確認済み)。
-      releaseName: cloudflare-ddns
       valuesObject:
         # API token は Infisical operator が作る Secret から(cloudflare-ddns-secrets.yaml)。
         # キーは CLOUDFLARE_API_TOKEN。

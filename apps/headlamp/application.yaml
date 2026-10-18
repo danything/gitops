@@ -28,7 +28,6 @@ spec:
     chart: headlamp
     targetRevision: 0.45.0
     helm:
-      releaseName: headlamp
       valuesObject:
         serviceAccount:
           create: true

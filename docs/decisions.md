@@ -152,8 +152,6 @@ bootstrap のあとに `helm install` する案は、再構築のたびに「CNI
 | 認証 | oauth2-proxy を前段のプロキシに(下記) | — |
 
 - **Cilium 1.20 は Gateway API v1.6.1 の CRD を要求する。** 古いと GatewayClass が `Waiting for controller` のまま止まる
-- **ノード自身からは 80/443 に届かなかった(k3s の頃)。** Gateway の nodePort 80/443 が L7LB リダイレクトとして載っていたため。
-  2026-10-18 に nodePort を既定の範囲に戻した(`bootstrap/cilium/values.yaml` の `nodePort`)
 - **`terminationGracePeriodSeconds` が長い Pod**(denpa と tuner-agent、6 時間)は Recreate と組むと入れ替わらない。`--grace-period=0 --force` で消す
 
 ### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
@@ -164,7 +162,7 @@ hostPort ならノードの全アドレスで受けられ、送信元 IP も保�
 
 | 対象 | hostPort |
 | --- | --- |
-| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind し、外からの通信はそこに直接届く。Service の nodePort はランダムなままでよい(`bootstrap/cilium/values.yaml` の `nodePort`。k3s の頃は 80/443 に揃える必要があった) |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind し、外からの通信はそこに直接届く。Service の nodePort はランダムなままでよい(`bootstrap/cilium/values.yaml` の `nodePort`) |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | matrix の LiveKit | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |

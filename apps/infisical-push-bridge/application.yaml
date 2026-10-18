@@ -25,7 +25,6 @@ spec:
     chart: infisical-push-bridge
     targetRevision: 0.1.1
     helm:
-      releaseName: infisical-push-bridge
       valuesObject:
         infisicalSecret:
           enabled: true
