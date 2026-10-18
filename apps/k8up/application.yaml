@@ -18,7 +18,6 @@ spec:
     chart: k8up
     targetRevision: 4.10.0
     helm:
-      releaseName: k8up
       valuesObject:
         k8up:
           # 注釈の無い PVC は取らない。`k8up.io/backup: "true"` が「取る」という宣言そのもの

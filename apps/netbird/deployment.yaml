@@ -29,8 +29,7 @@ metadata:
     secrets.infisical.com/auto-reload: "true"
 spec:
   replicas: 1
-  # hostPort 3478 と RWO の PVC を新旧 Pod で共有できないので Recreate
-  # (apps/wireguard の wg-easy と同じ事情)。
+  # hostPort 3478 と RWO の PVC を新旧 Pod で共有できないので Recreate。
   strategy:
     type: Recreate
   selector:

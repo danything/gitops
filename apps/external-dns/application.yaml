@@ -32,7 +32,6 @@ spec:
     chart: external-dns
     targetRevision: 1.23.0
     helm:
-      releaseName: external-dns
       valuesObject:
         provider:
           name: cloudflare

@@ -40,7 +40,7 @@
 ## プライベートのリポジトリを移す(1 本ずつ)
 
 **方針: プライベートは GitHub に置かない**(2026-09-15)。GitHub Actions の課金はプライベートにだけ掛かるので、
-公開リポジトリ(gitops・blog など)は GitHub のままでよい。対象は shadai / tamasagashi / worklog-cloud(noren は閉じた)。
+公開リポジトリ(gitops・blog など)は GitHub のままでよい。対象は todoroku / tamasagashi / worklog-cloud(noren は閉じた)。
 
 **Forgejo が唯一の置き場になる。** バックアップは k8up(R2)の 1 日 1 回だけなので、手元の clone も捨てないこと。
 
@@ -95,7 +95,7 @@
 
 **公開にしてはいけない。** パッケージ(コンテナイメージ)の読み取り権限はリポジトリではなく**組織の公開範囲**で決まり、
 公開の組織だと非公開リポジトリのイメージでも匿名で pull できる(`services/packages/perm.go` の
-`HasOrgOrUserVisible`。2026-09-15 に shadai のイメージが匿名で取れるのを見つけて limited にした)。
+`HasOrgOrUserVisible`。2026-09-15 に shadai(今の todoroku)のイメージが匿名で取れるのを見つけて limited にした)。
 
 ## Actions からイメージを push するとき
 
@@ -162,4 +162,4 @@ curl -X PATCH -H "Authorization: token $T" -H 'Content-Type: application/json' \
   https://fj.doany.io/api/v1/repos/doa/<name>
 ```
 
-2026-09-15 に shadai / renovate / tamasagashi / worklog-cloud へ当てた。
+2026-09-15 に shadai(今の todoroku)/ renovate / tamasagashi / worklog-cloud へ当てた。

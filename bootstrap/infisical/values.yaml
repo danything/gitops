@@ -25,7 +25,7 @@ infisical:
         - name: ALLOW_INTERNAL_IP_CONNECTIONS
           value: "true"
         # Outgoing mail via Exchange Online SMTP AUTH on the info@doany.io
-        # mailbox, same as mattermost/erpnext (STARTTLS on 587 is Infisical's
+        # mailbox (STARTTLS on 587 is Infisical's
         # default, SMTP_REQUIRE_TLS=true). The password is the one value here
         # that lives in Infisical itself (/infisical/infisical-smtp, pulled by
         # smtp-secret.yaml), hence optional: on a from-scratch install the

@@ -16,7 +16,7 @@ redis:
         repository: mirror.gcr.io/library/redis
         tag: 8.10.2-alpine
 # Native OIDC straight to Entra ID (same tenant/app registration as
-# auth/deployment.yaml, gitlab, erpnext) instead of Dex.
+# auth/deployment.yaml) instead of Dex.
 dex:
     enabled: false
 configs:

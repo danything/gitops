@@ -1,0 +1,27 @@
+# pulumi.yml の preview と up に共通の準備。checkout は呼ぶ側でする(このファイル自体が checkout の中にある)。
+name: pulumi setup
+description: bun と Pulumi の CLI を入れ、SDK を作って bun install と型の確認まで済ませる
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: pulumi/.bun-version
+    # CLI だけを入れる (command なし)
+    - uses: pulumi/actions@v7
+      with:
+        pulumi-version-file: pulumi/.pulumi-version
+    # SDK (Pulumi.yaml の packages) を作って bun install まで済ませる。lock がずれたら落とす (--frozen-lockfile の代わり)。
+    # Renovate の枝では postUpgradeTasks が同じ pulumi install で lock を作るので、ずれない (pulumi/README.md)
+    - shell: bash
+      working-directory: pulumi
+      run: |
+        pulumi install
+        git diff --exit-code -- package.json bun.lock || {
+          echo "::error::pulumi install で package.json / bun.lock が変わった。手元で pulumi install してコミットする"
+          exit 1
+        }
+    # bun は .ts を走らせるだけで型は見ない
+    - shell: bash
+      working-directory: pulumi
+      run: bun run typecheck

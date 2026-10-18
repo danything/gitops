@@ -1,4 +1,4 @@
-# Forgejo の DB。mattermost/postgres.yaml と同じ形(17 系、pg_dump を k8up に取らせる)。
+# Forgejo の DB。PostgreSQL 17 系。pg_dump を k8up に取らせる。
 apiVersion: v1
 kind: Service
 metadata:

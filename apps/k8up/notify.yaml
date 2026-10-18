@@ -276,7 +276,7 @@ data:
       body: JSON.stringify({ text }),
     });
     if (!r.ok) {
-      console.error(`Mattermost への投稿に失敗: ${r.status} ${await r.text()}`);
+      console.error(`Matrix への投稿に失敗: ${r.status} ${await r.text()}`);
       process.exit(1);
     }
     // FAILED でも exit 0。「投稿できた」がこの Job の成功。非ゼロにすると backoffLimit ぶん同じ警告を投稿し、
