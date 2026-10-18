@@ -39,7 +39,7 @@ DMZ の向け先を変えると、下の全部と AdGuard の split-horizon が�
 | 53 UDP・TCP / 853 TCP | AdGuard Home(DNS / DoT) | 開けている(下の「53 番は外にも開けている」) |
 | 8443 UDP・TCP | LiveKit(Matrix の通話。apps/matrix/README.md) | 要る |
 | 3478 UDP | NetBird の STUN(apps/netbird/) | 要る |
-| 51822 UDP | NetBird の routing peer(WireGuard) | 要る |
+| 51820 UDP | NetBird の routing peer(WireGuard) | 要る |
 | 3129 TCP | 3proxy の TLS 口(apps/3proxy/) | 外から使うなら要る |
 | 6443 TCP | Kubernetes の API(`ks.doany.io:6443`。recovery/README.md) | 要る(認証つき) |
 
