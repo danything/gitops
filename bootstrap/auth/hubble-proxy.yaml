@@ -1,13 +1,5 @@
-# hl.doany.io を SSO 付きで Hubble UI へ中継する oauth2-proxy。
-# Hubble UI 自身は認証を持たないので、直接 HTTPRoute に繋いではいけない。
-# Cilium の Gateway には ext auth が無いので、*.s.doany.io と同じ「oauth2-proxy 自身を
-# 前段のプロキシにする」方式(--upstream で中継先を持つ)。
-# コールバックは自分で受ける。a.doany.io 側に投げると、あちらは元のホストを
-# 知らないので認証後に a.doany.io に着地してしまう(`*.s.doany.io` は名前が
-# ワイルドカードで Entra に個別の redirect URI を登録できないため共有しているが、
-# こちらは固定の 1 ホストなので自前で持てる)。
-# Entra のアプリ登録に https://hl.doany.io/oauth2/callback を追加済み。
-# cookie secret は a.doany.io 側と共有しているので、どちらかで入れば両方通る。
+# hl.doany.io を SSO 付きで Hubble UI へ中継する oauth2-proxy(UI は認証を持たず、Gateway に ext auth が無い)。
+# コールバックは自分で受ける(a.doany.io に投げると元のホストに戻れない)。Entra に登録済み。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,9 +48,7 @@ spec:
           value: .doany.io
         - name: OAUTH2_PROXY_EMAIL_DOMAINS
           value: '*'
-        # ロールでは絞らない(2026-10-07)。Hubble は見るだけの画面なので、Argo CD や Kubernetes の「見るだけ」と
-        # 揃えて、テナントに居る人(ゲストを含む)なら誰でも見られる。管理の画面(AdGuard・*.s.doany.io)は admin だけ
-        # (docs/entra.md「ゲストを足したときに使えるもの」)
+        # 見るだけの画面なのでロールで絞らない(docs/entra.md)
         - name: OAUTH2_PROXY_REVERSE_PROXY
           value: 'true'
         - name: OAUTH2_PROXY_SET_XAUTHREQUEST

@@ -1,8 +1,5 @@
 # *.s.doany.io を SSO 付きで LAN のホスト(sub-backend)へ中継する oauth2-proxy。
-# Cilium の Gateway には ext auth が無いので
-# oauth2-proxy 自身を前段のプロキシとして置く(--upstream で中継先を持つ)。
-# コールバックは既存の a.doany.io 側インスタンスが受ける。cookie secret を共有しているので
-# セッションはそのまま通る。
+# Gateway に ext auth が無いので前段のプロキシにする。コールバックは a.doany.io 側が受ける(cookie secret を共有)。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,8 +48,7 @@ spec:
           value: .doany.io
         - name: OAUTH2_PROXY_EMAIL_DOMAINS
           value: '*'
-        # a.doany.io 側と同じく Entra のアプリロール admin で絞る。
-        # グループクレームから移した理由は docs/entra.md
+        # Entra のアプリロール admin だけ
         - name: OAUTH2_PROXY_OIDC_GROUPS_CLAIM
           value: roles
         - name: OAUTH2_PROXY_ALLOWED_GROUPS

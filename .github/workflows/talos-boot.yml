@@ -1,21 +1,11 @@
-# talos/render.sh の machine config を runner の QEMU(KVM)で実際に起動し、クラスタが立つところまで見る。
-#
-# 描けるか・形が合うか(needle は render.sh)に加えて、動かして初めて分かる穴も拾う
-# (2026-10-17、`helm template` に `--api-versions` が無く GatewayClass `cilium` が描かれず、
-# Gateway が `Waiting for controller` のまま公開経路が全部死んだ。#401)。2026-10-17 に talos-validate をここへまとめた。
-# Renovate が Talos / Kubernetes / Cilium / gateway-api / cert-manager / argo / infisical を上げる PR で効く。
-#
-# **秘密はゼロ。** 使い捨ての秘密とダミーで描く(本物は SOPS 済みで、age の鍵は CI に渡さない)。
-# **外に副作用を出さない。** ACME・DNS の書き込み・R2・非公開レジストリには触らない:
-#   - ArgoCD は `extraObjects`(app-of-apps と GitHub App の repo-creds)と通知先を抜く
-#   - ClusterIssuer `letsencrypt` は自己署名に差し替える(本物の clusterissuer.yaml は当てない)
-#   - infisical は SMTP の env を抜く
-# 手順の元は docs/talos.md「VM ブートドリル」。
+# talos/render.sh の machine config を runner の QEMU(KVM)で起動し、クラスタが立つところまで見る。
+# 秘密はゼロ(使い捨てとダミー)。外に副作用を出さない: ArgoCD の extraObjects と通知先、
+# 本物の ClusterIssuer(自己署名に差し替え)、infisical の SMTP を抜く。手順の元は docs/talos.md。
 name: talos boot
 
 on:
   pull_request:
-    # push と同じ一覧(YAML のアンカー。GitHub Actions は 2025-09 から読む。マージキー `<<:` は読まない)
+    # YAML のアンカーは読むが、マージキー `<<:` は読まない
     paths: &paths
       - talos/**
       - bootstrap/cilium/**
@@ -33,7 +23,7 @@ on:
 permissions:
   contents: read
 
-# 同じ PR で積み上がると runner を食うので、古い方を止める。main は止めない(マージごとの結果を残す)
+# PR では古い方を止める。main は止めない
 concurrency:
   group: talos-boot-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -51,7 +41,7 @@ env:
 jobs:
   boot:
     runs-on: ubuntu-latest
-    # 実測で 8 分(2026-10-17)。30 分を超えたら何かが止まっている
+    # 実測 8 分
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -80,7 +70,6 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 ovmf zstd >/dev/null
           sudo curl -fsSL -o /usr/local/bin/talosctl \
             "https://github.com/siderolabs/talos/releases/download/${{ steps.v.outputs.version }}/talosctl-linux-amd64"
-          # runner の kubectl は古いことがある。サーバと同じ版にそろえる
           sudo curl -fsSL -o /usr/local/bin/kubectl \
             "https://dl.k8s.io/release/${{ steps.v.outputs.k8s }}/bin/linux/amd64/kubectl"
           sudo chmod +x /usr/local/bin/talosctl /usr/local/bin/kubectl
@@ -91,21 +80,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/vm
-          # 入れ済みの raw イメージをそのままディスクにする(ISO から入れる手間と installer の取得を省く)
           curl -fsSL --retry 3 \
             "https://factory.talos.dev/image/${{ steps.v.outputs.schematic }}/${{ steps.v.outputs.version }}/metal-amd64.raw.zst" \
             | zstd -d -o /tmp/vm/disk.raw
-          # 疎なファイルで 140G。EPHEMERAL の maxSize 64GiB と u-local-path の minSize 50GiB が両方取れる大きさ
+          # EPHEMERAL の maxSize 64GiB と u-local-path の minSize 50GiB が両方取れる大きさ
           truncate -s 140G /tmp/vm/disk.raw
           cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vm/OVMF_VARS.fd
 
       - name: machine config を生成する
         run: |
           set -euo pipefail
-          # 秘密は使い捨てとダミー(上の「秘密はゼロ」)
           talosctl gen secrets -o /tmp/secrets.yaml
-          # fj.doany.io は CI からは引かない。経路だけ通す(ghcr.io にダミーを置くと
-          # ghcr.io/siderolabs/kubelet の取得が 403 で落ちる)
+          # ダミーは fj.doany.io に置く(ghcr.io に置くと kubelet の取得が 403 で落ちる)
           cat > /tmp/registries.yaml <<'PATCH'
           machine:
             registries:
@@ -115,11 +101,10 @@ jobs:
                     username: ci-dummy
                     password: ci-dummy
           PATCH
-          # **argocd / infisical の値は本物の values.yaml。** 秘密の側(secret-values.sops.yaml)だけダミーに替えて重ねる。
-          # 通知の送り先は secret-values.sops.yaml にしか無いので、渡さなければ通知も出ない。
-          # extraObjects は app-of-apps(`apps`)と GitHub App の repo-creds。CI で本物を同期させない
+          # values.yaml は本物、secret-values.sops.yaml だけダミー(通知先もそこにしか無い)。
+          # extraObjects は app-of-apps と repo-creds。CI で本物を同期させない
           echo 'extraObjects: []' > /tmp/argocd-secret-values.yaml
-          # SMTP は外(smtp.office365.com)に繋ぎに行くので抜く(リストなので丸ごと置き換える)
+          # SMTP の env を抜く(リストなので丸ごと置き換える)
           yq '{"infisical": {"extraEnv": [.infisical.extraEnv[] | select(.name | test("^SMTP_") | not)]},
             "postgresql": {"auth": {"password": "ci-dummy"}}, "redis": {"auth": {"password": "ci-dummy"}}}' \
             bootstrap/infisical/values.yaml > /tmp/infisical-secret-values.yaml
@@ -138,20 +123,15 @@ jobs:
             ARGOCD_SECRET_VALUES=/tmp/argocd-secret-values.yaml INFISICAL_SECRET_VALUES=/tmp/infisical-secret-values.yaml \
             INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
             ./talos/render.sh /tmp/out
-          # 外からは hostfwd の 127.0.0.1 で入る
           talosctl config endpoint 127.0.0.1
           talosctl config node "$NODE"
 
       - name: VM を起動する
         run: |
           set -euo pipefail
-          # 8G / 4 vCPU。runner は 16G / 4 vCPU(ドリルは 12G だったが、それだと runner 側が苦しい)。
-          #
-          # 網: bond0(eno1 + eno2)は QEMU の内部ハブ越しに 1 つの SLIRP へ。SLIRP を本番の 10.0.0.0/24 と
-          # IPv6 のプレフィックスに合わせ、RA も出させる(accept_ra / autoconf を確かめるため)。
-          # dhcpstart を .2 にするのは maintenance mode(DHCP)でも hostfwd の宛先に居させるため。
-          # ipv4=on は省けない(ipv6=on だけ書くと IPv4 が無効になる)。eno4 は外に出さない別の SLIRP。
-          # ディスクは virtio-scsi にする。/dev/sda に見えるので main.yaml の diskSelector を書き換えずに済む。
+          # runner は 16G なので 8G(12G だと runner が苦しい)。bond0(eno1 + eno2)はハブ越しに本番と同じ網の SLIRP へ。
+          # dhcpstart は maintenance mode でも hostfwd の宛先に居させるため。ipv4=on は省けない(ipv6=on だけだと IPv4 が無効)。
+          # virtio-scsi は /dev/sda に見えるので diskSelector を書き換えずに済む。
           qemu-system-x86_64 \
             -machine q35,accel=kvm -cpu host -smp 4 -m 8192 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
@@ -177,7 +157,6 @@ jobs:
           N1=$(name "$MAC_ENO1"); N2=$(name "$MAC_ENO2"); N4=$(name "$MAC_ENO4")
           echo "  eno1 -> $N1  eno2 -> $N2  eno4 -> $N4"
           [ -n "$N1" ] && [ -n "$N2" ] && [ -n "$N4" ] || { echo "::error::NIC の名前が引けない"; exit 1; }
-          # 実機と違うのは NIC の名前だけ。ほかは描いたまま当てる
           sed -e "s/\beno1\b/$N1/g" -e "s/\beno2\b/$N2/g" -e "s/\beno4\b/$N4/g" \
             /tmp/out/controlplane.yaml > /tmp/vm/controlplane.yaml
           talosctl apply-config --insecure -e 127.0.0.1 -n 127.0.0.1 -f /tmp/vm/controlplane.yaml
@@ -187,10 +166,8 @@ jobs:
         run: |
           set -euo pipefail
           until talosctl version >/dev/null 2>&1; do sleep 5; done
-          # etcd が上がるまでは断られる
           until talosctl bootstrap 2>/dev/null; do sleep 5; done
           talosctl kubeconfig "$KUBECONFIG" --force
-          # 書かれるのは https://10.0.0.2:6443(runner からは届かない)
           kubectl config set-cluster doany --server=https://127.0.0.1:6443
           until kubectl get --raw /readyz >/dev/null 2>&1; do sleep 5; done
           echo "  API サーバが応答した"
@@ -199,7 +176,7 @@ jobs:
         timeout-minutes: 12
         run: |
           set -euo pipefail
-          # 在るまで待ってから rollout status。inlineManifest は Talos が順に流すので最初は居ない
+          # inlineManifest は順に流れるので、在るまで待ってから rollout status
           ro() { # $1=namespace  $2=kind/name
             until kubectl -n "$1" get "$2" >/dev/null 2>&1; do sleep 5; done
             kubectl -n "$1" rollout status "$2" --timeout=10m
@@ -213,7 +190,6 @@ jobs:
           ro kube-system ds/cilium-envoy
           ro kube-system deploy/cilium-operator
           ro kube-system deploy/coredns
-          # Hubble の証明書はクラスタの中の Job が作る(bootstrap/cilium/values.yaml の `hubble.tls`)
           until kubectl -n kube-system get secret hubble-server-certs hubble-relay-client-certs >/dev/null 2>&1; do sleep 5; done
           ro kube-system deploy/hubble-relay
           ro kube-system deploy/hubble-ui
@@ -224,28 +200,26 @@ jobs:
           ro argocd deploy/argocd-server
           ro argocd deploy/argocd-repo-server
           ro argocd sts/argocd-application-controller
-          # infisical は postgres に繋がるまで Ready にならない。postgres の PVC は local-path
-          # (u-local-path の上)なので、ここが通れば PV の経路も通っている
+          # postgres の PVC は local-path なので、ここで PV の経路も見ている
           ro infisical deploy/infisical
           kubectl -n infisical wait --for=jsonpath='{.status.phase}'=Bound pvc --all --timeout=1m
-          # 上の一覧に無いもの(chart が増やした Pod など)の取りこぼし止め
+          # 上の一覧に無い Pod の取りこぼし止め
           for i in $(seq 24); do
             BAD=$(kubectl get pods -A --no-headers --field-selector=status.phase!=Running,status.phase!=Succeeded)
             [ -z "$BAD" ] && break
             sleep 5
           done
           [ -z "$BAD" ] || { echo "$BAD"; echo "::error::Running でない Pod がある"; exit 1; }
-          # talosctl health はノードの側で回るので runner から 10.0.0.2 に届かなくてよい(Kubernetes 側の項目は SKIP になるので上で見ている)
+          # Kubernetes 側の項目は SKIP になるので上で見ている
           talosctl health --wait-timeout 5m
 
       - name: GatewayClass と Gateway
         timeout-minutes: 8
         run: |
           set -euo pipefail
-          # #401 の穴そのもの。無いと Gateway は誰にも拾われない
           until kubectl get gatewayclass cilium >/dev/null 2>&1; do sleep 5; done
           kubectl wait --for=condition=Accepted gatewayclass/cilium --timeout=3m
-          # 本物の ClusterIssuer(ACME + Cloudflare DNS-01)の代わり。同じ名前にして gateway.yaml を書き換えずに当てる
+          # 本物の ClusterIssuer と同じ名前の自己署名
           cat > /tmp/issuer.yaml <<'YAML'
           apiVersion: cert-manager.io/v1
           kind: ClusterIssuer
@@ -254,12 +228,11 @@ jobs:
           spec:
             selfSigned: {}
           YAML
-          # webhook が受け付けるようになるまで断られる
           until kubectl apply -f /tmp/issuer.yaml 2>/dev/null; do sleep 5; done
           until kubectl apply -f bootstrap/gateway/gateway.yaml -f bootstrap/gateway/redirect-https.yaml -f bootstrap/argocd/httproute.yaml; do sleep 5; done
           kubectl -n kube-system wait --for=condition=Ready certificate --all --timeout=3m
           kubectl -n kube-system wait --for=condition=Programmed gateway/doany --timeout=3m
-          # 公開経路を実際に通す。Service の nodePort はランダムなまま(bootstrap/cilium/values.yaml の `nodePort`)。http は https への 301、https は argocd-server まで
+          # http は https への 301、https は argocd-server まで
           code() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$@" || true; }
           for i in $(seq 36); do
             H=$(code -H 'Host: ac.doany.io' http://127.0.0.1:18080/)
@@ -288,18 +261,18 @@ jobs:
           [ "$GOT" = "$WANT" ] || fail "bond0 の MAC が $GOT(cluster.yaml は $WANT)"
           echo "  bond0 hardwareAddr: $GOT"
 
-          # 以下は forwarding=1(Kubernetes が上げる)のあとで見ないと意味が無い(cluster.yaml の accept_ra)
+          # 以下は forwarding=1 のあとで見ないと意味が無い(cluster.yaml の accept_ra)
           F=$(talosctl read /proc/sys/net/ipv6/conf/bond0/forwarding)
           [ "$F" = 1 ] || fail "bond0 の forwarding が $F。前提が成り立っていない"
 
-          # グローバルな IPv6 は静的な ::2 だけ。SLAAC(autoconf=0 で止めている)が付いていたら落とす
+          # グローバルな IPv6 は静的な ::2 だけ(SLAAC は autoconf=0 で止めている)
           STATIC=$(yq -r 'select(.kind == "BondConfig") | .addresses[].address | select(test(":"))' talos/patches/cluster.yaml)
           GLOBAL=$(talosctl get addresses -o json \
             | jq -rs '.[] | select(.spec.linkName == "bond0" and .spec.family == "inet6" and .spec.scope != "link") | .spec.address' | sort)
           echo "  bond0 の IPv6(link-local 以外): $(echo $GLOBAL)"
           [ "$GLOBAL" = "$STATIC" ] || fail "bond0 のグローバル IPv6 が静的な $STATIC だけになっていない"
 
-          # RA の既定経路。SLIRP の RA は間隔が長いので少し待つ
+          # SLIRP の RA は間隔が長いので待つ
           for i in $(seq 24); do
             R=$(talosctl get routes -o json \
               | jq -rs '[.[] | select(.spec.family == "inet6" and .spec.outLinkName == "bond0" and (.spec.dst // "") == "" and .spec.protocol == "ra")] | length')

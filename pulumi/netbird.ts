@@ -1,11 +1,6 @@
-// NetBird (https://nb.doany.io、apps/netbird/) の設定。**ここが正本。** 2026-10-07 に画面で作ってあったものを import で取り込んだ。
-//
-// 持っているのは DNS (ネームサーバー・ゾーン・レコード)、ネットワーク (自宅の LAN への経路)、exit ノードのルート、
-// アクセスのポリシー。**持っていないもの:** グループ (所属するピアはセットアップキーやログインで変わるので、
-// ここでは ID で指すだけ)、ピア、ユーザー、セットアップキー、トークン、Entra の IdP (下に理由)。アカウントの設定は持つ。
-//
-// 鍵は state に入れない。provider は環境変数 NB_PAT を読む (PR は PREVIEW_NB_PAT = Auditor、main は NB_PAT = Admin。
-// どちらもサービスユーザーのトークン。README.md「NetBird」)。
+// NetBird (https://nb.doany.io) の設定の正本。DNS・ネットワーク・exit ノード・ポリシー・アカウントの設定を持つ。
+// グループ (ID で指すだけ)・ピア・ユーザー・セットアップキー・トークン・Entra の IdP は持たない。
+// provider は環境変数 NB_PAT を読む (README.md「NetBird」)。
 
 import * as netbird from "@pulumi/netbird";
 
@@ -38,10 +33,8 @@ new netbird.NameserverGroup(
 
 new netbird.DnsSettings("settings", { disabledManagementGroups: [] }, { provider });
 
-// *.doany.io を家の Gateway (10.0.0.2) に向ける。exit ノード越しに家の外向きの IPv4 を引くと、家のルーターで
-// 折り返しになって届かないため (2026-10-07)。ゾーンに無い名前 (apex など) は上のネームサーバーに流れる。
-// **nb.doany.io だけは外向きのまま。** 内部に向けると、管理サーバーとリレーへの接続が NetBird のトンネル頼みになり、
-// 切れたときに戻ってこられない
+// *.doany.io を家の Gateway に向ける (外向きの IPv4 は家のルーターで折り返せず届かない)。
+// nb.doany.io だけは外向きのまま (内部に向けると、トンネルが切れたときに戻ってこられない)
 const zone = new netbird.DnsZone(
   "doany-io",
   { name: "doany.io", domain: "doany.io", enabled: true, enableSearchDomain: false, distributionGroups: [ALL] },
@@ -55,12 +48,8 @@ record("wildcard", "*.doany.io", "A", "10.0.0.2", "db2rtin4p630008pv9qg");
 // ワイルドカードは 1 段ぶんしか拾わない (x.s.doany.io は *.doany.io に当たらない)
 record("wildcard-s", "*.s.doany.io", "A", "10.0.0.2", "db2rsg74p630008pv8ag");
 
-// nb.doany.io は家の外向きのアドレスを返したい。アドレスは書かず、**2 段の名前 nb.origin.doany.io に CNAME で向ける。**
-// 2 段なのでこのゾーンのワイルドカードには当たらず、上のネームサーバー (AdGuard → Cloudflare) で引かれる。
-// Cloudflare では *.doany.io が doany.io への CNAME (プロキシなし) で、doany.io は cloudflare-ddns が家の IP に
-// 書き換えるので、家の IP が変わっても追従する (IPv4 / IPv6 とも。2026-10-07)。
-// NetBird は同じ名前に CNAME と A / AAAA を並べられない (A / AAAA に戻すときは、先にこれを消す)
-// 以前のキーは nb-a (A だったころ)。alias で同じリソースとして扱い、作り直さない
+// 2 段の名前に CNAME で向けると、このゾーンのワイルドカードに当たらず Cloudflare の家の IP に追従する。
+// 同じ名前に CNAME と A / AAAA は並べられない。alias は以前のキー (nb-a) を作り直さないため
 record("nb", "nb.doany.io", "CNAME", "nb.origin.doany.io", "db2rtjf4p630008pv9s0", { aliases: [{ name: "nb-a" }] });
 
 // --- 自宅の LAN への経路 -------------------------------------------------------------------------------
@@ -77,9 +66,8 @@ new netbird.NetworkRouter(
   opts(`${NETWORK}/daf80r713kb0009ahkrg`),
 );
 
-// リソースは必ず 1 つ以上のグループに入れる (provider の制約。2026-10-07 まではどこにも入っていなかった)。
-// アクセスの許可は下のポリシーがリソースを直接指しているので、このグループは今は何にも使っていない。
-// peers / resources は書かない (省略すると管理画面の値をそのまま保つ。中身はリソースの側の groups で決まる)
+// リソースは 1 つ以上のグループに入れる (provider の制約。許可はポリシーがリソースを直接指すので使っていない)。
+// peers / resources は書かない (中身はリソースの側の groups で決まる)
 const homeLan = new netbird.Group("home-lan", { name: "Home LAN" }, { provider });
 
 const lan = new netbird.NetworkResource(
@@ -145,7 +133,6 @@ allow("to-lan-10-10", "daf86qf13kb0009ahrh0", "Users to 10.10.0.0/24", "もう�
 });
 
 // --- アカウントの設定とログイン ------------------------------------------------------------------------
-// 2026-10-07 に画面の値をそのまま取り込んだ。ログインは Entra だけ (ローカルのパスワードは止めてある)
 const ACCOUNT = "daf7c8f13kb0009ahad0";
 new netbird.AccountSettings(
   "account",
@@ -176,6 +163,5 @@ new netbird.AccountSettings(
   opts(ACCOUNT),
 );
 
-// 内蔵 IdP (Dex) につないだ Entra の IdP (`entra-daf87u713kb0009ahs4g`、アプリ登録は共用の b0fa498f-…) は**持たない**。
-// provider がクライアントシークレットを必須にしていて (API からは読めない)、持つには共用のアプリ登録のシークレットを
-// GitHub に置くことになる。漏れたときの範囲 (全部の SSO) に見合わない。画面で持つ (2026-10-07 に取り込みを試して外した)
+// Entra の IdP は持たない。provider がクライアントシークレットを必須にしていて、共用のアプリ登録の
+// シークレットを GitHub に置くことになる (漏れると全部の SSO に及ぶ)。画面で持つ

@@ -2,24 +2,13 @@ name: Claude Code Review
 
 on:
   pull_request:
-    # **`labeled` が要る。** bot の PR は `opened` の時点ではスキップされるので、
-    # あとから `needs-review` を貼っても再実行されなかった(2026-09-07 に #85 で発覚)。
-    # 下の `if` がラベルの有無を見ているので、無関係なラベルで起動しても素通りする。
+    # `labeled` は、あとから needs-review を貼った bot の PR を拾うため
     types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 jobs:
   claude-review:
-    # Draft PR はスキップ。fork からの PR も対象外 (secrets が渡らないため) —
-    # そちらは claude-code-review-fork.yml がラベル起動で処理する。
-    #
-    # bot の PR も原則スキップするが、**`needs-review` ラベルが付いていれば見る**。
-    # 自分でマージされる PR をレビューしても誰も読まないので飛ばす。人を待つ PR は
-    # レビューする価値がある、という切り分け。Renovate は自動マージしないまとまり
-    # (メジャーと chart) にだけこのラベルを付ける (5ym/repo-config)。
-    #
-    # 実例: #7 に postgres 17 → 18 が入っていた。PVC の PG_VERSION は 17 なので
-    # そのまま上げると起動を拒否する。1 行の差分でも、依存そのものに内在するリスクは
-    # レビューで拾える。
+    # Draft と fork(secrets が渡らない)はスキップ。bot の PR は needs-review が付いたもの
+    # (Renovate が自動マージしないまとまり)だけ見る。
     if: >-
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -43,13 +32,8 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
-          # **Renovate の PR をレビューするのに要る。** action 自身が bot 起動を拒否し、
-          # `Workflow initiated by non-human actor` で落ちる(2026-09-07 に #85 で発覚)。
-          # 上の `if` で「bot は needs-review が付いているときだけ」に絞ってあるので、
-          # ここは `*` ではなく renovate だけを名指しする。`*` は公開リポジトリでは
-          # 外部の App がプロンプトを持ち込める(action のドキュメントの警告)。
-          # Renovate は 2026-10 から自前の GitHub App(`doa-renovate`)で動いている。名前が変わると
-          # ここで黙って落ちる(#206 で発覚)ので、両方を名指ししておく
+          # 無いと action が bot 起動を拒否する。`*` にしない(外部の App がプロンプトを持ち込める)。
+          # Renovate の App 名が変わるとここで黙って落ちる
           allowed_bots: "renovate[bot],doa-renovate[bot]"
           prompt: |
             REPO: ${{ github.repository }}
@@ -81,14 +65,7 @@ jobs:
               突き合わせて**影響を言うこと (例: PVC の PG_VERSION と major の不一致)
             - リリースノートが本当に見つからなければ、探した先を書いたうえで「要確認」とすること
 
-          # WebFetch と gh release はリリースノートを読むため。**読み取りだけ**に絞る。
-          # 取ってくる中身は第三者が書いたもので、レビュー本文への指示が混ざりうる
-          # (プロンプトインジェクション)。このワークフローはコメントしかできず、
-          # マージも push もできないので影響は限定される。
-          #
-          # **注釈をこのブロックの中に書かないこと。** `claude_args: |` は YAML の
-          # ブロックスカラーなので `#` はコメントにならず、そのまま CLI の引数として
-          # 渡って --allowedTools の解釈が壊れる(2026-09-07 に踏んだ。レビューが
-          # 「WebFetch の権限が無い」と言うのに設定上は許可されている、という形で出た)。
+          # WebFetch と gh release はリリースノート用で、読み取りだけに絞る。
+          # 注釈をこのブロックの中に書かない(`#` がそのまま CLI の引数になり --allowedTools が壊れる)
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*),WebFetch"

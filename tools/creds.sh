@@ -1,13 +1,7 @@
 #!/bin/sh
-# kubectl / talosctl / helm の入口(tools/README.md「クラスタの資格情報」)。本物は /usr/local/libexec/gitops/ にあり、
-# このスクリプトがその名前で呼ばれる。クラスタに繋ぐときだけ資格情報をコンテナの /dev/shm(tmpfs)に作り、
-# KUBECONFIG / TALOSCONFIG で渡す。**平文はディスクに書かない。** /dev/shm はコンテナと一緒に消える(t.ps1 は --rm)。
-#
+# kubectl / talosctl / helm の入口(tools/README.md「クラスタの資格情報」)。繋ぐときだけ talos/secrets.yaml の CA で
+# 1 日で切れる証明書を作り、/dev/shm(tmpfs)に置いて渡す。平文はディスクに書かない。
 # 既定は読み取り用。管理者は `tools/t.ps1 --admin …`(GITOPS_ADMIN=1)のときだけ。
-#   kubectl / helm  読み取り用は talos/secrets.yaml の CA でその場で証明書を作る(1 日で切れる)。
-#                   管理者も同じく system:masters の証明書をその場で作る(ファイルで持たない)
-#   talosctl        同じく CA でその場で作る(os:reader / os:admin)。talosconfig は保存しない
-#                   (docs/decisions.md「手で持つもの」)
 set -eu
 tool=${0##*/}
 real=/usr/local/libexec/gitops/$tool
@@ -15,12 +9,11 @@ shm=/dev/shm/gitops
 
 die() { echo "$tool: $*" >&2; exit 1; }
 
-# 最初の引数らしいもの(フラグを飛ばす)。`kubectl -n x get` だと x を拾うが、そのときは「繋ぐ」側に倒れるだけ
-# (helm も「繋がないと分かっているもの」以外は繋ぐ側にしてある)。`--` より後ろはコマンドの引数なので見ない
+# 最初の引数らしいもの。`kubectl -n x get` だと x を拾うが、そのときは「繋ぐ」側に倒れるだけ
 sub=
 for a in "$@"; do case $a in --) break ;; -*) ;; *) sub=$a; break ;; esac; done
 
-# 繋がないもの(版を見る・描くだけ)と、資格情報を自分で渡しているものはそのまま通す。CI(tools.yml)もここを通る
+# 繋がないものと、資格情報を自分で渡しているものはそのまま通す(CI の tools.yml もここを通る)
 pass() { exec "$real" "$@"; }
 for a in "$@"; do
 	case $a in
@@ -48,14 +41,12 @@ mkdir -p -m 700 "$shm"
 cd /repo
 nokey() { [ -s ~/.config/sops/age/keys.txt ] || die "age の鍵が無い(README「Infisical より下の層」の 1 行目で .home に置く)"; }
 
-# talos/secrets.yaml の CA($1 = os か k8s)で、件名 $2 のクライアント証明書をその場で作り、$3 に置く。
-# 鍵 $4(ed25519 / EC)。1 日で切れる。ノードの時計が少し遅れていても通るように 5 分前から有効にする。
-# 作業中は CA の鍵も $w(tmpfs)に出るので、作り終えたらすぐ消す。結果は $3.crt / $3.key / $3.ca
+# CA($1 = os か k8s)で件名 $2・鍵 $4(ed25519 / EC)の証明書を作り $3.crt / $3.key / $3.ca に置く。
+# ノードの時計の遅れを見て 5 分前から有効にする。CA の鍵が出る $w はすぐ消す。
 mint() {
 	nokey
 	w=$(mktemp -d "$shm/w.XXXXXX")
-	# `( … ) || …` だと中の set -e が効かないので、終了コードを受けてから見る。パイプは最後の終了コードしか
-	# 返さないので、復号したものは一度ファイルに出す
+	# `( … ) || …` だと中の set -e が効かない。パイプは失敗を拾わないので復号はファイルに出す
 	set +e
 	(
 		set -e
@@ -64,7 +55,7 @@ mint() {
 			sops -d --extract "[\"certs\"][\"$1\"][\"$k\"]" talos/secrets.yaml >"$w/ca.$k.b64"
 			base64 -d "$w/ca.$k.b64" >"$w/ca.$k"
 		done
-		# Talos は ed25519 の鍵に独自の見出しを付けている。中身は PKCS#8 なので見出しだけ直せば openssl が読める
+		# Talos の ed25519 は独自の見出し。中身は PKCS#8 なので見出しだけ直す
 		sed -i 's/ED25519 PRIVATE KEY/PRIVATE KEY/' "$w/ca.key"
 		case $4 in
 		ed25519) openssl genpkey -algorithm ed25519 -out "$w/c.key" ;;
@@ -84,12 +75,10 @@ mint() {
 	[ $rc = 0 ] || { rm -f "$3".*; die "証明書を作れなかった(talos/secrets.yaml を age の鍵で開けるか)"; }
 }
 
-# 名前は talos/render.sh の gen config と同じ(doany)。行き先は作業用 PC の LAN にいるノードの口 10.10.0.4。
-# render.sh の 10.0.0.2 はクラスタの LAN で、手元からは届かない。NetBird はクラスタの上で動くので、
-# クラスタが落ちたときに使えない。10.10.0.4 は Talos の証明書(apid・kube-apiserver)の SAN に入っている
+# 作業用 PC の LAN 側のノードの口(10.0.0.2 は手元から届かず、NetBird はクラスタが落ちると使えない)
 ep=10.10.0.4
 
-# talosconfig を $shm に作って置き場所を返す($1 = admin / readonly)。作るのは初回だけ
+# talosconfig を作って置き場所を返す($1 = admin / readonly)
 talosconfig() {
 	t=$shm/talosconfig-$1
 	if [ ! -s "$t" ]; then
@@ -111,12 +100,10 @@ fi
 out=$shm/kubeconfig-$role
 if [ ! -s "$out" ]; then
 	if [ $role = admin ]; then
-		# 管理者は system:masters(Talos の talosctl kubeconfig と同じグループ)。talosctl kubeconfig は 1 年もつ
-		# 証明書を毎回出すので使わず、読み取り用と同じく 1 日で切れるものを作る
+		# talosctl kubeconfig は 1 年もつ証明書を出すので使わない
 		subj=/O=system:masters/CN=tools-admin
 	else
-		# 読み取り用は bootstrap/apiserver/rbac.yaml の entra:viewer(組み込みの view + readonly-extra。Secret は読めない)。
-		# Headlamp で Entra の viewer が持つ権限と同じにするため、同じグループ名を使う
+		# Headlamp の Entra の viewer と同じ権限(bootstrap/apiserver/rbac.yaml)
 		subj=/O=entra:viewer/CN=tools-readonly
 	fi
 	mint k8s "$subj" "$out.c.$$" ec

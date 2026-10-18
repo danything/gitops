@@ -1,28 +1,17 @@
-# 実機(main)だけの設定。
-#
-# カーネル引数(intel_iommu=on / iommu=pt)は machine config ではなく Image Factory の schematic に入れている。
-# v1.14 では `machine.install` が UnattendedInstallConfig と衝突して書けないため。
-# schematic: 96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca
-#   customization.extraKernelArgs: [intel_iommu=on, iommu=pt]
-#   customization.systemExtensions.officialExtensions: [siderolabs/dvb-pt3, siderolabs/intel-ucode]
+# 実機(main)だけの設定。カーネル引数と拡張は machine.install に書けないので schematic に入れている
+# (talos/versions.yaml)。
 ---
 apiVersion: v1alpha1
 kind: UnattendedInstallConfig
 provisioning:
     diskSelector:
-        # SATA の SSD(Radeon R7、447 GB)。DL360 では Smart Array(hpsa)越しで Linux からは TRAN=sas に見える。
-        # Z440 ではオンボードの SATA(AHCI)。どちらも当日 `talosctl get disks` を見てから確定させる。CEL 式。
+        # SATA の SSD。箱を替えたら当日 `talosctl get disks` を見てから確定させる
         match: disk.dev_path == "/dev/sda"
     wipe: false
 ---
-# PT3 のドライバ(../docs/decisions.md「PT3 チューナー」)。dvb-pt3 extension は earth_pt3 を blacklist して
-# 配っているので、ここで明示的に読ませる。読めば /dev/dvb/adapter* が出る。
-# KubeVirt にパススルーする保険(vfio_pci / vfio_iommu_type1)は、ホストのドライバと PT3 を取り合うので外した。
-#
-# 復調(tc90522)とチューナー(qm1d1c0042 / mxl301rf)も読ませる。earth_pt3 は probe のときに
-# これらを request_module で引くが、Talos にはそれを満たす modprobe が無い。**並べた順には読まれない**
-# (名前の順なので earth-pt3 が先頭)ため、それでも `Failed to create FE0` で /dev/dvb/*/frontend0 が
-# できない。チューナーが揃ったあとで付け直すのは ../../apps/pt3/rebind.yaml(2026-10-17)。順を守る上流の修正は PR 中。
+# PT3 のドライバ(../docs/decisions.md「PT3 チューナー」)。dvb-pt3 は earth_pt3 を blacklist しているので明示で読ませる。
+# 復調とチューナーも要る(Talos には request_module を満たす modprobe が無い)。並べた順には読まれないので、
+# 付け直しは ../../apps/pt3/rebind.yaml。
 machine:
   kernel:
     modules:

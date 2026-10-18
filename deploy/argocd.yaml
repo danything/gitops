@@ -1,14 +1,10 @@
-# This repo's ArgoCD配置. The ApplicationSet in bootstrap/argocd/repos.yaml
-# scans the org for this file and builds this repo's Application from it -- so everything about how this repo gets
-# deployed is decided here, not in the cluster or in bootstrap.
+# このリポジトリの Application の設定(bootstrap/argocd/repos.yaml の ApplicationSet が読む)
 name: gitops
 namespace: ''
 
-# Directory holding the manifests, relative to the repo root.
 sourcePath: apps
 recurse: true
 
-# autoSync: false leaves the app on manual sync in the UI.
 autoSync: true
 prune: true
 selfHeal: true

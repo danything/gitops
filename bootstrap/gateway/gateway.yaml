@@ -1,6 +1,4 @@
-# Cilium Gateway(Gateway API)。公開している Web はすべてここを通る。
-# 証明書は cert-manager が ClusterIssuer letsencrypt(Cloudflare DNS-01)で発行する。
-# ワイルドカードなのでホストを足すたびに証明書を増やさなくてよい。
+# 公開している Web はすべてここを通る。証明書はワイルドカード(DNS-01)。
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -15,7 +13,7 @@ spec:
     - doany.io
     - "*.doany.io"
 ---
-# `sub`(*.s.doany.io)は 2 段のワイルドカードなので上の証明書では覆えない。別に発行する。
+# 2 段のワイルドカードは上の証明書で覆えない
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -29,8 +27,7 @@ spec:
   dnsNames:
     - "*.s.doany.io"
 ---
-# `dp.l.doany.io`(宅内向けの denpa)も 2 段のワイルドカードなので別に発行する。
-# 公開 DNS には無く AdGuard の rewrite だけで引ける名前だが、DNS-01 なので A レコードは要らない。
+# 宅内向け(AdGuard の rewrite だけで引ける名前。DNS-01 なので公開の A は要らない)
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -50,14 +47,12 @@ metadata:
   name: doany
   namespace: kube-system
   annotations:
-    # ExternalDNS(apps/external-dns/)が作る CNAME の宛先。apex(doany.io)の A / AAAA は DDNS が書く。
-    # これが無いと、ExternalDNS は Gateway の住所(LAN の 10.0.0.2)を宛先にしてしまう
+    # ExternalDNS の CNAME の宛先。無いと LAN の 10.0.0.2 を宛先にする
     external-dns.kubernetes.io/target: doany.io
 spec:
   gatewayClassName: cilium
   listeners:
-    # HTTP は全部 HTTPS に飛ばす。
-    # 実際のリダイレクトは redirect-https.yaml の HTTPRoute フィルタが行う。
+    # HTTPS へのリダイレクトは redirect-https.yaml
     - name: http
       protocol: HTTP
       port: 80
@@ -77,7 +72,7 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
-    # *.s.doany.io(SSO 付きで LAN のホストへ中継)。証明書は 2 段目のワイルドカード。
+    # SSO 付きで LAN のホストへ中継
     - name: https-sub
       protocol: HTTPS
       port: 443
@@ -90,7 +85,6 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
-    # *.l.doany.io(宅内からだけ引ける名前。いまは dp.l.doany.io だけ)。
     - name: https-lan
       protocol: HTTPS
       port: 443

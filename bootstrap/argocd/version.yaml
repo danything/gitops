@@ -1,3 +1,2 @@
-# argo-cd の chart の版。読むのは talos/render.sh(repo もこの行の registryUrl から読む)。
 # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
 version: 10.10.5

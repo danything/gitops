@@ -4,14 +4,14 @@
         "github>5ym/repo-config"
     ],
     "kubernetes": {
-        "description": "The kubernetes manager ships no default file patterns, so without this the manifests here are never scanned for image tags at all.",
+        "description": "kubernetes の manager は既定のファイルパターンを持たない。",
         "managerFilePatterns": [
             "**/*.yaml"
         ]
     },
     "customManagers": [
         {
-            "description": "手元のコマンドのイメージ(tools/Dockerfile)。`# renovate: datasource=… depName=…` の次の行の `ARG 名前=版` を見る。**managerFilePatterns の正規表現は `/…/` で囲む。** 囲まないと glob と読まれて何にも当たらない (2026-10-07 まで customManagers は 3 つとも空振りで、kubectl・talosctl・Talos・chart の版は追われていなかった)。",
+            "description": "tools/Dockerfile の `# renovate:` の次の行の `ARG 名前=版`。managerFilePatterns の正規表現は `/…/` で囲む(囲まないと glob と読まれ何にも当たらない)。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^tools/Dockerfile$/"
@@ -21,7 +21,7 @@
             ]
         },
         {
-            "description": "`# renovate: datasource=… depName=… [registryUrl=…]` の次の行にある version を見る。Talos の版も chart の版も、文章やコメントの中に散らばると Renovate が追えないので、`version.yaml` という 1 ファイルに出す約束にしてある。",
+            "description": "versions.yaml / version.yaml の `# renovate:` の次の行の version。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^talos/versions\\.yaml$/",
@@ -32,7 +32,7 @@
             ]
         },
         {
-            "description": "Pulumi が Terraform の provider を包んで使う版 (pulumi/Pulumi.yaml の packages)。2 つある: 包む側のプラグイン (`source: terraform-provider` の次の `version:`) と、包まれる provider (`parameters:` の 2 つ目)。SDK は CI と手元の `pulumi install` が毎回作る。Renovate の枝では下の packageRules の postUpgradeTasks が pulumi install して bun.lock を作る (pulumi/README.md)。provider の版は Terraform の registry (Renovate の既定) で見る。生成が引く OpenTofu の registry にも同じ版が出ているが、Renovate が使う 1 件の provider の API (/v1/providers/<名前>) を OpenTofu は持たない (404)。",
+            "description": "pulumi/Pulumi.yaml の packages で包む Terraform の provider(`parameters:` の 2 つ目)。版は Terraform の registry で見る(OpenTofu の registry は Renovate が使う API を持たない)。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^pulumi/Pulumi\\.yaml$/"
@@ -43,7 +43,7 @@
             "datasourceTemplate": "terraform-provider"
         },
         {
-            "description": "上の包む側のプラグイン (pulumi/pulumi-terraform-provider)。タグは v 付き、Pulumi.yaml は v なし。",
+            "description": "包む側のプラグイン。タグは v 付き、Pulumi.yaml は v なし。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^pulumi/Pulumi\\.yaml$/"
@@ -58,7 +58,7 @@
     ],
     "packageRules": [
         {
-            "description": "pulumi/ の bun.lock は Renovate に作らせず、postUpgradeTasks の pulumi install で作る。package.json が NetBird の SDK を file:sdks/netbird で指していて、SDK は pulumi install でしか作れないので、Renovate 自身の bun install は落ちる (#304)。renovate-post-upgrade.sh が Pulumi の CLI と bun を入れて pulumi install し、作り直した bun.lock を同じ枝にコミットさせる。実行の許可は自前の Renovate (apps/renovate/renovate.yaml) の RENOVATE_ALLOWED_COMMANDS。Pulumi.yaml の packages の版 (customManagers) を上げたときも同じく作り直す。 matchFileNames に bun.lock も入れる: bun の manager は bun.lock を package file として扱うので、package.json だけだと当たらず、Renovate 自身の bun install が走ってしまった (2026-10-08)。 **pulumi/ の更新は専用の枝 (renovate/pulumi) にまとめる**: skipArtifactsUpdate は、まとめた枝の全部の更新が指定しているときだけ効く (Renovate の docs)。renovate/all に tools/Dockerfile などと一緒に入ると効かず、postUpgradeTasks も走らなかった (#310)。",
+            "description": "bun.lock は pulumi install で作る(SDK が file:sdks/netbird で、Renovate 自身の bun install は落ちる)。bun.lock も package file なので matchFileNames に入れる。skipArtifactsUpdate は枝の全部の更新が指定しているときだけ効くので専用の枝にする。許可は apps/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS。",
             "matchFileNames": [
                 "pulumi/package.json",
                 "pulumi/bun.lock",
@@ -79,7 +79,7 @@
             }
         },
         {
-            "description": "AdGuard Home の版上げ。起動時に設定を移行する (schema_version) ので、postUpgradeTasks の renovate-post-upgrade.sh が新しい版の --check-config で apps/adguardhome/deployment.yaml の設定 (initContainer の CONFIG) を移行し、同じ枝にコミットする。読めない設定ならスクリプトが落ちて PR に出る。実行の許可は自前の Renovate (apps/renovate/renovate.yaml) の RENOVATE_ALLOWED_COMMANDS。専用の枝にするのは、移行が落ちたときに all dependencies の PR まで止めないため",
+            "description": "AdGuard Home は新しい版の --check-config で deployment.yaml の設定を移行して同じ枝にコミットする。専用の枝は、移行が落ちても他の PR を止めないため。",
             "matchDatasources": [
                 "docker"
             ],
@@ -99,7 +99,7 @@
             }
         },
         {
-            "description": "forgejo と rybbit の DB。PostgreSQL はメジャーが変わるとデータディレクトリの互換が切れるので、タグを差し替えるだけでは上がらない (dump と restore が要る)。17 のサポートは 2029-11 まであるので、上げるときは人が手順を組んでやる。",
+            "description": "PostgreSQL のメジャーはタグの差し替えでは上がらない(dump と restore が要る)。",
             "matchDatasources": [
                 "docker"
             ],
@@ -109,7 +109,7 @@
             "allowedVersions": "<18"
         },
         {
-            "description": "Talos と Kubernetes と Gateway API の CRD は自動マージしない。ノードが 1 台なので、Talos を上げることは 唯一のノードの再起動、つまり全停止を意味する。PR は「新しい版が出た」という通知として使い、適用は talosctl upgrade で人がやる (talos/versions.yaml)。 needs-review ラベルを付けて Claude のレビューに乗せる (.github/workflows/claude-code-review.yml)。Gateway API は再起動を伴わないが、**CRD の版が上がると Gateway も HTTPRoute も全部それに乗り換わる**ので、同じく人が見る。**talosctl のイメージ**(etcd スナップショットの CronJob)と手元の talosctl(tools/Dockerfile の `siderolabs/talos`。kubectl は `kubernetes/kubernetes` で入る)も同じ群に入れる ── ノードの版と一緒に上げたいので、片方だけ自動マージで先に進ませない。",
+            "description": "Talos・Kubernetes・Gateway API は自動マージしない(ノード 1 台で全停止、CRD は全経路が乗り換わる)。適用は人。talosctl のイメージと手元の CLI もノードの版と一緒に上げる。",
             "groupName": "talos",
             "groupSlug": "talos",
             "automerge": false,
@@ -124,7 +124,7 @@
             ]
         },
         {
-            "description": "argo-cd と infisical-standalone の chart (bootstrap/{argocd,infisical}/version.yaml) は自動マージしない。ArgoCD は全アプリの入口、infisical は全 Secret の出どころで、壊れると直す道具ごと止まる。PR は通知として使い、talos-boot が VM で起動まで見たうえで人がマージし、render.sh → apply-config → upgrade-k8s で当てる (talos/README.md)。2026-09-08 には SOPS 済みの CR の中の版を平文置換した PR が自動マージされて MAC が壊れた。版はいまは平文の version.yaml にある。",
+            "description": "argo-cd と infisical の chart は自動マージしない(壊れると直す道具ごと止まる)。当てるのは render.sh → apply-config → upgrade-k8s。",
             "matchDatasources": [
                 "helm"
             ],
@@ -140,7 +140,7 @@
             ]
         },
         {
-            "description": "上と同じ扱いを、bootstrap/{argocd,infisical}/values.yaml で上書きしているイメージ (argocd の redis、infisical 本体) にも。chart と同じく machine config に載り、当てるのは render.sh → apply-config → upgrade-k8s。",
+            "description": "values.yaml で上書きしているイメージも chart と同じ扱い(machine config に載る)。",
             "matchDatasources": [
                 "docker"
             ],
@@ -156,7 +156,7 @@
             ]
         },
         {
-            "description": "mirror.gcr.io (Docker Hub の pull-through キャッシュ) から引くイメージは、版を Docker Hub で引く。mirror.gcr.io は取得ならどの tag でも通す (無ければその場で Docker Hub から取ってくる) が、tags/list は誰かが一度取った tag しか返さないので、そこで引くと新しい版が見えない (2026-10-17 に rancher/local-path-provisioner で確かめた)。書き換えるのは tag だけで、ファイルの mirror.gcr.io/… はそのまま残る。",
+            "description": "mirror.gcr.io の tags/list は誰かが一度取った tag しか返さないので、版は Docker Hub で引く。",
             "matchDatasources": [
                 "docker"
             ],
@@ -166,7 +166,7 @@
             "overridePackageName": "{{{replace 'mirror.gcr.io/' 'docker.io/' packageName}}}"
         },
         {
-            "description": "sourceUrl はリリースノートを PR 本文に載せるため。netbird のイメージは OCI ラベル (org.opencontainers.image.source) を持っておらず、Renovate が元リポジトリを辿れないと Release Notes の節ごと欠ける (#85)。netbird は 3 つのイメージが同じリポジトリから出ている (netbird = クライアント、netbird-server = combined サーバ、どちらも netbirdio/netbird)。dashboard だけは別リポジトリで、そちらは OCI ラベルを持っているので書かない。 サーバとクライアントは版を揃えて上げたいので、2 つのイメージを専用の枝 (renovate/netbird) にまとめ、同じ PR で自動マージする (片方だけ先に入らない)。メジャーは共通の設定どおり人を待つ。下の netbird provider の規則が Pulumi.yaml の分を後から上書きするので、こちらに入るのはイメージ (apps/netbird/) だけ。",
+            "description": "netbird のイメージは OCI ラベルが無くリリースノートが欠けるので sourceUrl を書く。サーバとクライアントは同じ PR で上げる。",
             "matchDatasources": [
                 "docker"
             ],
@@ -179,7 +179,7 @@
             "groupSlug": "netbird"
         },
         {
-            "description": "NetBird の provider と、それを包む Pulumi のプラグインは自動マージしない。0.0.x で API が動くうえ、マージは NetBird の実物への up になる。PR の preview の差分を人が見る。**pulumi/Pulumi.yaml の分だけに当てる。** netbirdio/netbird は Docker のイメージ (apps/netbird/) と名前が同じで、絞らないとイメージの更新もこの枝に入る。そうなると枝の全部の更新が pulumi/ の規則 (skipArtifactsUpdate) に当たらなくなり、bun.lock を作る postUpgradeTasks が効かない (#315 のレビュー)。この枝の更新は全部 pulumi/ の規則にも当たる。",
+            "description": "NetBird の provider は自動マージしない(0.0.x で、マージが実物への up になる)。Pulumi.yaml に絞る(イメージと同名で、混ざると skipArtifactsUpdate が効かない)。",
             "matchFileNames": [
                 "pulumi/Pulumi.yaml"
             ],

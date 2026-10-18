@@ -1,8 +1,5 @@
-// doany.io の DNS のうち、ExternalDNS が作らないもの(メール・ワイルドカード・ドメインの確認)と、ゾーンの設定。
-//
-// アプリごとの名前は ExternalDNS がアプリの HTTPRoute から作る(apps/external-dns/)。ここには書かない。
-// apex の A / AAAA は cloudflare-ddns が家の IP に合わせて書き換えるので、ここでは持たない(apps/cloudflare-ddns/)。
-// 既存のレコードは import で取り込んだ(2026-10-07。取り込み済みなら何もしない)。
+// doany.io の DNS のうち ExternalDNS が作らないものと、ゾーンの設定。
+// アプリごとの名前は ExternalDNS、apex の A / AAAA は cloudflare-ddns が持つ。
 
 import * as cloudflare from "@pulumi/cloudflare";
 
@@ -13,38 +10,28 @@ const record = (key: string, args: Omit<cloudflare.DnsRecordArgs, "zoneId">, imp
   new cloudflare.DnsRecord(key, { zoneId, ...args }, importId ? { import: `${zoneId}/${importId}` } : undefined);
 
 // --- Web ---------------------------------------------------------------------------------------
-// 直接つなぐアプリ(社内用・重いもの)は全部これで家に来る。Cloudflare を通すアプリは ExternalDNS が
-// 個別の名前を作って上書きする(docs/decisions.md「DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける」)
-// **NetBird の nb.doany.io もこれに頼っている。** NetBird のゾーンでは nb を nb.origin.doany.io への CNAME にしていて、
-// その答え(家の IP)はこのワイルドカードから来る(netbird.ts)。ここを変えると NetBird の管理サーバーが引けなくなる
+// 直接つなぐアプリはこれで家に来る(Cloudflare を通すものは ExternalDNS が個別に上書きする)。
+// NetBird の nb.doany.io もこれに頼っている(netbird.ts)。変えると NetBird の管理サーバーが引けなくなる
 record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 }, "22d196005f64645eca6bccefd4e3fdee");
 
-// mado(ブラウザから RDP する入口。mado/)。**`main` ではなく JCOM 側の PC(10.10.0.2)に直接来る。** `main` が落ちたときの
-// 入口なので、`main` の Gateway も cloudflare-ddns も通さない。JCOM は固定 IP(IPv4 も IPv6 のプレフィックスも)。
-// IPv4 の 80 / 443 は JCOM のルーターでこの PC に転送し、IPv6 はルーターが止めないので PC に足した固定のアドレスに直接来る
-// (docs/router.md「10.10 側(JCOM)のルーター」)
+// mado(ブラウザから RDP する入口)。main が落ちたときの入口なので、JCOM 側の PC(固定 IP)に直接来る(docs/router.md)
 record("md-a", { name: "md.doany.io", type: "A", content: "61.21.173.41", proxied: false, ttl: 1 });
 record("md-aaaa", { name: "md.doany.io", type: "AAAA", content: "2405:1201:5201:3a00::2", proxied: false, ttl: 1 });
 
-// 証明書を出してよい認証局。cert-manager が使う Let's Encrypt だけ。Cloudflare の Universal SSL の認証局は
-// Cloudflare が自分で足すので書かない
+// 証明書を出してよい認証局は Let's Encrypt だけ(Universal SSL のぶんは Cloudflare が自分で足す)
 record("caa-issue", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 0, tag: "issue", value: "letsencrypt.org" } });
 record("caa-issuewild", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 0, tag: "issuewild", value: "letsencrypt.org" } });
 
 // --- メール(Exchange Online)----------------------------------------------------------------------
-// DNSSEC に対応した MX(Enable-DnssecForVerifiedDomain で払い出された。2026-10-07)。DANE はこれで効く。
-// 以前の doany-io.mail.protection.outlook.com は切り替えのあと消した(apps/mta-sts/README.md「DANE への切り替え」)
+// DNSSEC に対応した MX(Enable-DnssecForVerifiedDomain で払い出された)。DANE はこれで効く
 record("mx-dnssec", { name: "doany.io", type: "MX", content: "doany-io.o-v1.mx.microsoft", priority: 0, ttl: 3600 });
 record("autodiscover", { name: "autodiscover.doany.io", type: "CNAME", content: "autodiscover.outlook.com", proxied: false, ttl: 3600 }, "93eb5f05c05d9ca6ae8239cad26089e2");
-// 送るのは Exchange だけ(アプリも smtp.office365.com 経由)。以前あった a:b.doany.io は、ワイルドカード経由で
-// 家の IP を許していたので外した。送り元は Exchange だけなので -all(2026-10-07)
+// 送るのは Exchange だけ(アプリも smtp.office365.com 経由)なので -all
 record("spf", { name: "doany.io", type: "TXT", content: "v=spf1 include:spf.protection.outlook.com -all", ttl: 3600 }, "05522a739cbd45b787b93f1a700b8916");
-// DKIM(Exchange Online)。行き先は Get-DkimSigningConfig の Selector1CNAME / Selector2CNAME。
-// **明示しないとワイルドカードに吸われて doany.io の TXT(SPF)が返る**(2026-10-07 まではそうだった)
+// DKIM。行き先は Get-DkimSigningConfig の Selector1CNAME / Selector2CNAME。明示しないとワイルドカードに吸われる
 record("dkim-selector1", { name: "selector1._domainkey.doany.io", type: "CNAME", content: "selector1-doany-io._domainkey.doany.q-v1.dkim.mail.microsoft", proxied: false, ttl: 3600 });
 record("dkim-selector2", { name: "selector2._domainkey.doany.io", type: "CNAME", content: "selector2-doany-io._domainkey.doany.q-v1.dkim.mail.microsoft", proxied: false, ttl: 3600 });
-// なりすましを受け取り側で弾かせる。DKIM(selector1)と SPF が通るのを確かめてから reject にした(2026-10-07。
-// Gmail で dkim=pass / spf=pass / dmarc=pass)。集計の報告(rua)は info@ に来る
+// 集計の報告(rua)は info@ に来る
 record("dmarc", { name: "_dmarc.doany.io", type: "TXT", content: "v=DMARC1; p=reject; rua=mailto:info@doany.io", ttl: 1 }, "b1a49318efbb097555b43fede5e26697");
 
 // MTA-STS(RFC 8461)。方針ファイルは apps/mta-sts/。**方針を変えたら id も変える**(送り手は id で取り直す)
@@ -60,17 +47,14 @@ record("google-site-verification-2", { name: "doany.io", type: "TXT", content: "
 record("github-verification", { name: "_gh-danything-o.doany.io", type: "TXT", content: '"f39e74c26c"', ttl: 1 }, "71200b09aa051711661e46f5f2e95b60");
 
 // --- ゾーンの設定(Cloudflare を通す名前にだけ効く)-----------------------------------------------
-// 設定は「取り込み」ではなく「書く」(PATCH なので、取り込まなくても同じ)。security_header を import すると
-// プロバイダー(cloudflare 6.22)が nil pointer で落ちる(2026-10-07)
+// 取り込まずに書く(PATCH なので同じ。security_header を import するとプロバイダーが nil pointer で落ちる)
 const setting = (settingId: string, value: unknown) =>
   new cloudflare.ZoneSetting(`setting-${settingId}`, { zoneId, settingId, value });
 
 setting("ssl", "strict");
 setting("always_use_https", "on");
-// 1.0 / 1.1 は今使う理由が無い(既定のままだった)
 setting("min_tls_version", "1.2");
-// HSTS。以前は有効なのに max-age が 0 で、実際には効いていなかった。サブドメインは含めない
-// (直接つなぐアプリは家の Gateway が応答するので、ここの設定は届かない)。preload もしない
+// HSTS。サブドメインは含めない(直接つなぐアプリにはここの設定が届かない)
 setting("security_header", {
   strict_transport_security: { enabled: true, max_age: 31536000, include_subdomains: false, preload: false, nosniff: true },
 });

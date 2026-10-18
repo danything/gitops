@@ -1,6 +1,4 @@
-# *.s.doany.io の中継先。LAN のホスト(10.10.0.2)を名前で指せるようにするためだけの
-# Service と、手書きの EndpointSlice。Endpoint は selector では作れない(Pod ではない)。
-# 使うのは auth-sub の oauth2-proxy(sub-proxy.yaml の OAUTH2_PROXY_UPSTREAMS)。
+# *.s.doany.io の中継先(LAN の 10.10.0.2)を名前で指すための Service と手書きの EndpointSlice
 apiVersion: v1
 kind: Service
 metadata:
@@ -20,8 +18,7 @@ metadata:
   labels:
     kubernetes.io/service-name: sub-backend
 addressType: IPv4
-# API サーバが足す既定値(`protocol`・`conditions`)も書く。どちらも丸ごと比べるリストなので、
-# 書かないと ArgoCD がずっと OutOfSync と見る(2026-10-17、`bootstrap` に移したときに出た)
+# API サーバが足す既定値(`protocol`・`conditions`)も書く。書かないと ArgoCD がずっと OutOfSync と見る
 ports:
   - name: http
     port: 80

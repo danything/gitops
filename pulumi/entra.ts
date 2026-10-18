@@ -1,12 +1,5 @@
-// Entra ID のアプリ登録(`b0fa498f-…`、auth / argocd / headlamp / … が共用する 1 つ)の
-// リダイレクト URI(2026-10-06)とアプリロール(2026-10-07)を持つ。アプリ登録のほかの設定(クライアントシークレット、
-// ロールの割り当て)には触れない ── `ApplicationRedirectUris` / `ApplicationAppRole` はそれぞれ自分の分だけを持つリソース。
-//
-// **アプリを足す・消すときは、そのアプリのマニフェストと同じ PR でここも直す。** 以前は手で足し引きしていて、
-// ERPNext と Mattermost を消したあとも URI だけが残っていた。
-//
-// CI の鍵は置かない。GitHub Actions から Entra へはワークロード ID のフェデレーション(OIDC)で入る
-// (README.md「Entra」)。手元で流すときは Azure CLI のログイン(`az login`)がそのまま使われる。
+// 共用の Entra のアプリ登録(`b0fa498f-…`)のリダイレクト URI とアプリロール。ほかの設定には触れない。
+// アプリを足す・消すときは、そのアプリのマニフェストと同じ PR でここも直す。
 
 import * as azuread from "@pulumi/azuread";
 
@@ -37,7 +30,6 @@ new azuread.ApplicationRedirectUris(
     type: "Web",
     redirectUris: WEB_REDIRECTS.map(([host, path]) => `https://${host}${path}`),
   },
-  // 2026-10-06 に手で持っていた 12 本を取り込んだ(取り込み済みなら何もしない)
   { import: `/applications/${APPLICATION_OBJECT_ID}/redirectUris/Web` },
 );
 
@@ -53,6 +45,5 @@ new azuread.ApplicationAppRole(
     description: "この登録の後ろにあるセルフホストのアプリの管理者",
     allowedMemberTypes: ["User"],
   },
-  // 2026-10-07 に画面で作ってあったものを取り込んだ
   { import: `/applications/${APPLICATION_OBJECT_ID}/appRoles/fd51fd21-182f-4eb1-971e-c545c5862667` },
 );

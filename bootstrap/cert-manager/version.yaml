@@ -1,3 +1,2 @@
-# cert-manager の chart のバージョン。当て方は values.yaml に書いてある。
 # renovate: datasource=helm depName=cert-manager registryUrl=https://charts.jetstack.io
 version: v1.21.2
