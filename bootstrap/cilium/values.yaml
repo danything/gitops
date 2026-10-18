@@ -4,7 +4,7 @@
 # machine config の inlineManifest にする(更新は render.sh → apply-config → upgrade-k8s。
 # talos/README.md「上げ方 / 当て直し方」)。`cilium-config` の ConfigMap を直接いじらない ──
 # 次の upgrade-k8s で黙って戻る(2026-09-07 まで値が git に無く、`node-port-range: "80,443"` が
-# ConfigMap 直いじりでしか入っていなかった。戻ると公開している Web が全部落ちる)。
+# ConfigMap 直いじりでしか入っていなかった。当時は、戻ると公開している Web が全部落ちた)。
 
 # kube-proxy は使わない(Talos 側は talos/patches/cni.yaml で止めている)。
 kubeProxyReplacement: true
@@ -46,34 +46,20 @@ externalIPs:
   enabled: true
 nodePort:
   enabled: true
-  # 80 と 443 だけ。Gateway の Service がこの 2 つを nodePort として握っている。
-  # 範囲を広げると、その中に入る hostPort を Cilium が張らなくなる
-  # (AdGuard の 853、Mattermost calls の 8443(いまは LiveKit)、3proxy の 3129 が一斉に落ちた)。
+  # 範囲は既定(30000-32767)。Gateway の Service の nodePort は API サーバが割り当てるランダムな値のままでよい。
+  # 外からの 80/443 は Envoy が hostNetwork で掴んだソケットに直接届く(下の gatewayAPI.hostNetwork)。
   #
-  # hostNetwork にしても外せない。Service は NodePort 型のまま残り(下の
-  # gatewayAPI.hostNetwork のコメント)、この 2 つの NodePort フロントエンドが
-  # 経路そのものになっている。2026-09-08 に実測した。
+  # 2026-09-08〜10-17(k3s の頃)は違った。nodePort 80/443 の L7LB リダイレクトが経路そのもので、port-80 の nodePort を
+  # 30080 にずらすと 80 番が全部死んだ。そのため範囲を `"80,443"`、API サーバの `service-node-port-range` を `80-32767` にし、
+  # nodePort を 80/443 に揃える Job を置いていた。副作用として、ノード自身から 80/443 に繋ぐと応答が返らなかった
+  # (apps/netbird/routing-peer.yaml、apps/forgejo/node-access.yaml)。
   #
-  # `cilium-dbg bpf lb list` にはこう出る:
+  # 2026-10-18 に Talos で確かめ直した。VM では範囲を既定に戻し nodePort をランダム(32399/32657)にしても、外からも、
+  # ノード自身(hostNetwork の Pod)からも、Pod からも http 301 / https 200。本番でも port-80 の nodePort を 30080 に
+  # ずらして 301 / 200 のままだった。それで 3 つとも外した。
   #
-  #   10.0.0.2:80/TCP  0.0.0.0:0 (1189) [NodePort, l7-load-balancer] (L7LB Proxy Port: 80)
-  #
-  # Envoy は確かにホストの `0.0.0.0:80` を LISTEN しているが、そのソケットに
-  # 直接来た接続は通らない。実通信は L7LB リダイレクト経由で Envoy に入る。
-  # 試しに port-80 の nodePort だけ 30080 に振り直したところ、外部・LAN・Pod・ホストの
-  # すべてから 80 番が死んだ(443 は無事。すぐ戻した)。
-  #
-  # 帰結が 3 つある:
-  #
-  # 1. ここと API サーバの `service-node-port-range=80-32767`(talos/patches/apiserver.yaml)は外せない
-  # 2. 復元では当て直しが要る。Cilium が Service を作り直すと API サーバが
-  #    範囲内のランダムな値を割り当てる。`bootstrap/gateway/nodeport.yaml`(ArgoCD の PostSync)がパッチを当てる
-  # 3. 副作用として、ノード自身からノードの 80/443 に繋ぐと応答が返らない。
-  #    これは実害を出した(2026-09-08)。hostNetwork の Pod も「ノード自身」で、netbird のルーティングピアが
-  #    `nb.doany.io:443` に繋げず `Management: Disconnected` で止まった
-  #    (VPN 越しの DNS も LAN への RDP も落ちる)。あちらを hostNetwork から外して直した
-  #    (apps/netbird/routing-peer.yaml)。hostNetwork の Pod を足すときは必ずこれを思い出すこと。
-  range: "80,443"
+  # **範囲を広げないこと。** 範囲に入る hostPort を Cilium は張らない(`80-32767` にしたとき
+  # AdGuard の 853、LiveKit の 8443、3proxy の 3129 が一斉に落ちた)。
 
 # Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
 gatewayAPI:
@@ -91,14 +77,7 @@ gatewayAPI:
   # Service は消えず NodePort になる(`operator/pkg/model/translation/gateway-api/translator.go`
   # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。
   #
-  # nodePort の手当ては消えなかった(2026-09-08 訂正)
-  #
-  # この変更は当初「手で当てていた nodePort 80/443 が要らなくなる」つもりで入れた。
-  # それは誤りだった。Envoy はホストの `0.0.0.0:80` を LISTEN するが、
-  # そこに直接来た接続は通らない。実通信は Cilium の L7LB リダイレクト経由で入る。
-  # 詳しくは上の `nodePort.range` のコメント(実測つき)。
-  #
-  # したがって nodePort の当て直し(bootstrap/gateway/nodeport.yaml)は今も要る(#91 で消したが戻した)。
+  # nodePort の値は経路に関係しない(上の `nodePort` のコメント。k3s の頃は関係していた)。
   #
   # ポートの指定は無い。Gateway のリスナー(80 / 443)がそのままホストに bind される。
   # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`

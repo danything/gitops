@@ -109,7 +109,6 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 - **平文の残りは ArgoCD(2026-10-17 まで GitHub Actions の `bootstrap-apply.yml`)。** 鶏と卵にならない ──
   ArgoCD が動くのに要るもの(本体・repo の資格情報・入口の `apps`)は全部 machine config にあり、この層に頼っていない。
   この層が要る CRD も machine config が入れる(`InfisicalSecret` の CRD だけ `apps/` から来るので、最初の何回かは retry)。
-  唯一 git に書けない Gateway の nodePort 80/443 は PostSync の Job([bootstrap/gateway/nodeport.yaml](../bootstrap/gateway/nodeport.yaml))
 - **SOPS の Secret を machine config に入れる。** 復号鍵はクラスタにも CI にも渡さないので、ArgoCD からは当てられない。
   machine config の入力(`talos/secrets.yaml`)もクラスタ CA の秘密鍵を含む SOPS なので信頼水準は変わらず、起動時点で存在する
 - **Helm を実行する場所はクラスタの外(手元の生成時)だけ。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
@@ -153,7 +152,8 @@ bootstrap のあとに `helm install` する案は、再構築のたびに「CNI
 | 認証 | oauth2-proxy を前段のプロキシに(下記) | — |
 
 - **Cilium 1.20 は Gateway API v1.6.1 の CRD を要求する。** 古いと GatewayClass が `Waiting for controller` のまま止まる
-- **ノード自身からは 80/443 に届かない。** Gateway の nodePort が L7LB リダイレクトとして載っているため(外から来る通信の経路そのもの)
+- **ノード自身からは 80/443 に届かなかった(k3s の頃)。** Gateway の nodePort 80/443 が L7LB リダイレクトとして載っていたため。
+  2026-10-18 に nodePort を既定の範囲に戻した(`bootstrap/cilium/values.yaml` の `nodePort`)
 - **`terminationGracePeriodSeconds` が長い Pod**(denpa と tuner-agent、6 時間)は Recreate と組むと入れ替わらない。`--grace-period=0 --force` で消す
 
 ### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
@@ -164,7 +164,7 @@ hostPort ならノードの全アドレスで受けられ、送信元 IP も保�
 
 | 対象 | hostPort |
 | --- | --- |
-| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind するが、**実通信は nodePort の L7LB リダイレクト経由**(`bootstrap/cilium/values.yaml` の `nodePort`)。nodePort 80/443 は `bootstrap/gateway/nodeport.yaml`(ArgoCD の PostSync)が当て直す |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind し、外からの通信はそこに直接届く。Service の nodePort はランダムなままでよい(`bootstrap/cilium/values.yaml` の `nodePort`。k3s の頃は 80/443 に揃える必要があった) |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | matrix の LiveKit | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
@@ -173,7 +173,7 @@ hostPort ならノードの全アドレスで受けられ、送信元 IP も保�
   `ss` には出ないので確認は `cilium-dbg service list | grep HostPort`
 - **hostPort と RollingUpdate は両立しない**(新しい Pod が Pending で止まる)。AdGuard と 3proxy は `strategy: Recreate`
 - **Gateway はアドレスが付くまで `Programmed=False`。** `gatewayAPI.hostNetwork` でノードの IP が `status.addresses` に入る
-- **`nodePort.range` は `80,443` の 2 つだけ。** Cilium は nodePort の範囲に入る hostPort を張らない(`80-32767` にしたら 853・8443・3129 が一斉に落ちた)。
+- **`nodePort.range` を広げない(既定の 30000-32767)。** Cilium は nodePort の範囲に入る hostPort を張らない(`80-32767` にしたら 853・8443・3129 が一斉に落ちた)。
   前段を入れ替えるときは、自分で配っている chart の入口(denpa の `httpRoute`)も数えること
 
 ### 3proxy と AdGuard の DoH はサイドカーで TLS を終端する

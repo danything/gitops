@@ -96,7 +96,7 @@ nameservers:
     - address: 1.0.0.1
 ---
 # ノード(containerd)から fj.doany.io のイメージを取るため、名前を中継の ClusterIP に向ける。
-# ノード自身からは Gateway の 443 に繋がらない(bootstrap/cilium/values.yaml の nodePort の 3)。
+# ノード自身からは Gateway の 443 に繋がらなかった(k3s の頃。bootstrap/cilium/values.yaml の `nodePort`。今も要るかは未確認)。
 # 中継は apps/forgejo/node-access.yaml(2026-09-15)
 apiVersion: v1alpha1
 kind: StaticHostConfig

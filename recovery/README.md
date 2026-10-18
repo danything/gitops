@@ -115,16 +115,15 @@ kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting 
 ## 5. 残りの bootstrap/ が入るのを見る(ArgoCD)
 
 手ですることは無い。ArgoCD の Application `bootstrap`([../bootstrap/argocd/repos.yaml](../bootstrap/argocd/repos.yaml))が
-`ClusterIssuer`・Gateway・auth・`InfisicalSecret` を当て、最後に Gateway の Service の nodePort を 80/443 に揃える
-([../bootstrap/gateway/nodeport.yaml](../bootstrap/gateway/nodeport.yaml) の PostSync の Job)。
+`ClusterIssuer`・Gateway・auth・`InfisicalSecret` を当てる。
 
 ```shell
 kubectl -n argocd get application bootstrap    # InfisicalSecret の CRD が来るまでは何度か落ちて retry で戻る
-kubectl -n kube-system get svc cilium-gateway-doany   # 80:80 / 443:443。違えば ArgoCD で bootstrap を Sync し直す
 kubectl get certificate -A                      # Gateway に証明書が付く
 ```
 
-ここが 80/443 でないと公開経路が全部死ぬ([../bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml) の `nodePort`)。
+Gateway の Service の nodePort はランダムな値のままでよい(2026-10-18 まではここで 80/443 に揃えていた。
+[../bootstrap/cilium/values.yaml](../bootstrap/cilium/values.yaml) の `nodePort`)。
 
 Argo CD はこの間に `apps/` と各リポジトリの `deploy/` を同期しはじめる。**中身はまだ空**なので、
 Infisical の Secret を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。
