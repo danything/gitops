@@ -16,7 +16,7 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 | `gitops pulumi apply` / `preview` | アカウント | pulumi/README.md「鍵と state」 | GitHub の secrets | gitops の Pulumi |
 
 アカウントのトークンは `tools/t.ps1 cf accounts tokens list`、ユーザーのトークンは画面の **My Profile → API Tokens** で見る。
-**どれも期限を付けていない。** 期限の監視(`.github/workflows/expiry.yml`)が見るのは Pulumi 用だけ。
+**どれも期限を付けていない。** 期限の監視(`.github/workflows/pulumi.yml` の `expiry`、`pulumi/expiry.sh`)が見るのは Pulumi 用だけ。
 
 ## 作り直す
 

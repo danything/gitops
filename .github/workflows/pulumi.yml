@@ -5,6 +5,7 @@
 #              main からしか使えない)
 #   毎週月曜 → preview --refresh --expect-no-changes。Cloudflare 側を直接いじったら落ちる。
 #              Pulumi で表せない残り(カスタムドメイン・容量)も pulumi/report.ts で見る
+#              鍵の期限も見る(pulumi/expiry.sh。30 日を切ったら Matrix の部屋 server に投稿)
 #
 # 書き込みの鍵は R2 の設定を書き換えられる(= バックアップのバケットを消せる)。
 # 守りは 2 つ: Environment で main に限ること、doany-restic に `protect` が付いていること
@@ -17,6 +18,7 @@
 #   PREVIEW_CLOUDFLARE_API_TOKEN / PREVIEW_AWS_ACCESS_KEY_ID / PREVIEW_AWS_SECRET_ACCESS_KEY
 #                             R2 の設定の読み取り + doany-pulumi の読み書き(state のロックに要る)
 #   PREVIEW_NB_PAT            NetBird の読み取り (サービスユーザー gitops-pulumi-preview、Auditor)
+#   MATRIX_SERVER_WEBHOOK_URL 鍵の期限の投稿先(expiry)
 # Environment `pulumi-apply` の秘密:
 #   CLOUDFLARE_API_TOKEN / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 #                             R2 の設定の書き込み + doany-pulumi の読み書き
@@ -45,6 +47,11 @@ on:
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
+    inputs:
+      report:
+        description: 鍵の期限を、遠いものも含めて全部投稿する (expiry の動作確認用)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -173,3 +180,46 @@ jobs:
           cloud-url: ${{ secrets.PULUMI_BACKEND_URL }}
           pulumi-version-file: pulumi/.pulumi-version
           always-include-summary: true
+
+  # 鍵の期限(pulumi/expiry.sh)。30 日を切ったか切れていたら Matrix の部屋 server に投稿する。
+  # PR では投稿せずログに出すだけ。手動実行で `report` を付けると全部を投稿する。
+  # 鍵は自分の期限しか読めないので、preview 用と apply 用をそれぞれで見る。apply 用は Environment `pulumi-apply`
+  # (main だけ)にあるので PR では見ない。
+  expiry:
+    if: github.event_name != 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        key: ${{ github.event_name == 'pull_request' && fromJSON('["preview"]') || fromJSON('["preview", "apply"]') }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.key == 'apply' && 'pulumi-apply' || '' }}
+    permissions:
+      contents: read
+      # Entra へ OIDC で入る (preview だけ)
+      id-token: write
+    env:
+      KEY: ${{ matrix.key }}
+      NB_PAT: ${{ matrix.key == 'apply' && secrets.NB_PAT || secrets.PREVIEW_NB_PAT }}
+      CF_TOKEN: ${{ matrix.key == 'apply' && secrets.CLOUDFLARE_API_TOKEN || secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # hookshot の部屋 server の受け口 (https://m.doany.io/webhook/<Infisical /matrix/matrix の hook-server>)
+      WEBHOOK: ${{ secrets.MATRIX_SERVER_WEBHOOK_URL }}
+      DRY_RUN: ${{ github.event_name == 'pull_request' }}
+      REPORT_ALL: ${{ inputs.report == true }}
+      WARN_DAYS: "30"
+    steps:
+      - uses: actions/checkout@v7
+      - if: matrix.key == 'preview'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.PREVIEW_AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+      - run: pulumi/expiry.sh
+      # 確かめられなかったことも知らせる (鍵が切れて 401 になったときなど。黙って落ちると気づかない)
+      - if: failure() && github.event_name != 'pull_request'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg text ":warning: 鍵の期限を確かめられなかった ($KEY 用)。鍵が切れているかもしれない: $RUN_URL" '{text: $text}' |
+            curl -fsS -X POST -H "Content-Type: application/json" --data-binary @- "$WEBHOOK"
