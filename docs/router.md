@@ -47,7 +47,7 @@ Talos の API(50000)は LAN からしか届かない(recovery/README.md)。
 
 ## 53 番は外にも開けている(意図して)
 
-AdGuard Home は問い合わせ元を絞っておらず(apps/adguardhome/config.yaml の `allowed_clients: []`)、DMZ で 53 番も外に出ている。
+AdGuard Home は問い合わせ元を絞っておらず(apps/adguardhome/deployment.yaml の `CONFIG` の `allowed_clients: []`)、DMZ で 53 番も外に出ている。
 **意図してそうしている**(2026-10-07 に確認)。オープンリゾルバとして DNS の増幅攻撃の踏み台に使われうることは承知の上。
 閉じるときは、ルーターで 53 番の受信を止めるか、`allowed_clients` に家の LAN・Pod・NetBird の範囲だけを書く。
 

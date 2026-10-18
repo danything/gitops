@@ -79,7 +79,7 @@
             }
         },
         {
-            "description": "AdGuard Home の版上げ。起動時に設定を移行する (schema_version) ので、postUpgradeTasks の renovate-post-upgrade.sh が新しい版の --check-config で apps/adguardhome/config.yaml を移行し、deployment.yaml の doany.io/config-sha256 も合わせて同じ枝にコミットする。読めない設定ならスクリプトが落ちて PR に出る。実行の許可は自前の Renovate (apps/renovate/renovate.yaml) の RENOVATE_ALLOWED_COMMANDS。専用の枝にするのは、移行が落ちたときに all dependencies の PR まで止めないため",
+            "description": "AdGuard Home の版上げ。起動時に設定を移行する (schema_version) ので、postUpgradeTasks の renovate-post-upgrade.sh が新しい版の --check-config で apps/adguardhome/deployment.yaml の設定 (initContainer の CONFIG) を移行し、同じ枝にコミットする。読めない設定ならスクリプトが落ちて PR に出る。実行の許可は自前の Renovate (apps/renovate/renovate.yaml) の RENOVATE_ALLOWED_COMMANDS。専用の枝にするのは、移行が落ちたときに all dependencies の PR まで止めないため",
             "matchDatasources": [
                 "docker"
             ],
@@ -93,7 +93,6 @@
                     "bash apps/adguardhome/renovate-post-upgrade.sh"
                 ],
                 "fileFilters": [
-                    "apps/adguardhome/config.yaml",
                     "apps/adguardhome/deployment.yaml"
                 ],
                 "executionMode": "branch"
