@@ -107,17 +107,16 @@ spec:
               value: https://nb.doany.io
             - name: NB_LOG_LEVEL
               value: info
-            # 51820 ではなく 51822。元は wg-easy と併走していたときの回避で、
-            # あちらは撤去済み(2026-09-07)。戻す必然性が無いのでそのまま
-            # (STUN が外から通っているのでホールパンチは成立する)。
+            # WireGuard の口。下の hostPort と揃える。2026-10-18 までは wg-easy と併走していた頃の名残で 51822 だった。
+            # ルーターは DMZ で全部をノードに向けているので、番号を変えてもルーターは触らない(docs/router.md)。
             - name: NB_WIREGUARD_PORT
-              value: "51822"
+              value: "51820"
           ports:
             # hostNetwork をやめたので、WireGuard の口は hostPort で出す。
             # 無くても relay 経由で通信は成立するが、直接 P2P にならない。
             - name: wireguard
-              containerPort: 51822
-              hostPort: 51822
+              containerPort: 51820
+              hostPort: 51820
               protocol: UDP
           securityContext:
             capabilities:
