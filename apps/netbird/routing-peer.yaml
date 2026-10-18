@@ -89,6 +89,10 @@ spec:
       #   ホストから nb.doany.io:443     … connection refused / timeout
       #   Pod から   nb.doany.io:443     … 200
       #
+      # 2026-10-18 に nodePort の手当てを外してからは、ホストからもノード自身の 443 に届く。ただし公開 DNS の A
+      # (WAN 側)にはホストから届かない(talos/patches/cluster.yaml の fj.doany.io の StaticHostConfig)ので、
+      # hostNetwork に戻す理由は無い。
+      #
       # ダッシュボードに出る名前がノード名(`main`)から Pod 名に変わる。
       containers:
         - name: netbird
