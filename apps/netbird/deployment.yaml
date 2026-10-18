@@ -23,7 +23,7 @@ metadata:
     secrets.infisical.com/auto-reload: "true"
 spec:
   replicas: 1
-  # hostPort 3478 と RWO の PVC を新旧 Pod で共有できないので Recreate。
+  # RWO の PVC を新旧 Pod で共有しないので Recreate。
   strategy:
     type: Recreate
   selector:
@@ -90,13 +90,6 @@ spec:
           ports:
             - name: http
               containerPort: 80
-            # STUN は UDP なのでゲートウェイを通せない。ノードの IP に直接出す。
-            # インターネットから届かせるにはルータで UDP 3478 を 10.0.0.2 に転送する必要がある
-            # (無くても relay 経由で通信自体は成立する。直接 P2P にならないだけ)。
-            - name: stun
-              containerPort: 3478
-              hostPort: 3478
-              protocol: UDP
           readinessProbe:
             # 公式インストーラが起動判定に使っているのと同じ口(内蔵 IdP が答えられる = 一通り上がっている)
             httpGet:

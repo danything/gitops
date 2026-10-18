@@ -1,5 +1,4 @@
-# PSA は privileged。理由: STUN(UDP 3478)の hostPort が baseline に通らない(STUN は Gateway を通せない。
-# https://docs.netbird.io/selfhosted/external-reverse-proxy)。一覧と背景は docs/talos.md「PSA のラベル」。
+# PSA は privileged。理由: routing peer の hostPort(WireGuard の 51820)と NET_ADMIN が baseline に通らない。一覧と背景は docs/talos.md「PSA のラベル」。
 apiVersion: v1
 kind: Namespace
 metadata:

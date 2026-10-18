@@ -19,9 +19,11 @@ data:
       listenAddress: ":80"
       # ピアが実際に繋ぎに来るアドレス。relay の rels:// URL もここから作られる。
       exposedAddress: "https://nb.doany.io:443"
-      # 内蔵 STUN。リバースプロキシを通せない(UDP なので)ため hostPort でノードに直接出す。
-      stunPorts:
-        - 3478
+      # STUN は外のもの(Cloudflare)を使い、内蔵の STUN は止める(`stuns` を書くと止まる)。
+      # 内蔵だと WAN 側のアドレスに問い合わせることになり、クラスタの中のピア(routing peer)からは
+      # ルーターで折り返さず届かない。届かないと IPv4 の P2P の候補を出せず relay に落ちる(2026-10-18)
+      stuns:
+        - uri: "stun:stun.cloudflare.com:3478"
       metricsPort: 9090
       healthcheckAddress: ":9000"
       logLevel: "info"

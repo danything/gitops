@@ -277,7 +277,7 @@ v0.65.0 から management/signal/relay が 1 つの combined コンテナなの�
 
 - **gRPC と HTTP が同じホスト名・同じポートに混在する。** gRPC のサービスを GRPCRoute に、`/api` `/oauth2` `/relay` `/ws-proxy` を
   HTTPRoute に、残りをダッシュボードに振った。GRPCRoute なら Cilium が backend を h2c 扱いするので Gateway の設定を触らない
-- **STUN(UDP 3478)はリバースプロキシを通せない**ので hostPort。namespace の PSA が `privileged` なのはこのため
+- **STUN は外のもの(Cloudflare)を使う。** 内蔵だとクラスタの中の routing peer から WAN 側に届かず、IPv4 の P2P に落ちる
 - **`livenessProbe` は付けない。** healthcheck は `localhost:9000` にしか bind されない
 - **外部 IdP(Entra)は設定ファイルに書けない**(0.62 以降はストアに入るデータ)。ダッシュボードか `POST /api/identity-providers` で足す。
   リダイレクト URI は `https://nb.doany.io/oauth2/callback` 固定
