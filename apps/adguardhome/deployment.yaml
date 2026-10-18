@@ -4,16 +4,10 @@ metadata:
   name: adguardhome
   namespace: adguardhome
   annotations:
-    # AdGuard 自身の認証は切ってある(`users: []`、2026-09-07)。守っているのは前段の
-    # oauth2-proxy(bootstrap/auth/adguard-proxy.yaml)で、通るのは Entra のアプリロール
-    # `admin` を持つ人だけ。AdGuard には SSO も利用者管理も無く、上流の認証プロキシ対応も
-    # 2020 年から open のままなので、認証を 1 か所(Entra)に寄せた。
+    # AdGuard 自身の認証は切ってある(`users: []`)。守っているのは前段の oauth2-proxy
+    # (bootstrap/auth/adguard-proxy.yaml、Entra のアプリロール `admin`)。
     # Web の口はクラスタ内からは無認証になる。外からは Gateway 経由だけで、その手前に SSO がある。
-    #
-    # AdGuard の設定の正本は initContainer の `CONFIG`(下)。UI で変えた設定は Pod が作り直されると戻る (2026-10-07 から)。
-    #
-    # クエリログの保持は 90d だと querylog.json だけで 2 GB に育ち、毎日のバックアップに乗るので
-    # 7d に縮めた (2026-09-06。`CONFIG` の querylog.interval)。
+    # クエリログの保持(querylog.interval)は 90d だと querylog.json が 2 GB に育ちバックアップに乗るので 7d。
 spec:
   replicas: 1
   # hostPort を持つので同じポートを 2 つの Pod が同時に掴めない。RollingUpdate だと
@@ -30,8 +24,7 @@ spec:
     spec:
       # 設定の正本は下の `CONFIG`。起動のたびに PVC の AdGuardHome.yaml に書き戻してから AdGuard を起動する
       # (AdGuard は設定ファイルを書き換えるので、読み取り専用の ConfigMap を直接マウントしない)。
-      # **Pod の定義の中に置くのは、設定を変えれば Pod が作り直されるようにするため**(ConfigMap だと変えても
-      # Pod は古い設定のまま動き続け、2026-10-18 まではハッシュの注釈と CI で見張っていた)。
+      # **Pod の定義の中に置くのは、設定を変えれば Pod が作り直されるようにするため**(ConfigMap だと Pod は古い設定のまま)。
       initContainers:
         - name: config
           image: busybox:1.38
@@ -244,11 +237,10 @@ spec:
                 schema_version: 34
       containers:
         - name: adguardhome
-          # 版を固定する (2026-10-07 まで latest)。上げると起動時に設定を移行する (schema_version) ので、
-          # Renovate の PR の中で renovate-post-upgrade.sh が config.yaml も移行しておく。その PR は自動マージする
+          # 版を上げる Renovate の PR では renovate-post-upgrade.sh が `CONFIG` も移行する(上の注記)。その PR は自動マージする
           image: adguard/adguardhome:v0.107.79
           # LoadBalancer は使わず、ノードの全アドレスで受けるために hostPort を持つ(docs/decisions.md「LoadBalancer をどう置き換えるか」)。
-          # hostPort は送信元 IP を保つので、AdGuard のクライアント別統計も従来どおり。
+          # hostPort は送信元 IP を保つので、AdGuard のクライアント別統計が取れる。
           ports:
             - name: dns-udp
               containerPort: 53
@@ -295,7 +287,6 @@ spec:
             name: doh-proxy
         # DoT(853)用の証明書。cert-manager が ah.doany.io で発行した Secret を、
         # AdGuard の設定が見ているファイル名(server.crt / server.key)に読み替えて渡す。
-        # 以前は Traefik の acme.json を監視する acme-watcher が PVC に書き出していた。
         - name: adguardhome-ssl
           secret:
             secretName: adguard-dot-tls

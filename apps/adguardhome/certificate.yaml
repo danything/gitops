@@ -11,5 +11,4 @@ spec:
     kind: ClusterIssuer
   dnsNames:
     # 命名規則(../../README.md「ホスト名の付け方」)どおり、AdGuard Home の 2 語で `ah`。
-    # 以前は `d.doany.io` で、2026-09-07 に端末の設定を移してから外した。
     - ah.doany.io

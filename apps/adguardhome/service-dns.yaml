@@ -6,9 +6,7 @@ metadata:
 spec:
   # ClusterIP でよい理由は docs/decisions.md「ルーティングの選定」の hostPort の表
   type: ClusterIP
-  # Dual-stack: without this the Service is IPv4-only, yet the CNI still
-  # installs hostPort DNAT rules for v6 :53 -- so IPv6 queries reach the
-  # svclb pod and are dropped there (klipper-lb only gets SRC_RANGES for v4).
+  # 無いと IPv4 だけの Service になり、IPv6 で来た DNS(:53)を受けられない。
   ipFamilyPolicy: RequireDualStack
   ipFamilies:
     - IPv4

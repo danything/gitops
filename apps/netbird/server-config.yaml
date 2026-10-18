@@ -1,7 +1,6 @@
 # NetBird combined サーバ(netbirdio/netbird-server)の設定。
 # v0.65.0 以降の「combined」構成で、management / signal / relay / STUN と内蔵 IdP(Dex)が
-# 1 コンテナに入っている。旧来の management+signal+relay+dashboard の 4 コンテナ構成ではない
-# (公式 Helm chart netbirdio/helms は 2026-04 で更新が止まっていて旧構成のままなので使っていない)。
+# 1 コンテナに入っている(公式 Helm chart は旧来の 4 コンテナ構成のままなので使わない)。
 #
 # 素の値は https://github.com/netbirdio/netbird/blob/main/combined/config.yaml.example と、
 # 公式インストーラ getting-started.sh の render_combined_yaml() に合わせてある。
@@ -32,10 +31,9 @@ data:
       dataDir: "/var/lib/netbird"
 
       auth:
-        # 内蔵 IdP(Dex)。外部 IdP は要らない(0.62 以降)。Entra を足すのは後から
-        # ダッシュボードの UI でできるので、まずはローカルユーザーだけで動かす。
+        # 内蔵 IdP(Dex)。Entra はダッシュボードの UI で外部 IdP として足してある。
         issuer: "https://nb.doany.io/oauth2"
-        # ローカルのメール+パスワードを閉じる(2026-09-07)。入口は Entra だけ。
+        # ローカルのメール+パスワードを閉じる。入口は Entra だけ。
         # 内蔵 IdP(Dex)自体は動いたままで、外部 IdP のコネクタを提供する役に徹する。
         #
         # 締め出したときの戻し方: ここを false にして ArgoCD に流し、

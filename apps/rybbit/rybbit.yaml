@@ -2,7 +2,7 @@
 # 版は GitHub のリリースに合わせて 2 つ同じタグで上げる(タグは v 付き。latest は追わない)。
 #
 # 環境変数は上流の docker-compose.yml の backend / client と同じ。DISABLE_SIGNUP は
-# 最初のアカウントを作ったら true にする(README「使い始め」)。テレメトリは切る。
+# 最初のアカウント(管理者)を作ったら true にする(README「使い始め」)。
 apiVersion: v1
 kind: Service
 metadata:
@@ -35,7 +35,6 @@ metadata:
   name: backend
   namespace: rybbit
   annotations:
-    # 参照している Secret を Infisical operator が同期したら、自動でローリング再起動する
     secrets.infisical.com/auto-reload: "true"
 spec:
   replicas: 1
@@ -110,7 +109,6 @@ spec:
                 secretKeyRef:
                   name: rybbit
                   key: better-auth-secret
-            # 最初のアカウント(管理者)は 2026-09-19 に作った。以後は誰も登録できない
             - name: DISABLE_SIGNUP
               value: "true"
             - name: DISABLE_TELEMETRY

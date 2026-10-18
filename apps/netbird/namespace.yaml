@@ -1,10 +1,5 @@
-# PSA は privileged。STUN(UDP 3478)を hostPort でノードの IP に直接出すため。
-# Pod Security Standards の baseline は `hostPort` を許さない(許容値は未定義か 0 だけ)ので、
-# baseline のままだと Pod が作れない(docs/talos.md「PSA のラベル」)。
-#
-# STUN をゲートウェイ経由にできないのは NetBird 側の制約:
-# 「HTTP reverse proxies only handle TCP traffic; STUN requires direct UDP access」
-# (https://docs.netbird.io/selfhosted/external-reverse-proxy)。
+# PSA は privileged。理由: STUN(UDP 3478)の hostPort が baseline に通らない(STUN は Gateway を通せない。
+# https://docs.netbird.io/selfhosted/external-reverse-proxy)。一覧と背景は docs/talos.md「PSA のラベル」。
 apiVersion: v1
 kind: Namespace
 metadata:

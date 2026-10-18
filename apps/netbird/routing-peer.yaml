@@ -1,29 +1,20 @@
 # NetBird の routing peer(サブネットルータ)。自宅 LAN 10.0.0.0/24 への入口で、
 # iLO(10.0.0.3)や AdGuard(10.0.0.2:53)にここ経由で届く。
-#
-# Headscale を落として NetBird にした理由がここ。headscale は FAQ で
-# 「headscale 自身を動かすマシンをサブネットルータにするな」と明記していて、
-# ノード 1 台のこの構成では回避できなかった。NetBird は routing peer が独立した
-# 概念で、コンテナで動かす前提のドキュメントがある(docs/decisions.md)。
-#
-# 上流の kubernetes-operator にも NetworkRouter があるが、あれは
-# Kubernetes の Service を公開するためのもので、物理 LAN のサブネットルータではない。
-# ここが必要としているのは後者なので、素の Deployment で組む(hostNetwork は
-# 2026-09-08 に外した。理由は下の spec のコメント)。
+# Headscale ではなく NetBird にした理由はこれ(docs/decisions.md)。上流の kubernetes-operator の NetworkRouter は
+# Service を公開するためのもので、物理 LAN のサブネットルータではないので、素の Deployment で組む。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: netbird-routing-peer-data
   namespace: netbird
   annotations:
-    # ピアの identity(秘密鍵)。消えると再登録が要るので取る。
+    # ピアの identity(秘密鍵)と設定だけ。消えると再登録が要るので取る。
     k8up.io/backup: "true"
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      # ピアの identity(秘密鍵)と設定だけ。消えると再登録が要る
       storage: 128Mi
 ---
 # 鍵は Infisical の /netbird/netbird-routing-peer に `setup-key` で置く。
@@ -74,26 +65,9 @@ spec:
       labels:
         app: netbird-routing-peer
     spec:
-      # hostNetwork にしない(2026-09-08 に外した)。
-      #
-      # 元は「LAN へ素で出るため」に hostNetwork にしていたが、Pod のネットワークからでも
-      # LAN には届く(Cilium が masquerade する)。実測:
-      #
-      #   Pod から 10.10.0.2:3389 / 10.10.0.1:80 / 10.10.0.4:853 / 10.0.0.1:80  … 全部 OK
-      #
-      # 逆に hostNetwork だと管理サーバに繋げなくなった。Gateway を hostNetwork に
-      # した(#91)結果、ホスト自身からノードの 443 に繋ぐと応答が返らない
-      # (bootstrap/cilium/values.yaml の `nodePort`)。このピアは `nb.doany.io:443` に
-      # 繋ぎに行くので、そこに巻き込まれて `Management: Disconnected` で止まっていた。
-      #
-      #   ホストから nb.doany.io:443     … connection refused / timeout
-      #   Pod から   nb.doany.io:443     … 200
-      #
-      # 2026-10-18 に nodePort の手当てを外してからは、ホストからもノード自身の 443 に届く。ただし公開 DNS の A
-      # (WAN 側)にはホストから届かない(talos/patches/cluster.yaml の fj.doany.io の StaticHostConfig)ので、
-      # hostNetwork に戻す理由は無い。
-      #
-      # ダッシュボードに出る名前がノード名(`main`)から Pod 名に変わる。
+      # hostNetwork にしない。Pod のネットワークからでも LAN には届く(Cilium が masquerade する)。
+      # ホストからは公開 DNS の A(WAN 側)に届かない(talos/patches/cluster.yaml の StaticHostConfig)ので、
+      # hostNetwork だと nb.doany.io:443 に繋げず `Management: Disconnected` で止まる。
       containers:
         - name: netbird
           image: netbirdio/netbird:0.81.2
@@ -107,14 +81,14 @@ spec:
               value: https://nb.doany.io
             - name: NB_LOG_LEVEL
               value: info
-            # WireGuard の口。下の hostPort と揃える。2026-10-18 までは wg-easy と併走していた頃の名残で 51822 だった。
+            # WireGuard の口。下の hostPort と揃える。
             # ルーターは DMZ で全部をノードに向けているので、番号を変えてもルーターは触らない(docs/router.md)。
             # **効くのは最初の起動だけ。** NetBird は PVC の /var/lib/netbird/default.json に `"WgPort"` を保存し、以降はそちらを使う。
-            # 番号を変えるときは default.json も直してから作り直す(2026-10-18 に変えたとき、env だけ直して hostPort とずれた)。
+            # 番号を変えるときは default.json も直してから作り直す(env だけ直すと hostPort とずれる)。
             - name: NB_WIREGUARD_PORT
               value: "51820"
           ports:
-            # hostNetwork をやめたので、WireGuard の口は hostPort で出す。
+            # WireGuard の口は hostPort で出す。
             # 無くても relay 経由で通信は成立するが、直接 P2P にならない。
             - name: wireguard
               containerPort: 51820

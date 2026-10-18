@@ -31,9 +31,6 @@ spec:
           ports:
             # Gateway は使わない。443 では TLS 終端(HTTPS リスナー)と passthrough が共存できず
             # ProtocolConflict になるため(docs/decisions.md)、このサイドカーがホストのポートで直接受ける。
-            #
-            # 3proxy 自身の平文が 3128(プロキシの慣用ポート)なので、その TLS 版として隣の 3129。
-            # コンテナ側の待ち受けと同じ番号なので読み替えも要らない。
             - name: proxy-tls
               containerPort: 3129
               hostPort: 3129

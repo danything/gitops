@@ -16,29 +16,21 @@
 #
 # ネットワークは**ジョブごとに別**(container.network: "")。Runner がジョブごとに dind の中に bridge の
 # ネットワーク(WORKFLOW-…)を作り、ジョブ(と services)のコンテナをそこに置き、終わったら消す。
-# 前は host(全ジョブが Pod のネットワークを分け合う)だった。それだと、どれかのジョブが dind でコンテナを
-# 起こすたびに、全ジョブから見えるところに veth(IPv6 のリンクローカル付き)が出入りし、Chromium が
-# ERR_NETWORK_CHANGED で読み込みを切って e2e が落ちた(doa/todoroku#366)。同じ番号のポート(4173 など)も取り合っていた。
+# host(全ジョブが Pod のネットワークを分け合う)にしないこと。ほかのジョブの veth が出入りするたびに Chromium が
+# ERR_NETWORK_CHANGED で読み込みを切って e2e が落ち(doa/todoroku#366)、同じ番号のポートも取り合う。
 #
-# ジョブの中から docker を使う(イメージを作る・docker run)ときは、forgejo の docs の「docker-access」の DIND の形:
+# ジョブの中から docker を使うときは、forgejo の docs の「docker-access」の DIND の形:
 #   - ジョブには `--add-host=dind.docker.internal:host-gateway` を足す。host-gateway は dind の docker0 の
-#     住所(172.17.0.1。dind 自身 = Pod のネットワーク名前空間の住所)で、dockerd は 0.0.0.0:2376 で待っている。
-#     ジョブのネットワークからでも、宛先が dind 自身なので届く(別のネットワークのコンテナへの転送とは違い、遮られない)
+#     住所(172.17.0.1 = dind 自身)で、dockerd は 0.0.0.0:2376 で待っているので、ジョブのネットワークからも届く
 #   - ジョブの DOCKER_HOST は tcp://dind.docker.internal:2376。TLS はそのまま(証明書は valid_volumes で渡す)。
 #     dind のサーバー証明書の SAN にこの名前を足す(DOCKER_TLS_SAN)
-# 渡しているのは今までと同じ「dind を丸ごと操れる鍵」なので、できることは host のときと変わらない
-# (capacity が 2 以上なので、ジョブは docker の CLI で同時に走っているほかのジョブのコンテナも見える。前から同じ)。
-# Runner 自身は今までどおり localhost:2376(Pod の中)で dind に話す。
-# キャッシュ(ACTIONS_CACHE_URL)は Runner が自分の Pod の IP で出す。ジョブのネットワークから見ても dind の
-# 自分の IP なので届く。
+# 渡しているのは「dind を丸ごと操れる鍵」なので、ジョブは同時に走っているほかのジョブのコンテナも見える。
+# Runner 自身は localhost:2376 で dind に話す。キャッシュ(ACTIONS_CACHE_URL)は Pod の IP で出すので、ジョブからも届く。
 #
 # **ジョブのネットワークにも IPv6 を付ける(enable_ipv6)。** 無いと fj.doany.io に届かない。
-# fj.doany.io は AAAA(ノード)と A(家の外向きの IPv4)を返し、Pod からは IPv4 の方はヘアピンで届かない
-# (curl -4 は時間切れ)。host の頃は Pod の IPv6 で届いていた。checkout・API・upload-artifact・OIDC は
-# ジョブの中から fj.doany.io に行くので、IPv4 だけのネットワークでは全部止まる。
-# enable_ipv6 にすると dind がネットワークごとに ULA の /64 を割り当て、外へは NAT66(Pod の IPv6)で出るので、
-# 外向きは host の頃と同じ形になる(2026-10-07 に本番の dind で確かめた)。
-# docker login / push は dind(Pod のネットワーク)が自分で名前を引くので、これまでどおり。
+# fj.doany.io は AAAA(ノード)と A(家の外向きの IPv4)を返し、Pod からは IPv4 の方はヘアピンで届かない。
+# checkout・API・upload-artifact・OIDC はジョブの中から fj.doany.io に行くので、IPv4 だけでは全部止まる。
+# enable_ipv6 にすると dind がネットワークごとに ULA の /64 を割り当て、外へは NAT66(Pod の IPv6)で出る。
 # Cilium は vxlan なので Pod の MTU は 1500 より小さい。dind の既定 1500 のままだと大きいパケットが落ちる。
 # --mtu は既定の bridge(docker0)にしか効かないので、ジョブのネットワークの分は --default-network-opt で揃える。
 apiVersion: v1
@@ -71,10 +63,7 @@ data:
     log:
       level: info
     runner:
-      # 同時に受けるジョブの数。ワークフローが 2 本(test と claude-review)ある PR を
-      # 3 リポジトリぶん積むと 2 では順番待ちが長い。ノードは 44 コア / 46 GiB で
-      # 使用率は CPU 8% / メモリ 16%、CPU は余っているので詰まるのは下の dind のメモリ。
-      # 8 本のうち重いのは e2e(ブラウザ)くらいで、それが同時に何本も来ることは稀
+      # 同時に受けるジョブの数。CPU は余っているので、上限は dind のメモリ(下の limits)で決まる
       capacity: 8
       timeout: 3h
       labels:

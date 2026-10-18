@@ -2,7 +2,7 @@
 #
 # なぜ要るのか。AdGuard は DoH を HTTPS の口(443)でしか出さない。平文の 80 では 404 になる。
 # Gateway が backend へ平文で繋ぐ構成だと DoH が死に、これを「セキュア DNS」に入れている
-# ブラウザや端末は名前解決が全部できなくなる(2026-09-07 に実際に起きた)。
+# ブラウザや端末は名前解決が全部できなくなる。
 #
 # なぜ BackendTLSPolicy ではないのか。Cilium 1.20.1 は BackendTLSPolicy を Accepted にするが
 # 実際には Envoy の cluster に transport_socket を付けない。backend に平文で繋いだままなので
