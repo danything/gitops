@@ -119,7 +119,8 @@ restic dump <ID> /work/etcd.snapshot > etcd.snapshot
 
 Sidero のドキュメントの「Talos only creates missing resources from inline manifests」は起動時の適用の話で、
 **`talosctl apply-config` では更新も削除もされないが、`talosctl upgrade-k8s`(同じ版でも)を通せば SSA とインベントリで更新も削除もされる**
-(prune は既定で有効)。プローブ用の `ConfigMap` で確かめた。この実測を根拠に `bootstrap/` をまるごと inlineManifests に載せた。
+(prune は既定で有効)。プローブ用の `ConfigMap` で確かめた。この実測を根拠に `bootstrap/` の起動に要る層(Cilium・cert-manager・ArgoCD・Infisical と SOPS の Secret)を inlineManifests に載せた。
+残りの平文は ArgoCD の Application `bootstrap` が当てる(2026-10-17 から。[bootstrap/README.md](../bootstrap/README.md))。
 当て直しの手順は [talos/README.md](../talos/README.md)「上げ方 / 当て直し方」。
 
 ## VM ブートドリル
@@ -151,8 +152,8 @@ CNI の交換は構築時にやる ── 稼働中の差し替えは全 Pod 再
 | レイヤー | 決めること | 変更手段 |
 | --- | --- | --- |
 | イメージ | カーネル引数、system extension(GPU ドライバ等) | Image Factory で schematic を作って `talosctl upgrade` |
-| machine config | CNI、kube-proxy、ディスク、ネットワーク、`bootstrap/` の大半 | `render.sh` → `apply-config`(inlineManifests は `upgrade-k8s` まで) |
-| Kubernetes | ワークロード | Argo CD(`apps/` と各リポジトリの `deploy/`) |
+| machine config | CNI、kube-proxy、ディスク、ネットワーク、`bootstrap/` の chart と SOPS のファイル | `render.sh` → `apply-config`(inlineManifests は `upgrade-k8s` まで) |
+| Kubernetes | ワークロード | Argo CD(`apps/`・`bootstrap/` の残りの平文・各リポジトリの `deploy/`) |
 
 SSH もシェルもパッケージマネージャも無く gRPC API だけなので、**障害時は「直さず作り直す」**。
 デバッグは `talosctl dmesg` / `logs` / `read`、debug コンテナ。

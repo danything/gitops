@@ -15,7 +15,8 @@ name: talos boot
 
 on:
   pull_request:
-    paths:
+    # push と同じ一覧(YAML のアンカー。GitHub Actions は 2025-09 から読む。マージキー `<<:` は読まない)
+    paths: &paths
       - talos/**
       - bootstrap/cilium/**
       - bootstrap/cert-manager/**
@@ -26,15 +27,7 @@ on:
       - .github/workflows/talos-boot.yml
   push:
     branches: [main]
-    paths:
-      - talos/**
-      - bootstrap/cilium/**
-      - bootstrap/cert-manager/**
-      - bootstrap/argocd/**
-      - bootstrap/infisical/**
-      - bootstrap/gateway/**
-      - bootstrap/apiserver/**
-      - .github/workflows/talos-boot.yml
+    paths: *paths
   workflow_dispatch:
 
 permissions:
@@ -122,8 +115,8 @@ jobs:
                     username: ci-dummy
                     password: ci-dummy
           PATCH
-          # **argocd / infisical の値は本物の values.yaml。** 秘密の側(secret-values.yaml)だけダミーに替えて重ねる。
-          # 通知の送り先は secret-values.yaml にしか無いので、渡さなければ通知も出ない。
+          # **argocd / infisical の値は本物の values.yaml。** 秘密の側(secret-values.sops.yaml)だけダミーに替えて重ねる。
+          # 通知の送り先は secret-values.sops.yaml にしか無いので、渡さなければ通知も出ない。
           # extraObjects は app-of-apps(`apps`)と GitHub App の repo-creds。CI で本物を同期させない
           echo 'extraObjects: []' > /tmp/argocd-secret-values.yaml
           # SMTP は外(smtp.office365.com)に繋ぎに行くので抜く(リストなので丸ごと置き換える)
@@ -135,9 +128,9 @@ jobs:
             | .stringData.ENCRYPTION_KEY = \"$(openssl rand -hex 16)\"
             | .stringData.AUTH_SECRET = \"$(openssl rand -base64 32)\"
             | .stringData.TELEMETRY_ENABLED = \"false\"" \
-            bootstrap/infisical/secrets.yaml > /tmp/infisical-secret.yaml
+            bootstrap/infisical/secrets.sops.yaml > /tmp/infisical-secret.yaml
           yq 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
-            bootstrap/cert-manager/cloudflare-secret.yaml > /tmp/cloudflare-secret.yaml
+            bootstrap/cert-manager/cloudflare-secret.sops.yaml > /tmp/cloudflare-secret.yaml
           for f in /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done

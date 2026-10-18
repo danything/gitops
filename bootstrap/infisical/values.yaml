@@ -1,5 +1,5 @@
 # infisical-standalone の chart の値。版は version.yaml、DB と Redis のパスワードは
-# secret-values.yaml(SOPS)。描いて machine config に載せるのは talos/render.sh
+# secret-values.sops.yaml(SOPS)。描いて machine config に載せるのは talos/render.sh
 # (ArgoCD に置けない理由は docs/decisions.md「infisical だけは ArgoCD に移せない」)。
 #
 # https://github.com/Infisical/infisical/tree/main/helm-charts/infisical-standalone-postgres
@@ -16,7 +16,7 @@ infisical:
         repository: mirror.gcr.io/infisical/infisical
         # The chart's default tag lags releases; pin explicitly.
         tag: v0.166.8
-    # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL live in infisical/secrets.yaml.
+    # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL live in infisical/secrets.sops.yaml.
     kubeSecretRef: infisical-secrets
     extraEnv:
         # Kubernetes auth makes Infisical call https://kubernetes.default.svc

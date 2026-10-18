@@ -96,7 +96,7 @@ kubeconfig も talosconfig もファイルでは持たない(t.ps1 がその場�
   その後ろの Deployment まで当たらないことがある(2026-10-17、argo-cd 10.10.5 を当てたとき 1 回目は ArgoCD が古い版のままだった)。
   当て終わったら `kubectl -n argocd get deploy -o wide` でイメージの版を見る
 - **何も変えていなければ `apply-config --dry-run` の差分は出ない。** 描くたびに変わる値は潰してある
-  (Hubble の証明書はクラスタの中で作る、infisical の `postgres-password` は secret-values.yaml に固定、`updatedAt` は `render.sh` が落とす)。
+  (Hubble の証明書はクラスタの中で作る、infisical の `postgres-password` は secret-values.sops.yaml に固定、`updatedAt` は `render.sh` が落とす)。
   差分が出たら、それは本当に変わったもの
 
 ### Talos 本体

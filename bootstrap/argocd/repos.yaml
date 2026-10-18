@@ -111,10 +111,10 @@ spec:
 # bootstrap/ の平文のマニフェスト(Gateway・auth・ClusterIssuer・InfisicalSecret など)。2026-10-17 まで
 # GitHub Actions(bootstrap-apply.yml)が当てていた(../../docs/decisions.md「層の分け方」)。
 #
-# **machine config が持つものは外す。** Helm の値と版(`*values.yaml`・`*version.yaml`)、SOPS のファイル、
+# **machine config が持つものは外す。** Helm の値と版(`*values.yaml`・`*version.yaml`)、SOPS のファイル
+# (`*.sops.yaml`。名前で外すので、足しても exclude は触らなくてよい。../../.sops.yaml が他の名前では暗号化させない)、
 # machine config が作る Namespace(argocd・cert-manager・infisical)、`apiserver/`、`cilium/`。
 # このファイル自身は上の `apps`(argocd/values.yaml の extraObjects)が持つので外す。
-# **SOPS のファイルを足したら exclude にも足すこと**(復号できないまま当たって同期が落ちる)。
 # 照合は bootstrap/ からの相対パスで、`*` は `/` もまたぐ(argo-cd の util/glob は区切り文字無しの gobwas/glob)。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -129,7 +129,7 @@ spec:
     path: bootstrap
     directory:
       recurse: true
-      exclude: '{*values.yaml,*version.yaml,apiserver/*,cilium/*,argocd/repos.yaml,argocd/namespace.yaml,cert-manager/namespace.yaml,infisical/namespace.yaml,cert-manager/cloudflare-secret.yaml,infisical/secrets.yaml}'
+      exclude: '{*values.yaml,*version.yaml,*.sops.yaml,apiserver/*,cilium/*,argocd/repos.yaml,argocd/namespace.yaml,cert-manager/namespace.yaml,infisical/namespace.yaml}'
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
