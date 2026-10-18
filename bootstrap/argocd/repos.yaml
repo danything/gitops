@@ -1,12 +1,6 @@
-# **Forgejo 側は別の ApplicationSet(下の `repos-forgejo`)に分けてある(2026-10-05)。**
-# ApplicationSet は generator が 1 つでも失敗すると**全体の Application を 1 本も作らず**
-# 戻る(argo-cd の applicationset_controller.go: `GenerateApplications` がエラーを返したら
-# 生成も更新もせずに requeue)。まっさらなクラスタでは Forgejo はまだ空で、読むための
-# `forgejo-repo-creds` も無い(それを当てるのは **このリポジトリの Application** ──
-# apps/forgejo/argocd-creds.yaml)。同じ ApplicationSet に同居させていると、gitea 側が落ちて
-# このリポジトリ自身の Application も作られず、Forgejo もデプロイされないので**自力で抜けられない**。
-# 分けておけば GitHub 側が先に全部立ち、Forgejo が戻った時点で下が追いつく。
-# 2 つの template は同じ形を保つこと(片方だけ直すとアプリの扱いが Git の置き場で変わる)。
+# Forgejo 側は別の ApplicationSet(下の `repos-forgejo`)に分ける。generator が 1 つでも失敗すると
+# Application を 1 本も作らないので、まっさらなクラスタ(Forgejo も forgejo-repo-creds もまだ無い)で
+# 同居させると自力で抜けられない。2 つの template は同じ形を保つこと。
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -15,33 +9,18 @@ metadata:
 spec:
   goTemplate: true
   goTemplateOptions:
-    # Every key referenced below has to exist in the repo's argocd.yaml.
-    # A missing or misspelled one fails the generator loudly instead of
-    # rendering an Application with an empty name or path.
+    # argocd.yaml にキーが欠けたら、空の名前で描かずに落とす
     - missingkey=error
   generators:
-    # Two steps: find the repos, then let each repo describe itself.
-    #   1. scmProvider walks the danything org and keeps repos that carry a
-    #      deploy/argocd.yaml.
-    #   2. git reads that file out of the repo, and its keys become the
-    #      template parameters below.
-    # Adding an app is therefore "push manifests + deploy/argocd.yaml to a new repo".
-    # This file is the one piece that isn't decided per-repo, because it's the
-    # rule for *finding* the repos -- it can't live in the repos it finds.
+    # deploy/argocd.yaml を持つリポジトリを探し、そのファイルのキーを template の引数にする
     - matrix:
         generators:
           - scmProvider:
               cloneProtocol: https
               github:
                 organization: danything
-                # Default branch only. allBranches: true would produce one
-                # Application per branch, which is for preview environments.
                 allBranches: false
-                # The GitHub App repo-creds ArgoCD already uses to clone
-                # danything/*, reused for the org API scan -- so there's no
-                # second credential to create, no anonymous 60 req/hr ceiling
-                # (this scan runs every 3 minutes), and worklog-cloud doesn't
-                # go invisible for being private.
+                # clone と同じ GitHub App(匿名だと 60 req/h の上限と、private が見えない)
                 appSecretName: creds-2776534691
               filters:
                 - pathsExist:
@@ -51,14 +30,11 @@ spec:
               revision: '{{ .branch }}'
               files:
                 - path: deploy/argocd.yaml
-  # generator の結果から repo が消えても(改名の途中、一時的な API エラー)、Application は消しても
-  # その中の実リソース(Deployment や PVC)は道連れにしない。
+  # generator から repo が一時的に消えても、実リソース(PVC など)は道連れにしない
   syncPolicy:
     preserveResourcesOnDeletion: true
   template:
     metadata:
-      # Declared per-repo rather than derived from the repo name, so a repo can
-      # keep an existing Application's name and have the controller adopt it in place.
       name: '{{ .name }}'
     spec:
       project: default
@@ -68,35 +44,24 @@ spec:
         path: '{{ .sourcePath }}'
         directory:
           include: '*.yaml'
-          # argocd.yaml は apiVersion/kind の無い設定なので外す(sourcePath が deploy のリポジトリでは同期の中に入る)。
-          # bootstrap/ も外す。gitops repo は同期対象を apps/ に絞っているので通常は当たらないが、
-          # sourcePath が `.` の瞬間(移行中や設定ミス)に SOPS 暗号化済みの bootstrap/*.yaml を
-          # そのまま apply してしまうと Secret を壊すため、二重に防ぐ。
-          # `_` で始まるディレクトリも外す。用意はしたが動かしていないアプリを、置き場を変えずに
-          # 寝かせておくため (例: apps/_<name>/)。動かすときは `_` を外して git mv するだけ。
-          # 照らすのは sourcePath からの相対パスで、gobwas/glob を区切り無しで使う (`*` も `/` を
-          # 跨ぐ) ので、`**/_*/**` は頭に `/` が要り、いちばん上の `_<name>/…` には当たらない。
-          # そのために `_*/**` も並べる
+          # argocd.yaml は manifest でない。bootstrap/ は sourcePath が `.` になったとき SOPS 済みを当てない保険。
+          # `_` で始まるディレクトリは寝かせているアプリ。`*` は `/` も跨ぐが `**/_*/**` は頭の `/` が要るので
+          # `_*/**` も並べる
           exclude: '{**/argocd.yaml,bootstrap/**,_*/**,**/_*/**}'
       destination:
         server: https://kubernetes.default.svc
-        # Empty for a repo whose manifests span several namespaces, which is
-        # fine because every manifest in these repos carries its own.
         namespace: '{{ .namespace }}'
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
-        # CRD を入れる Application より先に同期しにいったものは、既定の 5 回で諦めて
-        # OutOfSync のまま止まる(refresh=hard では戻らない。ドリル 5 回目で踏んだ)。
-        # backoff を伸ばして自力で戻るようにする。15s から倍々で上限 5 分、10 回で約 33 分。
+        # CRD より先に同期したものは既定の 5 回で諦めて止まる(refresh=hard でも戻らない)。約 33 分まで粘る
         retry:
           limit: 10
           backoff:
             duration: 15s
             factor: 2
             maxDuration: 5m
-  # These four live in the patch rather than in template because plain
-  # templating only substitutes strings, and they're booleans.
+  # 真偽値は template では文字列になるので patch で入れる
   templatePatch: |
     spec:
       source:
@@ -108,14 +73,9 @@ spec:
           prune: {{ .prune }}
           selfHeal: {{ .selfHeal }}
 ---
-# bootstrap/ の平文のマニフェスト(Gateway・auth・ClusterIssuer・InfisicalSecret など)。2026-10-17 まで
-# GitHub Actions(bootstrap-apply.yml)が当てていた(../../docs/decisions.md「層の分け方」)。
-#
-# **machine config が持つものは外す。** Helm の値と版(`*values.yaml`・`*version.yaml`)、SOPS のファイル
-# (`*.sops.yaml`。名前で外すので、足しても exclude は触らなくてよい。../../.sops.yaml が他の名前では暗号化させない)、
-# machine config が作る Namespace(argocd・cert-manager・infisical)、`apiserver/`、`cilium/`。
-# このファイル自身は上の `apps`(argocd/values.yaml の extraObjects)が持つので外す。
-# 照合は bootstrap/ からの相対パスで、`*` は `/` もまたぐ(argo-cd の util/glob は区切り文字無しの gobwas/glob)。
+# bootstrap/ の平文のマニフェスト(Gateway・auth・ClusterIssuer・InfisicalSecret など)。
+# machine config が持つもの(値・版・SOPS・Namespace・apiserver/・cilium/)と、`apps` が持つこのファイルは外す。
+# `*` は `/` もまたぐ。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -137,8 +97,7 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # InfisicalSecret の CRD は apps/infisical-operator(別の Application)が入れるので、まっさらなクラスタでは
-    # 最初の何回かは落ちる。15s から倍々・上限 5 分・10 回(約 33 分)で自力で戻る(apps/k8up と同じ)。
+    # InfisicalSecret の CRD は別の Application が入れるので、まっさらなクラスタでは最初は落ちる
     retry:
       limit: 10
       backoff:
@@ -146,9 +105,7 @@ spec:
         factor: 2
         maxDuration: 5m
 ---
-# Forgejo(fj.doany.io)の doa を見る。上の `repos` と分けている理由は上のコメント。
-# **ここが失敗していても上の `repos` は止まらない。** 失敗中は
-# `kubectl -n argocd get applicationset repos-forgejo -o yaml` の `ErrorOccurred` に理由が出る。
+# Forgejo(fj.doany.io)の doa を見る。失敗の理由は `get applicationset repos-forgejo -o yaml` の ErrorOccurred。
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -159,17 +116,9 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    # 同じ形で Forgejo(fj.doany.io)の doa(2026-09-16 に danything から改名)も見る。
-    # **改名したら必ずここを直す。** 旧名のままだと Forgejo が 307 を返し、ArgoCD の
-    # git クライアントはリダイレクトを追わないので、対象のアプリが丸ごと Unknown で止まる。
-    # あわせて Infisical /argocd/forgejo-repo-creds の url も直すこと(repo-creds は URL の
-    # 接頭辞で照合するため、ずれると資格情報が付かない)。**プライベートのリポジトリは GitHub に置かず
-    # Forgejo にだけ置く**方針(2026-09-15。GitHub Actions の課金はプライベートにだけ掛かる)。
-    # Forgejo の API は Gitea と同じなので gitea の scmProvider で読める。
-    # 読むための資格情報は apps/forgejo/argocd-creds.yaml(Infisical から)。scan と clone の両方に使う。
-    # **同じリポジトリが GitHub と Forgejo の両方にあると Application 名がぶつかる**(上の `repos` と
-    # 同じ Application を取り合い、所有者の食い違いで片方が ErrorOccurred になる)。
-    # 移すときは GitHub 側を消してから(apps/forgejo/README.md)。
+    # owner を改名したら必ずここと Infisical /argocd/forgejo-repo-creds の url を直す
+    # (Forgejo の 307 を ArgoCD は追わず、repo-creds は URL の接頭辞で照合する)。
+    # 同じリポジトリが GitHub にもあると Application 名がぶつかる。移すときは GitHub 側を消してから。
     - matrix:
         generators:
           - scmProvider:
@@ -189,7 +138,7 @@ spec:
               revision: '{{ .branch }}'
               files:
                 - path: deploy/argocd.yaml
-  # ここから下は上の `repos` と同じ(説明も上)。直すときは両方そろえる
+  # ここから下は上の `repos` と同じ。直すときは両方そろえる
   syncPolicy:
     preserveResourcesOnDeletion: true
   template:

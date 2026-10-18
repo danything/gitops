@@ -1,5 +1,2 @@
-# cilium の chart のバージョンはここが唯一の出どころ。文章の中の数字は Renovate が追えないので、
-# 機械が読める形に出してある。読むのは talos/render.sh と .github/workflows/cilium-drift.yml。
-# 形は talos/versions.yaml と揃えてある。
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io
 version: 1.20.3

@@ -1,40 +1,24 @@
-# クラスタ共通。v1.14 では型付きドキュメントと v1alpha1 を併記できないので、
-# 項目ごとに書く場所が決まっている(../docs/talos.md「machine config の作法」)。
+# クラスタ共通。型付きドキュメントと v1alpha1 で書く場所が決まっている(../docs/talos.md「machine config の作法」)。
 machine:
   sysctls:
-    # これが無いと IPv6 の既定経路が消える。Kubernetes が上がると
-    # `net.ipv6.conf.{all,bond0}.forwarding` が 1 になり、既定の `accept_ra=1` は
-    # 「forwarding が有効なら RA を無視する」なのでカーネルが RA 由来の default route を落とす。
-    # 2 = forwarding でも RA を受ける。QEMU で再現・修正を確認済み(../docs/talos.md「VM ブートドリル」)。
+    # 無いと IPv6 の既定経路が消える(Kubernetes が forwarding=1 にすると accept_ra=1 は RA を無視する)
     net.ipv6.conf.bond0.accept_ra: "2"
-    # bond0 の SLAAC の IID を MAC 由来(EUI-64)にしない。
-    # 値は 3(random)。stable-privacy(2)は `stable_secret` が要り、未設定のまま 2 を書くと
-    # `write /proc/sys/net/ipv6/conf/bond0/addr_gen_mode: invalid argument` で
-    # KernelParamSpecController が数秒おきに失敗し続ける(実測)。
-    # 3 は再起動ごとに IID が変わる。ブート間で固定したくなったら `stable_secret` を足して 2 に戻す。
-    # (下の autoconf=0 で SLAAC のグローバルアドレスは付けないので、効くのはリンクローカルだけ)
+    # IID を MAC 由来にしない。2(stable-privacy)は stable_secret が無いと書き込みが失敗し続ける
     net.ipv6.conf.bond0.addr_gen_mode: "3"
-    # **bond0 に SLAAC のアドレスを付けない。** 公開する AAAA は下の静的アドレス(::2)のつもりだが、
-    # cloudflare-ddns の `local.iface.stable:bond0` は一時アドレス以外から選ぶので、SLAAC のアドレスが
-    # あるとそちらを書く(2026-10-17 に、AAAA が EUI-64 の SLAAC になっているのを見つけた)。
-    # addr_gen_mode=3 だと SLAAC が再起動ごとに変わるので、AAAA も毎回変わってしまう。
-    # autoconf=0 はアドレスを作らないだけで、RA の既定経路(上の accept_ra)はそのまま受ける。
+    # SLAAC のアドレスを付けない(あると cloudflare-ddns が静的な ::2 でなくそちらを AAAA に書く)。
+    # RA の既定経路はそのまま受ける。
     net.ipv6.conf.bond0.autoconf: "0"
-    # Forgejo の Runner(dind)で vite などがファイル監視を使う。既定の 128 は全コンテナの root で
-    # 共有なので足りず、worklog-cloud の e2e が EMFILE で落ちた(2026-09-15)
+    # Forgejo の Runner(dind)のファイル監視。既定の 128 では EMFILE で落ちる
     fs.inotify.max_user_instances: "8192"
     fs.inotify.max_user_watches: "1048576"
-    # IPv6 は bond0 に一本化する。eno4 側の RA でデフォルトルートを奪われると非対称ルーティングになる。
+    # IPv6 は bond0 に一本化する(eno4 の RA に既定経路を奪われると非対称になる)
     net.ipv6.conf.eno4.disable_ipv6: "1"
   network:
-    # 名前は main 固定。local-path の PV の nodeAffinity が main を指している。
-    # インタフェースは下の BondConfig / LinkConfig(型付きドキュメント)に書く。v1alpha1 の
-    # machine.network.interfaces は bond の MAC を指定できないため(2026-10-17 に移した)。
+    # local-path の PV の nodeAffinity が main を指している
     hostname: main
 ---
-# 10.0 側。**MAC は e6:2c:1b:1a:a0:39 に固定する。** ルーターの IPv6 ホスト公開のエントリがこの MAC を
-# 指している(docs/router.md)。指定しないと bond は links の先頭(eno1)の MAC を引き継ぎ、
-# NIC や箱(Z440)を替えた日に変わって、外からの IPv6 が全部止まる(以前、再起動で変わって実際に止まった)。
+# MAC を固定する。ルーターの IPv6 ホスト公開がこの MAC を指していて(docs/router.md)、
+# 指定しないと eno1 の MAC を引き継ぎ、NIC や箱を替えた日に外からの IPv6 が全部止まる。
 apiVersion: v1alpha1
 kind: BondConfig
 name: bond0
@@ -46,18 +30,13 @@ miimon: 100
 hardwareAddr: e6:2c:1b:1a:a0:39
 addresses:
     - address: 10.0.0.2/24
-    # 静的アドレス。プレフィックスは ISP 由来なので変わりうる。
-    # 変わったときは cloudflare-ddns(local.iface.stable:bond0)が実際のアドレスを公開する。
+    # プレフィックスは ISP 由来で変わりうる(公開は cloudflare-ddns が実際のアドレスで行う)
     - address: 240f:6d:842b:1::2/64
 routes:
-    # destination を書かないと gateway の側の既定経路になる。
-    # IPv6 の既定経路は RA 由来(`default via fe80::… proto ra`)なので書かない。
-    # 上の `accept_ra: "2"` とセット。Kubernetes が上がったあとに
-    # `talosctl get routes -o yaml` で `protocol: ra` の `dst: ""` が残っていることを確かめること
-    # (クラスタ起動前だけ見ても意味が無い。forwarding が 1 になるのはそのあと)。
+    # IPv6 の既定経路は RA 由来なので書かない(上の accept_ra とセット)
     - gateway: 10.0.0.1
 ---
-# 10.10 側。DHCP は DHCPv4Config / DHCPv6Config を書かない限り無効(明示の設定が 1 つでもあれば既定の DHCP は止まる)
+# 10.10 側。DHCP は明示の設定が無い限り無効
 apiVersion: v1alpha1
 kind: LinkConfig
 name: eno4
@@ -74,19 +53,16 @@ podSubnets:
     - fd42::/64
 serviceSubnets:
     - 10.43.0.0/16
-    # /64 は Talos に弾かれる(/108 以下が必須)。
+    # /108 以下が必須
     - fd43::/108
 ---
-# HostnameConfig は消して v1alpha1 側に書く。gen config が既定で入れる
-# `auto: stable` と `hostname` は併記できず、パッチからは `auto` を消せない
-# (`auto: null` も `$patch: replace` も効かない)。下の KubeNodeConfig と同じ手で
-# ドキュメントごと落としてから、下の machine.network.hostname を効かせる。
+# gen config が入れる `auto: stable` と `hostname` は併記できず、パッチから `auto` を消せないので
+# ドキュメントごと落として machine.network.hostname を効かせる。
 apiVersion: v1alpha1
 kind: HostnameConfig
 $patch: delete
 ---
-# ノード自身の名前解決。実機の systemd-resolved と同じ Cloudflare を見る。
-# クラスタ内の名前解決は CoreDNS、LAN 向けの公開リゾルバは AdGuard で、どちらもこれとは別。
+# ノード自身の名前解決(クラスタ内は CoreDNS、LAN 向けは AdGuard で別)
 apiVersion: v1alpha1
 kind: ResolverConfig
 nameservers:
@@ -95,31 +71,15 @@ nameservers:
     - address: 1.1.1.1
     - address: 1.0.0.1
 ---
-# ノード(containerd)から fj.doany.io のイメージを取るため、名前をノード自身(Gateway)に向ける。
-# 公開 DNS のままだと A が WAN 側の 59.140.229.91 で、ノードからだとルーターで折り返さず届かない(PC からは届く。
-# AAAA のノード自身の IPv6 なら届く)。2026-10-18 に hostNetwork の Pod から確かめた。
-# 2026-09-15〜10-18 は Gateway に届かなかったので中継(apps/forgejo/node-access.yaml の nginx)の ClusterIP に向けていた
-# (bootstrap/cilium/values.yaml の `nodePort`)。
+# ノードから fj.doany.io のイメージを取るため自分に向ける(公開 DNS の A は WAN 側で、ノードからは届かない)
 apiVersion: v1alpha1
 kind: StaticHostConfig
 name: 10.0.0.2
 hostnames:
     - fj.doany.io
 ---
-# 単一ノードなので control-plane に taint を付けない。
-#
-# `KubeNodeConfig` は既定で `node-role.kubernetes.io/control-plane: NoSchedule` を入れる。
-# ノードが 1 台しかないこのクラスタでは、toleration を持たない Pod が全部 Pending になる。
-#
-# 2026-09-08 の VM ドリルで実際に踏んだ。cilium と CoreDNS は toleration を持っているので上がり、
-# ノードは `Ready` に見えるまま、metrics-server・hubble・local-path-provisioner が
-# `no nodes available to schedule pods` で止まっていた。アプリが 1 つも上がらない。
-#
-# taints だけを消す方法が無い
-#
-# `taints` はマップなので、`taints: {}` では消えない(マージなので何も起きない)。
-# 中に `$patch: replace` を書くとキーとして残ってしまい `name "$patch" is invalid` で
-# validate が落ちる(実測)。上の HostnameConfig と同じく、
+# 単一ノードなので control-plane の NoSchedule を付けない(toleration の無い Pod が全部 Pending になる)。
+# taints はマップなので `{}` では消えず、`$patch: replace` は validate が落ちる。
 # ドキュメントごと消して labels だけ書き戻すのが唯一の手。
 apiVersion: v1alpha1
 kind: KubeNodeConfig
@@ -127,7 +87,7 @@ $patch: delete
 ---
 apiVersion: v1alpha1
 kind: KubeNodeConfig
-# labels は書き戻すこと。消したままだと `kubectl get nodes` の ROLES が `<none>` になる。
+# 消したままだと ROLES が <none> になる
 labels:
     node-role.kubernetes.io/control-plane: ""
     node.kubernetes.io/exclude-from-external-load-balancers: ""

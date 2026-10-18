@@ -1,19 +1,13 @@
-# Cilium の Helm 値。これがクラスタの土台。
-#
-# このファイルが「あるべき値」。当てるのは talos/render.sh で、ここから `helm template` して
-# machine config の inlineManifest にする(更新は render.sh → apply-config → upgrade-k8s。
-# talos/README.md「上げ方 / 当て直し方」)。`cilium-config` の ConfigMap を直接いじらない ──
-# 次の upgrade-k8s で黙って戻る(2026-09-07 まで値が git に無く、`node-port-range: "80,443"` が
-# ConfigMap 直いじりでしか入っていなかった。当時は、戻ると公開している Web が全部落ちた)。
+# Cilium の値の正本。talos/render.sh が描いて inlineManifest にする(render.sh → apply-config → upgrade-k8s)。
+# cilium-config を直接いじらない(次の upgrade-k8s で黙って戻る)。
 
-# kube-proxy は使わない(Talos 側は talos/patches/cni.yaml で止めている)。
+# kube-proxy は talos/patches/cni.yaml で止めている
 kubeProxyReplacement: true
-# KubePrism。Talos が localhost:7445 で API サーバを負荷分散する。
-# ここが違うと Cilium が API サーバに繋げず上がらない(talos-boot が流す render.sh の needle が `7445` を見ている)。
+# KubePrism。Talos が localhost:7445 で API サーバを負荷分散する。違うと Cilium が上がらない(render.sh の needle が見ている)。
 k8sServiceHost: localhost
 k8sServicePort: 7445
 
-# Talos は cgroup を自分で用意する。Cilium に自動マウントさせると衝突する。
+# Talos は cgroup を自分で用意する。自動マウントさせると衝突する。
 cgroup:
   autoMount:
     enabled: false
@@ -24,100 +18,46 @@ ipam:
 ipv6:
   enabled: true
 
-# 送信元 IP を保つのに要る(2026-09-07)。既定は iptables で SNAT していて、
-# hostPort に入ってくる IPv4 の送信元が cilium_host(10.42.0.148)に潰れていた。
-# IPv6 は素通りしていたので気づきにくい。実害:
-#
-# | | |
-# | --- | --- |
-# | NetBird の STUN(3478) | 外側アドレスを誤って返す → IPv4 の NAT 越えが成立せず relay 専用に落ちる |
-# | AdGuard(53/853) | IPv4 クライアントのクエリログとクライアント別ルールが効かない |
-# | 3proxy(3129/8444)・LiveKit(8443。Matrix の通話) | 送信元が全部同じに見える |
-#
-# `kubeProxyReplacement: true` と組み合わせるときの推奨設定でもある。
+# 送信元 IP を保つ。無いと hostPort に来る IPv4 の送信元が cilium_host に潰れる
+# (NetBird の STUN が外側アドレスを誤って返す、AdGuard のクライアント別ルールが効かない、など)。
 bpf:
   masquerade: true
 
-# 既定はどれも無効。有効にしないと Pod は Running なのにホストのポートに何も来ない
-# (eBPF なので `ss` にも現れない。確認は `cilium-dbg service list`)。
+# 既定はどれも無効。無いと Pod は Running なのにホストのポートに何も来ない(確認は `cilium-dbg service list`)。
 hostPort:
   enabled: true
 externalIPs:
   enabled: true
 nodePort:
   enabled: true
-  # 範囲は既定(30000-32767)。Gateway の Service の nodePort は API サーバが割り当てるランダムな値のままでよい。
-  # 外からの 80/443 は Envoy が hostNetwork で掴んだソケットに直接届き、ノード自身からも届く(下の gatewayAPI.hostNetwork)。
-  # k3s の頃は nodePort 80/443 の L7LB リダイレクトが経路そのもので、揃える手当てが要った(2026-10-18 に外した。#436)。
-  #
-  # **範囲を広げないこと。** 範囲に入る hostPort を Cilium は張らない(`80-32767` にしたとき
-  # AdGuard の 853、LiveKit の 8443、3proxy の 3129 が一斉に落ちた)。
+  # 範囲は既定のまま。広げないこと: 範囲に入る hostPort を Cilium は張らない(853・8443・3129 が一斉に落ちた)。
 
-# Gateway API。CRD は v1.6.1 が要る(v1.5.1 だと GatewayClass が無言で止まる)。
+# Gateway API。CRD が古いと GatewayClass が無言で止まる。
 gatewayAPI:
   enabled: true
-  # Envoy をホストネットワークで待たせる(2026-09-07)。LoadBalancer Service も
-  # nodePort も介さず、ノードの 80/443 に直接 bind する。
-  #
-  # 何が変わったか
-  #
-  # LoadBalancer Service が 1 つも無くなった。それまで Gateway は LB-IPAM から
-  # `10.10.0.53` をもらう LoadBalancer で、参照はドキュメントの中だけだった。
-  # おかげで LB-IPAM と L2 アナウンスを撤去できた(2026-09-07)。
-  # Gateway の `status.addresses` はノードの `10.0.0.2` になる。
-  #
-  # Service は消えず NodePort になる(`operator/pkg/model/translation/gateway-api/translator.go`
-  # の `toServiceType`: `if HostNetworkConfig.Enabled { return ServiceTypeNodePort }`)。nodePort の値は経路に関係しない。
-  #
-  # ポートの指定は無い。Gateway のリスナー(80 / 443)がそのままホストに bind される。
-  # `httpPort` / `httpsPort` / `sharedListenerPort` は `ingressController.hostNetwork`
-  # 側の項目で、こちらには無い(値の見た目が似ているので混同しやすい)。
+  # Envoy がノードの 80/443 に直接 bind する(Service は NodePort になるが、値は経路に関係しない)。
+  # ポートの指定は無い。httpPort などは ingressController.hostNetwork 側の項目。
   hostNetwork:
-    # 下の envoy.securityContext とセット。80/443 は特権ポートなので、
-    # NET_BIND_SERVICE が無いと `cannot bind '0.0.0.0:80': Permission denied` で
-    # 公開 Web が全部落ちる(2026-09-07 に実際にやった)。
-    # 実際に付いていることは fork 後のプロセスで確認する:
-    #   kubectl -n kube-system exec ds/cilium-envoy -- grep CapEff /proc/7/status
-    #   → 0000000000000400 (CAP_NET_BIND_SERVICE のみ。starter が他を落とす)
+    # 下の envoy.securityContext とセット。無いと 80/443 の bind が Permission denied で公開 Web が全部落ちる。
+    #   確認: kubectl -n kube-system exec ds/cilium-envoy -- grep CapEff /proc/7/status → 0000000000000400
     enabled: true
-  # gRPC を通すのに要る(2026-09-07)。既定は false で、その場合 Envoy は TLS の
-  # ALPN で `h2` を広告しない。grpc-go のクライアントは ALPN の合意を必須にしているので、
-  # NetBird のピアが `missing selected ALPN property` で管理サーバに繋げなかった。
-  #
-  # 有効にすると全リスナーが「HTTP/2 を試して、駄目なら HTTP/1.1」を広告する。
-  # つまりブラウザからの既存サイトも HTTP/2 になる。WebSocket は HTTP/2 上では
-  # 拡張 CONNECT が要るが、ブラウザはそれが使えなければ HTTP/1.1 の別接続に落ちるので
-  # ArgoCD・Infisical はそのまま動く(適用後に実際に確認した)。
-  #
-  # チャートの注記どおり appProtocol サポートも一緒に有効になるが、
-  # このクラスタに appProtocol を宣言している Service は 1 つも無いので影響しない。
+  # gRPC に要る(無いと ALPN で h2 を広告せず、NetBird のピアが `missing selected ALPN property` で繋がらない)。
+  # 全リスナーが HTTP/2 になるが、WebSocket はブラウザが HTTP/1.1 に落ちるので動く。
   enableAlpn: true
 
-# クラスタ内の通信を見る画面。Cilium 本体の hubble は元から有効(:4244 で待ち受け)で、
-# 足りていなかったのは Relay と UI の 2 Pod だけ。
-#
-# UI 自身は認証を持たない。oauth2-proxy を前段に置いて守る
-# (Cilium の Gateway には ext auth が無いので、*.s.doany.io と同じ「前段プロキシ」方式。
-# ../auth/hubble-proxy.yaml)。UI の Service を直接 HTTPRoute に繋がないこと。
+# UI 自身は認証を持たない。前段の oauth2-proxy(../auth/hubble-proxy.yaml)で守る。UI の Service を直接 HTTPRoute に繋がない。
 hubble:
   relay:
     enabled: true
   ui:
     enabled: true
-  # Hubble の TLS 証明書はクラスタの中の Job / CronJob(cilium-certgen)が作る。既定の `helm` は描くたびに
-  # CA と証明書を作り直すので、machine config に秘密鍵が載り、何も変えなくても apply-config に差分が出ていた。
+  # 証明書はクラスタ内の CronJob が作る。既定の `helm` は描くたびに作り直し、machine config に秘密鍵が載る。
   tls:
     auto:
       method: cronJob
 
-# Envoy に特権ポートを bind させるための権限。Gateway のリスナーは 80/443 で、
-# hostNetwork にするとホストのその番号を直接掴む。既定の Envoy にはこの権限が無い。
-#
-# 2 つ要る。コンテナに capability を渡すだけでは足りず、`cilium-envoy-starter` が
-# fork 後に全部落とすので、`keepCapNetBindService` で明示的に残す必要がある
-# (chart の values のコメントに書いてある)。
-#
-# 既定は `[NET_ADMIN, SYS_ADMIN]`。既定を消さないよう両方書く。
+# 特権ポートの bind。cilium-envoy-starter が fork 後に capability を落とすので keepCapNetBindService も要る。
+# 既定の NET_ADMIN / SYS_ADMIN を消さないよう両方書く。
 envoy:
   securityContext:
     capabilities:

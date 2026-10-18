@@ -1,28 +1,16 @@
-# API サーバの公開まわりと、外から入る人・CI の認証。
-#
-# なぜ要るか: cilium-drift.yml が GitHub Actions からクラスタを読む(書き込みは無い。
-# 2026-10-17 まで bootstrap-apply.yml が bootstrap/ を当てていたが ArgoCD に移した)。kubeconfig を GitHub に
-# 置くとアカウントが落ちた時点でクラスタ全部が落ちるので、**Actions の OIDC トークンを API サーバが直接受ける。**
-# 保存する秘密はゼロで、トークンは実行のたびに発行されて数分で切れる。
-# Entra の issuer は Headlamp が利用者本人の id_token を転送してくるぶん(権限の中身は
-# bootstrap/apiserver/rbac.yaml)。
+# API サーバの公開名と、外から入る CI(cilium-drift.yml の OIDC トークン)と人(Entra)の認証。
+# 権限の中身は bootstrap/apiserver/rbac.yaml。
 ---
 apiVersion: v1alpha1
 kind: KubeAPIServerConfig
-# 外から `kubectl --server=https://ks.doany.io:6443` を証明書検証つきで使うために要る。
-# Talos はマシンのアドレス・ホスト名・Kubernetes の名前は自動で入れるが、公開名は入らない。
+# 外から ks.doany.io を証明書検証つきで使うため(公開名は自動では入らない)
 certExtraSANs:
   - ks.doany.io
-# `service-node-port-range` は既定に戻した(2026-10-18。bootstrap/cilium/values.yaml の `nodePort`)。
 ---
 apiVersion: v1alpha1
 kind: KubeAuthenticationConfig
-# `configuration` の中身は Kubernetes の AuthenticationConfiguration そのもの
-# (apiVersion / kind は Talos が付けるので書かない)。
-#
-# `anonymous` を消さないこと。ここを与えると既定を置き換えるので、
-# 書き忘れると kubelet や LB のヘルスチェック(/livez /readyz /healthz)が
-# 匿名で叩けなくなり、コントロールプレーンが上がらなくなる。
+# `anonymous` を消さないこと。与えると既定を置き換えるので、書き忘れると
+# /livez /readyz /healthz を匿名で叩けずコントロールプレーンが上がらない。
 configuration:
   anonymous:
     enabled: true
@@ -33,39 +21,31 @@ configuration:
   jwt:
     - issuer:
         url: https://token.actions.githubusercontent.com
-        # ワークフロー側で `&audience=` に同じ値を指定する。既定の audience
-        # (リポジトリ所有者の URL)のままにしないこと — 他のワークフローと共有されるため
+        # 既定の audience(所有者の URL)は他のワークフローと共有されるので使わない
         audiences:
           - https://ks.doany.io
       claimMappings:
-        # `sub` をそのまま使わない。`repo:danything@143234231/gitops@1311609465:ref:…` のように
-        # 組織 ID とリポジトリ ID が埋め込まれる形に変わっており、形式が変わると RBAC が黙って
-        # 効かなくなる。要る情報から組み立てる(例: gha:danything/gitops:refs/heads/main)。
+        # `sub` は形式が変わると RBAC が黙って効かなくなるので、要る情報から組み立てる
         username:
           expression: '"gha:" + claims.repository + ":" + claims.ref'
-      # issuer は世界中の GitHub Actions が使う公開の IdP。issuer を信じるだけでは誰でも入れる。
-      # 効いているのはここで、緩めると即座に穴になる。
+      # issuer は世界中の GitHub Actions が使う公開の IdP。効いているのはここで、緩めると即座に穴になる。
       claimValidationRules:
         - expression: 'claims.repository == "danything/gitops"'
           message: "danything/gitops 以外は受け付けない"
         - expression: 'claims.ref == "refs/heads/main"'
           message: "main 以外のブランチからは受け付けない"
-        # ワークフローのファイルまで固定する。許すのは cilium-drift.yml だけ(権限は cilium-config の get だけ)。
         - expression: >-
             claims.workflow_ref.startsWith("danything/gitops/.github/workflows/cilium-drift.yml@")
           message: "cilium-drift.yml 以外のワークフローからは受け付けない"
-    # Entra ID。Headlamp が利用者本人のトークンを API サーバへ転送する(Headlamp 自身は権限を持たない)。
+    # Entra ID。Headlamp が利用者本人の id_token を転送してくる。
     - issuer:
         url: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
-        # oauth2-proxy と同じアプリ登録。**この組で出た id_token はどれもクラスタの資格情報になる**
-        # (a.doany.io や hl.doany.io の認証で出たものも通る)。分けたくなったら audiences を差し替える。
+        # oauth2-proxy と同じアプリ登録なので、この組で出た id_token はどれもクラスタの資格情報になる
         audiences:
           - b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
       claimMappings:
-        # gha: と混ざらないように接頭辞を付ける。
         username:
           expression: '"entra:" + claims.preferred_username'
-        # アプリロール admin を持つ人だけ entra:admin、それ以外は entra:viewer。
-        # ロールが 1 つも無い利用者には roles クレーム自体が無いので has() で守る。
+        # ロールが無い利用者には roles クレーム自体が無いので has() で守る
         groups:
           expression: '(has(claims.roles) && "admin" in claims.roles) ? ["entra:admin"] : ["entra:viewer"]'

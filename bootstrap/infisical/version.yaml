@@ -1,3 +1,2 @@
-# infisical-standalone の chart の版。読むのは talos/render.sh(repo もこの行の registryUrl から読む)。
 # renovate: datasource=helm depName=infisical-standalone registryUrl=https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
 version: 1.11.0

@@ -1,48 +1,33 @@
-// restic の置き場(R2 の doany-restic)の設定。**ここが正本。**
-//
-// 変えるときはこのファイルを直して PR を出す。PR に preview の差分が付き、main に入ると up が当たる。
-// Cloudflare の画面や `cf` で直接いじると、次の週次の preview(--refresh)がずれとして落ちる。
-//
-// 持っているのは「壊れると restic のリポジトリが黙って壊れる / 外に漏れる」設定だけ。
-// Pulumi で表せない残り(カスタムドメインが付いていないこと、容量)は report.ts。
+// restic の置き場(R2 の doany-restic)の設定の正本。直接いじると週次の preview(--refresh)が落ちる。
+// Pulumi で表せない残り(カスタムドメイン・容量)は report.ts。
 
 import * as cloudflare from "@pulumi/cloudflare";
 
-// Entra のアプリ登録のリダイレクト URI(entra.ts)
 import "./entra.ts";
-// この Pulumi の CI が Entra に入るための信頼の設定(entra-ci.ts)
 import "./entra-ci.ts";
-// Cloudflare の通知を Matrix に(notifications.ts)
 import "./notifications.ts";
-// doany.io の DNS(ExternalDNS が作らないもの)とゾーンの設定(dns.ts)
 import "./dns.ts";
-// NetBird の DNS・ネットワーク・ルート・ポリシー(netbird.ts)
 import "./netbird.ts";
 
-// アカウント ID は git に置かない(endpoint と同じ扱い。apps/k8up/README.md)。CI は secrets から渡す
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
 if (!accountId) throw new Error("CLOUDFLARE_ACCOUNT_ID が要る");
 
 const name = "doany-restic";
 
-// バケット本体。**protect を外さないこと** ── 外すとコードの間違い 1 つでバックアップが丸ごと消える。
-// 2026-09-06 に手で作ったものを import で取り込んだ(import は取り込み済みなら何もしない)。
+// protect を外さないこと(コードの間違い 1 つでバックアップが丸ごと消える)
 const bucket = new cloudflare.R2Bucket(
   name,
   {
     accountId,
     name,
-    // docs/decisions.md「ツール選定(比較の結論)」(R2 のバケット doany-restic、APAC、Standard)
     location: "apac",
     storageClass: "Standard",
   },
   { protect: true, import: `${accountId}/${name}/default` },
 );
 
-// **消す・移すルールは 1 本も置かない。** restic の pack が消えるとリポジトリが壊れ、
-// `restic check` までは誰も気づかない。保持は restic の forget/prune だけで決める。
-// Infrequent Access への移行も同じ扱い ── 最低保存期間の課金と、check/prune の読み出し課金が乗る。
-// 残すのは R2 の既定ルール(失敗したマルチパートの残骸を 7 日で掃除する)だけ。
+// 消す・移すルールは置かない(pack が消えるとリポジトリが黙って壊れる。IA は課金が乗る)。
+// 残すのは失敗したマルチパートの掃除だけ。
 new cloudflare.R2BucketLifecycle(name, {
   accountId,
   bucketName: bucket.name,

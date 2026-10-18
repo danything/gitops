@@ -1,6 +1,4 @@
-# 手元で使う運用のコマンド一式(tools/README.md)。手元には Docker だけを入れ、版はここで固定する。
-# 版は Renovate が上げる(`# renovate:` の次の ARG。renovate.json の customManagers)。
-# kubectl と talosctl はノードの版と揃えたいので、Renovate では talos の群(自動マージしない)。
+# 手元で使う運用のコマンド一式(tools/README.md)。版は Renovate が `# renovate:` の次の ARG を上げる。
 FROM oven/bun:1.4.3 AS bun
 
 FROM golang:1.27-trixie AS age
@@ -32,9 +30,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl bzip2 git openssh-client less openssl \
  && rm -rf /var/lib/apt/lists/*
 
-# **入れるものは全部、公式が出しているチェックサムと照らし合わせる**(2026-10-07)。sops は age 鍵を、infisical は
-# 秘密を扱うので、取得元やミラーでの差し替えに気づけるようにする。get は「ファイルを取る」、ok は
-# 「チェックサムのファイル(ハッシュ  ファイル名 の形)に照らす」。一致しなければ組み立てごと止まる
+# 入れるものは全部、公式のチェックサムと照らす(ok は「ハッシュ  ファイル名」の形のファイルに照らす)
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     mkdir /tmp/dl && cd /tmp/dl; \
@@ -55,7 +51,7 @@ RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     ok "$gh/restic/restic/releases/download/${RESTIC_VERSION}/SHA256SUMS" "restic_${RESTIC_VERSION#v}_linux_$a.bz2"; \
     get "$gh/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION}-linux-$p.tar.gz"; \
     ok "$gh/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION#v}-checksums.txt" "pulumi-${PULUMI_VERSION}-linux-$p.tar.gz"; \
-    # kubectl・talosctl・helm の本物は libexec に置く。/usr/local/bin のほうは creds.sh(下)
+    # kubectl・talosctl・helm の本物は libexec。/usr/local/bin のほうは creds.sh
     mkdir -p /usr/local/libexec/gitops; \
     install -m 755 kubectl /usr/local/libexec/gitops/kubectl; \
     install -m 755 "talosctl-linux-$a" /usr/local/libexec/gitops/talosctl; \
@@ -63,22 +59,19 @@ RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     install -m 755 "sops-${SOPS_VERSION}.linux.$a" /usr/local/bin/sops; \
     tar -xzf "cli_${INFISICAL_VERSION#v}_linux_$a.tar.gz" -C /usr/local/bin infisical; \
     bunzip2 -c "restic_${RESTIC_VERSION#v}_linux_$a.bz2" > /usr/local/bin/restic; \
-    # Pulumi は本体と bun・Node.js の言語ホストだけ。ほかの言語のぶんは 200MB 近いので入れない。
-    # bun の言語ホストが無いと runtime: bun のプロジェクトで SDK を作れない (pulumi install。2026-10-07 まで抜けていた)
+    # Pulumi は本体と bun・Node.js の言語ホストだけ(bun が無いと pulumi install で SDK を作れない)
     tar -xzf "pulumi-${PULUMI_VERSION}-linux-$p.tar.gz" --strip-components=1 -C /usr/local/bin pulumi/pulumi pulumi/pulumi-language-bun pulumi/pulumi-language-nodejs; \
     chmod +x /usr/local/bin/* /usr/local/libexec/gitops/*; \
     cd / && rm -r /tmp/dl
 
-# age はチェックサムのファイルを出していない(sigsum の証明だけ)。Go のモジュールとして入れ、Go の公開の
-# チェックサムの台帳(sum.golang.org)で中身を確かめる
+# age はチェックサムのファイルを出していないので、Go のモジュールとして入れ sum.golang.org で確かめる
 COPY --from=age /go/bin/age /go/bin/age-keygen /usr/local/bin/
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN npm install -g "cf@${CF_VERSION}" && npm cache clean --force
 
-# kubectl・talosctl・helm はクラスタに繋ぐときだけ、暗号化した資格情報を tmpfs に戻して渡す(creds.sh)
+# クラスタに繋ぐときだけ資格情報を tmpfs に作って渡す
 COPY --chmod=755 creds.sh /usr/local/bin/creds.sh
 RUN for t in kubectl talosctl helm; do ln -s creds.sh "/usr/local/bin/$t"; done
 
-# HOME はリポジトリの .home/(compose.yaml)
 WORKDIR /repo

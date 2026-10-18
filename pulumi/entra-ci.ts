@@ -1,14 +1,6 @@
-// この Pulumi 自身が Entra に入るための、CI 用のアプリ登録 2 つの「信頼の設定」(ワイルドカード ID のフェデレーション)。
-// GitHub Actions のどの実行に、どのアプリ登録としてトークンを出すかを決める(README.md「Entra」)。
-//
-// 2026-10-06 に `az` で手で作り、subject の形を間違えて AADSTS700213 で入れなかったことがある。git で持つ。
-// 2026-10-07 に取り込んだ。書き換えられるよう、apply のサービスプリンシパルを 2 つのアプリ登録の所有者にした
-// (Application.ReadWrite.OwnedBy は自分が所有者のものしか書けない)。
-//
-// **apply の信頼の設定は消せないように protect する。** 消すと apply が Entra に入れなくなり、自分では直せない
-// (直すには管理者が az で作り直す)。preview のほうも、壊すと PR の preview が落ちる。
-//
-// アプリ登録そのもの(名前・API の権限)は持たない。Graph の権限の付与は管理者の同意が要り、CI の権限では書けない。
+// この Pulumi の CI が Entra に入るための、アプリ登録 2 つの「信頼の設定」(README.md「Entra」)。
+// protect する: apply のものを消すと apply が Entra に入れなくなり、自分では直せない。
+// アプリ登録そのもの(名前・API の権限)は CI の権限では書けないので持たない。
 
 import * as azuread from "@pulumi/azuread";
 

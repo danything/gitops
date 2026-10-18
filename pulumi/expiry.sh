@@ -1,14 +1,7 @@
 #!/usr/bin/env bash
-# 鍵の期限を見て、30 日を切ったか切れていたら Matrix の部屋 server に知らせる。pulumi.yml の expiry ジョブから呼ぶ。
-#
-# 期限を API から読めるものだけを見る。日付を手で書くファイルは置かない (書き忘れと書き換え忘れが起きる)。
-# **鍵は自分の期限だけを読む。** NetBird の Auditor は利用者の一覧は読めても他人のトークンは読めない (403) ので、
-# preview 用と apply 用をそれぞれのジョブで使う (KEY=preview|apply)。
-#   - NetBird のサービスユーザーのトークン (README.md「NetBird」)
-#   - Cloudflare の API トークン (期限が付いていれば)
-#   - Entra のアプリ登録のクライアントシークレットと証明書 (テナントの全部。共用の Main が切れると SSO が全部止まる)。
-#     preview のジョブだけで見る (az login 済みであること)
-# 期限の無いもの (WINGET_TOKEN など) は対象外。
+# 鍵の期限を API から読み、WARN_DAYS 日を切ったか切れていたら Matrix に知らせる (pulumi.yml の expiry)。
+# 鍵は自分の期限だけを読む (KEY=preview|apply): NetBird のトークン、Cloudflare の API トークン、
+# Entra のテナントの全シークレットと証明書 (preview だけ。az login 済みであること)。
 #
 # env: KEY NB_PAT CF_TOKEN CF_ACCOUNT WEBHOOK DRY_RUN REPORT_ALL WARN_DAYS
 set -euo pipefail

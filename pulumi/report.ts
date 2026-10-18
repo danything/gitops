@@ -1,9 +1,6 @@
-// Pulumi では表せない 2 つを見る。毎週の preview と一緒に CI が流す。**読むだけ。**
-//
-//   - カスタムドメインが付いていないこと(R2CustomDomain は「付いているもの」しか持てず、
-//     「付いていない」を宣言できない)
-//   - 容量(アカウント全体。ズレではないので落とさず、Summary に記録するだけ)
-//
+// Pulumi で表せない 2 つを読むだけで見る(毎週の preview と一緒に CI が流す):
+//   - カスタムドメインが付いていないこと(R2CustomDomain は「付いていない」を宣言できない)
+//   - 容量(落とさず Summary に記録するだけ)
 //   cd pulumi && bun install && CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… bun report.ts
 
 import { execFileSync } from "node:child_process";
@@ -11,8 +8,7 @@ import { appendFileSync } from "node:fs";
 
 const BUCKETS = ["doany-restic"];
 
-// cf は自分と同じランタイム(bun)で起動する。cf の bin は `#!/usr/bin/env node` なので、
-// そのまま起動すると node を探しに行く。bun の上で cf が動くことは 2026-10-05 に確認済み。
+// cf の bin は `#!/usr/bin/env node` なので、自分と同じランタイム(bun)で起動する
 const CF = new URL("./node_modules/.bin/cf", import.meta.url).pathname;
 const GHA = !!process.env.GITHUB_ACTIONS;
 

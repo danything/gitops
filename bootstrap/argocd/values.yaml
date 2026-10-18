@@ -1,38 +1,24 @@
-# argo-cd の chart の値。版は version.yaml、秘密の値(通知の webhook と GitHub App の鍵)は
-# secret-values.sops.yaml(SOPS)。描いて machine config に載せるのは talos/render.sh。
-#
-# CRD は chart から描かせない。3 つで 1.83 MB あり、描き出しの 95%。
-# render.sh が `KubeExternalManifestConfig` で URL を渡す
-# (なぜ URL なのかは docs/decisions.md「層の分け方」)。
+# argo-cd の chart の値。秘密の値は secret-values.sops.yaml。描いて machine config に載せるのは talos/render.sh。
+# CRD は描かせない(1.83 MB で描き出しの 95%)。render.sh が URL で渡す。
 crds:
     install: false
-# chart の既定は ecr-public.aws.com/docker/library/redis。匿名の取得は共有 IP だと絞られ、
-# talos-boot で ImagePullBackOff になった(2026-10-17)。mirror.gcr.io は Docker Hub の
-# pull-through キャッシュで、中身は同じ(digest を確かめた)。tag は chart の既定に合わせてある。
-# **chart を上げる PR では、この tag を新しい chart の既定と見比べる**(上書きしたので chart に付いてこない)。
-# Renovate は Docker Hub の側で版を引く(../../renovate.json の mirror.gcr.io の規則)。
+# 既定の ecr-public は匿名の取得が絞られて ImagePullBackOff になる。mirror.gcr.io は Docker Hub のキャッシュ。
+# 上書きしたので chart に付いてこない。chart を上げる PR ではこの tag を新しい chart の既定と見比べる。
 redis:
     image:
         repository: mirror.gcr.io/library/redis
         tag: 8.10.2-alpine
-# Native OIDC straight to Entra ID (same tenant/app registration as
-# auth/deployment.yaml) instead of Dex.
+# Dex を使わず Entra ID に直接 OIDC(auth/deployment.yaml と同じアプリ登録)
 dex:
     enabled: false
 configs:
     params:
-        # TLS is terminated at the Cilium Gateway (cert-manager), so argocd-server
-        # talks plain HTTP internally to avoid a double-TLS redirect loop.
+        # TLS は Gateway で終端する(二重 TLS のリダイレクトループを避ける)
         server.insecure: true
     cm:
         url: https://ac.doany.io
-        # Local admin superuser disabled now that Entra ID OIDC login works;
-        # the Entra "admins" group has role:admin via RBAC below (shared
-        # with auth/deployment.yaml's oauth2-proxy --allowed-groups).
+        # ローカルの admin は使わない。chart の既定 admin.enabled: true も上書きする
         accounts.admin.enabled: "false"
-        # The chart default is admin.enabled: true; without this override every
-        # helm upgrade would re-enable the admin login it fought argocd-server's
-        # field ownership over.
         admin.enabled: "false"
         oidc.config: |
             name: Microsoft Entra ID
@@ -44,10 +30,8 @@ configs:
               - openid
               - profile
               - email
-        # Secret は ArgoCD の管理対象から外す。git に平文 Secret は置かない方針なので ArgoCD が Secret を
-        # 作ることは無く、一方で Infisical operator が作る Secret には CR からコピーされた tracking-id が
-        # 付くため、ArgoCD が「git に無い管理対象」と見なして sync 時に prune してしまう
-        # (2026-09-06 の復元リハーサルで踏んだ)。
+        # Secret は管理対象から外す。Infisical operator の Secret は CR の tracking-id がコピーされ、
+        # 外さないと sync で prune される。
         resource.exclusions: |
             - apiGroups: [""]
               kinds: ["Secret"]
@@ -59,32 +43,16 @@ configs:
         scopes: '[roles, email]'
 notifications:
     secret:
-        # Helm's own empty placeholder secret would fight any externally
-        # managed argocd-notifications-secret for ownership, so let Helm skip it.
+        # helm の空の Secret が外で管理する argocd-notifications-secret と取り合う
         create: false
-    # notifiers/templates/triggers/subscriptions live here (not in a
-    # separately-applied ConfigMap) because the chart owns and re-renders
-    # argocd-notifications-cm on every release sync with notifications.cm.create
-    # true by default; anything applied out-of-band gets wiped the next time
-    # the chart is re-rendered.
-    #
-    # notifiers は secret-values.sops.yaml(`service.webhook.mattermost`)。送り先は Matrix の部屋 argocd
-    # (スペース「通知」)の hookshot の webhook(2026-10-06 に Mattermost → Zulip → Matrix と移した)。
-    # 名前は mattermost のまま ── テンプレートと subscriptions が参照している。
-    # 送るのは {"text": …}(Slack 互換)。hookshot の変換のスクリプト(apps/matrix/hookshot.yaml)が読む
+    # 通知の設定は chart が argocd-notifications-cm を描き直すのでここに書く(別に当てると消える)。
+    # notifiers は secret-values.sops.yaml。送り先は Matrix の hookshot だが、名前は mattermost のまま
+    # (テンプレートと subscriptions が参照している)。
     templates:
-        # Succeeded is back: Progressing -> Healthy flips too fast to read as a
-        # "deploy complete" signal, so sync-result gives that its own clear ping.
         template.app-sync-result: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.operationState.phase}} {{if eq .app.status.operationState.phase \"Succeeded\"}}✅{{else if eq .app.status.operationState.phase \"Running\"}}\U0001F680{{else}}❌{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
-        # Shared by both on-health-change branches, so all six health.status values
-        # need an emoji here (Healthy/Progressing included).
         template.app-health-status: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.health.status}} {{if eq .app.status.health.status \"Healthy\"}}\U0001F49A{{else if eq .app.status.health.status \"Progressing\"}}\U0001F504{{else if eq .app.status.health.status \"Degraded\"}}\U0001F494{{else if eq .app.status.health.status \"Suspended\"}}⏸️{{else if eq .app.status.health.status \"Missing\"}}❓{{else}}❔{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
     triggers:
-        # 'Running' sits between syncs as an intermediate phase, so this condition
-        # still flips false -> true on every new sync even though it's one `when`.
-        # Running and Succeeded both get oncePer (like the Healthy health-status
-        # branch below) so they fire once per revision instead of on every
-        # reconcile, while Error/Failed still notify every time.
+        # oncePer で revision ごとに 1 回。Error/Failed は毎回
         trigger.on-sync-result: |
             - when: app.status.operationState.phase == 'Running'
               oncePer: app.status.sync.revision
@@ -94,54 +62,26 @@ notifications:
             - when: app.status.operationState.phase == 'Succeeded'
               oncePer: app.status.sync.revision
               send: [app-sync-result]
-        # Healthy dropped: on-sync-result's Succeeded already covers the
-        # "deploy completed fine" case, so this stays for anomalies only.
+        # Healthy は on-sync-result の Succeeded で足りる
         trigger.on-health-change: |
             - when: app.status.health.status == 'Progressing'
               oncePer: app.status.sync.revision
               send: [app-health-status]
             - when: app.status.health.status in ['Degraded', 'Suspended', 'Missing', 'Unknown']
               send: [app-health-status]
-    # Applies to every Application automatically (current and future, eg. via
-    # ApplicationSet) without needing per-app annotations.
     subscriptions:
         - recipients:
             - mattermost
           triggers:
             - on-sync-result
             - on-health-change
-# The seed that makes ArgoCD start managing itself. It rides along with this
-# chart install precisely so there's nothing extra to kubectl apply. The
-# chart renders each entry through `tpl`, so anything put here must not
-# contain Go template braces -- the ApplicationSet does, which is why it
-# lives in argocd/repos.yaml and is pulled from git instead.
+# ArgoCD が自分を管理し始める種。chart は各要素を `tpl` に通すので、Go テンプレートを含むもの
+# (ApplicationSet)は repos.yaml に置く。
 extraObjects:
-    # The GitHub App credential that lets ArgoCD read danything/* -- both the
-    # private repos (this one included) and the SCM Provider generator's org
-    # scan in argocd/repos.yaml. It genuinely can't be fetched from
-    # git, since it's what makes fetching from git possible, so it ships with
-    # the install instead. Created through the UI originally, hence the
-    # generated name: keeping that name means applying this adopts the
-    # existing secret instead of leaving two sets of credentials for the same
-    # URL behind. Plaintext because this is the one credential that can't
-    # come from Infisical: ArgoCD syncing is how Infisical itself gets
-    # deployed and recovered -- this repo is private.
-    #
-    # 中身は下の githubAppRepoCreds(鍵だけ secret-values.sops.yaml にあり、helm が map として重ねる)。
-    # extraObjects はリストなので、そのままでは値ファイルを重ねると丸ごと置き換わる。
-    # 文字列の要素は chart が `tpl` に通すので、ここで toYaml して 1 つの要素にする。
+    # danything/* を読む GitHub App の repo-creds(git から取れないのでここに置く)。名前は UI で作ったときのもの。
+    # 鍵は secret-values.sops.yaml。リストは値ファイルを重ねると丸ごと置き換わるので、map を toYaml して 1 要素にする。
     - '{{ toYaml .Values.githubAppRepoCreds }}'
-    # The anchor, and the only thing here that has to be applied by hand
-    # (which the ArgoCD install already is). It syncs argocd/repos.yaml out of
-    # this repo, that ApplicationSet discovers the app repos, and each repo's
-    # own argocd.yaml decides how it gets deployed -- so changing any of that
-    # is a push, not a kubectl command.
-    #
-    # An Application syncs a whole directory, and this directory also holds
-    # the values that install ArgoCD, so the include below is what keeps
-    # ArgoCD out of its own management. Widening it (say to '*.yaml') would
-    # put this file under prune/selfHeal: deleting it would then uninstall
-    # ArgoCD, and values couldn't be tried out with kubectl any more.
+    # app-of-apps。include を広げると values.yaml まで prune/selfHeal の対象になり、消すと ArgoCD が消える。
     - apiVersion: argoproj.io/v1alpha1
       kind: Application
       metadata:

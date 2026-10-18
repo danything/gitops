@@ -1,9 +1,5 @@
-# **renovate.json を壊さないための見張り。**
-#
-# Renovate は**知らないトップレベルのキーをエラーにする。** `ignorePathsDescription`
-# のような「それっぽい自己文書化のキー」も通らない(2026-09-08 に実際に書いて、
-# レビューで指摘されるまで気づかなかった)。**壊れていても Renovate が黙って
-# 動かなくなるだけ**で、PR も来なくなるので気づきにくい。
+# renovate.json の見張り。壊れていても Renovate は黙って止まるだけで気づきにくい
+# (知らないキーは `ignorePathsDescription` のようなものもエラー)。
 name: renovate validate
 
 on:
@@ -27,6 +23,5 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.22.0
-      # 版は固定しない ── **Renovate 本体が受け付けるか**を見たいので、
-      # そのときの最新の判定に合わせるのが正しい。
+      # 版は固定しない(最新の Renovate が受け付けるかを見る)
       - run: npx --yes --package renovate renovate-config-validator --strict

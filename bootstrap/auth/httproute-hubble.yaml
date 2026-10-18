@@ -1,8 +1,4 @@
-# 公開経路。証明書は Gateway([../gateway/](../gateway/))のリスナーに付いているので指定しない。
-# 当てるのは ArgoCD の Application `bootstrap`(../README.md「公開経路(HTTPRoute)もここにある」)。
-#
-# backend は Hubble UI ではなく oauth2-proxy。UI 自身は認証を持たないので
-# 直接繋いではいけない(bootstrap/auth/hubble-proxy.yaml)。
+# backend は oauth2-proxy(Hubble UI は認証を持たないので直接繋がない)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

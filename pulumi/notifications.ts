@@ -1,8 +1,5 @@
-// Cloudflare の通知を Matrix の部屋 server(スペース「通知」)に流す(hookshot の汎用の受け口 `cloudflare`。apps/matrix/hookshot.yaml)。
-//
-// 受け口の URL は ID を含むので git に置かない。CI は secrets の CLOUDFLARE_NOTIFY_WEBHOOK_URL から渡す
-// (値は Infisical /matrix/matrix の hook-cloudflare から作った https://m.doany.io/webhook/<ID>)。
-// Cloudflare の通知の本文は `text` に来るので、hookshot の slack のスクリプトがそのまま読む。
+// Cloudflare の通知を Matrix の部屋 server に流す(hookshot。apps/matrix/hookshot.yaml)。
+// 受け口の URL は ID を含むので secrets(値は Infisical /matrix/matrix の hook-cloudflare から作る)。
 
 import * as cloudflare from "@pulumi/cloudflare";
 import * as pulumi from "@pulumi/pulumi";

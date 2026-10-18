@@ -1,37 +1,7 @@
-# **Cloudflare・Entra・NetBird の設定を Pulumi で当てる。** 中身は pulumi/。
-#
-#   PR       → preview。差分を PR にコメントする(読み取りの鍵だけ)
-#   main     → up。**マージした時点で当たる**(書き込みの鍵は Environment `pulumi-apply` に置き、
-#              main からしか使えない)
-#   毎週月曜 → preview --refresh --expect-no-changes。Cloudflare 側を直接いじったら落ちる。
-#              Pulumi で表せない残り(カスタムドメイン・容量)も pulumi/report.ts で見る
-#              鍵の期限も見る(pulumi/expiry.sh。30 日を切ったら Matrix の部屋 server に投稿)
-#
-# 書き込みの鍵は R2 の設定を書き換えられる(= バックアップのバケットを消せる)。
-# 守りは 2 つ: Environment で main に限ること、doany-restic に `protect` が付いていること
-# (外すと Pulumi は消すのを拒否しなくなる。pulumi/index.ts)。
-#
-# 秘密(リポジトリの Actions secrets):
-#   PULUMI_BACKEND_URL        state の置き場(R2 の doany-pulumi。endpoint にアカウント ID が入るので secrets)
-#   PULUMI_CONFIG_PASSPHRASE  state の暗号化。state に秘密は入れていないので、失くしたら作り直せる(pulumi/README.md)
-#   CLOUDFLARE_ACCOUNT_ID
-#   PREVIEW_CLOUDFLARE_API_TOKEN / PREVIEW_AWS_ACCESS_KEY_ID / PREVIEW_AWS_SECRET_ACCESS_KEY
-#                             R2 の設定の読み取り + doany-pulumi の読み書き(state のロックに要る)
-#   PREVIEW_NB_PAT            NetBird の読み取り (サービスユーザー gitops-pulumi-preview、Auditor)
-#   MATRIX_SERVER_WEBHOOK_URL 鍵の期限の投稿先(expiry)
-# Environment `pulumi-apply` の秘密:
-#   CLOUDFLARE_API_TOKEN / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
-#                             R2 の設定の書き込み + doany-pulumi の読み書き
-#   NB_PAT                    NetBird の書き込み (サービスユーザー gitops-pulumi-apply、Admin)
-# AWS_* は state の置き場(R2 の S3 API)のため。値は同じ API トークンから作る(ID と値の sha256)。
-#
-# Entra(pulumi/entra.ts)には**鍵を置かずに**入る。GitHub Actions の OIDC トークンを Entra の
-# ワークロード ID のフェデレーションで受ける(id-token: write が要る)。ID は秘密ではないので Variables:
-#   AZURE_TENANT_ID           リポジトリの Variables
-#   PREVIEW_AZURE_CLIENT_ID   リポジトリの Variables。アプリ登録「gitops pulumi preview (Entra read)」
-#                             (Application.Read.All。PR と main から入れる)
-#   AZURE_CLIENT_ID           Environment `pulumi-apply` の Variables。「gitops pulumi apply (Entra write)」
-#                             (Application.ReadWrite.OwnedBy。所有者になっている共用のアプリ登録しか書けない)
+# Cloudflare・Entra・NetBird を Pulumi で当てる(pulumi/)。PR → preview、main → up、
+# 毎週 → refresh して差分があれば落とす + report.ts + 鍵の期限。
+# 書き込みの鍵はバックアップのバケットを消せるので Environment `pulumi-apply`(main だけ)に置く。
+# 秘密と Variables の一覧は pulumi/README.md。
 name: pulumi
 
 on:
@@ -59,11 +29,8 @@ env:
   PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
   PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-  # doany.io のゾーン(dns.ts)。アカウント ID と同じく git に置かない
   CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-  # Cloudflare の通知の送り先(notifications.ts)。hookshot の受け口の ID を含むので secrets に
   CLOUDFLARE_NOTIFY_WEBHOOK_URL: ${{ secrets.CLOUDFLARE_NOTIFY_WEBHOOK_URL }}
-  # cf / Pulumi のテレメトリを切る
   DO_NOT_TRACK: "1"
   PULUMI_SKIP_UPDATE_CHECK: "true"
   # azuread provider は GitHub Actions の OIDC トークン(ACTIONS_ID_TOKEN_REQUEST_*)を自分で拾う
@@ -74,27 +41,23 @@ jobs:
   preview:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    # 同じ PR の古い preview は捨ててよい。up とは別の列にする ── 1 列にまとめると、GitHub は
-    # 待ちを 1 件しか持たないので、マージ後の up が後から来た preview に押し出されて消えうる
+    # up と別の列にする(待ちは 1 件だけなので、up が preview に押し出されうる)
     concurrency:
       group: pulumi-preview-${{ github.ref }}
       cancel-in-progress: true
     permissions:
       contents: read
-      # 差分を PR にコメントする
       pull-requests: write
       # Entra へ OIDC で入る
       id-token: write
     env:
       ARM_CLIENT_ID: ${{ vars.PREVIEW_AZURE_CLIENT_ID }}
-      # NetBird のサービスユーザー gitops-pulumi-preview (Auditor、読み取りだけ)
       NB_PAT: ${{ secrets.PREVIEW_NB_PAT }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.PREVIEW_AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.PREVIEW_AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v7
-      # bun・Pulumi の CLI・SDK・型の確認(up と同じ)
       - uses: ./.github/actions/pulumi-setup
 
       - uses: pulumi/actions@v7
@@ -106,7 +69,7 @@ jobs:
           pulumi-version-file: pulumi/.pulumi-version
           comment-on-pr: true
           edit-pr-comment: true
-          # 毎週の実行(と手動実行)は実物を読み直し、1 つでも差分があれば落とす(= Cloudflare 側を直接いじった)
+          # 週次と手動は実物を読み直し、差分があれば落とす
           refresh: ${{ github.event_name != 'pull_request' }}
           expect-no-changes: ${{ github.event_name != 'pull_request' }}
 
@@ -119,19 +82,15 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: pulumi-apply
-    # 走っている up は止めない(途中で切ると state がロックされたまま残る)。待ちが押し出されても、
-    # 残るのは新しい main なので取りこぼしは無い。preview と同時に走ると片方がロックで落ちるが、
-    # state は壊れない(落ちた方を流し直す)
+    # 走っている up は止めない(途中で切ると state がロックされたまま残る)
     concurrency:
       group: pulumi-up
       cancel-in-progress: false
     permissions:
       contents: read
-      # Entra へ OIDC で入る
       id-token: write
     env:
       ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      # NetBird のサービスユーザー gitops-pulumi-apply (Admin)
       NB_PAT: ${{ secrets.NB_PAT }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -149,10 +108,8 @@ jobs:
           pulumi-version-file: pulumi/.pulumi-version
           always-include-summary: true
 
-  # 鍵の期限(pulumi/expiry.sh)。30 日を切ったか切れていたら Matrix の部屋 server に投稿する。
-  # PR では投稿せずログに出すだけ。手動実行で `report` を付けると全部を投稿する。
-  # 鍵は自分の期限しか読めないので、preview 用と apply 用をそれぞれで見る。apply 用は Environment `pulumi-apply`
-  # (main だけ)にあるので PR では見ない。
+  # 鍵の期限。PR ではログだけ。鍵は自分の期限しか読めないので preview 用と apply 用を別々に見る
+  # (apply 用は main だけ)。
   expiry:
     if: github.event_name != 'push'
     strategy:
@@ -163,14 +120,12 @@ jobs:
     environment: ${{ matrix.key == 'apply' && 'pulumi-apply' || '' }}
     permissions:
       contents: read
-      # Entra へ OIDC で入る (preview だけ)
       id-token: write
     env:
       KEY: ${{ matrix.key }}
       NB_PAT: ${{ matrix.key == 'apply' && secrets.NB_PAT || secrets.PREVIEW_NB_PAT }}
       CF_TOKEN: ${{ matrix.key == 'apply' && secrets.CLOUDFLARE_API_TOKEN || secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
       CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      # hookshot の部屋 server の受け口 (https://m.doany.io/webhook/<Infisical /matrix/matrix の hook-server>)
       WEBHOOK: ${{ secrets.MATRIX_SERVER_WEBHOOK_URL }}
       DRY_RUN: ${{ github.event_name == 'pull_request' }}
       REPORT_ALL: ${{ inputs.report == true }}
@@ -184,7 +139,7 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
       - run: pulumi/expiry.sh
-      # 確かめられなかったことも知らせる (鍵が切れて 401 になったときなど。黙って落ちると気づかない)
+      # 確かめられなかったことも知らせる(鍵が切れて 401 など)
       - if: failure() && github.event_name != 'pull_request'
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
