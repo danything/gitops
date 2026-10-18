@@ -2,12 +2,12 @@
 
 ## いまの決まり
 
-**認可はアプリロールで決める。テナントに認可用のグループは無い**(グループクレームは 2026-09-07 に消し、`admins` グループも削除した)。
+**認可はアプリロールで決める。テナントに認可用のグループは無い**。
 共用のアプリ登録 `Main`(client id `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`)にロール `Admins`(値 `admin`)があり、
 各アプリはトークンの `roles` に `admin` があれば管理者にする。ロールとリダイレクト URI は Pulumi が持つ([../pulumi/entra.ts](../pulumi/entra.ts))。
 
 - **ロールはユーザーに直接割り当てる。** テナントに Entra ID P1/P2 が無く、グループ単位の割り当てができない。管理者が増えたらその人にも割り当てる
-- **`appRoleAssignmentRequired` は `false` のまま**(2026-10-07、本人)。`はい` にすると、ロールの無い人が `Main` の後ろのアプリ全部から締め出され、
+- **`appRoleAssignmentRequired` は `false` のまま**(本人)。`はい` にすると、ロールの無い人が `Main` の後ろのアプリ全部から締め出され、
   人を足すたびに割り当てが要る。誰が入れるかはテナントに居るかどうか、何ができるかは各アプリ側で絞る
 - ロールにした理由: 設定が読める(`g, admin, role:admin`)、ロール名は他の IdP にも移せる、トークンがテナントのグループの数に左右されない
 
@@ -19,7 +19,7 @@
 
 ## ゲストを足したときに使えるもの
 
-方針は「**使うものは全部使える、管理は `admin` のロールを持つ人(info@)だけ**」(2026-10-07 に本人が決めた)。
+方針は「**使うものは全部使える、管理は `admin` のロールを持つ人(info@)だけ**」(本人)。
 ゲストを Entra に招くだけで、割り当てなどは要らない。
 
 | 種類 | ゲスト | 決めているところ |
@@ -34,10 +34,10 @@ Forgejo の members から外したいときは [../apps/forgejo/README.md](../a
 
 ## oauth2-proxy のセッションは Cookie だけ(redis なし)
 
-セッションが 4293 バイトあったのはグループではなく **ID・アクセス・リフレッシュの 3 つのトークンそのもの**だった
-(グループは 2 つで 100 バイト強)。**`OAUTH2_PROXY_SESSION_COOKIE_MINIMAL=true`** でそれを落とし、Email と User だけを Cookie に持つ。
+セッションを大きくしていたのは **ID・アクセス・リフレッシュの 3 つのトークンそのもの**(合わせて 4 KB 超)。
+**`OAUTH2_PROXY_SESSION_COOKIE_MINIMAL=true`** でそれを落とし、Email と User だけを Cookie に持つ。
 `--pass-authorization-header` / `--set-authorization-header` / `--pass-access-token` / `--cookie-refresh` とは併用できない(使っていない)。
-redis は 2026-09-07 に消した。切り戻すなら `SESSION_STORE_TYPE=redis` と `REDIS_CONNECTION_URL` を戻して入れ直す(セッションは消える)。
+redis に戻すなら `SESSION_STORE_TYPE=redis` と `REDIS_CONNECTION_URL` を足して入れ直す(セッションは消える)。
 
 効いたかは oauth2-proxy のログで見る。`groups:[admin]` ならロールで通り、`refresh_token:false` ならトークンが落ちている。
 
@@ -47,5 +47,3 @@ kubectl logs -n auth deploy/auth --since=10m | grep AuthSuccess
 
 **`OIDC_GROUPS_CLAIM` を generic な `oidc` プロバイダで使うと `groups` スコープを勝手に要求し、Entra に AADSTS650053 で断られる**
 (`bootstrap/auth/deployment.yaml` のコメント)。いまは `entra-id` プロバイダで `OAUTH2_PROXY_SCOPE` も明示している。
-
-wg-easy 用の別のアプリ登録 `wg-easy` が残っていれば消してよい(VPN は 2026-09-07 に NetBird へ移した)。

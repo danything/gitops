@@ -31,7 +31,7 @@ talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
 
 ノード単位で持つので **namespace ごとの `imagePullSecrets` が要らない**(`machine.registries`)。
 持つのは **fj.doany.io**(Forgejo のコンテナレジストリ)だけで、Forgejo のユーザー `yui` の
-`read:package` だけのトークン(全リポジトリ。Forgejo の名前は `talos-registry-pull`、2026-10-18 に作り直した)。
+`read:package` だけのトークン(全リポジトリ。Forgejo の名前は `talos-registry-pull`)。
 `username` は Forgejo が見ない(トークンの持ち主で決まる。`info` のままにしてあるが、何でも通る)。無いと非公開のリポジトリの
 イメージが引けない。ghcr.io に残るイメージは全部公開。SOPS で暗号化してある(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml)):
 
@@ -84,8 +84,7 @@ talosctl apply-config -f talos/clusterconfig/controlplane.yaml
 talosctl upgrade-k8s --endpoint https://10.10.0.4:6443    # ← これが inlineManifests を reconcile する
 ```
 
-`render.sh` は出力先を丸ごと消すので、`talos/clusterconfig/` に置いたもの(以前は kubeconfig を置いていた)は消える。
-kubeconfig も talosconfig もファイルでは持たない(t.ps1 がその場で作る)。
+`render.sh` は出力先を丸ごと消すので、`talos/clusterconfig/` に置いたものは消える。
 
 - **`apply-config` だけでは inlineManifests は動かない。** 起動時にしか読まれない
 - **`upgrade-k8s` は版を上げなくても reconcile する。** SSA とインベントリで**更新も削除も**する
@@ -93,7 +92,7 @@ kubeconfig も talosconfig もファイルでは持たない(t.ps1 がその場�
 - **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。** 古い machine config のまま流すと**走っている Cilium が巻き戻る**
 - **`timeout waiting for: [Job/argocd/argocd-redis-secret-init status: 'NotFound']` で終わったら、もう一度流す。**
   この Job は終わると 60 秒で消える(`ttlSecondsAfterFinished`)ので、待っている間に消えて時間切れになり、
-  その後ろの Deployment まで当たらないことがある(2026-10-17、argo-cd 10.10.5 を当てたとき 1 回目は ArgoCD が古い版のままだった)。
+  その後ろの Deployment まで当たらないことがある。
   当て終わったら `kubectl -n argocd get deploy -o wide` でイメージの版を見る
 - **何も変えていなければ `apply-config --dry-run` の差分は出ない。** 描くたびに変わる値は潰してある
   (Hubble の証明書はクラスタの中で作る、infisical の `postgres-password` は secret-values.sops.yaml に固定、`updatedAt` は `render.sh` が落とす)。

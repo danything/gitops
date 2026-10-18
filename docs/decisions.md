@@ -12,18 +12,15 @@
 (`pvc-<uid>_<ns>_<name>`)、Infisical のデータと `ENCRYPTION_KEY`、ArgoCD + ApplicationSet + 各 repo の `deploy/argocd.yaml`、
 **復元手順は公開で秘密を含まない**という性質。
 
-## Z440 へは Talos のまま移す(2026-10-17)
+## Z440 へは Talos のまま移す
 
-一番危ない OS の入れ替え(Talos への移行)は、**iLO で画面まで見える DL360** で済ませた。Z440 の遠隔管理は
-AMT 9.x(電源と SOL だけ)で、単体の GPU が無いと POST もしない。Talos なら箱の違いは schematic と NIC の名前に閉じる。
-計画と箱の違いは [z440-migration.md](z440-migration.md)。
+OS の入れ替えは **iLO で画面まで見える DL360** で済ませた。Z440 の遠隔管理は AMT 9.x(電源と SOL だけ)なので、
+箱の違いは schematic と NIC の名前に閉じ込める([z440-migration.md](z440-migration.md))。
 
-## bond0 の MAC を固定する(2026-10-17)
+## bond0 の MAC を固定する
 
-ルーターの IPv6 ホスト公開はノードを **bond0 の MAC(`e6:2c:1b:1a:a0:39`)で指している**
-([router.md](router.md)「IPv6 はノードだけを公開する」)。固定しないと bond は先頭のメンバーの MAC を引き継ぎ、
-再起動で変わってエントリから外れたことがある。[talos/patches/cluster.yaml](../talos/patches/cluster.yaml) の `BondConfig` の
-`hardwareAddr` に書いたので、NIC の交換でも Z440 への移設でも変わらない。
+ルーターの IPv6 ホスト公開が **bond0 の MAC で指している**ので、`BondConfig` の `hardwareAddr` で固定した
+([router.md](router.md)「IPv6 はノードだけを公開する」)。
 
 ## ツール選定(比較の結論)
 
@@ -41,7 +38,7 @@ AMT 9.x(電源と SOL だけ)で、単体の GPU が無いと POST もしない�
 **結論: restic(k8up)。** k8up の中身は素の restic なので、k8up が気に入らなければ CronJob + restic イメージに落とせるし、
 k8up の取ったスナップショットも手元の restic CLI で読める(Infisical はそうやって戻す)。
 
-リモートは Cloudflare R2 のバケット `doany-restic`(APAC、Standard。2026-09-06)。API トークンは
+リモートは Cloudflare R2 のバケット `doany-restic`(APAC、Standard)。API トークンは
 Object Read & Write をこのバケットだけに絞った Account API token。下り(egress)が無料なので復元で費用が跳ねない。
 
 ### 手で持つもの(根っこ)
@@ -64,7 +61,7 @@ TTL も付いている。使い捨てにするほうが安全(../talos/README.md
 R2 の鍵を GitHub の秘密(gist・Actions)に置かないのは、GitHub のトークンがあちこちに散っているため。
 GitHub 側が丸ごと漏れても、バックアップ(を消せる鍵)だけは無事な状態を残す。
 
-### そのパスフレーズをどこに置くか(2026-09-08 決定)
+### そのパスフレーズをどこに置くか
 
 **公開 repo に暗号文が載っている以上、オフラインで無限に総当たりされる。強度がすべて**なので
 diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を正本にしない** ──
@@ -89,7 +86,7 @@ diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を�
 (RDBMS は `pg_dump`、SQLite は `bun:sqlite` の `serialize()`、ファイルの PVC は注釈)。**どれが何で取れているかの一覧は
 [../apps/k8up/README.md](../apps/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
 
-## Talos の起動順序をどう組むか(2026-09-07)
+## Talos の起動順序をどう組むか
 
 Talos には helm-controller が無く、inlineManifests は Helm を実行できないので、手元の `render.sh` が `helm template` して載せる。
 **ArgoCD は Infisical 無しで起動する。** `$argocd-oidc:client-secret` のような参照は Secret が無いと警告して文字列のまま返す
@@ -106,7 +103,7 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 
 - **CRD だけ URL で渡すのは大きさの都合。** 埋めると machine config が 341 KB → 4 MB を超える。
   `KubeExternalManifestConfig` は Talos がそのために用意している入口([talos/render.sh](../talos/render.sh))
-- **平文の残りは ArgoCD(2026-10-17 まで GitHub Actions の `bootstrap-apply.yml`)。** 鶏と卵にならない ──
+- **平文の残りは ArgoCD。** 鶏と卵にならない ──
   ArgoCD が動くのに要るもの(本体・repo の資格情報・入口の `apps`)は全部 machine config にあり、この層に頼っていない。
   この層が要る CRD も machine config が入れる(`InfisicalSecret` の CRD だけ `apps/` から来るので、最初の何回かは retry)。
 - **SOPS の Secret を machine config に入れる。** 復号鍵はクラスタにも CI にも渡さないので、ArgoCD からは当てられない。
@@ -114,7 +111,7 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 - **Helm を実行する場所はクラスタの外(手元の生成時)だけ。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
   ArgoCD も同じ扱いにすればクラスタ内に Helm コントローラを持たなくて済む。版の追従は Renovate
 
-## machine config と Cilium の chart をどう連動させるか(2026-09-08 決定)
+## machine config と Cilium の chart をどう連動させるか
 
 **machine config を「派生物」にする。** `helm template` の出力を `KubeInlineManifestConfig` に包んで `--config-patch` として渡す
 ([talos/render.sh](../talos/render.sh))ので、Cilium の値がリポジトリに二度書かれない。Renovate は
@@ -125,36 +122,33 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 流し忘れは [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で live と突き合わせる。
 bootstrap のあとに `helm install` する案は、再構築のたびに「CNI が無いので何も動かない」状態での手作業が増えるので採らない。
 
-**描いた結果はコミットしない(2026-10-17 に再検討)。** 描き出しを git に置いて Renovate の `postUpgradeTasks` に描き直させれば
-当てるのは「重ねるだけ」になるが、採らない:
-- **infisical の描き出しは秘密を含む。** chart が Redis の接続文字列(`REDIS_URL`)をパスワードごと Deployment の env に書き、
-  外から渡す口が無い(1.11.0 のテンプレートで確認)。ここだけは手元で描くしかなく、描く道具は結局残る
+**描いた結果はコミットしない。** 描き出しを git に置いて Renovate に描き直させる案は採らない:
+- **infisical の描き出しは秘密を含む**(下の「infisical だけは ArgoCD に移せない」)。ここだけは手元で描くしかなく、描く道具は結局残る
 - 描き出しは machine config で 980 行・310 KB(1 行が長い)。版を上げるたびにその差分が積もる
 - 代わりに **描くたびに変わる値を潰した**(Hubble の証明書・infisical の `postgres-password`・`updatedAt`)。
   同じ入力なら生成物はバイト単位で同じなので、`apply-config --dry-run` の差分がそのまま「何が変わるか」になる
 
-**起動に要らないものは ArgoCD に置く。** metrics-server は 2026-10-17 に `apps/metrics-server/` へ移した
-(版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
+**起動に要らないものは ArgoCD に置く**(metrics-server は `apps/metrics-server/`。版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
 全 namespace の Certificate が道連れ)。
 
-## ルーティングの選定(2026-09-06)
+## ルーティングの選定
 
-**Cilium(CNI + Gateway API)に寄せる。** `Ingress` API は凍結済みで ingress-nginx は 2026-03 に retire。
+**Cilium(CNI + Gateway API)に寄せる。** `Ingress` API は凍結済みで ingress-nginx は retire。
 **Talos で後から替えるのが高いのは CNI だけ**なので先に決め、Ingress・LB・証明書は Gateway API に寄せて後から差し替えられるようにした。
 
-| | 選択 | 置き換わるもの |
-| --- | --- | --- |
-| CNI | Cilium | flannel |
-| kube-proxy | Cilium の kubeProxyReplacement | kube-proxy |
-| LoadBalancer | 使わない(hostPort と Gateway の hostNetwork。下記) | ServiceLB |
-| Ingress | Cilium Gateway(Gateway API) | Traefik |
-| 証明書 | cert-manager(Cloudflare DNS-01) | Traefik 内蔵 ACME |
-| 認証 | oauth2-proxy を前段のプロキシに(下記) | — |
+| | 選択 |
+| --- | --- |
+| CNI | Cilium |
+| kube-proxy | Cilium の kubeProxyReplacement |
+| LoadBalancer | 使わない(hostPort と Gateway の hostNetwork。下記) |
+| Ingress | Cilium Gateway(Gateway API) |
+| 証明書 | cert-manager(Cloudflare DNS-01) |
+| 認証 | oauth2-proxy を前段のプロキシに(下記) |
 
 - **Cilium 1.20 は Gateway API v1.6.1 の CRD を要求する。** 古いと GatewayClass が `Waiting for controller` のまま止まる
 - **`terminationGracePeriodSeconds` が長い Pod**(denpa と tuner-agent、6 時間)は Recreate と組むと入れ替わらない。`--grace-period=0 --force` で消す
 
-### LoadBalancer をどう置き換えるか(2026-09-06 決定・実施済み)
+### LoadBalancer をどう置き換えるか
 
 **hostPort を選んだ。** ルータの DMZ 転送先と AdGuard の split-horizon が**ノード自身の IP**(`10.0.0.2` / `10.10.0.4` /
 `240f:6d:842b:1::2`)に固定されていて、LB-IPAM の仮想 IP だとクラスタ外の変更が要り、IPv6 のプレフィックスは RA 由来で変わりうる。
@@ -178,11 +172,11 @@ hostPort ならノードの全アドレスで受けられ、送信元 IP も保�
 
 - **3proxy**(TLS 終端 + 素の TCP): Cilium は `mode: Terminate` のリスナーに TLSRoute しか許さず、同じ 443 に Terminate と Passthrough を
   同居させると ProtocolConflict で 443 ごと落ちる。nginx(stream)のサイドカーが **hostPort 3129** で終端して `127.0.0.1:3128` に渡す
-- **AdGuard の DoH**: AdGuard は `/dns-query` を HTTPS の口(443)でしか出さない(平文の 80 は 404。切り替えの翌朝、ブラウザの名前解決だけが死んだ)。
+- **AdGuard の DoH**: AdGuard は `/dns-query` を HTTPS の口(443)でしか出さない(平文の 80 は 404)。
   `BackendTLSPolicy` は Cilium 1.20.1 が Accepted にするだけで実装していない。nginx のサイドカーが `/dns-query` だけを
   `https://127.0.0.1:443` へ回す。Cilium が `BackendTLSPolicy` を実装したら両方まとめて消せる
 
-### クライアント IP(2026-09-07 確認、`Cluster` のままでよい)
+### クライアント IP(`Cluster` のままでよい)
 
 Gateway の Service は `externalTrafficPolicy: Cluster`。**単一ノードでは backend が必ず同じノードに居るので SNAT されない**
 (denpa は公開側から 401・LAN から 200、AdGuard の DoH のログに端末の IPv6 が残る)。
@@ -198,17 +192,15 @@ Entra のトークンは大きく(セッション実測 4293 バイト)、Cookie
 
 ### sticky cookie は Cilium 1.21 待ち
 
-Traefik の sticky cookie に代わるものが無い(使っていたのは tamasagashi 1 本。更新中に HTML と CSS/JS が別の Pod から返る 404 を防ぐため)。
+Gateway に sticky cookie が無い(要るのは tamasagashi 1 本。更新中に HTML と CSS/JS が別の Pod から返る 404 を防ぐため)。
 Gateway API の session persistence は experimental チャネル限定、Cilium は 1.21 から(cilium/cilium#48029)、
 `sessionAffinity: ClientIP` は Gateway 経路に効かない。いまは replicas 1 で穴を受け入れている。
 **1.21 に上げるときに Gateway API CRD を experimental に替え(`talos/render.sh` の URL)、tamasagashi の HTTPRoute に `sessionPersistence` を足す。**
 それまでにアプリを複数 replica にするなら、セッション固定が無いことを先に確かめる。
 
-## chart を配るときと、chart で入れるとき(2026-09-07)
+## chart を配るときと、chart で入れるとき
 
-**`HelmChart` CRD(helm-controller)はやめた。** ArgoCD と二重管理になり(差分も同期状態も prune も見えない)、Talos に無い。
-argocd と infisical も `bootstrap/<name>/` の version.yaml・values.yaml から `render.sh` が描く。**Helm chart を配る(OCI で push する)のは続ける**(denpa と yosegaki)。
-入れ方は利用者に選ばせる(`helm install` でも `Application` でも同じものが入るのが正しい)。このクラスタは ArgoCD の `Application` に統一した。
+**Helm chart を配る(OCI で push する)**のは denpa と yosegaki。入れ方は利用者に選ばせる(`helm install` でも `Application` でも同じものが入るのが正しい)。このクラスタは ArgoCD の `Application` に統一した。
 
 配る chart でやらないこと(踏んだもの。自分の chart はどれも該当しない):
 
@@ -220,7 +212,7 @@ argocd と infisical も `bootstrap/<name>/` の version.yaml・values.yaml か�
 
 **別のリリース名で入れ直すと別物として作り直しになる**(名前を切り詰める chart がある)。入れ方を替えるときは `helm template` と live を先に突き合わせる。
 
-### infisical だけは ArgoCD に移せない(2026-09-08、chart を読んで確定)
+### infisical だけは ArgoCD に移せない
 
 **理由は鶏卵ではなく chart の作り。** `infisical-standalone` 1.10.0 は `DB_CONNECTION_URI` と `REDIS_URL` を
 `.Values.*.auth.password` から **Deployment の平文 env に焼き込む**(`templates/_helpers.tpl`)ので、平文の Application に値を書けない。
@@ -229,56 +221,42 @@ argocd と infisical も `bootstrap/<name>/` の version.yaml・values.yaml か�
 **なので `bootstrap/` に残し、machine config の `inlineManifests` に載せる。** `render.sh` が SOPS 済みの値を復号して `helm template` に渡すので、
 平文は machine config の中にしか出ない。
 
-## ghcr の pull 認証
+## PT3 チューナー
 
-**2026-09-15 から ghcr.io の資格情報は要らない** ── 非公開のリポジトリを Forgejo に移し(apps/forgejo/README.md)、
-ghcr.io に残るイメージは全部公開。**ノード単位で持つのは fj.doany.io の資格情報だけ**(`talos/registries.yaml`、[talos/README.md](../talos/README.md))。
-
-## PT3 チューナー(Talos で動かすための算段)
-
-実機には Earthsoft PT3(`earth_pt3`、Altera 1172:4c15)が刺さっていて、Talos のカーネルは `CONFIG_DVB_PT3` を
-有効にしておらず、公式 extension にも無かった。denpa の tuner-agent はこの箱の `/dev/dvb` と B-CAS リーダーに依存している。
-
-**結論(2026-10-13): 上流に入った。** [siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682)
-(`CONFIG_DVB_PT3=m`)が v1.15.0-alpha.1 に入り、`siderolabs/dvb-pt3` が Image Factory の公式 extension に出た。
-本番の schematic を `96371c8f…`(dvb-pt3 + intel-ucode + IOMMU の引数)に作り直し、Talos を v1.15.0-alpha.1 に上げた
-(`talos/versions.yaml`)。extension は `earth_pt3` を blacklist して配るので、`talos/patches/main.yaml` の
-`machine.kernel.modules` で読ませる。alpha をノード 1 台の本番に乗せることになるが、正式版を待つより PT3 を先に取った。
+denpa の tuner-agent は Earthsoft PT3(`earth_pt3`)の `/dev/dvb` と B-CAS リーダーに依存している。
+**公式 extension `siderolabs/dvb-pt3` を使う**([siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682))。
+v1.15.0-alpha.1 からしか無いので、**正式版を待つより PT3 を先に取り、本番を alpha に乗せている**。
+extension は `earth_pt3` を blacklist して配るので、`talos/patches/main.yaml` の `machine.kernel.modules` で読ませる。
 
 **駄目だったときの保険: KubeVirt の VM にパススルー。** PT3(05:00.0)は IOMMU グループ 36 に単独、B-CAS は USB(GemPC Twin 08e6:3437)。
 `intel_iommu=on` は schematic に残してあるが、vfio は `talos/patches/main.yaml` から外した(PT3 をホストのドライバと取り合う)ので、戻るなら足し直す。
 **自前 extension を `imager` で焼く案は採らない**(アップグレードのたびに自前ビルドになる)。
 
-## 依存の更新をどこまで自動で入れるか(2026-09-07)
+## 依存の更新をどこまで自動で入れるか
 
 共有プリセット `5ym/repo-config` で、**パッチとマイナーは 1 つの PR にまとめて自動マージ、メジャーと Helm chart は人が見る**
-(postgres 17 → 18 が nginx のパッチと同じ PR で自動マージされかけた danything/gitops#7、chart のパッチ更新で中身が入れ替わった件から)。
+(chart はパッチ更新でも中身が入れ替わることがある)。
 PostgreSQL は 17 の線に固定(メジャーでデータディレクトリの互換が切れ、dump / restore が要る)、argo-cd と infisical-standalone の chart は自動マージしない。
 理由はそれぞれ [../renovate.json](../renovate.json) の `description`。Renovate 自体は [apps/renovate/](../apps/renovate/) の CronJob で動く。
 
-## PVC を守る仕掛けをやめた(2026-09-07)
+## PVC を守る仕掛けをやめた
 
 **「git で消したものは消える」を優先する**、という判断(本人)。PVC の `Prune=false,Delete=false` は git から消しても PVC が残り、
-StorageClass `local-path-retain`(`reclaimPolicy: Retain`)は追われない Released の PV を作っていた(35 日と 44 日放置が 3 本)。
+`reclaimPolicy: Retain` は追われない Released の PV を作っていた。
 
-**代わりの後ろ盾はバックアップ。** 誤って消したときの最大損失は 24 時間ぶん。**この判断は復元リハーサルが通ってから**行った
-(2026-10-17 には実際にこれで全部戻した)。
+**代わりの後ろ盾はバックアップ。** 誤って消したときの最大損失は 24 時間ぶん。
 
 **承知しておくこと**: `Delete=false` も外したので、**Argo CD の Application を消すと PVC も消える**。
 マニフェストを消すのは git のレビューを通るが、Application の削除は UI のボタン 1 つで済む。
 
 **`storageClassName` はバインド済み PVC では変更も削除もできない。** 変えるときは PVC を止め、PV を `Retain` にして古い PVC を消し、
-PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で同じ PV に結ぶ(2026-10-05 に 28 本をこれで付け替えた)。
+PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で同じ PV に結ぶ。
 
 ## バックアップに何を含めるか
 
-**有料でも取る(2026-09-08)。** R2 の無料枠(10 GB-month)に収めることを目的にすると録画を捨てることになる。
+**有料でも取る。** R2 の無料枠(10 GB-month)に収めることを目的にすると録画を捨てることになる。
 容量が問題になるのは桁が変わったとき(数百 GB)。課金は期間中の日次ピークの平均で、操作の回数は桁違いに余っている。
 
-いまの姿(2026-10-17):
-
-- **restic の実データは 5.60 GiB**(圧縮前 8.52 GiB)。前のホストのスクリプト(`host=main`)が PV の置き場を丸ごと持っていて、
-  k8up の世代を減らしても同じ blob を掴んで解放されなかったが、2026-10-17 に forget + prune した
 - 保持は k8up の Schedule で `keepDaily 7 / keepWeekly 4 / keepMonthly 6`(遡れるのは約半年)。etcd は日次で `keepDaily 7 / keepWeekly 4`
   ([../apps/k8up/etcd-snapshot.yaml](../apps/k8up/etcd-snapshot.yaml))
 - 戻せるかは毎月 1 日に [../apps/k8up/restore-check.yaml](../apps/k8up/restore-check.yaml) が最新を取り出して確かめる
@@ -289,12 +267,10 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 | 生 TS の作業領域(`denpa-raw`) | **取らない。** エンコードが終われば消え、数時間で入れ替わる。14 GB まで育つ |
 | AdGuard のクエリログ | **保持を 7 日に。** 純粋な計測データで、復元時に無くても困らない |
 
-## VPN を wg-easy から NetBird にした(2026-09-07)
+## VPN を wg-easy から NetBird にした
 
-要るのは **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・iLO に入る**の 3 つで、スマホを足すときの QR はよく使う。
-wg-easy は自前の認証を切れず SSO の後ろでも二重ログインが残り([wg-easy#1923](https://github.com/wg-easy/wg-easy/issues/1923))、
-Headscale は FAQ が「headscale を動かすマシンをサブネットルータにするな」と書いていてノード 1 台では避けられない。
-**NetBird は routing peer が独立した概念で、1 台構成でも問題が起きない。**
+要るのは **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・iLO に入る**の 3 つ。
+**NetBird は routing peer が独立した概念で、1 台構成でも問題が起きない**(Headscale は管理サーバーとサブネットルータの同居を避けよと書いている)。
 
 **公式 Helm chart は使わない**(更新が止まっている。[netbirdio/helms#39](https://github.com/netbirdio/helms/issues/39))。
 v0.65.0 から management/signal/relay が 1 つの combined コンテナなので、素の Deployment で足りる(`apps/netbird/`)。
@@ -306,28 +282,22 @@ v0.65.0 から management/signal/relay が 1 つの combined コンテナなの�
 - **外部 IdP(Entra)は設定ファイルに書けない**(0.62 以降はストアに入るデータ)。ダッシュボードか `POST /api/identity-providers` で足す。
   リダイレクト URI は `https://nb.doany.io/oauth2/callback` 固定
 
-## 公開経路(HTTPRoute)をどこに置くか(2026-09-07)
+## 公開経路(HTTPRoute)をどこに置くか
 
-`apps/gateway-routes/` にまとめていたのをやめ、**それぞれが公開しているものと同じ場所**に置いた
+**それぞれが公開しているものと同じ場所**に置く
 (このリポジトリの `apps/<name>/httproute.yaml`、各アプリのリポジトリの `deploy/httproute.yaml`、`bootstrap/` の argocd / auth / redirect-https)。
-ArgoCD は `recurse` で拾い tracking-id 注釈で追跡するので、場所は挙動に影響しない。
 
-**`bootstrap/` に移したものが本題。** `argocd` と `auth` の実体はこの層にある。
-当時は「ArgoCD が自分の公開経路を握ると、ArgoCD が壊れたときに直せない」として GitHub Actions に当てさせていたが、
-2026-10-17 に ArgoCD(Application `bootstrap`)へ移した。ArgoCD が壊れても当たっている経路は消えず、
-直すのは Headlamp か `tools/t.ps1 --admin` の kubectl で足りる。GitHub Actions の書き込みの経路(ワークフロー・RBAC・CEL)が丸ごと消えた。
+`bootstrap/` の経路も ArgoCD(Application `bootstrap`)が当てる。ArgoCD が壊れても当たっている経路は消えず、
+直すのは Headlamp か `tools/t.ps1 --admin` の kubectl で足りる。
 外部露出の一覧は `kubectl get httproute,grpcroute -A` が正確で、git を読むより早い(一覧の一枚は作らない)。
 
 **落とさずに動かす**: ArgoCD は「git から消えた + 自分が追跡している」ものを prune する。別リポジトリへは移送先を**先に**マージして
 tracking-id が書き換わってから元を消す。`bootstrap/` へは、先に live に `Prune=false` を効かせてから移し、tracking-id 注釈を剥がす。
 
-## DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける(2026-10-06)
+## DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける
 
 **社内用や通信量が多いアプリは直接つなぐ。SaaS のように外へ出すアプリは Cloudflare のプロキシを通す**(本人)。
-
-- 直接つなぐもの:`*.doany.io` のワイルドカード(proxied ではない CNAME → `doany.io`)で引ける。明示のレコードは持たない
-- Cloudflare を通すもの:アプリのリポジトリの HTTPRoute に `external-dns.kubernetes.io/cloudflare-proxied: "true"` を付け、
-  **ExternalDNS**(`apps/external-dns/`)が proxied の CNAME を作る
+やり方は [apps/external-dns/README.md](../apps/external-dns/README.md)。
 
 **DNS もアプリのリポジトリで持つ(疎結合)。** 中央の IaC(Pulumi・DNSControl・OctoDNS)に一覧を置くと、アプリを足すたびに 2 か所を直す。
 ExternalDNS は HTTPRoute の注釈だけで決まり、自分が作ったレコード(所有の印の TXT 付き)にしか触れないので、メールや DDNS の apex と同居できる。

@@ -1,7 +1,7 @@
 # mta-sts
 
 doany.io 宛てのメールの、**サーバーどうしの通信を守る** 2 つの仕組み。どちらも「途中で平文に落とされる・偽の
-サーバーに渡される」のを防ぐ。2026-10-07 に入れた。
+サーバーに渡される」のを防ぐ。
 
 | 仕組み | 何で守るか | 在処 |
 | --- | --- | --- |
@@ -14,11 +14,10 @@ doany.io 宛てのメールの、**サーバーどうしの通信を守る** 2 �
 今は **enforce**(max_age 1 週間)。**MX を変えるときは、先に testing に戻して id を変え、1 週間待つ**(enforce のまま
 MX を替えると、古い方針を覚えている送り手が新しい MX に送らなくなる)。
 
-
 1. [mta-sts.yaml](mta-sts.yaml) の `mta-sts.txt` を直し、`mta-sts/policy-rev` を上げる
 2. dns.ts の `_mta-sts` の `id` を変える(今の UTC の時刻など)。**変えないと送り手は古い方針を使い続ける**
 
-## DANE への切り替え(2026-10-07 に済んだ。Microsoft の手順。learn.microsoft.com の「How SMTP DANE works」)
+## DANE への切り替え(済み。Microsoft の「How SMTP DANE works」の手順)
 
 MX を `doany-io.mail.protection.outlook.com` から、DNSSEC に対応した `…mx.microsoft` に替え、Exchange 側で DANE を
 有効にする。受信を止めないよう、MX の TTL を下げてから新旧を並べて入れ替える。MTA-STS はそのあいだ testing にする。

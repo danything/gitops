@@ -74,20 +74,19 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`cloudflare-ddns/`](apps/cloudflare-ddns/) | DDNS |
 | [`external-dns/`](apps/external-dns/) | ExternalDNS。**Cloudflare を通すアプリの DNS を、アプリの HTTPRoute の注釈から作る**(gitops には書かない)。直接つなぐアプリはワイルドカードで引ける |
 | [`mta-sts/`](apps/mta-sts/) | MTA-STS の方針ファイル(`mta-sts.doany.io`)。DANE・TLS-RPT と合わせて、doany.io 宛てのメールのサーバー間の TLS を守る |
-| [`matrix/`](apps/matrix/) | Matrix のサーバー一式(`m.doany.io`。Web 版の Element は `e.doany.io`、スマホと PC は公式のアプリ)。Tuwunel + hookshot(通知の受け口)+ LiveKit(通話。`lk.doany.io`、hostPort 8443 をルーターで転送)。**Zulip からの移行先。使い始めは [apps/matrix/README.md](apps/matrix/README.md)** |
+| [`matrix/`](apps/matrix/) | Matrix のサーバー一式(`m.doany.io`。Web 版の Element は `e.doany.io`、スマホと PC は公式のアプリ)。Tuwunel + hookshot(通知の受け口)+ LiveKit(通話。`lk.doany.io`、hostPort 8443 をルーターで転送)。**使い始めは [apps/matrix/README.md](apps/matrix/README.md)** |
 | [`forgejo/`](apps/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [apps/forgejo/README.md](apps/forgejo/README.md)** |
 | [`netbird/`](apps/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`3proxy/`](apps/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
 | [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。PVC・DB のダンプ・etcd のスナップショット |
 | [`infisical/`](apps/infisical/) [`infisical-operator/`](apps/infisical-operator/) [`infisical-push-bridge/`](apps/infisical-push-bridge/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジ |
 | [`renovate/`](apps/renovate/) | Renovate(GitHub の danything・5ym と Forgejo の doa の全リポジトリの依存を上げる PR)。CronJob で 15 分おき。**秘密の入れ方は [apps/renovate/README.md](apps/renovate/README.md)** |
-| [`headlamp/`](apps/headlamp/) | Kubernetes の Web UI(`h.doany.io`、Portainer の置き換え)。認証は Entra、権限は `bootstrap/apiserver/` |
+| [`headlamp/`](apps/headlamp/) | Kubernetes の Web UI(`h.doany.io`)。認証は Entra、権限は `bootstrap/apiserver/` |
 | [`rybbit/`](apps/rybbit/) | Rybbit(`rt.doany.io`、アクセス解析。クッキー無し)+ ClickHouse + PostgreSQL + Redis。トドロクの離脱をファネル・ジャーニー・セッションリプレイで見る。**使い始めは [apps/rybbit/README.md](apps/rybbit/README.md)** |
 
 **動かしていないもの**は `apps/_<name>/` に置いてある。`_` で始まるディレクトリは Argo CD が同期しない
 ([bootstrap/argocd/repos.yaml](bootstrap/argocd/repos.yaml) の `directory.exclude`。全リポジトリ共通の決まり)ので、
-クラスタには何も作らない。動かすときは `git mv apps/_<name> apps/<name>`。いまは無い
-(GlitchTip を置いていたが、動かさないまま 2026-10-17 に消した。戻すなら git の履歴から)。
+クラスタには何も作らない。動かすときは `git mv apps/_<name> apps/<name>`。いまは無い。
 
 **アプリの多くはこのリポジトリに無い。** 各アプリのリポジトリの `deploy/` に置いてあり、
 `bootstrap/argocd/repos.yaml` の ApplicationSet が拾う(上の「仕組み」)。

@@ -19,7 +19,7 @@
    - `/forgejo/forgejo-db`: `postgres-password` ── 英数字だけのランダム(`openssl rand -hex 32` など)。
      postgres は最初の起動でしかパスワードを設定しないので、**後から変えるなら DB 側も変える**
    - `/forgejo/forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく bootstrap/auth にも平文で書いてある)、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
-2. Entra のアプリ登録 Main のリダイレクト URI(Web)に `https://fj.doany.io/user/oauth2/entra/callback` ── **2026-09-15 に `az ad app update` で追加済み**
+2. Entra のアプリ登録 Main のリダイレクト URI に `https://fj.doany.io/user/oauth2/entra/callback`([pulumi/entra.ts](../../pulumi/entra.ts) にある)
 3. main にマージ → ArgoCD が同期
 4. **管理者を作る**(1 度だけ)。Entra のメールと同じにしておくと、Entra でログインしたときに自動で紐づいて管理者になる。
    パスワードは捨てる(表示させない)。組織 `doa` とチーム `members`(読み取り・すべてのリポジトリ)も作る
@@ -39,23 +39,15 @@
 
 ## プライベートのリポジトリを移す(1 本ずつ)
 
-**方針: プライベートは GitHub に置かない**(2026-09-15)。GitHub Actions の課金はプライベートにだけ掛かるので、
-公開リポジトリ(gitops・blog など)は GitHub のままでよい。対象は todoroku / tamasagashi / worklog-cloud(noren は閉じた)。
+**方針: プライベートは GitHub に置かない。** GitHub Actions の課金はプライベートにだけ掛かるので、
+公開リポジトリ(gitops・blog など)は GitHub のままでよい。
 
 **Forgejo が唯一の置き場になる。** バックアップは k8up(R2)の 1 日 1 回だけなので、手元の clone も捨てないこと。
 
-先に 1 回だけ:
-
-1. Forgejo に組織 `doa` を作る
-2. ArgoCD 用のアクセストークンを作り(`read:repository` と `read:organization`)、Infisical `/argocd/forgejo-repo-creds` に
-   `url` = `https://fj.doany.io/doa` / `username` / `password` = トークン で入れる([argocd-creds.yaml](argocd-creds.yaml))。
-   **スコープは repository・organization・issue の読み取り。** issue が無いと、非公開リポジトリができた時点で
-   ApplicationSet が `token does not have at least one of required scope(s): [read:issue]` で止まる(2026-09-15)
-3. `bootstrap/argocd/repos.yaml` に Forgejo の generator を足す PR をマージする(**Forgejo とトークンが揃ってから**。
-   API に届かないと ApplicationSet 全体の生成が止まる)。
-   **2026-10-05 に `repos-forgejo` という別の ApplicationSet に分けた。** 同居していると、まっさらな
-   クラスタ(Forgejo が空で、トークンもまだ無い)で GitHub 側の Application まで 1 本も作られず、
-   Forgejo 自身もデプロイされないので抜けられなかった。いまは止まるのは Forgejo 側だけ
+ArgoCD が読むトークンは Infisical `/argocd/forgejo-repo-creds`([argocd-creds.yaml](argocd-creds.yaml))。
+**スコープは repository・organization・issue の読み取り。** issue が無いと ApplicationSet が
+`token does not have at least one of required scope(s): [read:issue]` で止まる。
+ApplicationSet は GitHub 側と別の `repos-forgejo`(同居させると、Forgejo が空のクラスタで GitHub 側まで 1 本も作られない)。
 
 リポジトリごとに:
 
@@ -78,7 +70,7 @@
 | テナントの人(Entra、チーム members) | 見える | 読める | できる | できない | ─ |
 | 管理者(Forgejo の管理画面で付ける) | 全部 | 全部 | できる | できる | できる |
 
-- **テナントのゲスト(もとは ERPNext のために招いた人)も tid が同じなので members に入る。** 外したくなったら Forgejo 専用のアプリ登録を作り、
+- **テナントのゲストも tid が同じなので members に入る。** 外したくなったら Forgejo 専用のアプリ登録を作り、
   「割り当てが必要」にして人ごとに割り当てる(Main の設定を変えると、ロールを割り当てていない人が Main の後ろのアプリ全部から締め出される。
   [../../docs/entra.md](../../docs/entra.md))
 - **Entra のアプリロール admin は Forgejo の管理者に連動しない**(グループのクレームを tid に使っているため)。管理者は管理画面で付け外しする
@@ -95,7 +87,7 @@
 
 **公開にしてはいけない。** パッケージ(コンテナイメージ)の読み取り権限はリポジトリではなく**組織の公開範囲**で決まり、
 公開の組織だと非公開リポジトリのイメージでも匿名で pull できる(`services/packages/perm.go` の
-`HasOrgOrUserVisible`。2026-09-15 に shadai(今の todoroku)のイメージが匿名で取れるのを見つけて limited にした)。
+`HasOrgOrUserVisible`)。
 
 ## Actions からイメージを push するとき
 
@@ -124,18 +116,18 @@ CI から Forgejo の API・git・レジストリに**長く生きる秘密な�
 - **リポジトリを絞ると**、スコープは repository / issue しか選べず、管理者の権限は効かない(`services/authz/access_token.go`)。
   レジストリ(package)と組織の操作は「すべて」で作る
 - **Forgejo Actions のジョブは `enable-openid-connect: true`** で JWT を取る。fork からの PR では取れない。
-  JWT の `workflow` は `name:` ではなく**ファイル名**(`run.WorkflowID`。2026-10-07 に実ジョブの JWT で確かめた。GitHub とは違う)。
+  JWT の `workflow` は `name:` ではなく**ファイル名**(`run.WorkflowID`。GitHub とは違う)。
   再利用ワークフロー(`uses: ./...`)のジョブは、**呼ばれる側**のファイルの設定が効き、JWT の `workflow` は**呼ぶ側**のファイル名になる
 - **境界は main に書ける人**: main のワークフローを書き換えられる人は、その JWT で持ち主として書ける(シークレットのときと同じ)。
   doa の main に書けるのは bots と Owners だけ(members は読み取り)
 
 | 状態 | 持ち主 | 名前 | 発行者 | クレームのルール | 範囲・スコープ | aud の置き場 | 代わりに消したもの |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **使っている**(2026-10-07) | yui | repo-config | GitHub Actions | GitHub の 5ym/repo-config、`refs/heads/main`、`forgejo-settings.yml`、push / schedule / workflow_dispatch | すべて・`write:organization` `write:repository` | GitHub の 5ym/repo-config の変数 `FORGEJO_AUDIENCE` | repo-config の secrets `FORGEJO_TOKEN` と yui のトークン `repo-config-settings` |
+| **使っている** | yui | repo-config | GitHub Actions | GitHub の 5ym/repo-config、`refs/heads/main`、`forgejo-settings.yml`、push / schedule / workflow_dispatch | すべて・`write:organization` `write:repository` | GitHub の 5ym/repo-config の変数 `FORGEJO_AUDIENCE` | repo-config の secrets `FORGEJO_TOKEN` と yui のトークン `repo-config-settings` |
 | 見送り | forgejo-bot | doa-registry | Forgejo Actions | doa の todoroku・tamasagashi・worklog-cloud、`refs/heads/main`、`publish.yml` / `fetch-latest.yml`、push / workflow_dispatch / schedule | すべて・`write:package` | 組織 doa の変数 `REGISTRY_AUDIENCE` | (今は組織の `REGISTRY_TOKEN`) |
 | 見送り | forgejo-bot | todoroku-deploy | Forgejo Actions | todoroku、`refs/heads/main`、`publish.yml`、push / workflow_dispatch | todoroku だけ・`write:repository` | todoroku の変数 `DEPLOY_AUDIENCE` | (今は todoroku の `DEPLOY_TOKEN`) |
 
-**forgejo-bot の 2 つは見送った**(2026-10-07)。forgejo-bot のものは 16.0.5 では画面にも CLI・API にも一覧・変更・削除の手段が無く
+**forgejo-bot の 2 つは見送った。**forgejo-bot のものは 16.0.5 では画面にも CLI・API にも一覧・変更・削除の手段が無く
 (forgejo-bot は画面にログインできない。`ENABLE_INTERNAL_SIGNIN: "false"`)、止めるには DB の `authorized_integration` の行を触ることになる。
 v17 以降で管理の手段が揃ったら、表のルールで `forgejo admin user create-authorized-integration --username forgejo-bot …` を本番で打ち、
 出力の `audience`(`u:<ユーザー ID>:<UUID>`。秘密ではない)を表の変数に入れて、ワークフローの PR
@@ -147,9 +139,7 @@ yui のもの(repo-config)は画面(設定 → 承認済みインテグレーシ
 
 ## ノードからイメージを取る
 
-ノードの名前解決で fj.doany.io をノード自身の Gateway に向ける(`10.0.0.2 fj.doany.io`。`talos/patches/cluster.yaml` の
-`StaticHostConfig`。公開 DNS の A にはノードから届かない)+ `talos/registries.yaml` の資格情報
-(yui の `read:package`、`talos-registry-pull`)。アプリ側に `imagePullSecrets` は要らない([../../talos/README.md](../../talos/README.md)「fj.doany.io の資格情報」)。
+アプリ側に `imagePullSecrets` は要らない([../../talos/README.md](../../talos/README.md)「fj.doany.io の資格情報」)。
 
 ## マージはスカッシュ
 
@@ -161,5 +151,3 @@ curl -X PATCH -H "Authorization: token $T" -H 'Content-Type: application/json' \
   -d '{"allow_merge_commits":false,"allow_rebase":false,"allow_rebase_explicit":false,"allow_fast_forward_only_merge":false,"allow_squash_merge":true,"default_merge_style":"squash","default_delete_branch_after_merge":true}' \
   https://fj.doany.io/api/v1/repos/doa/<name>
 ```
-
-2026-09-15 に shadai(今の todoroku)/ renovate / tamasagashi / worklog-cloud へ当てた。
