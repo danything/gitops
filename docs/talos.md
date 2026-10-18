@@ -67,7 +67,7 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 | --- | --- |
 | `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort)。**Talos の側で例外にしてある** |
 | `local-path-storage` | ヘルパー Pod の hostPath。[`talos/manifests/local-path.yaml`](../talos/manifests/local-path.yaml) がラベルを付ける |
-| `netbird` | hostPort 3478(内蔵 STUN。UDP なのでゲートウェイを通せない)・51820、NET_ADMIN 等、hostPath |
+| `netbird` | hostPort 51820(routing peer の WireGuard)、NET_ADMIN 等、hostPath |
 | `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)、PT3 を付け直す DaemonSet([apps/pt3/](../apps/pt3/))。**ラベルは denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops だけを grep すると抜けて見える |
 | `adguardhome` | hostPort 53 / 853 |
 | `matrix` | hostPort 8443(LiveKit) |
