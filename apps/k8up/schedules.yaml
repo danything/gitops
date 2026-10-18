@@ -8,7 +8,6 @@
 #   寄せてある。ジョブの履歴の数もあちら
 # - `runAsUser: 0` は全部に要る。既定の nonroot では 0600 のファイルが読めず、restic は 0 バイトの
 #   スナップショットを作り、k8up はそれを Succeeded にする(README「空のスナップショット」)
-# - 保持は全部 keepDaily 7 / keepWeekly 4 / keepMonthly 6
 #
 # 時刻は固定で、重ねない。k8up 同士(backup・prune・check)は operator が順に待たせる(`operator/locker/locker.go`)が、
 # k8up の外の CronJob は待たない。etcd-snapshot(13:00 UTC)と denpa-encoded-forget(18:30 UTC)の forget と

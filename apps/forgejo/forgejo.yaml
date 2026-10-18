@@ -2,14 +2,12 @@
 #
 # **chart(forgejo-helm)は使わない。** chart は app.ini の元と init のスクリプトを Secret で作るが、
 # このクラスタの ArgoCD は Secret を丸ごと管理対象から外している(bootstrap/argocd/values.yaml の
-# resource.exclusions)ので、それらが作られず Pod が起動しない(2026-09-15 に踏んだ)。
+# resource.exclusions)ので、それらが作られず Pod が起動しない。
 # 設定は環境変数(FORGEJO__<section>__<KEY>)で渡し、イメージの docker-setup.sh が app.ini に書く。
 #
-# 版は最新を追う(LTS に留めない。2026-09-15 に 15.0.8 → 16.0.4)。Renovate が PR を出す。
-# メジャーを上げるときはリリースノートの破壊的変更を読んでから。
+# 版は最新を追う(LTS に留めない)。メジャーを上げるときはリリースノートの破壊的変更を読んでから。
 #
-# 名前が forgejo-web / forgejo-repos なのは、chart 時代の Application が消えるときに
-# 同名のリソース(forgejo / forgejo-http / forgejo-data)を消すので、それに巻き込まれないように。
+# 名前が forgejo-web / forgejo-repos なのは chart 時代のリソース(forgejo / forgejo-http / forgejo-data)と被らないようにした名残。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -85,7 +83,7 @@ data:
       --group-claim-name tid \
       --group-team-map '{"22ac977d-b140-4dc8-8150-90d645d3475b": {"doa": ["members"]}}'
     # 一覧はタブ区切り(ID Name Type Enabled)。--vertical-bars の出力は空白の入り方が一定でなく、
-    # grep で拾えずに 2 回目の起動で add-oauth が「already exists」で落ちた(2026-09-15)
+    # 拾い損ねると 2 回目の起動で add-oauth が「already exists」で落ちる
     id=$(gitea admin auth list | awk '$2 == "entra" {print $1}')
     if [ -z "$id" ]; then
       gitea admin auth add-oauth "$@"
@@ -260,7 +258,7 @@ data:
   FORGEJO__actions__DEFAULT_ACTIONS_URL: https://github.com
   FORGEJO__repository__DEFAULT_BRANCH: main
   FORGEJO__repository__DEFAULT_PRIVATE: private
-  # マージはスカッシュだけにする方針(GitHub の頃と同じ)。組織単位で縛る設定は Forgejo に無いので、
+  # マージはスカッシュだけにする方針。組織単位で縛る設定は Forgejo に無いので、
   # 既定のマージ方法だけここで決め、許すマージ方法はリポジトリごとに API で絞る(README「マージはスカッシュ」)
   FORGEJO__repository_0X2E_pull_0X2D_request__DEFAULT_MERGE_STYLE: squash
   FORGEJO__session__COOKIE_SECURE: "true"

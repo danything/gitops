@@ -55,9 +55,9 @@ data:
         services:
           - service: "*"
             level: admin
-    # 通知のルームごとの webhook。URL は https://m.doany.io/webhook/<stateKey>。
+    # 通知のルームごとの webhook。
     # stateKey は推測されない乱数で、Infisical /matrix/matrix の hook-<部屋>(公開のリポジトリなので git に置かない)。
-    # 下の render が HOOK_ で始まる変数(stateKey)を差し替える。送り手は @_webhooks_<name>:doany.io
+    # 下の render が HOOK_ で始まる変数(stateKey)を差し替える。
     #
     # 投稿は全部 m.notice(bot の発言)。スマホに通知するかと音は、Element の「bot のメッセージ」の設定と
     # 部屋ごとの通知の設定で決める(人の会話は音あり、bot は音無しで通知、要らない部屋はメンションのみ)
@@ -95,21 +95,18 @@ data:
         state:
           name: argocd
           transformationFunction: *slack
-      # 部屋 ashi: ashi
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_ASHI}
         roomId: "!Ffdb9KuBulsduDwuX3ig_Mm_L58QUBd78rcfGOTWoNs"
         state:
           name: ashi
           transformationFunction: *slack
-      # 部屋 todoroku: todoroku
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_TODOROKU}
         roomId: "!6cY5BJsmPL_0_-t2q2E-veifDIO73fz2ABcZErJXkhQ"
         state:
           name: todoroku
           transformationFunction: *slack
-      # 部屋 worklog: worklog
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_WORKLOG}
         roomId: "!aAFRLm9zquKQuIO3X7L-PkvvWcPg7_dqu5WIgYQNhe0"

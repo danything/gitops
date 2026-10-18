@@ -1,7 +1,7 @@
 # etcd のスナップショットを日次で restic(R2)へ。
 #
 # **戻すときの主経路ではない。** 主経路は「git から Argo CD で建て直して PV を k8up で戻す」
-# (recovery/README.md。2026-10-17 に実機で通した)。こちらは git に無い状態
+# (recovery/README.md)。こちらは git に無い状態
 # (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書など)まで含めて**一瞬で戻したいとき**の近道。
 # 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
 #
@@ -39,8 +39,7 @@ spec:
         spec:
           restartPolicy: Never
           # 2 つのコンテナを同じユーザーで動かす。talosctl のイメージは root で走り、スナップショットを
-          # 0600 で書くので、k8up のイメージ(65532)の restic が `permission denied` で読めなかった
-          # (最初の 1 回、2026-10-17)。
+          # 0600 で書くので、k8up のイメージ(65532)の restic が `permission denied` で読めない。
           securityContext:
             runAsUser: 65532
             runAsGroup: 65532
@@ -69,7 +68,7 @@ spec:
                 - -ec
                 - |
                   export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
-                  # 空のファイルを「取れた」にしない(k8up の空スナップショットで懲りている。apps/k8up/README.md)
+                  # 空のファイルを「取れた」にしない(apps/k8up/README.md「空のスナップショット」)
                   [ -s etcd.snapshot ] || { echo "etcd.snapshot が空" >&2; exit 1; }
                   # --host は k8up の namespace と被らない名前に。k8up の prune は
                   # --host=<namespace> で絞るのでこちらには届かない ── 保持は自分で回す。

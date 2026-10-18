@@ -1,9 +1,7 @@
 # Renovate を自前で回す。danything と 5ym の GitHub の全リポジトリと、Forgejo(fj.doany.io)の doa の全リポジトリ。
 #
-# それまでは GitHub Actions(5ym/repo-config の renovate.yml)と Forgejo Actions(doa/renovate)で毎時回していたが、
-# GitHub の schedule は 15〜40 分遅れるうえに丸ごと飛ばされることがあった(2026-10-12 に数えた)。
-# CronJob なら時刻どおりに走る。**クラスタが落ちている間は止まる**が、予備は置かない(もとの 2 つの workflow は消した)。
-# クラスタが止まっているときはそれを直すのが先で、ほかの依存を上げる PR を出しても仕方がない(Forgejo はそもそもクラスタの上)。
+# GitHub Actions の schedule は遅れたり丸ごと飛ばされたりするので CronJob で回す。**クラスタが落ちている間は止まる**が、
+# 予備は置かない(クラスタを直すのが先。Forgejo はそもそもクラスタの上)。
 #
 # 1 つの Pod が 1 つの owner を受け持つ(GitHub App のトークンがインストールごとに分かれるため)。
 # Renovate には複数の owner を並行に回す機能が無いので、Indexed Job の 3 つの Pod で並べる。
@@ -11,7 +9,7 @@
 #
 # **Pod はいつも成功で終える。** Renovate が非ゼロで終わっても、トークンが作れなくても exit 0。
 # Job が失敗すると CronJob が Degraded になり、ArgoCD が gitops の同期を retry に入れて
-# apps/ の更新が止まる(2026-09-12 に k8up-notify で実際に起きた。apps/k8up/notify.yaml の末尾)。
+# apps/ の更新が止まる(apps/k8up/notify.yaml の末尾)。
 # 失敗はログに残す: `kubectl -n renovate logs job/<名前> --all-pods`。Job はいつも成功なので、ログを見られるよう成功の Job を 3 回分残す。
 apiVersion: v1
 kind: ConfigMap
@@ -33,7 +31,7 @@ data:
     export OWNER RENOVATE_AUTODISCOVER_FILTER="$OWNER/*"
     echo "受け持ち: $OWNER"
     if [ "$OWNER" = doa ]; then
-      # Forgejo(fj.doany.io)。もとの doa/renovate(2026-10-17 に消した)の Forgejo Actions の env と同じ。
+      # Forgejo(fj.doany.io)。
       # Pod から fj.doany.io へは IPv6 でしか届かない(IPv4 はヘアピンで落ちる。apps/forgejo/runner.yaml の冒頭)
       export RENOVATE_PLATFORM=forgejo RENOVATE_ENDPOINT=https://fj.doany.io/api/v1
       export RENOVATE_GIT_AUTHOR='Renovate Bot <renovate@fj.doany.io>'
@@ -44,8 +42,7 @@ data:
       fi
       RENOVATE_TOKEN=$FORGEJO_TOKEN
     else
-      # GitHub。中身は Actions の頃の renovate.yml の env と同じ。
-      # GitHub App doa-renovate(danything の org が持ち主。5ym にもインストールしてある)。client ID は秘密ではない
+      # GitHub。GitHub App doa-renovate(danything の org が持ち主。5ym にもインストールしてある)。client ID は秘密ではない
       export RENOVATE_PLATFORM=github APP_CLIENT_ID=Iv23liZjExRcK6lxJueN
       # App のトークンからは自分のユーザーを引けないので明示する。id は
       # `gh api users/doa-renovate%5Bbot%5D --jq .id`
@@ -79,8 +76,7 @@ data:
     [ "$rc" -eq 0 ] || echo "renovate が $rc で終わった(Job は成功にしておく。renovate.yaml の冒頭)" >&2
     exit 0
   github-app-token.mjs: |
-    // GitHub App doa-renovate のインストールトークンを作って標準出力に出す
-    // (Actions の頃の actions/create-github-app-token の代わり)。
+    // GitHub App doa-renovate のインストールトークンを作って標準出力に出す。
     // App の JWT(RS256、iss は client ID)で OWNER のインストールを探し、トークンと交換する。
     // トークンは 1 時間で切れる。Job の activeDeadlineSeconds はそれより短くしてある。
     import { sign } from "node:crypto";
@@ -129,7 +125,6 @@ spec:
       completions: 3
       parallelism: 3
       # 番号ごとに数える。1 つが落ちても(OOMKilled など。exit 0 にできない終わり方)残りの番号は最後まで回す
-      # (そのときの Job は Failed になる。3 本の CronJob だった頃にその 1 本が Failed になったのと同じ)
       backoffLimitPerIndex: 0
       # トークンは 1 時間で切れる。それより前に止める
       activeDeadlineSeconds: 2700

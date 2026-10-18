@@ -1,21 +1,15 @@
-# NetBird の combined サーバ + ダッシュボード。VPN はこれ 1 本(wg-easy は 2026-09-07 に撤去)。
-# 選定の理由と比較は docs/decisions.md「VPN を wg-easy から NetBird にした」。
+# NetBird の combined サーバ + ダッシュボード。選定の理由は docs/decisions.md「VPN を wg-easy から NetBird にした」。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: netbird-data
   namespace: netbird
   annotations:
-    # ファイルとしては取らない。下の backup サイドカーが store.db / idp.db /
-    # events.db を整合したコピーで取っている。ここに同居している GeoLite2-City(65 MB)と
-    # geonames(7 MB)は起動時に落とし直せるので、取る意味が無い。
+    # ファイルとしては取らない。下の backup サイドカーが DB だけを整合したコピーで取る。
     k8up.io/backup: "false"
 spec:
   accessModes:
     - ReadWriteOnce
-  # 既定の local-path(reclaim は Delete)
-  # ---「git で消したものはちゃんと消える」に寄せた(docs/decisions.md)。
-  # 後ろ盾は日次の restic。
   resources:
     requests:
       storage: 2Gi
@@ -40,8 +34,6 @@ spec:
       labels:
         app: netbird-server
       annotations:
-        # バックアップは下の backup コンテナで取る。netbird-server のイメージには
-        # sqlite3 が無く(あるのは perl だけ)、上流のイメージなのでこちらでは足せない。
         k8up.io/backupcommand-container: backup
         # store.db(ピアと設定)・idp.db(内蔵 IdP のユーザ)・events.db を、それぞれ
         # SQLite の pager 越しに読んで tar 1 本にまとめる。同じ PVC に居る
@@ -122,10 +114,8 @@ spec:
               mountPath: /var/lib/netbird
             - name: config
               mountPath: /etc/netbird
-        # バックアップのためだけのサイドカー。上の k8up.io/backupcommand は
-        # ここで走る。bun には bun:sqlite が入っているので、sqlite3 を持つイメージを
-        # 自前で焼かずに済む(アプリ側の 5 つと同じ手)。
-        # 読み取り専用でマウントする。このコンテナが DB を書き換えることは無い。
+        # バックアップのためだけのサイドカー(上の k8up.io/backupcommand はここで走る)。
+        # netbird-server のイメージには sqlite3 が無いので、bun:sqlite を使う。DB は読み取り専用でマウントする。
         - name: backup
           image: oven/bun:1.4.3-slim
           command: ["sleep", "infinity"]
@@ -171,7 +161,6 @@ spec:
 # WebSocket(`/relay`)が HTTP/2 上では拡張 CONNECT を要求されて壊れる
 # (Envoy が `upstream connect error ... reset reason: protocol error` で 502)。
 # Service を分ければクラスタが分かれ、h2c になるのは gRPC 側だけになる。
-# 公式の Traefik 例が netbird-server と netbird-server-h2c の 2 つを定義しているのと同じ理由。
 apiVersion: v1
 kind: Service
 metadata:

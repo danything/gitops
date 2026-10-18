@@ -2,7 +2,7 @@
 #
 # Talos は kernel.modules を書いた順ではなく名前の順に読むので、earth-pt3 がチューナー
 # (qm1d1c0042 / mxl301rf)より先に入り、`Failed to create FE0` で /dev/dvb/*/frontend0 ができない。
-# チューナーが揃ってから unbind / bind すれば通る(移行当日 2026-10-17 に手で確かめた)。
+# チューナーが揃ってから unbind / bind すれば通る。
 # 起動のたびに 1 回だけやって、あとは寝ている。tuner-agent は /dev/dvb ができるまでマウントを再試行する。
 # 付け直しても frontend0 が無ければ落ちて、kubelet の再起動でやり直す(黙って寝ない)。
 # namespace は denpa(PSA privileged。denpa のリポジトリの chart が作る)。PT3 は main にしか無い。

@@ -1,7 +1,7 @@
 # metrics-server。Talos には無い。入れないと `kubectl top` が使えず、ArgoCD・Headlamp・
 # Hubble の各 UI から使用量の表示が消える。HPA は今のところ 1 つも無いので停止には至らない。
 #
-# 2026-10-17 まで machine config の inlineManifest だった。起動に要るものではないので ArgoCD に移した
+# 起動に要るものではないので machine config の inlineManifest ではなく ArgoCD で入れる
 # (版を上げても render.sh → apply-config → upgrade-k8s を流さなくて済む)。
 apiVersion: argoproj.io/v1alpha1
 kind: Application

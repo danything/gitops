@@ -1,8 +1,8 @@
-# Tuwunel(Matrix のサーバー。https://github.com/matrix-construct/tuwunel)。Zulip からの移行先(2026-10-06)。
+# Tuwunel(Matrix のサーバー。https://github.com/matrix-construct/tuwunel)。
 #
 # 最小構成。サーバーはこれ 1 つで、DB(RocksDB)も中にある。Postgres も MAS も要らない:
 #   - ログインは Tuwunel 自身の OAuth/OIDC サーバー(MSC3861/2965)が受け、Entra に回す。
-#     スマホの Element X は「OAuth か パスワード」しか受け付けないので、これが要る(Synapse だと MAS が要る)
+#     スマホの Element X は「OAuth か パスワード」しか受け付けないので、これが要る
 #   - ID は @<メールの @ の前>:doany.io。初回のログインで自動で作られ、最初の人が管理者になる
 #   - フェデレーションは無し(家の中だけ)。パスワードのログインも無し
 #
@@ -136,7 +136,7 @@ spec:
         k8up.io/file-extension: .tar
     spec:
       # Service の自動の環境変数(TUWUNEL_PORT=tcp://… など)を入れない。Service の名前が tuwunel なので、
-      # Tuwunel が自分の設定(TUWUNEL_*)として読んで起動に失敗する(2026-10-06 に踏んだ)
+      # Tuwunel が自分の設定(TUWUNEL_*)として読んで起動に失敗する
       enableServiceLinks: false
       # バックアップのサイドカーが Tuwunel のプロセスにシグナルを送るため
       shareProcessNamespace: true
@@ -194,9 +194,8 @@ spec:
             - name: secrets
               mountPath: /run/secrets/matrix
               readOnly: true
-        # k8up のバックアップのときにだけ働く(上の backupcommand)。Tuwunel に SIGUSR2 を送って
-        # 整合の取れたバックアップ(backups/)を作らせ、できたら backups/ と media/ を tar で渡す。
-        # ふだんは寝ているだけ。Tuwunel のイメージにはシェルが無いので別に置く
+        # k8up のバックアップのときにだけ働く(上の backupcommand)。ふだんは寝ているだけ。
+        # Tuwunel のイメージにはシェルが無いので別に置く
         - name: backup
           image: busybox:1.38
           command: [sh, -c, "trap 'exit 0' TERM; sleep infinity & wait"]

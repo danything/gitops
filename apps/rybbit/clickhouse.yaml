@@ -1,7 +1,7 @@
 # Rybbit のイベントを溜める ClickHouse。上流の docker-compose.yml の設定(network / logging / resource_limits /
 # user_settings)をそのまま ConfigMap にし、メモリの上限だけこの箱に合わせて下げた。
 #
-# 版は上流の compose に合わせる(26.3 系)。Renovate が PR を出す。
+# 版は上流の compose に合わせる。
 apiVersion: v1
 kind: Service
 metadata:

@@ -1,10 +1,9 @@
 # エンコード済みの録画(PVC denpa-encoded、Pod の中では /media/encoded)だけ世代を持たない。
-# 中身が入れ替わるので、古い世代が消えたファイルを抱え続ける(1 世代でよい、は本人の判断。2026-10-05)。
+# 中身が入れ替わるので、古い世代が消えたファイルを抱え続ける。
 # 翌日までに誤削除に気づかないと戻せない。余裕が欲しくなったら --keep-last 2(約 2 GiB)。
 #
 # k8up の保持は Schedule(= namespace)単位でしか書けない。restic の forget は既定で (host, paths) ごとに
 # 保持を効かせる(k8up は --group-by を渡さない)ので、PVC ごとに別の保持を当てるには path を絞った forget を回す。
-# 以前のホストのスナップショット(host=main)が同じ blob を掴んでいて効いていなかったが、2026-10-17 に消した。
 apiVersion: batch/v1
 kind: CronJob
 metadata:

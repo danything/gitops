@@ -6,7 +6,7 @@ metadata:
   name: k8up-notify
   namespace: k8up
 ---
-# 読むだけ。k8up.io の 4 種類だけに絞る。
+# 読むだけ。
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -19,8 +19,7 @@ rules:
   - apiGroups: [""]
     resources: [persistentvolumeclaims, pods]
     verbs: [list]
-  # k8up の namespace の CronJob(etcd-snapshot・restore-check など)が最後まで走ったか。
-  # status しか読まない
+  # k8up の namespace の CronJob(etcd-snapshot・restore-check など)が最後まで走ったか。status しか読まない
   - apiGroups: [batch]
     resources: [cronjobs]
     verbs: [list]
@@ -137,7 +136,6 @@ data:
     const now = Date.now();
     const hours = (t) => (now - Date.parse(t)) / 3600e3;
 
-    // (host, path) ごとに最新を拾う。
     const latest = new Map();
     for (const s of snapshots) {
       for (const path of s.paths ?? []) {
@@ -169,7 +167,6 @@ data:
       return (await r.json()).items ?? [];
     };
     const get = (kind) => fetchAll(`https://kubernetes.default.svc/apis/k8up.io/v1/${kind}`, kind);
-    // コアの API は `/api/v1`(`/apis` ではない)。
     const getCore = (kind) => fetchAll(`https://kubernetes.default.svc/api/v1/${kind}`, kind);
 
     // 止めてあるアプリ(Running / Pending の Pod が無い namespace)の stale / 空 / 無音は見送る。
