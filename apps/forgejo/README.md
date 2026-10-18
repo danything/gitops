@@ -149,7 +149,7 @@ yui のもの(repo-config)は画面(設定 → 承認済みインテグレーシ
 
 ノードの名前解決で fj.doany.io をノード自身の Gateway に向ける(`10.0.0.2 fj.doany.io`。`talos/patches/cluster.yaml` の
 `StaticHostConfig`。公開 DNS の A にはノードから届かない)+ `talos/registries.yaml` の資格情報
-(info の `read:package`)。アプリ側に `imagePullSecrets` は要らない([../../talos/README.md](../../talos/README.md)「fj.doany.io の資格情報」)。
+(yui の `read:package`、`talos-registry-pull`)。アプリ側に `imagePullSecrets` は要らない([../../talos/README.md](../../talos/README.md)「fj.doany.io の資格情報」)。
 
 ## マージはスカッシュ
 

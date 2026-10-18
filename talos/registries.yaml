@@ -4,7 +4,7 @@ machine:
             fj.doany.io:
                 auth:
                     username: ENC[AES256_GCM,data:2fi9Gw==,iv:IrUHdYAPJqH9jwgyhA1trkmJeDhrvFcKLEQYjUHTP4g=,tag:0bg6wsrUvusRzqSTXHvIxA==,type:str]
-                    password: ENC[AES256_GCM,data:SvfWLk1UhP9ne1iB5O3dyla4jvxGQNM1Wls6un/d2GhEPG1SJnEKLw==,iv:faFsN+V/tQfzmdOdsjybMZ0Fg/l7T2EtuBkdX8br/kg=,tag:oG9N6T/gUk43+TpNPw7w2g==,type:str]
+                    password: ENC[AES256_GCM,data:HXa6oBG33x7SpQGpajM9yeRkTloQx8AjP7RctZx/PCKVP0eetxM8Jw==,iv:Jk4D7BYeYxG0Hl9KOeUZ8zU05+8Pau+brTn7f4zCG50=,tag:TRvfm9Q8tIkD0xTQM3mqDw==,type:str]
 sops:
     age:
         - enc: |
@@ -16,7 +16,7 @@ sops:
             YBuMuLhhiExdR7hA9Zpw+qbStZ7UJcRDXD5Ors+UC4tOYtzUZplN0g==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-    lastmodified: "2026-09-15T04:11:01Z"
-    mac: ENC[AES256_GCM,data:fbsIm1K0pnTDlp+SxYegzU4KZ2qM7ponxF2B9dBL21uGUEIq5sRoH7tr7TuYeoUWKW0FjBuJxnH5MvrtpkCDGzCDaVygdnLCss4sgY1pgrl7xpDAlMNO/zEXkysrSZ7UB65b3Nr9wym098xKaiTsxM5WZnJDbmINmeim2puF0Is=,iv:ACAsiu0LZ1GqEjb7GX0gxfwKMcV9YSlG2hXiYAnouTM=,tag:7FqPSVhwcGTHBCcVq2N7SQ==,type:str]
+    lastmodified: "2026-10-18T04:19:23Z"
+    mac: ENC[AES256_GCM,data:UZrapLSRfHO5egiYzaBbGXGPWqTmCfu/0GKtJSL3Ype31RAB5RBTbnx7GwvDsjm1DxWzz6P8LsXnpjIpTHT0vDMYJeGZe7DlaL4svApngVi9OkZo+TfSaVD7eHm4A/aQlGE49RZHH+LgIaT1hpZ8xGVVIk1pSvKcwcS+N4KdMms=,iv:uba7L3QCUe0Gz4aqyultNlv+yXjV//OI9T8rZsbIHUY=,tag:l+xOIANn3vMkPZ2QPIVGBg==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.13.3
