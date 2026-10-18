@@ -109,6 +109,8 @@ spec:
               value: info
             # WireGuard の口。下の hostPort と揃える。2026-10-18 までは wg-easy と併走していた頃の名残で 51822 だった。
             # ルーターは DMZ で全部をノードに向けているので、番号を変えてもルーターは触らない(docs/router.md)。
+            # **効くのは最初の起動だけ。** NetBird は PVC の /var/lib/netbird/default.json に `"WgPort"` を保存し、以降はそちらを使う。
+            # 番号を変えるときは default.json も直してから作り直す(2026-10-18 に変えたとき、env だけ直して hostPort とずれた)。
             - name: NB_WIREGUARD_PORT
               value: "51820"
           ports:
