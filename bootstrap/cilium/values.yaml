@@ -52,7 +52,7 @@ nodePort:
   # 2026-09-08〜10-17(k3s の頃)は違った。nodePort 80/443 の L7LB リダイレクトが経路そのもので、port-80 の nodePort を
   # 30080 にずらすと 80 番が全部死んだ。そのため範囲を `"80,443"`、API サーバの `service-node-port-range` を `80-32767` にし、
   # nodePort を 80/443 に揃える Job を置いていた。副作用として、ノード自身から 80/443 に繋ぐと応答が返らなかった
-  # (apps/netbird/routing-peer.yaml、apps/forgejo/node-access.yaml)。
+  # (apps/netbird/routing-peer.yaml。fj.doany.io の中継 apps/forgejo/node-access.yaml は 2026-10-18 に消した)。
   #
   # 2026-10-18 に Talos で確かめ直した。VM では範囲を既定に戻し nodePort をランダム(32399/32657)にしても、外からも、
   # ノード自身(hostNetwork の Pod)からも、Pod からも http 301 / https 200。本番でも port-80 の nodePort を 30080 に

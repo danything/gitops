@@ -45,9 +45,8 @@ machine:
           password: …
 ```
 
-**fj.doany.io はこれだけでは取れない。** ノードからノードの 443(Gateway)に繋がらないので、
-ノードの名前解決で fj.doany.io を中継の ClusterIP に向ける([patches/cluster.yaml](patches/cluster.yaml) の `StaticHostConfig`、
-中継は [../apps/forgejo/node-access.yaml](../apps/forgejo/node-access.yaml))。
+**fj.doany.io はこれだけでは取れない。** 公開 DNS の A(WAN 側)にはノードから届かないので、
+ノードの名前解決で fj.doany.io をノード自身(10.0.0.2 の Gateway)に向ける([patches/cluster.yaml](patches/cluster.yaml) の `StaticHostConfig`)。
 
 `render.sh` はこのファイルを復号して `--config-patch` に足す(**無ければ止まる**)。
 CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通している。

@@ -95,12 +95,14 @@ nameservers:
     - address: 1.1.1.1
     - address: 1.0.0.1
 ---
-# ノード(containerd)から fj.doany.io のイメージを取るため、名前を中継の ClusterIP に向ける。
-# ノード自身からは Gateway の 443 に繋がらなかった(k3s の頃。bootstrap/cilium/values.yaml の `nodePort`。今も要るかは未確認)。
-# 中継は apps/forgejo/node-access.yaml(2026-09-15)
+# ノード(containerd)から fj.doany.io のイメージを取るため、名前をノード自身(Gateway)に向ける。
+# 公開 DNS のままだと A が WAN 側の 59.140.229.91 で、ノードからだとルーターで折り返さず届かない(PC からは届く。
+# AAAA のノード自身の IPv6 なら届く)。2026-10-18 に hostNetwork の Pod から確かめた。
+# 2026-09-15〜10-18 は Gateway に届かなかったので中継(apps/forgejo/node-access.yaml の nginx)の ClusterIP に向けていた
+# (bootstrap/cilium/values.yaml の `nodePort`)。
 apiVersion: v1alpha1
 kind: StaticHostConfig
-name: 10.43.200.10
+name: 10.0.0.2
 hostnames:
     - fj.doany.io
 ---
