@@ -2,8 +2,7 @@
 #
 # **戻すときの主経路ではない。** 主経路は「git から Argo CD で建て直して PV を k8up で戻す」
 # (recovery/README.md。2026-10-17 に実機で通した)。こちらは git に無い状態
-# (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書、
-# API サーバが割り当てた nodePort など)まで含めて**一瞬で戻したいとき**の近道。
+# (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書など)まで含めて**一瞬で戻したいとき**の近道。
 # 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
 #
 # Talos API への権限は `os:etcd:backup` だけ(talos/patches/etcd-backup.yaml)。

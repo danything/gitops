@@ -107,7 +107,7 @@ PSA のラベルまで戻った。**PV の中身は戻らない**(etcd は「PVC
 このあと PV データを k8up で戻す。順序は etcd が先(PV オブジェクトが無いと戻す先が決まらない)。
 
 **主経路ではない。** 主経路は git から建て直すほう([recovery/README.md](../recovery/README.md)。スナップショットの鮮度に左右されない)。
-こちらは git に無い状態(Application の同期状態、発行済みの証明書、API サーバが割り当てた nodePort など)まで一度に戻したいときの近道。
+こちらは git に無い状態(Application の同期状態、発行済みの証明書など)まで一度に戻したいときの近道。
 日次で取っているのは [apps/k8up/etcd-snapshot.yaml](../apps/k8up/etcd-snapshot.yaml)(restic の `--host etcd`)。取り出しは:
 
 ```shell

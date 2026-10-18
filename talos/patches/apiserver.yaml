@@ -13,12 +13,7 @@ kind: KubeAPIServerConfig
 # Talos はマシンのアドレス・ホスト名・Kubernetes の名前は自動で入れるが、公開名は入らない。
 certExtraSANs:
   - ks.doany.io
-extraArgs:
-  # Gateway の Service は nodePort 80/443 を持っていて、そこが公開経路そのもの
-  # (Cilium の L7LB リダイレクト。bootstrap/cilium/values.yaml の `nodePort` に実測あり)。
-  # 既定の 30000-32767 のままだと 80/443 を Service に入れられず、復元後の
-  # 当て直しが `provided port is not in the valid range` で弾かれる。
-  service-node-port-range: 80-32767
+# `service-node-port-range` は既定に戻した(2026-10-18。bootstrap/cilium/values.yaml の `nodePort`)。
 ---
 apiVersion: v1alpha1
 kind: KubeAuthenticationConfig
