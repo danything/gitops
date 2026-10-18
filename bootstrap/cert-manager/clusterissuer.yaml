@@ -1,6 +1,6 @@
 # Let's Encrypt を Cloudflare の DNS-01 で。ワイルドカード証明書を取るので DNS-01。
 # トークンは同じ namespace の Secret にしか置けない(cert-manager は自分の namespace の
-# Secret しか読まない)ので、cloudflare-secret.yaml がここに置いている。
+# Secret しか読まない)ので、cloudflare-secret.sops.yaml がここに置いている。
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

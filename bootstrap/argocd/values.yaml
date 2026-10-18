@@ -1,5 +1,5 @@
 # argo-cd の chart の値。版は version.yaml、秘密の値(通知の webhook と GitHub App の鍵)は
-# secret-values.yaml(SOPS)。描いて machine config に載せるのは talos/render.sh。
+# secret-values.sops.yaml(SOPS)。描いて machine config に載せるのは talos/render.sh。
 #
 # CRD は chart から描かせない。3 つで 1.83 MB あり、描き出しの 95%。
 # render.sh が `KubeExternalManifestConfig` で URL を渡す
@@ -68,7 +68,7 @@ notifications:
     # true by default; anything applied out-of-band gets wiped the next time
     # the chart is re-rendered.
     #
-    # notifiers は secret-values.yaml(`service.webhook.mattermost`)。送り先は Matrix の部屋 argocd
+    # notifiers は secret-values.sops.yaml(`service.webhook.mattermost`)。送り先は Matrix の部屋 argocd
     # (スペース「通知」)の hookshot の webhook(2026-10-06 に Mattermost → Zulip → Matrix と移した)。
     # 名前は mattermost のまま ── テンプレートと subscriptions が参照している。
     # 送るのは {"text": …}(Slack 互換)。hookshot の変換のスクリプト(apps/matrix/hookshot.yaml)が読む
@@ -127,7 +127,7 @@ extraObjects:
     # come from Infisical: ArgoCD syncing is how Infisical itself gets
     # deployed and recovered -- this repo is private.
     #
-    # 中身は下の githubAppRepoCreds(鍵だけ secret-values.yaml にあり、helm が map として重ねる)。
+    # 中身は下の githubAppRepoCreds(鍵だけ secret-values.sops.yaml にあり、helm が map として重ねる)。
     # extraObjects はリストなので、そのままでは値ファイルを重ねると丸ごと置き換わる。
     # 文字列の要素は chart が `tpl` に通すので、ここで toYaml して 1 つの要素にする。
     - '{{ toYaml .Values.githubAppRepoCreds }}'
@@ -175,4 +175,4 @@ githubAppRepoCreds:
         url: https://github.com/danything
         githubAppID: "4434943"
         githubAppInstallationID: "150067651"
-        # githubAppPrivateKey は secret-values.yaml
+        # githubAppPrivateKey は secret-values.sops.yaml

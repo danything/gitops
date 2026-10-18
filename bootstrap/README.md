@@ -14,8 +14,9 @@ ArgoCD が動くのに要るもの(本体・repo の資格情報・ApplicationSe
 最初の何回か落ちて retry で戻る。
 
 **SOPS(age)で暗号化したファイルは ArgoCD が当てない** ── 復号鍵をクラスタにも CI にも渡さないため。
-`bootstrap` の `exclude` に並べてある(**足したら exclude にも足す**)。
-`infisical/secrets.yaml`、`cert-manager/cloudflare-secret.yaml`、`{argocd,infisical}/secret-values.yaml`。
+**名前を `*.sops.yaml` で終える**と `bootstrap` の `exclude` が外す(`.sops.yaml` の規則も
+その名前にしか一致しないので、別の名前では暗号化できない)。
+`infisical/secrets.sops.yaml`、`cert-manager/cloudflare-secret.sops.yaml`、`{argocd,infisical}/secret-values.sops.yaml`。
 鍵は [`recovery/sops-age.key.age`](../recovery/)。**中を編集するときも `sops edit` を通すこと。** MAC は暗号化して
 いない値も含めて計算されるので、**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる。**
 
@@ -23,7 +24,7 @@ ArgoCD が動くのに要るもの(本体・repo の資格情報・ApplicationSe
 
 どれも `render.sh` が `helm template` して machine config に載せる。どれも同じ形で、
 `<name>/version.yaml`(chart・repo・版。Renovate が上げる)と `<name>/values.yaml`(値)。
-argocd と infisical は、値のうち秘密だけを `<name>/secret-values.yaml`(SOPS、丸ごと暗号化)に分けて上に重ねる。
+argocd と infisical は、値のうち秘密だけを `<name>/secret-values.sops.yaml`(SOPS、丸ごと暗号化)に分けて上に重ねる。
 argocd・infisical の版は自動マージしない(`renovate.json` の `bootstrap charts`)。
 
 ## git と live がずれていないか
@@ -41,7 +42,7 @@ ConfigMap に出ているので、読むだけの権限で比べられる)。**�
 認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
 
 - `infisical/` … Infisical 本体(chart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
-  `secrets.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
+  `secrets.sops.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は既定の `local-path` で、`pg_dump` を k8up が日次で取っている。
 - **operator と push-bridge はここには無い。** ArgoCD の Application に移した(`apps/infisical-operator/`、
   `apps/infisical-push-bridge/`)。ArgoCD 自身は operator に依存しないので、bootstrap に置く理由がない。

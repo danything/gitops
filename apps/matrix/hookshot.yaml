@@ -88,7 +88,7 @@ data:
             result = parts.length
               ? { version: "v2", plain: parts.join("\n\n"), msgtype: "m.notice" }
               : { version: "v2", empty: true };
-      # 部屋 argocd: Argo CD の通知(bootstrap/argocd/values.yaml・secret-values.yaml)
+      # 部屋 argocd: Argo CD の通知(bootstrap/argocd/values.yaml・secret-values.sops.yaml)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_ARGOCD}
         roomId: "!BeZ3yus1s1E22DPYFauQjZ1AMGT2VkusuLzLk2r1cJk"

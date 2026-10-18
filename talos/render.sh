@@ -112,7 +112,7 @@ inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.y
 # 認証の側(OIDC の issuer)は patches/apiserver.yaml の KubeAuthenticationConfig。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
-# 値のうち秘密だけは secret-values.yaml(SOPS)にあり、復号して values.yaml の上に重ねる。
+# 値のうち秘密だけは secret-values.sops.yaml(SOPS)にあり、復号して values.yaml の上に重ねる。
 # CI は鍵を持たないので `ARGOCD_SECRET_VALUES` / `INFISICAL_SECRET_VALUES` にダミーを渡す
 # (SECRETS / REGISTRIES と同じ)。
 #
@@ -121,7 +121,7 @@ inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-
 # (../docs/decisions.md「infisical だけは ArgoCD に移せない」)。
 secret_values() { # $1=name  $2=env の上書き
 	if [ -n "$2" ]; then echo "$2"; return 0; fi
-	sops -d "bootstrap/$1/secret-values.yaml" > "$WORK/$1-secret-values.yaml"
+	sops -d "bootstrap/$1/secret-values.sops.yaml" > "$WORK/$1-secret-values.yaml"
 	echo "$WORK/$1-secret-values.yaml"
 }
 # 先に変数に取る。`chart … -f "$(secret_values …)"` だと復号の失敗を `set -e` が拾わない
@@ -150,8 +150,8 @@ done
 # Gateway の HTTPS リスナーに載せる Secret ができない。
 chart cert-manager cert-manager
 
-# SOPS 済みの Secret も入れる。infisical/secrets.yaml は infisical の起動に要る
-# (kubeSecretRef)ので、machine config に無いと起動しない。どちらも ArgoCD は復号できない。cloudflare-secret.yaml は
+# SOPS 済みの Secret も入れる。infisical/secrets.sops.yaml は infisical の起動に要る
+# (kubeSecretRef)ので、machine config に無いと起動しない。どちらも ArgoCD は復号できない。cloudflare-secret.sops.yaml は
 # DNS-01 の資格情報。machine config はもともと秘密の塊なので信頼水準は変わらない。
 # `sops -d … | inline` と繋がないこと。`#!/bin/sh` には `pipefail` が無いので、
 # 復号に失敗しても `set -e` が拾わず、中身が空の KubeInlineManifestConfig が
@@ -166,8 +166,8 @@ inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書�
 	sops -d "$2" > "$WORK/plain-$1.yaml"
 	inline "$1" < "$WORK/plain-$1.yaml" > "$WORK/inline-$1.yaml"
 }
-inline_secret infisical-secrets bootstrap/infisical/secrets.yaml "${INFISICAL_SECRET:-}"
-inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.yaml "${CLOUDFLARE_SECRET:-}"
+inline_secret infisical-secrets bootstrap/infisical/secrets.sops.yaml "${INFISICAL_SECRET:-}"
+inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.sops.yaml "${CLOUDFLARE_SECRET:-}"
 
 # cert-manager の CRD も URL で渡す(理由は bootstrap/cert-manager/values.yaml の `crds`)。
 cat >> "$WORK/external-crds.yaml" <<PATCH
