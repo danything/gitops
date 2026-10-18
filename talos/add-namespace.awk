@@ -2,6 +2,7 @@
 # chart によっては metadata.namespace を書かない(infisical の Deployment と
 # Service が実際にそうだった)。helm / kubectl なら `-n` で決まるが、Talos の
 # マニフェスト適用には既定の namespace が無いので default に落ちる。
+# 2026-10-18 に Talos v1.15.0-alpha.1 で外して確かめ直した: infisical の Deployment が default に出て起動しなかった。
 #
 #   awk -v ns=infisical -f ns.awk < helm-output.yaml
 BEGIN {

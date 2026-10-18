@@ -201,16 +201,15 @@ rm -rf "$OUT"
 talosctl gen config doany https://10.0.0.2:6443 "$@" --output-dir "$OUT" >/dev/null
 echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 
-# 描いたものが本当に入ったか。gen config は知らないキーを黙って捨てることがある。
+# 描いたものが本当に入ったか。見るのは render.sh が組み立てた側(版・helm の出力・inline の中身)だけ。
+# patches/ を書き写しただけのキーは見ない。gen config は知らないキーを `unknown keys found during decoding` で
+# 落とすので、通れば入っている(v1.15.0-alpha.1 で確かめた。2026-10-18)。逆に helm は知らない値を黙って捨てるので、
+# Cilium の値はここで見る。
 # 生成物では manifest が 1 行のエスケープ文字列になるので、引用符は \" で探す。
 for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
-	ks.doany.io token.actions.githubusercontent.com 'claims.repository == "danything/gitops"' \
-	'gha:danything/gitops:refs/heads/main' login.microsoftonline.com 'entra:admin' 'entra:viewer' \
-	'service-node-port-range: 80-32767' cilium-drift.yml 'enabled: false # Enable or disable kube-proxy' \
-	balance-alb /var/mnt/local-path 'name: EPHEMERAL' 'maxSize: 64GiB' 'secure: false' \
 	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'kind: GatewayClass' io.cilium/gateway-controller \
-	'name: local-path' rancher.io/local-path \
+	'name: local-path' rancher.io/local-path /var/mnt/local-path \
 	hubble-generate-certs \
 	'name: apiserver-rbac' 'name: cilium-drift' \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
@@ -225,9 +224,6 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	# `--` を付けておく(`-` で始まる needle を grep がオプションと取る)
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
-# machine.registries のキー。fj.doany.io は StaticHostConfig にも出るので行ごと見る
-grep -qx '            fj.doany.io:' "$OUT/controlplane.yaml" \
-	|| { echo "ERROR: machine.registries に fj.doany.io が無い" >&2; exit 1; }
 # 無いことを見る側。flannel は「ドキュメントが在ること」が有効化の意味(talos/patches/cni.yaml)
 for n in KubeFlannelCNIConfig /var/local-path-provisioner; do
 	! grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に残っている" >&2; exit 1; }
