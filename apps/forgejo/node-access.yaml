@@ -1,6 +1,6 @@
 # ノード自身(containerd)が fj.doany.io に届くための口。
 #
-# **ホストからノードの 80/443 には繋がらない**(bootstrap/cilium/values.yaml の nodePort の説明の 3)。
+# **ホストからノードの 80/443 には繋がらなかった**(k3s の頃。bootstrap/cilium/values.yaml の `nodePort`。今も要るかは未確認)。
 # 公開経路は Gateway なので、containerd が fj.doany.io のイメージを取ろうとすると
 # 接続がタイムアウトする(2026-09-15 に shadai で踏んだ)。レジストリはトークンの取得先(realm)も
 # `https://fj.doany.io/v2/token` を返すので、IP だけ差し替えるミラーでは足りない。
