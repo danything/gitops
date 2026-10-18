@@ -30,8 +30,9 @@ talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
 ## fj.doany.io の資格情報
 
 ノード単位で持つので **namespace ごとの `imagePullSecrets` が要らない**(`machine.registries`)。
-持つのは **fj.doany.io**(Forgejo のコンテナレジストリ)だけで、Forgejo のユーザー `info` の
-`read:package` だけのトークン(Forgejo の名前は `k3s-registry-pull`。作った頃の名前のまま)。無いと非公開のリポジトリの
+持つのは **fj.doany.io**(Forgejo のコンテナレジストリ)だけで、Forgejo のユーザー `yui` の
+`read:package` だけのトークン(全リポジトリ。Forgejo の名前は `talos-registry-pull`、2026-10-18 に作り直した)。
+`username` は Forgejo が見ない(トークンの持ち主で決まる。`info` のままにしてあるが、何でも通る)。無いと非公開のリポジトリの
 イメージが引けない。ghcr.io に残るイメージは全部公開。SOPS で暗号化してある(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml)):
 
 ```yaml
