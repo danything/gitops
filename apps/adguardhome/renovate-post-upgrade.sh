@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Renovate の postUpgradeTasks から呼ぶ(renovate.json)。AdGuard Home の版を上げた枝で、config.yaml の設定を新しい版に移行させる。
+# Renovate の postUpgradeTasks から呼ぶ(renovate.json)。AdGuard Home の版を上げた枝で、deployment.yaml の設定(initContainer の `CONFIG`)を新しい版に移行させる。
 #
-# AdGuard は起動時に古い schema_version の設定を移行する。git の config.yaml は起動のたびに PVC に書き戻すので、
+# AdGuard は起動時に古い schema_version の設定を移行する。git の設定は起動のたびに PVC に書き戻すので、
 # そのままでも動くが、git 側は古い schema_version のまま残り、移行が外された版で起動に失敗する。そこで版上げの PR の中で
 # 新しい版に `--check-config` させる。これは移行が要るときだけ設定ファイルを書き直し(要らなければ一切書かない)、
-# 読めない設定なら失敗する(= PR の postUpgradeTasks が落ちて気づける)。書き直したら config.yaml に戻し、
-# deployment.yaml の doany.io/config-sha256 も合わせる(CI の adguard-config が見る)。
+# 読めない設定なら失敗する(= PR の postUpgradeTasks が落ちて気づける)。書き直したら deployment.yaml に戻す。
 #
 # 動くのは Renovate のコンテナ(ghcr.io/renovatebot/renovate、apps/renovate/renovate.yaml の CronJob)の中、リポジトリの直下。
 # AdGuard の版は deployment.yaml のイメージのタグ(Renovate が上げた後の値)から取り、公式のチェックサムと照らしてから使う。
@@ -27,10 +26,21 @@ want=$(curl -fsSL "$base/checksums.txt" | awk -v f="./$f" '$2 == f { print $1 }'
 echo "$want  $d/$f" | sha256sum -c --strict - >/dev/null
 tar -xzf "$d/$f" -C "$d"
 
-# ConfigMap の「  AdGuardHome.yaml: |」より後(4 文字字下げ)が AdGuard の設定。前はコメントと ConfigMap の頭
-marker='  AdGuardHome.yaml: |'
-grep -qxF "$marker" config.yaml || { echo "config.yaml に「$marker」の行が無い" >&2; exit 1; }
-awk -v m="$marker" 'f { sub(/^    /, ""); print } $0 == m { f = 1 }' config.yaml >"$d/AdGuardHome.yaml"
+# deployment.yaml の「            - name: CONFIG」の次の「              value: |」から、字下げが 16 文字より浅い行の手前までが
+# AdGuard の設定(16 文字字下げ)
+grep -qxF '            - name: CONFIG' deployment.yaml || { echo "deployment.yaml に CONFIG の env が無い" >&2; exit 1; }
+# s: 0=前 1=value: | を待つ 2=本体 3=後
+split() { # $1=前/本体/後 のどれを出すか
+  awk -v want="$1" '
+    s == 0 && $0 == "            - name: CONFIG" { print_line("pre"); s = 1; next }
+    s == 1 { print_line("pre"); if ($0 == "              value: |") s = 2; next }
+    s == 2 && length($0) && $0 !~ /^                / { s = 3 }
+    s == 2 { if (want == "body") { sub(/^                /, ""); print } next }
+    { print_line(s == 3 ? "post" : "pre") }
+    function print_line(part) { if (part == want) print }
+  ' deployment.yaml
+}
+split body >"$d/AdGuardHome.yaml"
 cp "$d/AdGuardHome.yaml" "$d/before.yaml"
 
 "$d/AdGuardHome/AdGuardHome" --check-config --no-check-update -c "$d/AdGuardHome.yaml" -w "$d"
@@ -41,10 +51,9 @@ if cmp -s "$d/before.yaml" "$d/AdGuardHome.yaml"; then
 fi
 
 {
-  awk -v m="$marker" '{ print } $0 == m { exit }' config.yaml
-  awk '{ print (length($0) ? "    " $0 : "") }' "$d/AdGuardHome.yaml"
-} >"$d/config.yaml"
-mv "$d/config.yaml" config.yaml
-sum=$(sha256sum config.yaml | cut -d' ' -f1)
-sed -i "s|^\( *doany.io/config-sha256: *\)[0-9a-f]*$|\1$sum|" deployment.yaml
-echo "AdGuard $v: config.yaml を移行した ($(sed -n 's/^    schema_version: //p' config.yaml))"
+  split pre
+  awk '{ print (length($0) ? "                " $0 : "") }' "$d/AdGuardHome.yaml"
+  split post
+} >"$d/deployment.yaml"
+mv "$d/deployment.yaml" deployment.yaml
+echo "AdGuard $v: 設定を移行した ($(sed -n 's/^                schema_version: //p' deployment.yaml))"

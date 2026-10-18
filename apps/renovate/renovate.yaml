@@ -59,7 +59,7 @@ data:
       # postUpgradeTasks で流してよいコマンド(正規表現。これに合わないものは Renovate が拒む)。
       # pulumi/ は bun.lock を Renovate が作れない(SDK を pulumi install でしか作れない)ので、
       # スクリプトで pulumi install させる(pulumi/README.md)。
-      # AdGuard Home の版上げでは、新しい版に config.yaml を移行させる(apps/adguardhome/renovate-post-upgrade.sh)
+      # AdGuard Home の版上げでは、新しい版に設定(deployment.yaml の CONFIG)を移行させる(apps/adguardhome/renovate-post-upgrade.sh)
       export RENOVATE_ALLOWED_COMMANDS='["^bash pulumi/renovate-post-upgrade\\.sh$", "^bash apps/adguardhome/renovate-post-upgrade\\.sh$"]'
       # github.com のトークンは Forgejo のときだけ使う(GitHub ではトークンそのものが github.com のもの)
       unset RENOVATE_GITHUB_COM_TOKEN
