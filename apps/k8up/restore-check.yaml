@@ -5,7 +5,7 @@
 # スナップショットは新しく、0 バイトでもない。それを捕まえるには実際に取り出して開くしかない。
 # 四半期ごとの手動のリハーサル(ROADMAP)の代わり。建て直しそのものの手順は recovery/README.md。
 #
-# 見るもの((host, path) ごとの最新。`retired` は落とす。過去 8 日に出てこない経路は notify の担当):
+# 見るもの((host, path) ごとの最新。過去 8 日に出てこない経路は notify の担当):
 #   - SQLite(.db): `PRAGMA integrity_check` が ok、表が 1 つ以上
 #   - pg_dump(.sql): 使い捨ての postgres に流して ERROR が 0 行、表の数を出す
 #   - tar: 全部展開できる。netbird は store.db / idp.db / events.db を SQLite と同じく見る。
@@ -261,7 +261,6 @@ data:
       const now = Date.now();
       const latest = new Map();
       for (const s of JSON.parse(restic("snapshots", "--json").out)) {
-        if ((s.tags ?? []).includes("retired")) continue;
         if ((now - Date.parse(s.time)) / 3600e3 > LEARN_H) continue;
         for (const path of s.paths ?? []) {
           const key = `${s.hostname}${path}`;

@@ -101,13 +101,14 @@ CRD を Application が入れる種類のリソースは全部同じ([../../boot
 ## やめたアプリの残り
 
 notify は過去 8 日に出てきた (host, path) を「あるべきもの」とみなすので、消したアプリや改名したアプリは 8 日のあいだ毎日鳴る。
+**残さずに `restic forget --prune <ID…>` で消す。** Schedule が無くなったホストは forget も prune もされないので、消すまで R2 に残る。
 
-- **消してよいもの**: `restic forget <ID…>`(`--host` だけでは何も消さない)。中身は日曜の prune で解放される
-- **残しておきたいもの**: `restic tag --host <旧名> --add retired`。notify も restore-check も `retired` を見ない。
-  中身はそのままで restore できる
+- **ID で指定する。** `--host` だけでは何も消さない。`--keep-tag` などの保持ポリシーで全部を外そうとすると、
+  restic は `refusing to delete last snapshot of snapshot group` で止まる
+- 打つときは k8up のイメージ(`ghcr.io/k8up-io/k8up`、restic 入り)と `k8up-global` の秘密で使い捨ての Job を
+  `kubectl -n k8up create -f -` で流す(env の渡し方は [denpa-encoded-forget.yaml](denpa-encoded-forget.yaml) と同じ)
+- forget はリポジトリを排他でロックするので、schedules.yaml の時刻を外す
 
-打つときは k8up のイメージ(`ghcr.io/k8up-io/k8up`、restic 入り)と `k8up-global` の秘密で使い捨ての Job を
-`kubectl -n k8up create -f -` で流す(env の渡し方は [denpa-encoded-forget.yaml](denpa-encoded-forget.yaml) と同じ)。
-forget と tag はリポジトリを排他でロックするので、schedules.yaml の時刻を外す。
-
-shadai(todoroku の旧名)・mattermost・erpnext・zulip は `retired`。Schedule が無いので forget も prune もされず、**消すまで R2 に残る**。
+2026-10-18 までは残しておきたいものに `retired` のタグを付け、notify と restore-check で外していた。そのとき残っていた
+shadai(todoroku の旧名)・zulip と、Talos に移す前の lgtm・xool・todoroku の 66 本は 2026-10-18 に消した
+(重複排除でほとんど共有されていて、空いたのは 42 MiB)。
