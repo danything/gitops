@@ -11,7 +11,7 @@
 | [pv.sh](pv.sh) | PV のデータを k8up の `Restore` で戻す道具(下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
-**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる。
+**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる(`pv.sh - plan-all` は 2026-10-20 に本番の restic と突き合わせて、全 namespace の判定が上の表どおりになるのを確かめた)。
 
 **手動のリハーサルは回さない。** 中身は月次の [restore-check](../apps/k8up/restore-check.yaml)、machine config は
 [talos-boot](../.github/workflows/talos-boot.yml) が確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
@@ -159,64 +159,35 @@ kubectl get infisicalsecret -A       # 全部 Ready になる。k8up/k8up-global
 
 ## 8. PV データを戻す(k8up)
 
-**Argo CD を止めてから。** selfHeal が replicas を git の値に戻すので、アプリを 0 にしても起き上がってくる。
-戻し終わるまで application-controller を 0 にしておく(ApplicationSet は止まらないので Application は作られ続ける):
+**1 本で流す。** Argo CD を止め、Forgejo を先に戻し、非公開アプリの Application と PVC が出てくるのを待ってから、
+残りの namespace を 1 つずつ「止める → 戻す → 起こす」:
 
 ```shell
-sh recovery/pv.sh - argo-pause
+sh recovery/pv.sh - plan-all      # 読むだけ。namespace ごとに何をするかを出す。先にこれを見る
+sh recovery/pv.sh - restore-all
 ```
 
-**Forgejo を先に。** 非公開アプリのイメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、Argo CD が読む
-マニフェストも、それを読むトークン(Forgejo の DB)も全部 Forgejo にあるので、戻すまで 1 本も上がらない:
+`restore-all` がやっていること(途中で止まったら、その namespace から手で続けられる):
 
-```shell
-restic snapshots --host forgejo --latest 1 --compact
-sh recovery/pv.sh forgejo stop postgres
-sh recovery/pv.sh forgejo pgload postgres-data <ID> /forgejo-postgres.sql postgres forgejo forgejo
-sh recovery/pv.sh forgejo folder forgejo-repos <ID>
-sh recovery/pv.sh forgejo start
-sh recovery/pv.sh - argo-resume      # repos-forgejo の ERR が False になり、非公開アプリの Application と PVC が出てくるのを待つ
-kubectl -n argocd get applicationset -o custom-columns='NAME:.metadata.name,ERR:.status.conditions[?(@.type=="ErrorOccurred")].status'
-sh recovery/pv.sh - argo-pause
-```
+1. `argo-pause`(selfHeal が replicas を戻して、戻している最中にアプリが起き上がるので)
+2. `forgejo restore` ── **Forgejo を先に。** 非公開アプリのイメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、
+   Argo CD が読むマニフェストも、それを読むトークン(Forgejo の DB)も全部 Forgejo にあるので、戻すまで 1 本も上がらない
+3. `argo-resume` して ApplicationSet のエラーが消えるのを待ち、また `argo-pause`
+4. restic の host のうちクラスタに namespace があるもの(forgejo・infisical・etcd を除く)を `<ns> restore`
+5. `argo-resume`
 
-残りは namespace ごとに `restic snapshots --host <ns> --latest 1 --compact` で経路と ID を見て、
-**`stop` → 経路ごとに戻す → `start`**。経路の形で操作が決まる:
+1 つだけ戻すなら `sh recovery/pv.sh <ns> plan` で見てから `sh recovery/pv.sh <ns> restore`(Argo CD は先に `argo-pause`)。
+`restore` は namespace の最新のスナップショットを経路ごとに引き、**経路の形で操作を決める**:
 
 | 経路 | 操作 |
 | --- | --- |
-| `/data/<pvc>` | `folder <pvc> <ID>`(`/data/adguardhome-ssl` だけは戻さない。どの Pod も使っていない PVC で、消した) |
-| `/<ns>-<app>.db`(SQLite) | `sqlite <pvc> <ファイル名> <ID> /<ns>-<app>.db`。xool・worklog・lgtm・todoroku は `<app>-db` / `<app>.db`、blog は `yosegaki-db` / `yosegaki.db`、denpa は `denpa-data` / `denpa.db`(**`/data/denpa-data` の `folder` を先に**。あちらは `denpa.db*` を除いて取っている) |
-| `/rybbit-postgres.sql` | `stop postgres` にしてから `pgload postgres-data <ID> /rybbit-postgres.sql postgres rybbit analytics`(ダンプは `--clean` 付き) |
-| `/netbird-backup.tar` | `untar netbird-data <ID> /netbird-backup.tar "store.db* idp.db* events.db*"`。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
-| `/matrix-backup.tar` | 下 |
+| `/data/<pvc>` | `folder`。PVC がもう無ければ飛ばす(やめたアプリの残り) |
+| `/<ns>-<app>.db`(SQLite) | `sqlite`。PVC は `<app>-db`、無ければ `<app>-data`(denpa)。ファイル名は `<app>.db`。**folder を先に**流すので、`denpa.db*` を除いて取った `/data/denpa-data` を置いてから DB を戻す順になる |
+| `/<ns>-postgres.sql` | `pgload`。`deploy/postgres` だけ止めずに残し、ユーザーと DB はその Pod の env から取る(ダンプは `--clean` 付き) |
+| `/netbird-backup.tar` | `untar`(`store.db*` `idp.db*` `events.db*` を消してから)。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
+| `/matrix-backup.tar` | Tuwunel 自身のバックアップ(`backups/`)と `media/` の tar。新しく作られた `db/` を消して展開し、**1 回だけ `--restore-backup` 付きで起こす**(引数は Argo CD を戻すと selfHeal が消す) |
 
-```shell
-# 例: xool
-sh recovery/pv.sh xool stop
-sh recovery/pv.sh xool folder xool-assets <ID>
-sh recovery/pv.sh xool sqlite xool-db xool.db <ID> /xool-xool.db
-sh recovery/pv.sh xool start
-```
-
-matrix(Tuwunel)は DB のファイルではなく、Tuwunel 自身のバックアップ(`backups/`)と `media/` を tar で取っている。
-新しく作られた `db/` を消して置き、**1 回だけ `--restore-backup` 付きで起こす**(引数は Argo CD を戻すと selfHeal が消す):
-
-```shell
-sh recovery/pv.sh matrix stop
-sh recovery/pv.sh matrix folder tuwunel-data <ID>
-sh recovery/pv.sh matrix shell tuwunel-data 'rm -rf db backups media; tar -xf matrix-backup.tar; rm -f matrix-backup.tar; chown -R 65532:65532 .; ls backups'
-kubectl -n matrix patch sts tuwunel -p '{"spec":{"template":{"spec":{"containers":[{"name":"tuwunel","args":["--restore-backup"]}]}}}}'
-sh recovery/pv.sh matrix start
-kubectl -n matrix logs tuwunel-0 -c tuwunel | grep -iE 'restor|backup|error'
-```
-
-終わったら Argo CD を戻し、戻したアプリを一度入れ直して開いているファイルを掴み直させる:
-
-```shell
-sh recovery/pv.sh - argo-resume
-kubectl -n <ns> rollout restart deploy     # 戻した namespace ごと
-```
+表に無い経路があると `plan` の時点で止まる(黙って飛ばさない)。新しい形の経路を足したら pv.sh の `plan` とこの表に足す。
 
 - **`Succeeded` は「戻った」の意味ではない。** `pv.sh` は `Restored N files` と(SELinux 以外の)エラー数を出すので、それを見る。
   SQLite は大きさを restic と突き合わせてから付け替える
