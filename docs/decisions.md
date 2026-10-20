@@ -267,6 +267,39 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 | 生 TS の作業領域(`denpa-raw`) | **取らない。** エンコードが終われば消え、数時間で入れ替わる。14 GB まで育つ |
 | AdGuard のクエリログ | **保持を 7 日に。** 純粋な計測データで、復元時に無くても困らない |
 
+## Z440 で、ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする(2026-10-20 に決めた)
+
+**いまの弱点は戻す側。** local-path はスナップショットを取れないので、DB は k8up の `backupcommand` で論理ダンプを取り、
+戻し方が経路ごとに 7 通りに分かれた(`recovery/pv.sh` の `restore-all` で 1 コマンドにはまとめた)。
+スナップショットを取れるストレージにすると、次の 2 つが一度に手に入る:
+
+- **ダンプが原則いらない。** スナップショットは crash-consistent で、Postgres・SQLite(WAL)・Tuwunel(RocksDB)はそこから自分で立ち直る。
+  VolSync にフックが無いこと(作者が入れないと明言)が問題でなくなる
+- **戻すのが自動になる。** VolSync の volume populator は、`dataSourceRef` で ReplicationDestination を指した PVC を
+  作るだけで中身を埋める。ただし **populator は copyMethod: Snapshot が必須**(ドキュメントに明記)なので、local-path では使えない
+
+選んだもの:
+
+| | 判定 |
+| --- | --- |
+| **OpenEBS LVM LocalPV**(thin プール) | ◎ ローカル型で軽い。thin のボリュームでスナップショットが取れる。**OpenEBS の hostpath はスナップショットが無い**ので選ばない |
+| TopoLVM | ○ 同等。対応表が Kubernetes 1.36 まで(1.37 は表の外)。スナップショットは thin のみ・同じ台でのみ戻せる |
+| Longhorn | △ 複製型。1 台では重さの割に得るものが無い。**台数を増やすときに足す**(下) |
+| Rook/Ceph | × 3 台以上・台ごとの専用ディスク・運用の知識が前提。数台の規模には過剰 |
+| **VolSync**(Snapshot + populator) | ◎ データだけを PVC 単位で宣言的に取る。リソースは git と ArgoCD が戻すので役割が分かれる |
+| Velero | ○ 取る前後のフックがあり、利用者も多い。ただしリソースのバックアップが git と重複し、戻すのは命令型で、リソースまで戻すと ArgoCD とぶつかる |
+
+**移るのは Z440 への移設のとき。** いまの DL360 のディスクは local-path の `u-local-path` が残りを全部取っていて(`grow: true`)、
+LVM 用のパーティションを切る余地が無い。Talos のボリュームは未割り当ての領域にしか作れないので、切り直すには入れ直しになる。
+Talos v1.14 から、`RawVolumeConfig` と `LVMVolumeGroupConfig` でボリュームグループを machine config だけで作れる(シェルも特権 Pod も要らない)。
+
+**台数を増やすとき**は Longhorn を足し、止まって困るアプリから順に移す。VolSync の populator があれば、
+StorageClass を変えた PVC を作り直すだけで中身が埋まるので、ストレージの乗り換えも同じ手で済む。
+入口(Gateway・AdGuard・LiveKit)と API の宛先は 1 台の IP に固定されているので、そのときは VIP(Cilium の L2 Announcements、Talos の共有 VIP)も要る。
+
+確かめていないこと: OpenEBS LVM LocalPV が Talos で動くか(`dm-snapshot` モジュール、読み取り専用のルートで LVM のコマンドが通るか)、
+VolSync の restic mover と R2 の組み合わせ、restic が戻したファイルの持ち主。
+
 ## VPN を wg-easy から NetBird にした
 
 要るのは **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・iLO に入る**の 3 つ。

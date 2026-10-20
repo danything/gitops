@@ -17,6 +17,12 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 - [ ] BIOS を 02.62 に上げてから E5-2696 v4 を載せる
 - [ ] AMT(10.0.0.5)、Z440 用の schematic(GPU の extension と SOL の `console=`)、NIC の別名(`LinkAliasConfig`)
 - [ ] 移して確かめる。docs の「iLO(10.0.0.3)」を AMT に直す
+- [ ] **ストレージとバックアップを入れ替える**(入れ直しのついでに。理由は [docs/decisions.md](docs/decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)
+  - [ ] ディスクの切り方: `u-local-path` をやめ、`RawVolumeConfig` + `LVMVolumeGroupConfig` でボリュームグループ(thin プール)にする
+  - [ ] OpenEBS LVM LocalPV と snapshot-controller(CRD 込み)を入れる。Talos で動くかを先に QEMU(talos-boot)で確かめる
+  - [ ] VolSync(restic mover、copyMethod: Snapshot)を入れ、PVC ごとに ReplicationSource。R2 は PVC ごとに別の経路
+  - [ ] 戻しは populator(PVC の `dataSourceRef`)。移設のときは k8up の `restore-all` で戻し、そのあと VolSync に切り替える
+  - [ ] k8up・`backupcommand`・notify・restore-check を VolSync に合わせて畳む。k8up のリポジトリは保持期間(月次 6 か月)が切れるまで残す
 
 ## Phase 3 — Talos 定常運用
 
