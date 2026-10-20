@@ -1,7 +1,7 @@
 # Cilium の値の正本。talos/render.sh が描いて inlineManifest にする(render.sh → apply-config → upgrade-k8s)。
 # cilium-config を直接いじらない(次の upgrade-k8s で黙って戻る)。
 
-# kube-proxy は talos/patches/cni.yaml で止めている
+# kube-proxy は talos/controlplane.yaml で止めている
 kubeProxyReplacement: true
 # KubePrism。Talos が localhost:7445 で API サーバを負荷分散する。違うと Cilium が上がらない(render.sh の needle が見ている)。
 k8sServiceHost: localhost

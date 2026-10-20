@@ -53,7 +53,7 @@ data:
 
       reverseProxy:
         # Envoy(Cilium Gateway)の Pod から来る。X-Forwarded-For を信じる範囲。
-        # Pod CIDR(talos/patches/cluster.yaml の podSubnets)。bootstrap/auth の oauth2-proxy と同じ値。
+        # Pod CIDR(talos/controlplane.yaml の podSubnets)。bootstrap/auth の oauth2-proxy と同じ値。
         trustedHTTPProxies:
           - "10.42.0.0/16"
         # NetBird 自身のピア網(既定 100.64.0.0/10)

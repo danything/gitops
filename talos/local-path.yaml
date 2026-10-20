@@ -1,7 +1,7 @@
 # local-path-provisioner。Talos には無いので、入れないと PVC が 1 つも bind せず、
 # ストレージを持つアプリが全部 Pending で止まる。
 #
-# - データの置き場は `/var/mnt/local-path`([`talos/patches/volumes.yaml`](../patches/volumes.yaml) の
+# - データの置き場は `/var/mnt/local-path`([`controlplane.yaml`](controlplane.yaml) の
 #   `UserVolumeConfig` が切る別パーティション)。ディレクトリは `pvc-<uid>_<ns>_<name>`
 # - namespace は `local-path-storage`(PSA は privileged。ヘルパー Pod が hostPath を使う)
 # - StorageClass は既定の `local-path` 1 つだけ。PVC を守るのは Retain ではなく日次の restic

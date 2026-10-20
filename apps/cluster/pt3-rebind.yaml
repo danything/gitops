@@ -1,4 +1,4 @@
-# PT3 をドライバに付け直す(talos/patches/main.yaml の kernel.modules と対)。
+# PT3 をドライバに付け直す(talos/controlplane.yaml の kernel.modules と対)。
 #
 # Talos は kernel.modules を書いた順ではなく名前の順に読むので、earth-pt3 がチューナー
 # (qm1d1c0042 / mxl301rf)より先に入り、`Failed to create FE0` で /dev/dvb/*/frontend0 ができない。

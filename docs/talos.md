@@ -51,11 +51,11 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 | インストール先ディスク | `UnattendedInstallConfig` の `provisioning.diskSelector.match`(**CEL 式**。例 `disk.dev_path == "/dev/sda"`) |
 | カーネル引数 | `machine.install.extraKernelArgs` は使えない(同じく衝突)。**schematic の `customization.extraKernelArgs`** |
 | host DNS | `ResolverConfig`。**既定で有効**なので普通は書かなくてよい |
-| bond とそのメンバー | `BondConfig` / `LinkConfig`。v1alpha1 の `machine.network.interfaces` は bond の MAC を指定できない([patches/cluster.yaml](../talos/patches/cluster.yaml)) |
-| PV の置き場 | `UserVolumeConfig`。マウント先(`/var/mnt/<name>`)は kubelet に自動で通るので `extraMounts` は要らない([patches/volumes.yaml](../talos/patches/volumes.yaml))。ディスク上のラベルは `u-<name>` |
-| control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。**`KubeNodeConfig` を `$patch: delete` して `labels` だけ書き戻す**([patches/cluster.yaml](../talos/patches/cluster.yaml)) |
-| CNI を止める | `KubeFlannelCNIConfig` を `$patch: delete`、`KubeProxyConfig` を `enabled: false`([patches/cni.yaml](../talos/patches/cni.yaml))。**v1alpha1 の `cni.name: none` はもう書けない** |
-| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。Talos 1.14 以降は usermode の modprobe helper が無い(`/proc/sys/kernel/modprobe` が空)ので、`request_module` で依存を引くドライバは順番が狂うと失敗する(PT3 で踏んだ。[patches/main.yaml](../talos/patches/main.yaml)、上流に PR 中) |
+| bond とそのメンバー | `BondConfig` / `LinkConfig`。v1alpha1 の `machine.network.interfaces` は bond の MAC を指定できない([controlplane.yaml](../talos/controlplane.yaml)) |
+| PV の置き場 | `UserVolumeConfig`。マウント先(`/var/mnt/<name>`)は kubelet に自動で通るので `extraMounts` は要らない([controlplane.yaml](../talos/controlplane.yaml))。ディスク上のラベルは `u-<name>` |
+| control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。**`KubeNodeConfig` を `$patch: delete` して `labels` だけ書き戻す**([controlplane.yaml](../talos/controlplane.yaml)) |
+| CNI を止める | `KubeFlannelCNIConfig` を `$patch: delete`、`KubeProxyConfig` を `enabled: false`([controlplane.yaml](../talos/controlplane.yaml))。**v1alpha1 の `cni.name: none` はもう書けない** |
+| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。Talos 1.14 以降は usermode の modprobe helper が無い(`/proc/sys/kernel/modprobe` が空)ので、`request_module` で依存を引くドライバは順番が狂うと失敗する(PT3 で踏んだ。[controlplane.yaml](../talos/controlplane.yaml)、上流に PR 中) |
 
 ### PSA のラベル(Pod Security Admission が既定で `baseline`)
 
@@ -66,9 +66,9 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 | namespace | baseline に通らない理由 |
 | --- | --- |
 | `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort)。**Talos の側で例外にしてある** |
-| `local-path-storage` | ヘルパー Pod の hostPath。[`talos/manifests/local-path.yaml`](../talos/manifests/local-path.yaml) がラベルを付ける |
+| `local-path-storage` | ヘルパー Pod の hostPath。[`talos/local-path.yaml`](../talos/local-path.yaml) がラベルを付ける |
 | `netbird` | hostPort 51820(routing peer の WireGuard)、NET_ADMIN 等、hostPath |
-| `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)、PT3 を付け直す DaemonSet([apps/pt3/](../apps/pt3/))。**ラベルは denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops だけを grep すると抜けて見える |
+| `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)、PT3 を付け直す DaemonSet([apps/cluster/pt3-rebind.yaml](../apps/cluster/pt3-rebind.yaml))。**ラベルは denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops だけを grep すると抜けて見える |
 | `adguardhome` | hostPort 53 / 853 |
 | `matrix` | hostPort 8443(LiveKit) |
 | `3proxy` | hostPort 3129(TLS 終端サイドカー) |
@@ -122,7 +122,7 @@ Sidero のドキュメントの「Talos only creates missing resources from inli
 ## VM ブートドリル
 
 [.github/workflows/talos-boot.yml](../.github/workflows/talos-boot.yml) が PR ごとに描いた machine config を QEMU で起動して見る。
-見つけた穴は直した場所(`talos/patches/`・`render.sh`・`add-namespace.awk`)に理由を書いてある。
+見つけた穴は直した場所(`talos/controlplane.yaml`・`render.sh`・`add-namespace.awk`)に理由を書いてある。
 
 VM では確かめられないもの: PT3 のモジュールの読み順、bond のフェイルオーバーの復旧方向(落とす方向は 8 秒以内で `talosctl` は途切れない)。
 

@@ -1,0 +1,481 @@
+# ノード main の machine config のうち、手で書く部分の全部。render.sh が `gen config --config-patch` に渡す。
+# chart から描く部分(Cilium・ArgoCD・infisical・cert-manager・local-path)と版は render.sh が足す。
+#
+# **SOPS で password の値だけ暗号化してある**(../.sops.yaml)。平文の部分はそのまま直してよい。
+# パスワードを変えるときは `sops edit talos/controlplane.yaml`。render.sh が `sops -d` してから渡す。
+# 各ドキュメントの末尾の `sops:` は SOPS のメタデータ(触らない)。
+#
+# 型付きドキュメントと v1alpha1 で書く場所が決まっている(../docs/talos.md「machine config の作法」)。
+# ドキュメントは上から順に当たる(KubeNodeConfig の delete → 書き戻し は順番に意味がある)。
+machine:
+    sysctls:
+        # 無いと IPv6 の既定経路が消える(Kubernetes が forwarding=1 にすると accept_ra=1 は RA を無視する)
+        net.ipv6.conf.bond0.accept_ra: "2"
+        # IID を MAC 由来にしない。2(stable-privacy)は stable_secret が無いと書き込みが失敗し続ける
+        net.ipv6.conf.bond0.addr_gen_mode: "3"
+        # SLAAC のアドレスを付けない(あると cloudflare-ddns が静的な ::2 でなくそちらを AAAA に書く)。
+        # RA の既定経路はそのまま受ける。
+        net.ipv6.conf.bond0.autoconf: "0"
+        # Forgejo の Runner(dind)のファイル監視。既定の 128 では EMFILE で落ちる
+        fs.inotify.max_user_instances: "8192"
+        fs.inotify.max_user_watches: "1048576"
+        # IPv6 は bond0 に一本化する(eno4 の RA に既定経路を奪われると非対称になる)
+        net.ipv6.conf.eno4.disable_ipv6: "1"
+    network:
+        # local-path の PV の nodeAffinity が main を指している
+        hostname: main
+    # PT3 のドライバ(../docs/decisions.md「PT3 チューナー」)。dvb-pt3 は earth_pt3 を blacklist しているので明示で読ませる。
+    # 復調とチューナーも要る(Talos には request_module を満たす modprobe が無い)。並べた順には読まれないので、
+    # 付け直しは ../apps/cluster/pt3-rebind.yaml。
+    kernel:
+        modules:
+            - name: tc90522
+            - name: qm1d1c0042
+            - name: mxl301rf
+            - name: earth-pt3
+    # etcd スナップショットの日次取得(../apps/k8up/etcd-snapshot.yaml)のため、Pod から Talos API を叩く。
+    # 役割は os:etcd:backup だけ、namespace も k8up に絞る(os:admin を Pod に置かずに済む唯一の仕組み)。
+    features:
+        kubernetesTalosAPIAccess:
+            enabled: true
+            allowedRoles:
+                - os:etcd:backup
+            allowedKubernetesNamespaces:
+                - k8up
+    # fj.doany.io(Forgejo のコンテナレジストリ)の資格情報。ノード単位なので namespace ごとの imagePullSecrets が要らない。
+    # username は Forgejo が見ない(トークンの持ち主で決まる)。password は SOPS で暗号化(冒頭)。取りに行く先は下の StaticHostConfig。
+    registries:
+        config:
+            fj.doany.io:
+                auth:
+                    username: info
+                    password: ENC[AES256_GCM,data:GHSZMJUQN11ZQxb9MFfSeVBDvIMjcyC+IX4Zpnm6/lHd58A9mIpKJA==,iv:Yi29sF8b3xnXsNy1nMb+f8ZoFaUN0e84Zzc6/mZ4ghI=,tag:RXDdDe6rDngGO2Nl9GcAHA==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# カーネル引数と拡張は machine.install に書けないので schematic に入れている(versions.yaml)。
+apiVersion: v1alpha1
+kind: UnattendedInstallConfig
+provisioning:
+    diskSelector:
+        # SATA の SSD。箱を替えたら当日 `talosctl get disks` を見てから確定させる
+        match: disk.dev_path == "/dev/sda"
+    wipe: false
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# ディスクの割り方。既定だと EPHEMERAL(/var)が全部を取り、PVC の暴走で etcd ごと道連れになる。
+# ボリュームの設定は未確保のときにしか効かない(あとから書き足しても黙って無視され、直すには入れ直し)。
+# EPHEMERAL に maxSize が無いと grow が全部持っていく(siderolabs/talos#12713)。
+# 64GiB は実機の使用量(containerd 22G ほか)から。残りが local-path 用。
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+provisioning:
+    diskSelector:
+        match: system_disk
+    maxSize: 64GiB
+    grow: true
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# PV データの置き場。/var/mnt/<name> 固定で、local-path.yaml の paths がここを指す。
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: local-path
+provisioning:
+    diskSelector:
+        match: system_disk
+    minSize: 50GiB
+    grow: true
+filesystem:
+    type: xfs
+# /var 系は既定で nosuid,nodev,noexec になり、PVC の中の実行ファイル(Forgejo のサーバ側フック)が動かない。
+# コンテナは PSA と securityContext で押さえている。
+mount:
+    secure: false
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# MAC を固定する。ルーターの IPv6 ホスト公開がこの MAC を指していて(docs/router.md)、
+# 指定しないと eno1 の MAC を引き継ぎ、NIC や箱を替えた日に外からの IPv6 が全部止まる。
+apiVersion: v1alpha1
+kind: BondConfig
+name: bond0
+links:
+    - eno1
+    - eno2
+bondMode: balance-alb
+miimon: 100
+hardwareAddr: e6:2c:1b:1a:a0:39
+addresses:
+    - address: 10.0.0.2/24
+    # プレフィックスは ISP 由来で変わりうる(公開は cloudflare-ddns が実際のアドレスで行う)
+    - address: 240f:6d:842b:1::2/64
+routes:
+    # IPv6 の既定経路は RA 由来なので書かない(上の accept_ra とセット)
+    - gateway: 10.0.0.1
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# 10.10 側。DHCP は明示の設定が無い限り無効
+apiVersion: v1alpha1
+kind: LinkConfig
+name: eno4
+addresses:
+    - address: 10.10.0.4/24
+routes:
+    - destination: 10.10.0.0/24
+      gateway: 10.10.0.1
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# gen config が入れる `auto: stable` と `hostname` は併記できず、パッチから `auto` を消せないので
+# ドキュメントごと落として machine.network.hostname を効かせる。
+apiVersion: v1alpha1
+kind: HostnameConfig
+$patch: delete
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# ノード自身の名前解決(クラスタ内は CoreDNS、LAN 向けは AdGuard で別)
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+    - address: 2606:4700:4700::1111
+    - address: 2606:4700:4700::1001
+    - address: 1.1.1.1
+    - address: 1.0.0.1
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# ノードから fj.doany.io のイメージを取るため自分に向ける(公開 DNS の A は WAN 側で、ノードからは届かない)
+apiVersion: v1alpha1
+kind: StaticHostConfig
+name: 10.0.0.2
+hostnames:
+    - fj.doany.io
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+apiVersion: v1alpha1
+kind: KubeNetworkConfig
+podSubnets:
+    - 10.42.0.0/16
+    - fd42::/64
+serviceSubnets:
+    - 10.43.0.0/16
+    # /108 以下が必須
+    - fd43::/108
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# Cilium のために Talos の既定の CNI(flannel)と kube-proxy を止める。CoreDNS は止めない。
+# v1alpha1 の cluster.network.cni は型付きドキュメントと衝突して書けない。
+# KubeFlannelCNIConfig は在ること自体が有効化なので丸ごと消す。
+apiVersion: v1alpha1
+kind: KubeFlannelCNIConfig
+$patch: delete
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+apiVersion: v1alpha1
+kind: KubeProxyConfig
+enabled: false
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# 単一ノードなので control-plane の NoSchedule を付けない(toleration の無い Pod が全部 Pending になる)。
+# taints はマップなので `{}` では消えず、`$patch: replace` は validate が落ちる。
+# ドキュメントごと消して labels だけ書き戻すのが唯一の手。
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+$patch: delete
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+# 消したままだと ROLES が <none> になる
+labels:
+    node-role.kubernetes.io/control-plane: ""
+    node.kubernetes.io/exclude-from-external-load-balancers: ""
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# API サーバの公開名。外から ks.doany.io を証明書検証つきで使うため(公開名は自動では入らない)
+apiVersion: v1alpha1
+kind: KubeAPIServerConfig
+certExtraSANs:
+    - ks.doany.io
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# 外から入る CI(cilium-drift.yml の OIDC トークン)と人(Entra)の認証。権限の中身は ../bootstrap/apiserver/rbac.yaml。
+apiVersion: v1alpha1
+kind: KubeAuthenticationConfig
+# `anonymous` を消さないこと。与えると既定を置き換えるので、書き忘れると
+# /livez /readyz /healthz を匿名で叩けずコントロールプレーンが上がらない。
+configuration:
+    anonymous:
+        enabled: true
+        conditions:
+            - path: /livez
+            - path: /readyz
+            - path: /healthz
+    jwt:
+        - issuer:
+            url: https://token.actions.githubusercontent.com
+            # 既定の audience(所有者の URL)は他のワークフローと共有されるので使わない
+            audiences:
+                - https://ks.doany.io
+          claimMappings:
+            # `sub` は形式が変わると RBAC が黙って効かなくなるので、要る情報から組み立てる
+            username:
+                expression: '"gha:" + claims.repository + ":" + claims.ref'
+          # issuer は世界中の GitHub Actions が使う公開の IdP。効いているのはここで、緩めると即座に穴になる。
+          claimValidationRules:
+            - expression: claims.repository == "danything/gitops"
+              message: danything/gitops 以外は受け付けない
+            - expression: claims.ref == "refs/heads/main"
+              message: main 以外のブランチからは受け付けない
+            - expression: claims.workflow_ref.startsWith("danything/gitops/.github/workflows/cilium-drift.yml@")
+              message: cilium-drift.yml 以外のワークフローからは受け付けない
+        # Entra ID。Headlamp が利用者本人の id_token を転送してくる。
+        - issuer:
+            url: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
+            # oauth2-proxy と同じアプリ登録なので、この組で出た id_token はどれもクラスタの資格情報になる
+            audiences:
+                - b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
+          claimMappings:
+            username:
+                expression: '"entra:" + claims.preferred_username'
+            # ロールが無い利用者には roles クレーム自体が無いので has() で守る
+            groups:
+                expression: '(has(claims.roles) && "admin" in claims.roles) ? ["entra:admin"] : ["entra:viewer"]'
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0MVdVeTNnQ04xOWU3YlNj
+            UThxRm8yL0UvWDRCVHpmbE1EdGhkeUhWYTA4CkhYU3cwYStTM1R6VmQwNFJGYkxW
+            Y2hBYklsZ2VLWGpCeW5YNENQTXl3UVEKLS0tIHZYZnk2ZTh6WldUUGpYek1zTmZ1
+            cGFPM0VpNU9sRkNQMldlWXBjbjd5S2MKqYTzGc4Cb7WDn/M01Eti/EioAWvqjJMO
+            DJMOlD4AhXLg4ZqngxfYJVmZLr7JKbwbNg43Q8y1vhB1DaFCuTqTqw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-20T03:48:13Z"
+    mac: ENC[AES256_GCM,data:URGkaw8aWqkLMX9g49eTqpi0J86kUwZmMtIfDrQmeCiPS7SmxJDrMy9Z8co/S1Xiq2ROPAzUSoHBNQ9x/7RvO7Gpy4d3gerGVKYIIxNHfJN/njMjOoau97PGjHi76hUlrIaw/YH+29Nx81VBe1i9N84lvlE17oZhLb1AEwx1VpI=,iv:OexZ7Wueec6bEtzqED2OWCu10byog/61evINCOOKtJk=,tag:0FYbzaNXL3ApUQgCtPCxiw==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3

@@ -26,11 +26,14 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
-REGISTRIES=${REGISTRIES:-}
-if [ -z "$REGISTRIES" ]; then
-	REGISTRIES=$WORK/registries.yaml
-	sops -d talos/registries.yaml > "$REGISTRIES"
+# 手で書く部分。password の値だけ SOPS で暗号化してある(../.sops.yaml)。CI は ENC をダミーにしたものを渡す。
+# `sops -d … > file` は失敗すると set -e で止まる(パイプに繋がない。pipefail が無い)。
+CONTROLPLANE=${CONTROLPLANE:-}
+if [ -z "$CONTROLPLANE" ]; then
+	CONTROLPLANE=$WORK/controlplane.yaml
+	sops -d talos/controlplane.yaml > "$CONTROLPLANE"
 fi
+! grep -q 'ENC\[' "$CONTROLPLANE" || { echo "ERROR: controlplane.yaml に暗号文が残っている" >&2; exit 1; }
 
 # キーを名前で引く(位置で数えるとブロックが増えたとき別の値を掴む)。yq は版で構文が違うので awk。
 ver() { # $1=トップレベルのキー  $2=その下のキー
@@ -80,7 +83,7 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 # `--api-versions` が無いと helm template は GatewayClass を黙って描かず、公開経路が全部死ぬ。
 chart cilium kube-system --api-versions gateway.networking.k8s.io/v1/GatewayClass
 
-inline local-path < talos/manifests/local-path.yaml > "$WORK/inline-local-path.yaml"
+inline local-path < talos/local-path.yaml > "$WORK/inline-local-path.yaml"
 
 # CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(repos.yaml の bootstrap は apiserver/ を外す)。
 inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
@@ -148,7 +151,7 @@ PATCH
 set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
 	--install-image "factory.talos.dev/installer/${SCHEMATIC}:${TALOS}"
-for f in talos/patches/*.yaml "$REGISTRIES" "$WORK/gateway-api.yaml" "$WORK/external-crds.yaml" "$WORK"/inline-*.yaml; do
+for f in "$CONTROLPLANE" "$WORK/gateway-api.yaml" "$WORK/external-crds.yaml" "$WORK"/inline-*.yaml; do
 	set -- "$@" --config-patch "@$f"
 done
 
@@ -156,7 +159,7 @@ rm -rf "$OUT"
 talosctl gen config doany https://10.0.0.2:6443 "$@" --output-dir "$OUT" >/dev/null
 echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 
-# 描いたものが入ったか。patches/ のキーは gen config が知らないキーで落とすので見ない(helm は黙って捨てる)。
+# 描いたものが入ったか。controlplane.yaml のキーは gen config が知らないキーで落とすので見ない(helm は黙って捨てる)。
 # 生成物の manifest は 1 行のエスケープ文字列なので、引用符は \" で探す。
 for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
