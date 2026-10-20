@@ -291,14 +291,16 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 
 **移るのは Z440 への移設のとき。** いまの DL360 のディスクは local-path の `u-local-path` が残りを全部取っていて(`grow: true`)、
 LVM 用のパーティションを切る余地が無い。Talos のボリュームは未割り当ての領域にしか作れないので、切り直すには入れ直しになる。
-Talos v1.14 から、`RawVolumeConfig` と `LVMVolumeGroupConfig` でボリュームグループを machine config だけで作れる(シェルも特権 Pod も要らない)。
+Talos は `RawVolumeConfig` と `LVMVolumeGroupConfig` でボリュームグループを machine config だけで作れる(シェルも特権 Pod も要らない。
+LVM の設定は v1.14 のドキュメントにあり、siderolabs/talos#12309 が 2026-06 に閉じられて入った)。
 
 **台数を増やすとき**は Longhorn を足し、止まって困るアプリから順に移す。VolSync の populator があれば、
 StorageClass を変えた PVC を作り直すだけで中身が埋まるので、ストレージの乗り換えも同じ手で済む。
 入口(Gateway・AdGuard・LiveKit)と API の宛先は 1 台の IP に固定されているので、そのときは VIP(Cilium の L2 Announcements、Talos の共有 VIP)も要る。
 
 確かめていないこと: OpenEBS LVM LocalPV が Talos で動くか(`dm-snapshot` モジュール、読み取り専用のルートで LVM のコマンドが通るか)、
-VolSync の restic mover と R2 の組み合わせ、restic が戻したファイルの持ち主。
+VolSync の restic mover と R2 の組み合わせ、restic が戻したファイルの持ち主、**thin プールが溢れたときの挙動と見張り**
+(データとメタデータのどちらが溢れても書き込みが止まる。スナップショットを定期的に取るので、余裕と見張りが要る)。
 
 ## VPN を wg-easy から NetBird にした
 

@@ -21,7 +21,7 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
   - [ ] ディスクの切り方: `u-local-path` をやめ、`RawVolumeConfig` + `LVMVolumeGroupConfig` でボリュームグループ(thin プール)にする
   - [ ] OpenEBS LVM LocalPV と snapshot-controller(CRD 込み)を入れる。Talos で動くかを先に QEMU(talos-boot)で確かめる
   - [ ] VolSync(restic mover、copyMethod: Snapshot)を入れ、PVC ごとに ReplicationSource。R2 は PVC ごとに別の経路
-  - [ ] 戻しは populator(PVC の `dataSourceRef`)。移設のときは k8up の `restore-all` で戻し、そのあと VolSync に切り替える
+  - [ ] 戻しは populator(PVC の `dataSourceRef`)。移設のときは `recovery/pv.sh restore-all`(k8up の restic から)で戻し、そのあと VolSync に切り替える
   - [ ] k8up・`backupcommand`・notify・restore-check を VolSync に合わせて畳む。k8up のリポジトリは保持期間(月次 6 か月)が切れるまで残す
 
 ## Phase 3 — Talos 定常運用
