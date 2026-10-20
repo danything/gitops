@@ -26,15 +26,26 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
-# controlplane.yaml の `${名前}` を secrets.yaml の値で埋める。値は ENVIRON で渡す(sed だと値の / や & が壊す)。
+# controlplane.yaml の `"${名前}"` を secrets.yaml の値で埋める。値は ENVIRON で渡す(sed だと値の / や & が壊す)。
+# 印は二重引用符で囲んで書き、埋めるときに \ と " をエスケープする(値の # や : で YAML が壊れないように)。
 # 埋め残しがあれば止まる(そのまま当てると `${…}` が文字どおりパスワードになる)。
-FJ_REGISTRY_PASSWORD=$(sed -n 's/^fjRegistryPassword: *//p' "$SECRETS" | tr -d "\"'")
+# 値は 1 行で読み、外側の引用符だけ外す(中の引用符は値の一部)。
+secret() { # $1=secrets.yaml のトップレベルのキー
+	sed -n "s/^$1: *//p" "$SECRETS" | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+FJ_REGISTRY_PASSWORD=$(secret fjRegistryPassword)
 [ -n "$FJ_REGISTRY_PASSWORD" ] || { echo "ERROR: secrets.yaml に fjRegistryPassword が無い" >&2; exit 1; }
 FJ_REGISTRY_PASSWORD=$FJ_REGISTRY_PASSWORD awk '/^[[:space:]]*#/ {print; next} {
 	while (match($0, /\$\{[A-Z_]+\}/)) {
 		k = substr($0, RSTART + 2, RLENGTH - 3)
 		if (!(k in ENVIRON)) { print "ERROR: controlplane.yaml の ${" k "} を埋める値が無い" > "/dev/stderr"; exit 1 }
-		$0 = substr($0, 1, RSTART - 1) ENVIRON[k] substr($0, RSTART + RLENGTH)
+		# gsub の置換文字列の \ は awk の実装で解釈が違うので、1 文字ずつ組む
+		v = ""
+		for (i = 1; i <= length(ENVIRON[k]); i++) {
+			c = substr(ENVIRON[k], i, 1)
+			v = v (c == "\\" || c == "\"" ? "\\" : "") c
+		}
+		$0 = substr($0, 1, RSTART - 1) v substr($0, RSTART + RLENGTH)
 	}
 	print
 }' talos/controlplane.yaml > "$WORK/controlplane.yaml"
