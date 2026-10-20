@@ -7,7 +7,7 @@
 | **machine config**([../talos/render.sh](../talos/render.sh) が描く) | Helm で入れるもの(cilium・cert-manager・argocd・infisical)、`apiserver/rbac.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |
 | **ArgoCD**(Application `bootstrap`。[argocd/repos.yaml](argocd/repos.yaml)) | 残りの平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など) | main へのマージ(prune / selfHeal 付き) |
 
-`InfisicalSecret` の CRD だけは `apps/infisical-operator/` が入れるので、まっさらなクラスタでは `bootstrap` の同期が
+`InfisicalSecret` の CRD だけは `apps/infisical/operator.yaml` が入れるので、まっさらなクラスタでは `bootstrap` の同期が
 最初の何回か落ちて retry で戻る。
 
 **SOPS(age)で暗号化したファイルは ArgoCD が当てない** ── 復号鍵をクラスタにも CI にも渡さないため。
@@ -34,23 +34,23 @@ ConfigMap に出ているので、読むだけの権限で比べられる)。**�
 ## Secret
 
 平文の Secret はアプリのリポジトリにはコミットしない。値は **Infisical**(https://il.doany.io、このクラスタでセルフホスト)が持ち、
-**Infisical 純正 operator**(`apps/infisical-operator/`)が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
+**Infisical 純正 operator**(`apps/infisical/operator.yaml`)が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
 認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
 
 - `infisical/` … Infisical 本体(chart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
   `secrets.sops.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は既定の `local-path` で、`pg_dump` を k8up が日次で取っている。
-- **operator と push-bridge はここには無い**(`apps/infisical-operator/`、`apps/infisical-push-bridge/`)。
+- **operator と push-bridge はここには無い**(`apps/infisical/operator.yaml`、`apps/infisical/push-bridge.yaml`)。
   ArgoCD 自身は operator に依存しないので、bootstrap に置く理由がない。
   認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
   Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を
-  付けてある)。SA と RBAC は `apps/infisical-operator/rbac.yaml`。
+  付けてある)。SA と RBAC は `apps/infisical/operator-rbac.yaml`。
   operator 側に長期の資格情報は無い(`identityId` は秘密ではない)。
 
 ### API サーバの入口(GitHub Actions と人)
 
 **GitHub Actions は読むだけ。** cilium-drift.yml の OIDC トークンを API サーバが直接受け
-([../talos/patches/apiserver.yaml](../talos/patches/apiserver.yaml) の `KubeAuthenticationConfig`)、
+([../talos/controlplane.yaml](../talos/controlplane.yaml) の `KubeAuthenticationConfig`)、
 権限は `cilium-config` の `get` だけ([apiserver/rbac.yaml](apiserver/rbac.yaml))。
 CA は [apiserver/ca.crt](apiserver/ca.crt)(`talos/secrets.yaml` のクラスタ CA。作り直したら替える)。
 kubeconfig も age 鍵も GitHub に置いていない。
@@ -60,7 +60,7 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 `entra:admin` で cluster-admin、それ以外は `entra:viewer` で読み取り専用(組み込みの `view`
 ＋ CRD とノードぶんの `readonly-extra`)。**振り分けは CEL で、割り当ては Entra 側で完結する。**
 ここに置いたのは、ArgoCD も CI も要らずに効く層だから ── 締め出されたときに直せる。
-認証設定([../talos/patches/apiserver.yaml](../talos/patches/apiserver.yaml))も [apiserver/rbac.yaml](apiserver/rbac.yaml) も
+認証設定([../talos/controlplane.yaml](../talos/controlplane.yaml))も [apiserver/rbac.yaml](apiserver/rbac.yaml) も
 machine config に載っているので、変えたら `render.sh` → `apply-config`(RBAC は inlineManifest なので `upgrade-k8s` まで)。
 **ArgoCD には当てさせない**(`bootstrap` の exclude に `apiserver/`。締め出されたときに直せる層に置く)。
 
@@ -93,7 +93,7 @@ ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` �
 `Prune=false` も一緒にコピーさせて、prune の対象から外す。
 
 **`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無く、`apps/` の同期が丸ごと落ちる**
-(CRD を入れる `apps/infisical-operator/` が同じ同期の中にいる)。
+(CRD を入れる `apps/infisical/operator.yaml` が同じ同期の中にいる)。
 仕組みは k8up の `Schedule` と同じで、説明は [apps/k8up/README.md](../apps/k8up/README.md)「CRD がまだ無いクラスタで apps を止めないこと」。
 
 `bootstrap/` の `InfisicalSecret`(`argocd/oidc-secret.yaml`・`auth/secrets.yaml`・`infisical/smtp-secret.yaml`)にも付けてある。

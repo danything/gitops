@@ -128,7 +128,7 @@ bootstrap のあとに `helm install` する案は、再構築のたびに「CNI
 - 代わりに **描くたびに変わる値を潰した**(Hubble の証明書・infisical の `postgres-password`・`updatedAt`)。
   同じ入力なら生成物はバイト単位で同じなので、`apply-config --dry-run` の差分がそのまま「何が変わるか」になる
 
-**起動に要らないものは ArgoCD に置く**(metrics-server は `apps/metrics-server/`。版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
+**起動に要らないものは ArgoCD に置く**(metrics-server は `apps/cluster/metrics-server.yaml`。版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
 全 namespace の Certificate が道連れ)。
 
 ## ルーティングの選定
@@ -226,10 +226,10 @@ Gateway API の session persistence は experimental チャネル限定、Cilium
 denpa の tuner-agent は Earthsoft PT3(`earth_pt3`)の `/dev/dvb` と B-CAS リーダーに依存している。
 **公式 extension `siderolabs/dvb-pt3` を使う**([siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682))。
 v1.15.0-alpha.1 からしか無いので、**正式版を待つより PT3 を先に取り、本番を alpha に乗せている**。
-extension は `earth_pt3` を blacklist して配るので、`talos/patches/main.yaml` の `machine.kernel.modules` で読ませる。
+extension は `earth_pt3` を blacklist して配るので、`talos/controlplane.yaml` の `machine.kernel.modules` で読ませる。
 
 **駄目だったときの保険: KubeVirt の VM にパススルー。** PT3(05:00.0)は IOMMU グループ 36 に単独、B-CAS は USB(GemPC Twin 08e6:3437)。
-`intel_iommu=on` は schematic に残してあるが、vfio は `talos/patches/main.yaml` から外した(PT3 をホストのドライバと取り合う)ので、戻るなら足し直す。
+`intel_iommu=on` は schematic に残してあるが、vfio は `talos/controlplane.yaml` から外した(PT3 をホストのドライバと取り合う)ので、戻るなら足し直す。
 **自前 extension を `imager` で焼く案は採らない**(アップグレードのたびに自前ビルドになる)。
 
 ## 依存の更新をどこまで自動で入れるか

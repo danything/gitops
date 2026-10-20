@@ -78,7 +78,7 @@ curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05
 - **Secure Boot が Disabled**(RBSU は POST 中に F9 → Server Security → Secure Boot Settings)。Boot Mode は UEFI のまま
 - POST 中に **F11** で USB を選ぶ(iLO の Virtual Media なら Image File CD-ROM/DVD に ISO の URL を貼り、Reset して F11)
 - コンソールに maintenance mode の IP が出る。インタフェースが `eno1` / `eno2` / `eno4`、インストール先が `/dev/sda`(447 GB)であること
-  (違ったら `talos/patches/cluster.yaml` / `main.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
+  (違ったら `talos/controlplane.yaml` / `main.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
 
 ```shell
 IP=<コンソールに出た IP>
@@ -250,7 +250,7 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 - [ ] `talosctl get routes -o yaml | grep -B10 'protocol: ra'` に `dst: ""`(IPv6 の既定経路)が残っている
 - [ ] netbird で外から VPN に入れる(ブラウザでは確かめられない)、AdGuard(`dig @10.10.0.4 example.com`)
 - [ ] **PT3**: `talosctl ls /dev/dvb` に adapter0〜3 と各 `frontend0`、`talosctl ls /dev/bus/usb` に B-CAS リーダー、録画が動く
-      (frontend が無いときは [../apps/pt3/rebind.yaml](../apps/pt3/rebind.yaml) が付け直しているか)
+      (frontend が無いときは [../apps/cluster/pt3-rebind.yaml](../apps/cluster/pt3-rebind.yaml) が付け直しているか)
 - [ ] Renovate の CronJob が次の回で動く(`kubectl -n renovate get jobs`)、k8up の通知が翌日 OK ✅
 - [ ] etcd のスナップショットを 1 回手で取る(`kubectl -n k8up create job --from=cronjob/etcd-snapshot etcd-snapshot-first`)
 
@@ -267,7 +267,7 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | ノードが上がらない | iLO のコンソール。ダッシュボードに版と健全性が出る |
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
-| 非公開イメージが引けない | `talos/registries.yaml` が machine config に入っているか、Forgejo が戻っているか(8) |
+| 非公開イメージが引けない | `talos/secrets.yaml` の `fjRegistryPassword` が machine config に入っているか、Forgejo が戻っているか(8) |
 | bootstrap apply が TLS で落ちる | `secrets.yaml` を作り直した。`bootstrap/apiserver/ca.crt` を新しい `secrets.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
 | inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |

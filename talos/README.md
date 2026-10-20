@@ -8,9 +8,9 @@
 新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」)。
 コマンドに埋めてある版と schematic も、変えるときは versions.yaml と揃えること。talhelper は使わない。
 
-**組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分(`patches/`)と、
+**組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分は [controlplane.yaml](controlplane.yaml) の 1 本だけで、
 他から描いてくる部分(Cilium・cert-manager・argocd・infisical は `bootstrap/<name>/` の version.yaml と values.yaml から、
-local-path-provisioner は `manifests/` から)を 1 か所で組む。**値をどこにも二度書かない**のが目的。
+local-path-provisioner は [local-path.yaml](local-path.yaml) から)と 1 か所で組む。**値をどこにも二度書かない**のが目的。
 CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を使う
 (別の作り方をすると「CI は通るが実機では通らない」が起きる)。
 
@@ -18,41 +18,37 @@ CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を�
 ./talos/render.sh talos/clusterconfig     # 出力先は丸ごと消して作り直す(.gitignore 済み)
 ```
 
-**秘密は 2 つともコミット済み** ── [secrets.yaml](secrets.yaml) はクラスタの CA 一式、
-[registries.yaml](registries.yaml) は fj.doany.io のイメージ取得の資格情報。
+**controlplane.yaml を丸ごとコミットしないのは**、生成物の 9 割が chart を描いたもの(約 300 KB の 1 行文字列)で、
+読めず、chart や Kubernetes の版を上げるたびに描き直しのコミットが要るから。
+**inlineManifest をファイルで指す仕組みは Talos に無い**(machine config はノードが読むので手元のパスは書けない。
+外を指せるのは URL の `KubeExternalManifestConfig` だけで、CRD はそれで渡している)。ファイルを包むのは render.sh の `inline`。
+
+**秘密は [secrets.yaml](secrets.yaml)(SOPS)の 1 本にまとめてコミット済み。** クラスタの CA 一式(`talosctl gen secrets` の形)に、
+`fjRegistryPassword`(下の fj.doany.io の資格情報)を足してある。controlplane.yaml には秘密を書かず、
+`${FJ_REGISTRY_PASSWORD}` のように名前だけ置き、render.sh が復号した値で埋める(埋め残しがあれば止まる)。
 **`secrets.yaml` を作り直すと別のクラスタになる**(`bootstrap/apiserver/ca.crt` と Infisical の Kubernetes auth の CA も
-替えることになる)ので触らない。まっさらから組むときだけ:
+替えることになる)ので触らない。まっさらから組むときだけ(`fjRegistryPassword` を足し直すこと):
 
 ```shell
-talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
+talosctl gen secrets -o talos/secrets.yaml && echo 'fjRegistryPassword: …' >> talos/secrets.yaml && sops -e -i talos/secrets.yaml
 ```
+
+値だけ差し替えるときは `sops set talos/secrets.yaml '["fjRegistryPassword"]' '"…"'`。
 
 ## fj.doany.io の資格情報
 
-ノード単位で持つので **namespace ごとの `imagePullSecrets` が要らない**(`machine.registries`)。
+ノード単位で持つので **namespace ごとの `imagePullSecrets` が要らない**(controlplane.yaml の `machine.registries`)。
 持つのは **fj.doany.io**(Forgejo のコンテナレジストリ)だけで、Forgejo のユーザー `yui` の
-`read:package` だけのトークン(全リポジトリ。Forgejo の名前は `talos-registry-pull`)。
+`read:package` だけのトークン(全リポジトリ。Forgejo の名前は `talos-registry-pull`)。値は secrets.yaml の `fjRegistryPassword`。
 `username` は Forgejo が見ない(トークンの持ち主で決まる。`info` のままにしてあるが、何でも通る)。無いと非公開のリポジトリの
-イメージが引けない。ghcr.io に残るイメージは全部公開。SOPS で暗号化してある(**平文は git に入れない**。規則は [`../.sops.yaml`](../.sops.yaml)):
-
-```yaml
-# talos/registries.yaml (暗号化前)
-machine:
-  registries:
-    config:
-      fj.doany.io:
-        auth:
-          username: info
-          password: …
-```
+イメージが引けない。ghcr.io に残るイメージは全部公開。
 
 **fj.doany.io はこれだけでは取れない。** 公開 DNS の A(WAN 側)にはノードから届かないので、
-ノードの名前解決で fj.doany.io をノード自身(10.0.0.2 の Gateway)に向ける([patches/cluster.yaml](patches/cluster.yaml) の `StaticHostConfig`)。
+ノードの名前解決で fj.doany.io をノード自身(10.0.0.2 の Gateway)に向ける(controlplane.yaml の `StaticHostConfig`)。
 
-`render.sh` はこのファイルを復号して `--config-patch` に足す(**無ければ止まる**)。
-CI には age の鍵を渡さないので、`REGISTRIES` にダミーを入れて経路だけ通している。
+CI には age の鍵を渡さないので、`talosctl gen secrets` の使い捨てに `fjRegistryPassword: ci-dummy` を足して経路だけ通している。
 
-**パッチは PR ごとに CI が検証する。** 使い捨ての秘密で `render.sh` を通す。`render.sh` は `talosctl validate --mode metal` に加えて、
+**controlplane.yaml は PR ごとに CI が検証する。** 使い捨ての秘密で `render.sh` を通す。`render.sh` は `talosctl validate --mode metal` に加えて、
 生成物に想定の設定(`ks.doany.io`・OIDC の issuer・bond の `balance-alb` など)が実際に入っているかまで見る
 ── **`gen config` は知らないキーを警告なく捨てることがある**ので、通ったことだけでは足りない。
 needle は `render.sh` の末尾の 1 か所だけに置く。
@@ -70,7 +66,7 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 | --- | --- | --- |
 | `versions.yaml` の `talos:`(または schematic) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>` | **再起動** |
 | `versions.yaml` の `kubernetes:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
-| `patches/` / `manifests/` / `bootstrap/` のほぼ全部(cilium・cert-manager・apiserver/rbac.yaml・{argocd,infisical}/ の values・SOPS の Secret 2 つ) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
+| `controlplane.yaml` / `local-path.yaml` / `bootstrap/` のほぼ全部(cilium・cert-manager・apiserver/rbac.yaml・{argocd,infisical}/ の values・SOPS の Secret 2 つ) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
 
 ### inlineManifests を直したとき
 
@@ -110,7 +106,7 @@ talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>
 
 ### 当てても効かないもの
 
-- **ディスクの割り方**(`patches/volumes.yaml`)。ボリュームは**まだ確保されていないときにしか
+- **ディスクの割り方**(controlplane.yaml の `VolumeConfig` / `UserVolumeConfig`)。ボリュームは**まだ確保されていないときにしか
   効かない**ので、あとから `apply-config` しても黙って無視される。変えるには入れ直し
 - **`talosctl upgrade-k8s` は Kubernetes の API に直接繋ぎに行く。** 既定ではクラスタの endpoint(10.0.0.2)へ行き、
   作業用 PC からは届かないので `--endpoint https://10.10.0.4:6443` を渡す

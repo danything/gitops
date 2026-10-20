@@ -23,8 +23,8 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 - [ ] **R2 の容量が下がり切るのを見る。** `host=main` を消した直後の restic の実データは **5.60 GiB**(2026-10-17)。
       日曜の prune のあと、`pulumi` ワークフローの週次の Summary で見る
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)。PT3 のモジュールの読み順を守る上流の修正
-      ([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))が入ったら、[apps/pt3/rebind.yaml](apps/pt3/rebind.yaml) を外して
-      `talos/patches/main.yaml` の並び順だけにする。入ったら dvb-pt3 の extension の README も直す(上流)
+      ([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))が入ったら、[apps/cluster/pt3-rebind.yaml](apps/cluster/pt3-rebind.yaml) を外して
+      `talos/controlplane.yaml` の並び順だけにする。入ったら dvb-pt3 の extension の README も直す(上流)
 
 ## 済んだこと(記録)
 

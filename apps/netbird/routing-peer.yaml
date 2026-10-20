@@ -66,7 +66,7 @@ spec:
         app: netbird-routing-peer
     spec:
       # hostNetwork にしない。Pod のネットワークからでも LAN には届く(Cilium が masquerade する)。
-      # ホストからは公開 DNS の A(WAN 側)に届かない(talos/patches/cluster.yaml の StaticHostConfig)ので、
+      # ホストからは公開 DNS の A(WAN 側)に届かない(talos/controlplane.yaml の StaticHostConfig)ので、
       # hostNetwork だと nb.doany.io:443 に繋げず `Management: Disconnected` で止まる。
       containers:
         - name: netbird

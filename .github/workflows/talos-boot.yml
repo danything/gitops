@@ -91,16 +91,8 @@ jobs:
         run: |
           set -euo pipefail
           talosctl gen secrets -o /tmp/secrets.yaml
-          # ダミーは fj.doany.io に置く(ghcr.io に置くと kubelet の取得が 403 で落ちる)
-          cat > /tmp/registries.yaml <<'PATCH'
-          machine:
-            registries:
-              config:
-                fj.doany.io:
-                  auth:
-                    username: ci-dummy
-                    password: ci-dummy
-          PATCH
+          # fj.doany.io の資格情報はダミー(ghcr.io に置くと kubelet の取得が 403 で落ちる)
+          echo "fjRegistryPassword: ci-dummy" >> /tmp/secrets.yaml
           # values.yaml は本物、secret-values.sops.yaml だけダミー(通知先もそこにしか無い)。
           # extraObjects は app-of-apps と repo-creds。CI で本物を同期させない
           echo 'extraObjects: []' > /tmp/argocd-secret-values.yaml
@@ -119,7 +111,7 @@ jobs:
           for f in /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done
-          SECRETS=/tmp/secrets.yaml REGISTRIES=/tmp/registries.yaml \
+          SECRETS=/tmp/secrets.yaml \
             ARGOCD_SECRET_VALUES=/tmp/argocd-secret-values.yaml INFISICAL_SECRET_VALUES=/tmp/infisical-secret-values.yaml \
             INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
             ./talos/render.sh /tmp/out
@@ -256,17 +248,17 @@ jobs:
             echo "  volume $v: $P"
           done
 
-          WANT=$(yq -r 'select(.kind == "BondConfig") | .hardwareAddr' talos/patches/cluster.yaml)
+          WANT=$(yq -r 'select(.kind == "BondConfig") | .hardwareAddr' talos/controlplane.yaml)
           GOT=$(talosctl get links bond0 -o json | jq -r .spec.hardwareAddr)
-          [ "$GOT" = "$WANT" ] || fail "bond0 の MAC が $GOT(cluster.yaml は $WANT)"
+          [ "$GOT" = "$WANT" ] || fail "bond0 の MAC が $GOT(controlplane.yaml は $WANT)"
           echo "  bond0 hardwareAddr: $GOT"
 
-          # 以下は forwarding=1 のあとで見ないと意味が無い(cluster.yaml の accept_ra)
+          # 以下は forwarding=1 のあとで見ないと意味が無い(controlplane.yaml の accept_ra)
           F=$(talosctl read /proc/sys/net/ipv6/conf/bond0/forwarding)
           [ "$F" = 1 ] || fail "bond0 の forwarding が $F。前提が成り立っていない"
 
           # グローバルな IPv6 は静的な ::2 だけ(SLAAC は autoconf=0 で止めている)
-          STATIC=$(yq -r 'select(.kind == "BondConfig") | .addresses[].address | select(test(":"))' talos/patches/cluster.yaml)
+          STATIC=$(yq -r 'select(.kind == "BondConfig") | .addresses[].address | select(test(":"))' talos/controlplane.yaml)
           GLOBAL=$(talosctl get addresses -o json \
             | jq -rs '.[] | select(.spec.linkName == "bond0" and .spec.family == "inet6" and .spec.scope != "link") | .spec.address' | sort)
           echo "  bond0 の IPv6(link-local 以外): $(echo $GLOBAL)"

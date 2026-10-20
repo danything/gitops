@@ -27,14 +27,14 @@ roleRef:
   kind: ClusterRole
   name: cilium-drift
 subjects:
-  # talos/patches/apiserver.yaml の claimMappings.username.expression が作る名前。
+  # talos/controlplane.yaml の claimMappings.username.expression が作る名前。
   # `sub` は組織 ID / リポジトリ ID 入りの形に変わったので使っていない。
   - apiGroup: rbac.authorization.k8s.io
     kind: User
     name: "gha:danything/gitops:refs/heads/main"
 ---
 # ここから下は人。Entra の id_token を Headlamp が API サーバへ転送してくる
-# (talos/patches/apiserver.yaml の 2 つめの issuer)。アプリロール admin を持つ人は
+# (talos/controlplane.yaml の 2 つめの issuer)。アプリロール admin を持つ人は
 # entra:admin、それ以外は entra:viewer のグループになって届く。
 #
 # CI と同じくこのファイルは machine config に載るので、クラスタを作り直した

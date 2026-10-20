@@ -11,8 +11,6 @@ creation_rules:
   - path_regex: ^bootstrap/.*\.sops\.yaml$
     encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-  # 以下は全部が秘密なので丸ごと
+  # 全部が秘密なので丸ごと(CA 一式と fjRegistryPassword)
   - path_regex: ^talos/secrets\.yaml$
-    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-  - path_regex: ^talos/registries\.yaml$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r

@@ -38,7 +38,7 @@ Z440 では NIC の名前が DL360 と変わる(`eno1`〜`eno4` にはならな�
 - 選ぶのは **`mac(link.permanent_addr)`**。bond のメンバーになると今の MAC は bond の MAC に変わるので、元の MAC で見る
 - **`bond0` は残す**(メンバーは `lan0` の 1 本)。MAC は `hardwareAddr: e6:2c:1b:1a:a0:39` で固定してあるので、
   **DL360 でも Z440 でも変わらない**。ルーターの IPv6 公開のエントリ([router.md](router.md))は直さなくてよい
-- `talos/patches/cluster.yaml` で `eno4` を名指ししているところ(`LinkConfig` と sysctl の `net.ipv6.conf.eno4.disable_ipv6`)も別名に直す
+- `talos/controlplane.yaml` で `eno4` を名指ししているところ(`LinkConfig` と sysctl の `net.ipv6.conf.eno4.disable_ipv6`)も別名に直す
 
 ```yaml
 apiVersion: v1alpha1
@@ -49,7 +49,7 @@ selector:
 # BondConfig の links: [lan0]、LinkConfig の name: jcom0
 ```
 
-**ディスク**: `disk.dev_path == "/dev/sda"` は Z440 でも SSD 1 本なら同じになるはず(`talosctl get disks` で見る。`talos/patches/main.yaml` の注)。
+**ディスク**: `disk.dev_path == "/dev/sda"` は Z440 でも SSD 1 本なら同じになるはず(`talosctl get disks` で見る。`talos/controlplane.yaml` の注)。
 
 **この config は DL360 では効かない**(MAC が当たらず 10.0 側が上がらない)ので、普通に当てない。
 `talosctl apply-config --mode=staged` で**次の起動から**効くように置き、電源を切る直前にやる(手順 4)。
@@ -90,7 +90,7 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 1. 番号を確かめる: `talosctl -n 10.0.0.2 dmesg | grep ttyS`(`ttyS4` などになる)
 2. Image Factory の schematic の `customization.extraKernelArgs` に `console=tty0` と `console=ttyS<番号>,115200n8` を足し、
    新しい schematic ID で `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>`(再起動する)。
-   カーネル引数は machine config に書けない(`talos/patches/main.yaml` の注、[talos.md](talos.md))。
+   カーネル引数は machine config に書けない(`talos/controlplane.yaml` の注、[talos.md](talos.md))。
    schematic ID は `talos/versions.yaml` と `main.yaml` の注も揃える。**Arc の extension を足すのも同じ手順**なので一緒にやる
    (`siderolabs/i915` で足りるか要確認。Arc B シリーズなどは `siderolabs/xe`。**両方は入れない** ── 同じ GPU を取り合う)
 
@@ -150,6 +150,6 @@ DL360 の `eno2`(bond の 2 本目)のように、片方の機械にしか無い
 - [router.md](router.md)・この文書の構成表を Z440 に直す
 - 「iLO(10.0.0.3)」と書いてあるところを AMT(10.0.0.5)に直す: apps/netbird/routing-peer.yaml のコメント、ROADMAP.md、
   docs/decisions.md、recovery/README.md(建て直しの入口。ISO の起動と Secure Boot の手順も AMT の IDE-R に)、docs/talos.md の対象の行
-- **10.10 側を外す**(小さいサーバをルーターにしたあと): `talos/patches/cluster.yaml` の 10.10 側の `LinkConfig`・別名・
+- **10.10 側を外す**(小さいサーバをルーターにしたあと): `talos/controlplane.yaml` の 10.10 側の `LinkConfig`・別名・
   `disable_ipv6` の sysctl を消し、AdGuard の 10.10.0.4 の待ち受け(apps/adguardhome/service-dns.yaml)を外し、
   10.10 側の機器の DNS を 10.0.0.2 にする。NetBird の 10.10.0.0/24 の経路は、BL1500HM の静的ルーティングで届くのでそのままでよい

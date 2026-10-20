@@ -5,7 +5,7 @@
 # (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書など)まで含めて**一瞬で戻したいとき**の近道。
 # 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
 #
-# Talos API への権限は `os:etcd:backup` だけ(talos/patches/etcd-backup.yaml)。
+# Talos API への権限は `os:etcd:backup` だけ(talos/controlplane.yaml)。
 # 下の ServiceAccount を見て Talos が同名の Secret に talosconfig を書く。
 #
 # **通知は何も足さなくてよい。** notify は過去 8 日に出てきた (host, path) を
