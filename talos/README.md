@@ -25,7 +25,7 @@ CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を�
 
 **秘密は [secrets.yaml](secrets.yaml)(SOPS)の 1 本にまとめてコミット済み。** クラスタの CA 一式(`talosctl gen secrets` の形)に、
 `fjRegistryPassword`(下の fj.doany.io の資格情報)を足してある。controlplane.yaml には秘密を書かず、
-`"${FJ_REGISTRY_PASSWORD}"` のように名前だけ置き(二重引用符で囲む。埋めるときに  と " をエスケープする)、render.sh が復号した値で埋める(埋め残しがあれば止まる)。
+`"${FJ_REGISTRY_PASSWORD}"` のように名前だけ置き(二重引用符で囲む。埋めるときに `\` と `"` をエスケープする)、render.sh が復号した値で埋める(埋め残しがあれば止まる)。
 **`secrets.yaml` を作り直すと別のクラスタになる**(`bootstrap/apiserver/ca.crt` と Infisical の Kubernetes auth の CA も
 替えることになる)ので触らない。まっさらから組むときだけ(`fjRegistryPassword` を足し直すこと):
 
