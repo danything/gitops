@@ -167,7 +167,7 @@ sh recovery/pv.sh - plan-all      # 読むだけ。namespace ごとに何をす�
 sh recovery/pv.sh - restore-all
 ```
 
-`restore-all` がやっていること(途中で止まったら、その namespace から手で続けられる):
+`restore-all` がやっていること(途中で止まったら Argo CD が止まったままのことがあるので、止まったところの表示に従う。**流し直すと Forgejo からやり直す**ので、続きは `<ns> restore` を 1 つずつ):
 
 1. `argo-pause`(selfHeal が replicas を戻して、戻している最中にアプリが起き上がるので)
 2. `forgejo restore` ── **Forgejo を先に。** 非公開アプリのイメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、

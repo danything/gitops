@@ -248,6 +248,8 @@ case $OP in
 			[ "$rc" = 2 ] && bad="$bad $h"
 		done
 		[ -z "$bad" ] || { echo "戻し方が決まっていない経路がある:$bad(sh recovery/pv.sh <ns> plan で見る)" >&2; exit 1; }
+		# ここから先で落ちたら、Argo CD が止まったままかもしれないことと続け方を出す
+		trap 'rc=$?; [ $rc = 0 ] || echo "restore-all が途中で止まった($rc)。Argo CD は止まったままかもしれない(sh recovery/pv.sh - argo-resume で戻す)。止めた namespace は sh recovery/pv.sh <ns> start で起こせる。流し直すと Forgejo からやり直すので、続きは <ns> restore を 1 つずつ" >&2' EXIT
 		sh "$0" - argo-pause
 		sh "$0" forgejo restore
 		sh "$0" - argo-resume
