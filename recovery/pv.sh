@@ -35,7 +35,8 @@ shift 2
 K=kubectl
 REP="$HOME/.cache/pv-replicas-$NS"
 
-# env にもう入っていれば(RESTIC_REPOSITORY)読まない
+# restic.env を読む。restore-all などが自分を呼び直すとき、子は親が読んだ env を継ぐので読み直さない
+# (RESTIC_REPOSITORY があれば読み終わっているとみなす。資格情報を env で直に渡すときも同じ)
 restic_env() { [ -n "${RESTIC_REPOSITORY:-}" ] && return 0; set -a; . "$HOME/.config/restic.env"; set +a; }
 
 stop() {
@@ -114,13 +115,16 @@ unhelper() { $K -n "$NS" delete pod "h-$1" --wait=false >/dev/null; }
 
 # --- まとめて戻す(plan / restore / plan-all / restore-all) ---
 # スナップショットの経路の形で操作が決まる(README の 8 の表)。namespace = restic の host。
-#   /data/<pvc>          folder(PVC が無ければ飛ばす。やめたアプリの残り)
+#   /data/<pvc>          folder
 #   /<ns>-<app>.db       sqlite。PVC は <app>-db、無ければ <app>-data。ファイル名は <app>.db
 #   /<ns>-postgres.sql   pgload(deploy/postgres は止めずに残す。ユーザーと DB はその Pod の env から)
 #   /netbird-backup.tar  untar
 #   /matrix-backup.tar   Tuwunel の --restore-backup(README の 8 の下)
 # 順番は folder → sqlite → tar → pgload(denpa は /data/denpa-data を先に置いてから denpa.db を戻す)。
 # infisical は recovery/infisical.sh、etcd は docs/talos.md で戻すので、ここでは扱わない。
+#
+# **namespace や PVC が無いのは飛ばさずに止める。** 「まだ Argo CD が作っていない」と「やめたアプリの残り」を
+# 区別できないので。やめたアプリの残りは restic から消す(../apps/k8up/README.md「やめたアプリの残り」)。
 
 latest() { # $1=host → 「ID 経路」を経路ごとに 1 行(いちばん新しいもの)
 	restic snapshots --host "$1" --latest 1 --json \
@@ -129,28 +133,31 @@ latest() { # $1=host → 「ID 経路」を経路ごとに 1 行(いちばん新
 
 pvc_exists() { $K -n "$NS" get pvc "$1" >/dev/null 2>&1; }
 
-# 「順番 操作 引数…」を出す。決められない経路は止める(黙って飛ばさない)
+# 「順番 操作 引数…」を出す。決められないものは止める(黙って飛ばさない)
 # パイプの中の while で exit しても外に伝わらないので、一覧はファイルに取ってから読む
 plan() {
+	$K get ns "$NS" >/dev/null 2>&1 || { echo "ERROR: $NS: namespace が無い" >&2; exit 1; }
 	_l=$(mktemp); _o=$(mktemp)
+	trap 'rm -f "$_l" "$_o"' EXIT
 	latest "$NS" > "$_l"
 	while read -r id p; do
 		case $p in
 			/data/*)
 				pvc=${p#/data/}
-				if pvc_exists "$pvc"; then echo "1 folder $pvc $id"; else echo "# 飛ばす: $p(PVC $pvc が無い)" >&2; fi ;;
+				pvc_exists "$pvc" || { echo "ERROR: $NS: $p を戻す PVC $pvc が無い" >&2; exit 1; }
+				echo "1 folder $pvc $id" ;;
 			/"$NS"-postgres.sql) echo "4 pgload postgres-data $id $p" ;;
 			/"$NS"-*.db)
 				app=${p#/"$NS"-}; app=${app%.db}
 				if pvc_exists "$app-db"; then echo "2 sqlite $app-db $app.db $id $p"
 				elif pvc_exists "$app-data"; then echo "2 sqlite $app-data $app.db $id $p"
-				else echo "ERROR: $p を戻す PVC($app-db / $app-data)が無い" >&2; exit 1; fi ;;
+				else echo "ERROR: $NS: $p を戻す PVC($app-db / $app-data)が無い" >&2; exit 1; fi ;;
 			/netbird-backup.tar) echo "3 untar netbird-data $id $p store.db*,idp.db*,events.db*" ;;
 			/matrix-backup.tar) echo "3 matrix tuwunel-data $id $p" ;;
-			*) echo "ERROR: $p の戻し方が決まっていない(README の 8 の表に足す)" >&2; exit 1 ;;
+			*) echo "ERROR: $NS: $p の戻し方が決まっていない(README の 8 の表に足す)" >&2; exit 1 ;;
 		esac
 	done < "$_l" > "$_o"
-	sort -n "$_o"; rm -f "$_l" "$_o"
+	sort -n "$_o"
 }
 
 restore() {
@@ -159,7 +166,8 @@ restore() {
 	echo "== $NS"; echo "$steps" | sed 's/^/  /'
 	keep=; echo "$steps" | grep -q ' pgload ' && keep=postgres
 	stop $keep
-	echo "$steps" | while read -r _ op a b c d; do
+	# 一覧は fd 3 で読む(標準入力に流すと、中で呼ぶコマンドが残りの行を食いうる)
+	while read -r _ op a b c d <&3; do
 		case $op in
 			folder) folder "$a" "$b" ;;
 			sqlite) sh "$0" "$NS" sqlite "$a" "$b" "$c" "$d" ;;
@@ -176,20 +184,30 @@ restore() {
 				# 1 回だけ。Argo CD を戻すと selfHeal が引数を消す
 				$K -n "$NS" patch sts tuwunel -p '{"spec":{"template":{"spec":{"containers":[{"name":"tuwunel","args":["--restore-backup"]}]}}}}' >/dev/null ;;
 		esac
-	done
+	done 3<<STEPS
+$steps
+STEPS
 	start
 }
 
-# 戻す namespace(restic の host のうち、クラスタに namespace があるもの。forgejo・infisical・etcd を除く)
+# 戻す namespace = restic の host(forgejo は先に別で戻す。infisical・etcd は別の手順)
 hosts() {
-	restic snapshots --json | bun -e 'console.log([...new Set(JSON.parse(await Bun.stdin.text()).map(s => s.hostname))].sort().join("\n"))' \
-		| while read -r h; do
-			case $h in forgejo|infisical|etcd) continue ;; esac
-			if $K get ns "$h" >/dev/null 2>&1; then echo "$h"; else echo "# 飛ばす: host $h(namespace が無い)" >&2; fi
-		done
+	restic snapshots --json \
+		| bun -e 'console.log([...new Set(JSON.parse(await Bun.stdin.text()).map(s => s.hostname))].sort().join("\n"))' \
+		| grep -vxE 'forgejo|infisical|etcd'
 }
 
-wait_appsets() { # Forgejo が戻って ApplicationSet のエラーが消えるまで(非公開アプリの Application と PVC が出てくる)
+# 全 host の plan が通るか。通らなければ 1(何も触らない)
+plan_all() {
+	rc=0
+	for h in "$@"; do
+		echo "== $h"
+		if out=$(sh "$0" "$h" plan); then echo "$out" | sed 's/^/  /'; else rc=1; fi
+	done
+	return $rc
+}
+
+wait_appsets() { # Forgejo が戻って ApplicationSet のエラーが消えるまで(非公開アプリの Application が出てくる)
 	for _ in $(seq 1 60); do
 		e=$($K -n argocd get applicationset -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="ErrorOccurred")].status}{"\n"}{end}' | grep -c True || true)
 		[ "$e" -eq 0 ] && { echo "applicationset: エラーなし"; return 0; }
@@ -210,17 +228,27 @@ case $OP in
 	start) start ;;
 	plan) restic_env; plan ;;
 	restore) restic_env; restore ;;
-	plan-all) # 読むだけ。forgejo と各 namespace で何をするかを出す
+	plan-all) # 読むだけ。forgejo と各 namespace で何をするかを出す。1 つでも決められなければ 1
 		restic_env
-		for h in forgejo $(hosts); do echo "== $h"; sh "$0" "$h" plan | sed 's/^/  /'; done ;;
+		plan_all forgejo $(hosts) ;;
 	restore-all) # README の 8 を通しで。Forgejo を先に戻し、非公開アプリが出てくるのを待ってから残り
 		restic_env
+		# Forgejo の plan が通らなければ何も触らない
+		plan_all forgejo >/dev/null || { echo "forgejo の plan が通らない(plan-all で見る)" >&2; exit 1; }
 		sh "$0" - argo-pause
 		sh "$0" forgejo restore
 		sh "$0" - argo-resume
 		wait_appsets
+		# 残りの namespace と PVC が全部出そろうまで待つ(Argo CD は動かしたまま)。
+		# 1 つでも欠けていれば、どこも上書きする前に止まる
+		H=$(hosts); ok=
+		for _ in $(seq 1 30); do
+			plan_all $H >/dev/null 2>&1 && { ok=1; break; }
+			sleep 20
+		done
+		[ -n "$ok" ] || { plan_all $H >/dev/null || true; echo "10 分待っても上の plan が通らない。forgejo だけ戻した状態で止めた(Argo CD は動いている)" >&2; exit 1; }
 		sh "$0" - argo-pause
-		for h in $(hosts); do sh "$0" "$h" restore; done
+		for h in $H; do sh "$0" "$h" restore; done
 		sh "$0" - argo-resume ;;
 	folder) folder "$1" "$2" ;;
 	sqlite) # $1=pvc $2=ファイル名 $3=snapshot $4=中のパス

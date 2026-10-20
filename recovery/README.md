@@ -172,8 +172,8 @@ sh recovery/pv.sh - restore-all
 1. `argo-pause`(selfHeal が replicas を戻して、戻している最中にアプリが起き上がるので)
 2. `forgejo restore` ── **Forgejo を先に。** 非公開アプリのイメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、
    Argo CD が読むマニフェストも、それを読むトークン(Forgejo の DB)も全部 Forgejo にあるので、戻すまで 1 本も上がらない
-3. `argo-resume` して ApplicationSet のエラーが消えるのを待ち、また `argo-pause`
-4. restic の host のうちクラスタに namespace があるもの(forgejo・infisical・etcd を除く)を `<ns> restore`
+3. `argo-resume` して ApplicationSet のエラーが消え、**残りの namespace と PVC が全部出そろって全部の `plan` が通る**まで待ち(10 分。通らなければ forgejo だけ戻した状態で止まる)、また `argo-pause`
+4. restic の host(forgejo・infisical・etcd を除く)を 1 つずつ `<ns> restore`
 5. `argo-resume`
 
 1 つだけ戻すなら `sh recovery/pv.sh <ns> plan` で見てから `sh recovery/pv.sh <ns> restore`(Argo CD は先に `argo-pause`)。
@@ -181,13 +181,13 @@ sh recovery/pv.sh - restore-all
 
 | 経路 | 操作 |
 | --- | --- |
-| `/data/<pvc>` | `folder`。PVC がもう無ければ飛ばす(やめたアプリの残り) |
+| `/data/<pvc>` | `folder` |
 | `/<ns>-<app>.db`(SQLite) | `sqlite`。PVC は `<app>-db`、無ければ `<app>-data`(denpa)。ファイル名は `<app>.db`。**folder を先に**流すので、`denpa.db*` を除いて取った `/data/denpa-data` を置いてから DB を戻す順になる |
 | `/<ns>-postgres.sql` | `pgload`。`deploy/postgres` だけ止めずに残し、ユーザーと DB はその Pod の env から取る(ダンプは `--clean` 付き) |
 | `/netbird-backup.tar` | `untar`(`store.db*` `idp.db*` `events.db*` を消してから)。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
 | `/matrix-backup.tar` | Tuwunel 自身のバックアップ(`backups/`)と `media/` の tar。新しく作られた `db/` を消して展開し、**1 回だけ `--restore-backup` 付きで起こす**(引数は Argo CD を戻すと selfHeal が消す) |
 
-表に無い経路があると `plan` の時点で止まる(黙って飛ばさない)。新しい形の経路を足したら pv.sh の `plan` とこの表に足す。
+表に無い経路、namespace や PVC が無いものは `plan` の時点で止まる(黙って飛ばさない。「まだ Argo CD が作っていない」と「やめたアプリの残り」を区別できないので)。やめたアプリの残りは restic から消しておく([../apps/k8up/README.md](../apps/k8up/README.md)「やめたアプリの残り」)。新しい形の経路を足したら pv.sh の `plan` とこの表に足す。
 
 - **`Succeeded` は「戻った」の意味ではない。** `pv.sh` は `Restored N files` と(SELinux 以外の)エラー数を出すので、それを見る。
   SQLite は大きさを restic と突き合わせてから付け替える
