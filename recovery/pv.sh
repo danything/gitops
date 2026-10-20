@@ -117,7 +117,7 @@ unhelper() { $K -n "$NS" delete pod "h-$1" --wait=false >/dev/null; }
 # スナップショットの経路の形で操作が決まる(README の 8 の表)。namespace = restic の host。
 #   /data/<pvc>          folder
 #   /<ns>-<app>.db       sqlite。PVC は <app>-db、無ければ <app>-data。ファイル名は <app>.db
-#   /<ns>-postgres.sql   pgload(deploy/postgres は止めずに残す。ユーザーと DB はその Pod の env から)
+#   /<ns>-postgres.sql   pgload(deploy/postgres は止めずに残す。ユーザーと DB は plan で deploy の env から)
 #   /netbird-backup.tar  untar
 #   /matrix-backup.tar   Tuwunel の --restore-backup(README の 8 の下)
 # 順番は folder → sqlite → tar → pgload(denpa は /data/denpa-data を先に置いてから denpa.db を戻す)。
@@ -146,7 +146,12 @@ plan() {
 				pvc=${p#/data/}
 				pvc_exists "$pvc" || { echo "ERROR: $NS: $p を戻す PVC $pvc が無い" >&2; exit 1; }
 				echo "1 folder $pvc $id" ;;
-			/"$NS"-postgres.sql) echo "4 pgload postgres-data $id $p" ;;
+			/"$NS"-postgres.sql)
+				# ユーザーと DB は deploy/postgres の env(値で書いてあるもの)。触る前に決めておく
+				pe() { $K -n "$NS" get deploy postgres -o "jsonpath={.spec.template.spec.containers[0].env[?(@.name==\"$1\")].value}" 2>/dev/null; }
+				u=$(pe POSTGRES_USER); db=$(pe POSTGRES_DB)
+				[ -n "$u" ] && [ -n "$db" ] || { echo "ERROR: $NS: deploy/postgres の POSTGRES_USER / POSTGRES_DB が読めない" >&2; exit 1; }
+				echo "4 pgload postgres-data $id $p $u $db" ;;
 			/"$NS"-*.db)
 				app=${p#/"$NS"-}; app=${app%.db}
 				if pvc_exists "$app-db"; then echo "2 sqlite $app-db $app.db $id $p"
@@ -154,7 +159,8 @@ plan() {
 				else echo "ERROR: $NS: $p を戻す PVC($app-db / $app-data)が無い" >&2; exit 1; fi ;;
 			/netbird-backup.tar) echo "3 untar netbird-data $id $p store.db*,idp.db*,events.db*" ;;
 			/matrix-backup.tar) echo "3 matrix tuwunel-data $id $p" ;;
-			*) echo "ERROR: $NS: $p の戻し方が決まっていない(README の 8 の表に足す)" >&2; exit 1 ;;
+			# 終了コード 2 = 待っても直らない(restore-all はこれを Forgejo を戻す前に見る)
+			*) echo "ERROR: $NS: $p の戻し方が決まっていない(README の 8 の表に足す)" >&2; exit 2 ;;
 		esac
 	done < "$_l" > "$_o"
 	sort -n "$_o"
@@ -173,9 +179,8 @@ restore() {
 			sqlite) sh "$0" "$NS" sqlite "$a" "$b" "$c" "$d" ;;
 			untar) sh "$0" "$NS" untar "$a" "$b" "$c" "$(echo "$d" | tr , ' ')" ;;
 			pgload)
-				u=$($K -n "$NS" exec deploy/postgres -- printenv POSTGRES_USER)
-				db=$($K -n "$NS" exec deploy/postgres -- printenv POSTGRES_DB)
-				sh "$0" "$NS" pgload "$a" "$b" "$c" postgres "$u" "$db" ;;
+				set -- $d   # plan が足したユーザーと DB
+				sh "$0" "$NS" pgload "$a" "$b" "$c" postgres "$1" "$2" ;;
 			matrix)
 				folder "$a" "$b"
 				helper "$a"
@@ -194,7 +199,7 @@ STEPS
 hosts() {
 	restic snapshots --json \
 		| bun -e 'console.log([...new Set(JSON.parse(await Bun.stdin.text()).map(s => s.hostname))].sort().join("\n"))' \
-		| grep -vxE 'forgejo|infisical|etcd'
+		| { grep -vxE 'forgejo|infisical|etcd' || true; }
 }
 
 # 全 host の plan が通るか。通らなければ 1(何も触らない)
@@ -235,6 +240,14 @@ case $OP in
 		restic_env
 		# Forgejo の plan が通らなければ何も触らない
 		plan_all forgejo >/dev/null || { echo "forgejo の plan が通らない(plan-all で見る)" >&2; exit 1; }
+		# 待っても直らないもの(戻し方が決まっていない経路。plan の終了コード 2)も、触る前に止める。
+		# namespace がまだ無いものはここでは見えない(Forgejo の後でしか出てこない)
+		bad=
+		for h in $(hosts); do
+			rc=0; sh "$0" "$h" plan >/dev/null 2>&1 || rc=$?
+			[ "$rc" = 2 ] && bad="$bad $h"
+		done
+		[ -z "$bad" ] || { echo "戻し方が決まっていない経路がある:$bad(sh recovery/pv.sh <ns> plan で見る)" >&2; exit 1; }
 		sh "$0" - argo-pause
 		sh "$0" forgejo restore
 		sh "$0" - argo-resume
