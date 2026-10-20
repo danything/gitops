@@ -4,6 +4,10 @@
 #
 #   tools/t.ps1 --admin sh recovery/pv.sh <namespace> <操作> [引数…]
 #
+#   - plan-all / restore-all   全部(namespace は `-`)。plan は読むだけ。restore-all が README の 8 そのもの
+#   plan / restore             その namespace の最新のスナップショットを経路の形で戻す(下の「まとめて戻す」)
+#
+#   以下は restore が使う部品。手で続けるときにも使う
 #   argo-pause / argo-resume   Argo CD の application-controller を 0 / 1 にする。止めないと selfHeal が
 #                              replicas を戻して、戻している最中にアプリが起き上がる
 #   stop [残すもの…]           その namespace の Deployment / StatefulSet を 0 にする(元の数は ~/.cache に控える)
@@ -31,7 +35,9 @@ shift 2
 K=kubectl
 REP="$HOME/.cache/pv-replicas-$NS"
 
-restic_env() { set -a; . "$HOME/.config/restic.env"; set +a; }
+# restic.env を読む。restore-all などが自分を呼び直すとき、子は親が読んだ env を継ぐので読み直さない
+# (RESTIC_REPOSITORY があれば読み終わっているとみなす。資格情報を env で直に渡すときも同じ)
+restic_env() { [ -n "${RESTIC_REPOSITORY:-}" ] && return 0; set -a; . "$HOME/.config/restic.env"; set +a; }
 
 stop() {
 	mkdir -p "$(dirname "$REP")"
@@ -107,6 +113,114 @@ P
 }
 unhelper() { $K -n "$NS" delete pod "h-$1" --wait=false >/dev/null; }
 
+# --- まとめて戻す(plan / restore / plan-all / restore-all) ---
+# スナップショットの経路の形で操作が決まる(README の 8 の表)。namespace = restic の host。
+#   /data/<pvc>          folder
+#   /<ns>-<app>.db       sqlite。PVC は <app>-db、無ければ <app>-data。ファイル名は <app>.db
+#   /<ns>-postgres.sql   pgload(deploy/postgres は止めずに残す。ユーザーと DB は plan で deploy の env から)
+#   /netbird-backup.tar  untar
+#   /matrix-backup.tar   Tuwunel の --restore-backup(README の 8 の下)
+# 順番は folder → sqlite → tar → pgload(denpa は /data/denpa-data を先に置いてから denpa.db を戻す)。
+# infisical は recovery/infisical.sh、etcd は docs/talos.md で戻すので、ここでは扱わない。
+#
+# **namespace や PVC が無いのは飛ばさずに止める。** 「まだ Argo CD が作っていない」と「やめたアプリの残り」を
+# 区別できないので。やめたアプリの残りは restic から消す(../apps/k8up/README.md「やめたアプリの残り」)。
+
+latest() { # $1=host → 「ID 経路」を経路ごとに 1 行(いちばん新しいもの)
+	restic snapshots --host "$1" --latest 1 --json \
+		| bun -e 'for (const s of JSON.parse(await Bun.stdin.text()) ?? []) for (const p of s.paths) console.log(s.id, p)'
+}
+
+pvc_exists() { $K -n "$NS" get pvc "$1" >/dev/null 2>&1; }
+
+# 「順番 操作 引数…」を出す。決められないものは止める(黙って飛ばさない)
+# パイプの中の while で exit しても外に伝わらないので、一覧はファイルに取ってから読む
+plan() {
+	$K get ns "$NS" >/dev/null 2>&1 || { echo "ERROR: $NS: namespace が無い" >&2; exit 1; }
+	_l=$(mktemp); _o=$(mktemp)
+	trap 'rm -f "$_l" "$_o"' EXIT
+	latest "$NS" > "$_l"
+	while read -r id p; do
+		case $p in
+			/data/*)
+				pvc=${p#/data/}
+				pvc_exists "$pvc" || { echo "ERROR: $NS: $p を戻す PVC $pvc が無い" >&2; exit 1; }
+				echo "1 folder $pvc $id" ;;
+			/"$NS"-postgres.sql)
+				# ユーザーと DB は deploy/postgres の env(値で書いてあるもの)。触る前に決めておく
+				pe() { $K -n "$NS" get deploy postgres -o "jsonpath={.spec.template.spec.containers[0].env[?(@.name==\"$1\")].value}" 2>/dev/null; }
+				u=$(pe POSTGRES_USER); db=$(pe POSTGRES_DB)
+				[ -n "$u" ] && [ -n "$db" ] || { echo "ERROR: $NS: deploy/postgres の POSTGRES_USER / POSTGRES_DB が読めない" >&2; exit 1; }
+				echo "4 pgload postgres-data $id $p $u $db" ;;
+			/"$NS"-*.db)
+				app=${p#/"$NS"-}; app=${app%.db}
+				if pvc_exists "$app-db"; then echo "2 sqlite $app-db $app.db $id $p"
+				elif pvc_exists "$app-data"; then echo "2 sqlite $app-data $app.db $id $p"
+				else echo "ERROR: $NS: $p を戻す PVC($app-db / $app-data)が無い" >&2; exit 1; fi ;;
+			/netbird-backup.tar) echo "3 untar netbird-data $id $p store.db*,idp.db*,events.db*" ;;
+			/matrix-backup.tar) echo "3 matrix tuwunel-data $id $p" ;;
+			# 終了コード 2 = 待っても直らない(restore-all はこれを Forgejo を戻す前に見る)
+			*) echo "ERROR: $NS: $p の戻し方が決まっていない(README の 8 の表に足す)" >&2; exit 2 ;;
+		esac
+	done < "$_l" > "$_o"
+	sort -n "$_o"
+}
+
+restore() {
+	steps=$(plan)
+	[ -n "$steps" ] || { echo "$NS: 戻すものが無い"; return 0; }
+	echo "== $NS"; echo "$steps" | sed 's/^/  /'
+	keep=; echo "$steps" | grep -q ' pgload ' && keep=postgres
+	stop $keep
+	# 一覧は fd 3 で読む(標準入力に流すと、中で呼ぶコマンドが残りの行を食いうる)
+	while read -r _ op a b c d <&3; do
+		case $op in
+			folder) folder "$a" "$b" ;;
+			sqlite) sh "$0" "$NS" sqlite "$a" "$b" "$c" "$d" ;;
+			untar) sh "$0" "$NS" untar "$a" "$b" "$c" "$(echo "$d" | tr , ' ')" ;;
+			pgload)
+				set -- $d   # plan が足したユーザーと DB
+				sh "$0" "$NS" pgload "$a" "$b" "$c" postgres "$1" "$2" ;;
+			matrix)
+				folder "$a" "$b"
+				helper "$a"
+				$K -n "$NS" exec "h-$a" -- sh -euc "cd /pvc; rm -rf db backups media; tar -xf ${c#/}; rm -f ${c#/}; chown -R 65532:65532 .; ls backups"
+				unhelper "$a"
+				# 1 回だけ。Argo CD を戻すと selfHeal が引数を消す
+				$K -n "$NS" patch sts tuwunel -p '{"spec":{"template":{"spec":{"containers":[{"name":"tuwunel","args":["--restore-backup"]}]}}}}' >/dev/null ;;
+		esac
+	done 3<<STEPS
+$steps
+STEPS
+	start
+}
+
+# 戻す namespace = restic の host(forgejo は先に別で戻す。infisical・etcd は別の手順)
+hosts() {
+	restic snapshots --json \
+		| bun -e 'console.log([...new Set(JSON.parse(await Bun.stdin.text()).map(s => s.hostname))].sort().join("\n"))' \
+		| { grep -vxE 'forgejo|infisical|etcd' || true; }
+}
+
+# 全 host の plan が通るか。通らなければ 1(何も触らない)
+plan_all() {
+	rc=0
+	for h in "$@"; do
+		echo "== $h"
+		if out=$(sh "$0" "$h" plan); then echo "$out" | sed 's/^/  /'; else rc=1; fi
+	done
+	return $rc
+}
+
+wait_appsets() { # Forgejo が戻って ApplicationSet のエラーが消えるまで(非公開アプリの Application が出てくる)
+	for _ in $(seq 1 60); do
+		e=$($K -n argocd get applicationset -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="ErrorOccurred")].status}{"\n"}{end}' | grep -c True || true)
+		[ "$e" -eq 0 ] && { echo "applicationset: エラーなし"; return 0; }
+		sleep 10
+	done
+	echo "applicationset のエラーが 10 分で消えない(kubectl -n argocd get applicationset で見る)" >&2; exit 1
+}
+
 case $OP in
 	argo-pause)
 		$K -n argocd scale sts/argocd-application-controller --replicas=0 >/dev/null
@@ -117,6 +231,40 @@ case $OP in
 		echo "argo resumed" ;;
 	stop) stop "$@" ;;
 	start) start ;;
+	plan) restic_env; plan ;;
+	restore) restic_env; restore ;;
+	plan-all) # 読むだけ。forgejo と各 namespace で何をするかを出す。1 つでも決められなければ 1
+		restic_env
+		plan_all forgejo $(hosts) ;;
+	restore-all) # README の 8 を通しで。Forgejo を先に戻し、非公開アプリが出てくるのを待ってから残り
+		restic_env
+		# Forgejo の plan が通らなければ何も触らない
+		plan_all forgejo >/dev/null || { echo "forgejo の plan が通らない(plan-all で見る)" >&2; exit 1; }
+		# 待っても直らないもの(戻し方が決まっていない経路。plan の終了コード 2)も、触る前に止める。
+		# namespace がまだ無いものはここでは見えない(Forgejo の後でしか出てこない)
+		bad=
+		for h in $(hosts); do
+			rc=0; sh "$0" "$h" plan >/dev/null 2>&1 || rc=$?
+			[ "$rc" = 2 ] && bad="$bad $h"
+		done
+		[ -z "$bad" ] || { echo "戻し方が決まっていない経路がある:$bad(sh recovery/pv.sh <ns> plan で見る)" >&2; exit 1; }
+		# ここから先で落ちたら、Argo CD が止まったままかもしれないことと続け方を出す
+		trap 'rc=$?; [ $rc = 0 ] || echo "restore-all が途中で止まった($rc)。Argo CD は止まったままかもしれない(sh recovery/pv.sh - argo-resume で戻す)。止めた namespace は sh recovery/pv.sh <ns> start で起こせる。流し直すと Forgejo からやり直すので、続きは <ns> restore を 1 つずつ" >&2' EXIT
+		sh "$0" - argo-pause
+		sh "$0" forgejo restore
+		sh "$0" - argo-resume
+		wait_appsets
+		# 残りの namespace と PVC が全部出そろうまで待つ(Argo CD は動かしたまま)。
+		# 1 つでも欠けていれば、どこも上書きする前に止まる
+		H=$(hosts); ok=
+		for _ in $(seq 1 30); do
+			plan_all $H >/dev/null 2>&1 && { ok=1; break; }
+			sleep 20
+		done
+		[ -n "$ok" ] || { plan_all $H >/dev/null || true; echo "10 分待っても上の plan が通らない。forgejo だけ戻した状態で止めた(Argo CD は動いている)" >&2; exit 1; }
+		sh "$0" - argo-pause
+		for h in $H; do sh "$0" "$h" restore; done
+		sh "$0" - argo-resume ;;
 	folder) folder "$1" "$2" ;;
 	sqlite) # $1=pvc $2=ファイル名 $3=snapshot $4=中のパス
 		restic_env
