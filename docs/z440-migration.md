@@ -50,6 +50,8 @@ selector:
 ```
 
 **ディスク**: `disk.dev_path == "/dev/sda"` は Z440 でも SSD 1 本なら同じになるはず(`talosctl get disks` で見る。`talos/controlplane.yaml` の注)。
+**入れ直しのついでに、local-path の `u-local-path` を LVM のボリュームグループに切り替える**(ROADMAP の Phase 2.5、
+[decisions.md](decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)。ボリュームは未割り当ての領域にしか作れないので、このときしか切り直せない。
 
 **この config は DL360 では効かない**(MAC が当たらず 10.0 側が上がらない)ので、普通に当てない。
 `talosctl apply-config --mode=staged` で**次の起動から**効くように置き、電源を切る直前にやる(手順 4)。
