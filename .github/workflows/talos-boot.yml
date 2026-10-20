@@ -91,8 +91,10 @@ jobs:
         run: |
           set -euo pipefail
           talosctl gen secrets -o /tmp/secrets.yaml
-          # fj.doany.io の資格情報はダミー(ghcr.io に置くと kubelet の取得が 403 で落ちる)
-          echo "fjRegistryPassword: ci-dummy" >> /tmp/secrets.yaml
+          # controlplane.yaml は password(fj.doany.io)だけ暗号化してある。ダミーに置き換える
+          # (ダミーは fj.doany.io に置いたまま。ghcr.io に置くと kubelet の取得が 403 で落ちる)
+          yq 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
+            talos/controlplane.yaml > /tmp/controlplane.yaml
           # values.yaml は本物、secret-values.sops.yaml だけダミー(通知先もそこにしか無い)。
           # extraObjects は app-of-apps と repo-creds。CI で本物を同期させない
           echo 'extraObjects: []' > /tmp/argocd-secret-values.yaml
@@ -108,10 +110,10 @@ jobs:
             bootstrap/infisical/secrets.sops.yaml > /tmp/infisical-secret.yaml
           yq 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
             bootstrap/cert-manager/cloudflare-secret.sops.yaml > /tmp/cloudflare-secret.yaml
-          for f in /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
+          for f in /tmp/controlplane.yaml /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done
-          SECRETS=/tmp/secrets.yaml \
+          SECRETS=/tmp/secrets.yaml CONTROLPLANE=/tmp/controlplane.yaml \
             ARGOCD_SECRET_VALUES=/tmp/argocd-secret-values.yaml INFISICAL_SECRET_VALUES=/tmp/infisical-secret-values.yaml \
             INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
             ./talos/render.sh /tmp/out

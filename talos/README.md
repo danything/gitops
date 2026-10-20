@@ -23,30 +23,32 @@ CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を�
 **inlineManifest をファイルで指す仕組みは Talos に無い**(machine config はノードが読むので手元のパスは書けない。
 外を指せるのは URL の `KubeExternalManifestConfig` だけで、CRD はそれで渡している)。ファイルを包むのは render.sh の `inline`。
 
-**秘密は [secrets.yaml](secrets.yaml)(SOPS)の 1 本にまとめてコミット済み。** クラスタの CA 一式(`talosctl gen secrets` の形)に、
-`fjRegistryPassword`(下の fj.doany.io の資格情報)を足してある。controlplane.yaml には秘密を書かず、
-`"${FJ_REGISTRY_PASSWORD}"` のように名前だけ置き(二重引用符で囲む。埋めるときに `\` と `"` をエスケープする)、render.sh が復号した値で埋める(埋め残しがあれば止まる)。
+**秘密は 2 か所、どちらも SOPS でコミット済み**(規則は [`../.sops.yaml`](../.sops.yaml)。**平文は git に入れない**)。
+
+- [secrets.yaml](secrets.yaml): クラスタの CA 一式(`talosctl gen secrets` の形)。丸ごと暗号化
+- [controlplane.yaml](controlplane.yaml): `password` の値(下の fj.doany.io の資格情報)**だけ**をその場で暗号化。
+  ほかは平文のまま読めて、`sops` を通さず直接直せる(`mac_only_encrypted`)。パスワードを変えるときだけ `sops edit talos/controlplane.yaml`。
+  SOPS は**ドキュメントごとに `sops:` のメタデータを付け、インデントを 4 にする**(触らない)。render.sh は `sops -d` してから渡す
+
 **`secrets.yaml` を作り直すと別のクラスタになる**(`bootstrap/apiserver/ca.crt` と Infisical の Kubernetes auth の CA も
-替えることになる)ので触らない。まっさらから組むときだけ(`fjRegistryPassword` を足し直すこと):
+替えることになる)ので触らない。まっさらから組むときだけ:
 
 ```shell
-talosctl gen secrets -o talos/secrets.yaml && echo 'fjRegistryPassword: …' >> talos/secrets.yaml && sops -e -i talos/secrets.yaml
+talosctl gen secrets -o talos/secrets.yaml && sops -e -i talos/secrets.yaml
 ```
-
-値だけ差し替えるときは `sops set talos/secrets.yaml '["fjRegistryPassword"]' '"…"'`。
 
 ## fj.doany.io の資格情報
 
 ノード単位で持つので **namespace ごとの `imagePullSecrets` が要らない**(controlplane.yaml の `machine.registries`)。
 持つのは **fj.doany.io**(Forgejo のコンテナレジストリ)だけで、Forgejo のユーザー `yui` の
-`read:package` だけのトークン(全リポジトリ。Forgejo の名前は `talos-registry-pull`)。値は secrets.yaml の `fjRegistryPassword`。
+`read:package` だけのトークン(全リポジトリ。Forgejo の名前は `talos-registry-pull`)。値は controlplane.yaml の中で暗号化してある。
 `username` は Forgejo が見ない(トークンの持ち主で決まる。`info` のままにしてあるが、何でも通る)。無いと非公開のリポジトリの
 イメージが引けない。ghcr.io に残るイメージは全部公開。
 
 **fj.doany.io はこれだけでは取れない。** 公開 DNS の A(WAN 側)にはノードから届かないので、
 ノードの名前解決で fj.doany.io をノード自身(10.0.0.2 の Gateway)に向ける(controlplane.yaml の `StaticHostConfig`)。
 
-CI には age の鍵を渡さないので、`talosctl gen secrets` の使い捨てに `fjRegistryPassword: ci-dummy` を足して経路だけ通している。
+CI には age の鍵を渡さないので、controlplane.yaml の `ENC[…]` を `ci-dummy` に置き換えて経路だけ通している(`cloudflare-secret.sops.yaml` と同じやり方)。
 
 **controlplane.yaml は PR ごとに CI が検証する。** 使い捨ての秘密で `render.sh` を通す。`render.sh` は `talosctl validate --mode metal` に加えて、
 生成物に想定の設定(`ks.doany.io`・OIDC の issuer・bond の `balance-alb` など)が実際に入っているかまで見る

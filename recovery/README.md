@@ -267,7 +267,7 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | ノードが上がらない | iLO のコンソール。ダッシュボードに版と健全性が出る |
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
-| 非公開イメージが引けない | `talos/secrets.yaml` の `fjRegistryPassword` が machine config に入っているか、Forgejo が戻っているか(8) |
+| 非公開イメージが引けない | `talos/controlplane.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
 | bootstrap apply が TLS で落ちる | `secrets.yaml` を作り直した。`bootstrap/apiserver/ca.crt` を新しい `secrets.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
 | inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |

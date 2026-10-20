@@ -27,7 +27,7 @@
 | [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[Talos の作法と検証](docs/talos.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Z440 への移行](docs/z440-migration.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
 | [`ROADMAP.md`](ROADMAP.md) | やることと進捗(なぜそうしたかは `docs/decisions.md`) |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
-| [`.sops.yaml`](.sops.yaml) | 平文の秘密を SOPS(age)で暗号化する規則(`bootstrap/` の 4 ファイルと `talos/secrets.yaml`) |
+| [`.sops.yaml`](.sops.yaml) | 平文の秘密を SOPS(age)で暗号化する規則(`bootstrap/` の 4 ファイルと `talos/` の 2 つ) |
 
 ## 秘密の扱い
 

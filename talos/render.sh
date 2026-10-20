@@ -26,34 +26,14 @@ if [ -z "$SECRETS" ]; then
 	sops -d talos/secrets.yaml > "$SECRETS"
 fi
 
-# controlplane.yaml の `"${名前}"` を secrets.yaml の値で埋める。値は ENVIRON で渡す(sed だと値の / や & が壊す)。
-# 印は二重引用符で囲んで書き、埋めるときに \ と " をエスケープする(値の # や : で YAML が壊れないように)。
-# 埋められる名前は FILL に並べたものだけ(ENVIRON 全体を引くと ${HOME} などが黙って埋まる)。埋め残しは止まる。
-# 値は 1 行で読み、外側の引用符だけ外す。YAML のエスケープは戻さないので、引用符と \ を含む値は止める。
-secret() { # $1=secrets.yaml のトップレベルのキー
-	_v=$(sed -n "s/^$1: *//p" "$SECRETS" | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
-	[ -n "$_v" ] || { echo "ERROR: secrets.yaml に $1 が無い" >&2; return 1; }
-	case $_v in *[\"\'\\]*) echo "ERROR: secrets.yaml の $1 に引用符か \\ がある(読み戻せない)" >&2; return 1 ;; esac
-	printf '%s' "$_v"
-}
-FJ_REGISTRY_PASSWORD=$(secret fjRegistryPassword)
-FILL=FJ_REGISTRY_PASSWORD FJ_REGISTRY_PASSWORD=$FJ_REGISTRY_PASSWORD awk '
-BEGIN { n = split(ENVIRON["FILL"], a, " "); for (i = 1; i <= n; i++) ok[a[i]] = 1 }
-/^[[:space:]]*#/ { print; next }
-{
-	while (match($0, /\$\{[A-Z_]+\}/)) {
-		k = substr($0, RSTART + 2, RLENGTH - 3)
-		if (!(k in ok)) { print "ERROR: controlplane.yaml の ${" k "} を埋める値が無い" > "/dev/stderr"; exit 1 }
-		# gsub の置換文字列の \ は awk の実装で解釈が違うので、1 文字ずつ組む
-		v = ""
-		for (i = 1; i <= length(ENVIRON[k]); i++) {
-			c = substr(ENVIRON[k], i, 1)
-			v = v (c == "\\" || c == "\"" ? "\\" : "") c
-		}
-		$0 = substr($0, 1, RSTART - 1) v substr($0, RSTART + RLENGTH)
-	}
-	print
-}' talos/controlplane.yaml > "$WORK/controlplane.yaml"
+# 手で書く部分。password の値だけ SOPS で暗号化してある(../.sops.yaml)。CI は ENC をダミーにしたものを渡す。
+# `sops -d … > file` は失敗すると set -e で止まる(パイプに繋がない。pipefail が無い)。
+CONTROLPLANE=${CONTROLPLANE:-}
+if [ -z "$CONTROLPLANE" ]; then
+	CONTROLPLANE=$WORK/controlplane.yaml
+	sops -d talos/controlplane.yaml > "$CONTROLPLANE"
+fi
+! grep -q 'ENC\[' "$CONTROLPLANE" || { echo "ERROR: controlplane.yaml に暗号文が残っている" >&2; exit 1; }
 
 # キーを名前で引く(位置で数えるとブロックが増えたとき別の値を掴む)。yq は版で構文が違うので awk。
 ver() { # $1=トップレベルのキー  $2=その下のキー
@@ -171,7 +151,7 @@ PATCH
 set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
 	--install-image "factory.talos.dev/installer/${SCHEMATIC}:${TALOS}"
-for f in "$WORK/controlplane.yaml" "$WORK/gateway-api.yaml" "$WORK/external-crds.yaml" "$WORK"/inline-*.yaml; do
+for f in "$CONTROLPLANE" "$WORK/gateway-api.yaml" "$WORK/external-crds.yaml" "$WORK"/inline-*.yaml; do
 	set -- "$@" --config-patch "@$f"
 done
 
