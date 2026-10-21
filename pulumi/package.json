@@ -15,7 +15,7 @@
   "main": "index.ts",
   "dependencies": {
     "@pulumi/azuread": "6.11.1",
-    "@pulumi/cloudflare": "6.23.0",
+    "@pulumi/cloudflare": "6.23.1",
     "@pulumi/netbird": "file:sdks/netbird",
     "@pulumi/pulumi": "3.270.0"
   },
