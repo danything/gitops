@@ -1,5 +1,8 @@
 # ExternalDNS。**Cloudflare を通すアプリの DNS レコードを、アプリの HTTPRoute から作る**。
 #
+# **移行中(2026-10-22〜)。** 下の方針を裏返し、Cloudflare を通すのを基本、通さないものに "false" を付ける形にしている
+# (README.md「方針」の注記)。いまは true と false の両方を拾う。
+#
 # 方針:
 #   - 社内用や通信量が多いアプリは**直接つなぐ**。何もしない ── `*.doany.io` のワイルドカード
 #     (proxied ではない CNAME)で引ける
