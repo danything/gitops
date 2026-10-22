@@ -24,7 +24,7 @@ spec:
           containers:
             - name: forget
               # notify と同じ。k8up のイメージに restic が入っている。
-              image: ghcr.io/k8up-io/k8up:v2.16.0
+              image: ghcr.io/k8up-io/k8up:v2.16.1
               command:
                 - sh
                 - -ec
