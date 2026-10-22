@@ -10,9 +10,10 @@ const record = (key: string, args: Omit<cloudflare.DnsRecordArgs, "zoneId">, imp
   new cloudflare.DnsRecord(key, { zoneId, ...args }, importId ? { import: `${zoneId}/${importId}` } : undefined);
 
 // --- Web ---------------------------------------------------------------------------------------
-// 直接つなぐアプリはこれで家に来る(Cloudflare を通すものは ExternalDNS が個別に上書きする)。
-// NetBird の nb.doany.io もこれに頼っている(netbird.ts)。変えると NetBird の管理サーバーが引けなくなる
-record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 }, "22d196005f64645eca6bccefd4e3fdee");
+// **Cloudflare を通すのが基本。** 名前を足すだけで Cloudflare 経由で家に来る。
+// 通さないものは個別に proxied ではないレコードを持つ: HTTPRoute のあるもの(nb・ah・fj・lk・dp など)は
+// ExternalDNS が `cloudflare-proxied: "false"` の注釈から作り、無いものは下に明示する(apps/external-dns/README.md)
+record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", proxied: true, ttl: 1 }, "22d196005f64645eca6bccefd4e3fdee");
 
 // Cloudflare を通さない名前のうち、HTTPRoute が無い(= ExternalDNS が作れない)もの。ワイルドカードを proxied に
 // するので、明示しないと Cloudflare に吸われる(apps/external-dns/README.md)
