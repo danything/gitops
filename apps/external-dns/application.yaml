@@ -1,18 +1,18 @@
-# ExternalDNS。**Cloudflare を通すアプリの DNS レコードを、アプリの HTTPRoute から作る**。
+# ExternalDNS。**Cloudflare を通さないアプリの DNS レコードを、アプリの HTTPRoute から作る**。
 #
-# **移行中(2026-10-22〜)。** 下の方針を裏返し、Cloudflare を通すのを基本、通さないものに "false" を付ける形にしている
-# (README.md「方針」の注記)。いまは true と false の両方を拾う。
+# 方針(2026-10-22 から。README.md):
+#   - **Cloudflare を通すのが基本。** 何もしない ── `*.doany.io` のワイルドカード(proxied の CNAME。pulumi/dns.ts)で
+#     Cloudflare 経由で家に来る
+#   - 遅延・通信量・Cloudflare が通さないもの(UDP、853 / 6443 など、100MB を超える上り、2 段の名前)は**直接つなぐ**。
+#     アプリのリポジトリの HTTPRoute に
+#       external-dns.kubernetes.io/cloudflare-proxied: "false"
+#     を付ける。ExternalDNS がそのホストの proxied ではない CNAME(→ doany.io)を作る
+#   - **gitops 側には何も書かない**(アプリを足す・消すのはアプリのリポジトリの PR だけで済む)。
+#     HTTPRoute の無い名前(ks・px・*.s)だけは pulumi/dns.ts に明示する
 #
-# 方針:
-#   - 社内用や通信量が多いアプリは**直接つなぐ**。何もしない ── `*.doany.io` のワイルドカード
-#     (proxied ではない CNAME)で引ける
-#   - SaaS のように外へ出すアプリは **Cloudflare のプロキシを通す**。アプリのリポジトリの HTTPRoute に
-#       external-dns.kubernetes.io/cloudflare-proxied: "true"
-#     を付ける。ExternalDNS がそのホストの proxied の CNAME(→ doany.io)を作る
-#   - **gitops 側には何も書かない**(アプリを足す・消すのはアプリのリポジトリの PR だけで済む)
-#
-# だから「注釈がある = Cloudflare を通す = 明示のレコードを持つ」。注釈の無い HTTPRoute には触れない
+# だから「注釈がある = Cloudflare を通さない = 明示のレコードを持つ」。注釈の無い HTTPRoute には触れない
 # (annotationFilter)。CNAME の宛先は Gateway の注釈(bootstrap/gateway/ の external-dns.kubernetes.io/target)。
+# 前の方針の名残で "true" が付いた HTTPRoute があっても拾わない(ワイルドカードで Cloudflare を通るので同じ結果になる)。
 #
 # **ExternalDNS が触るのは自分で作ったレコードだけ。** 作ったレコードの隣に所有の印の TXT
 # (`_externaldns.<名前>`)を置いて見分ける。メール(MX・SPF・DMARC・autodiscover)、ワイルドカード、
@@ -49,8 +49,8 @@ spec:
           - gateway-httproute
         domainFilters:
           - doany.io
-        # 注釈のある HTTPRoute だけ。いまは移行中で両方(上の方針)。ワイルドカードを proxied にしたら false だけにする
-        annotationFilter: external-dns.kubernetes.io/cloudflare-proxied in (true,false)
+        # Cloudflare を通さないと決めた HTTPRoute だけ(上の方針)
+        annotationFilter: external-dns.kubernetes.io/cloudflare-proxied in (false)
         # HTTPRoute や注釈を消したら、レコードも消す
         policy: sync
         registry: txt
