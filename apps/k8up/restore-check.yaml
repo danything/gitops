@@ -58,7 +58,7 @@ spec:
                 requests: {cpu: 10m, memory: 16Mi}
                 limits: {memory: 256Mi}
             - name: bun
-              image: oven/bun:1.4.3-slim
+              image: oven/bun:1.4.4-slim
               command: [cp, /usr/local/bin/bun, /tools/bun]
               securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
               volumeMounts:

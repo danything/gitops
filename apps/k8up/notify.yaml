@@ -83,7 +83,7 @@ spec:
           containers:
             - name: notify
               # netbird のサイドカーと同じイメージ。kubectl も jq も要らない。
-              image: oven/bun:1.4.3-slim
+              image: oven/bun:1.4.4-slim
               command: [bun, /script/notify.js]
               env:
                 - name: WEBHOOK
