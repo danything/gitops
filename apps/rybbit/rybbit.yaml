@@ -59,7 +59,7 @@ spec:
               until nc -z redis 6379; do echo "Redis を待っている"; sleep 5; done
       containers:
         - name: backend
-          image: ghcr.io/rybbit-io/rybbit-backend:v2.9.1
+          image: ghcr.io/rybbit-io/rybbit-backend:v2.9.2
           ports:
             - containerPort: 3001
           env:
@@ -146,7 +146,7 @@ spec:
     spec:
       containers:
         - name: client
-          image: ghcr.io/rybbit-io/rybbit-client:v2.9.1
+          image: ghcr.io/rybbit-io/rybbit-client:v2.9.2
           ports:
             - containerPort: 3002
           env:
