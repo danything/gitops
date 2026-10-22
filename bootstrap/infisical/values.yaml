@@ -7,7 +7,7 @@ infisical:
     image:
         # Docker Hub の匿名取得は絞られるので mirror.gcr.io から。chart の既定の tag は遅れるので固定する
         repository: mirror.gcr.io/infisical/infisical
-        tag: v0.167.0
+        tag: v0.167.1
     # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL は infisical/secrets.sops.yaml
     kubeSecretRef: infisical-secrets
     extraEnv:
