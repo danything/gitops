@@ -110,7 +110,7 @@ spec:
         # バックアップのためだけのサイドカー(上の k8up.io/backupcommand はここで走る)。
         # netbird-server のイメージには sqlite3 が無いので、bun:sqlite を使う。DB は読み取り専用でマウントする。
         - name: backup
-          image: oven/bun:1.4.3-slim
+          image: oven/bun:1.4.4-slim
           command: ["sleep", "infinity"]
           resources:
             requests:

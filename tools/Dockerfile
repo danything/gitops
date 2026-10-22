@@ -1,5 +1,5 @@
 # 手元で使う運用のコマンド一式(tools/README.md)。版は Renovate が `# renovate:` の次の ARG を上げる。
-FROM oven/bun:1.4.3 AS bun
+FROM oven/bun:1.4.4 AS bun
 
 FROM golang:1.27-trixie AS age
 # renovate: datasource=github-releases depName=FiloSottile/age
