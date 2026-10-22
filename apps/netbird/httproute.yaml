@@ -41,6 +41,9 @@ kind: HTTPRoute
 metadata:
   name: netbird
   namespace: netbird
+  annotations:
+    # Cloudflare を通さない(同じ名前で WireGuard の UDP と、つなぎっぱなしの gRPC を受けている)。apps/external-dns/README.md
+    external-dns.kubernetes.io/cloudflare-proxied: "false"
 spec:
   parentRefs:
     - name: doany

@@ -4,6 +4,10 @@
 
 ## 方針
 
+> **移行中(2026-10-22〜)。** Cloudflare を通すのを基本にし、通さないものに `cloudflare-proxied: "false"` を付ける形へ裏返している。
+> 手順: (1) 通さないものに `"false"` を付け、HTTPRoute の無い名前(`ks`・`px`・`*.s`)は `pulumi/dns.ts` に明示する → (2) ワイルドカードを proxied にする
+> → (3) `annotationFilter` を `false` だけにし、この節を書き直す。いまは (1)。
+
 | アプリ | DNS | すること |
 | --- | --- | --- |
 | 社内用・通信量が多い(**直接つなぐ**) | `*.doany.io` のワイルドカード(proxied ではない) | 何もしない |

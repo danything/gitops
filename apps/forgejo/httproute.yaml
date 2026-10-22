@@ -4,6 +4,9 @@ kind: HTTPRoute
 metadata:
   name: forgejo
   namespace: forgejo
+  annotations:
+    # Cloudflare を通さない(コンテナイメージの大きな層の push が、Cloudflare の 100MB の上限に当たる)。apps/external-dns/README.md
+    external-dns.kubernetes.io/cloudflare-proxied: "false"
 spec:
   parentRefs:
     - name: doany

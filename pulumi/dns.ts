@@ -14,6 +14,15 @@ const record = (key: string, args: Omit<cloudflare.DnsRecordArgs, "zoneId">, imp
 // NetBird の nb.doany.io もこれに頼っている(netbird.ts)。変えると NetBird の管理サーバーが引けなくなる
 record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 }, "22d196005f64645eca6bccefd4e3fdee");
 
+// Cloudflare を通さない名前のうち、HTTPRoute が無い(= ExternalDNS が作れない)もの。ワイルドカードを proxied に
+// するので、明示しないと Cloudflare に吸われる(apps/external-dns/README.md)
+//   ks: API サーバ。6443 は Cloudflare が通さないポート(CI の cilium-drift.yml が使う)
+//   px: 3proxy。hostPort の 3129 に直接来る
+//   *.s: 2 段の名前(bootstrap/auth の sub)。Cloudflare の無料の証明書は 1 段しか守れない
+record("ks", { name: "ks.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 });
+record("px", { name: "px.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 });
+record("wildcard-s", { name: "*.s.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 });
+
 // mado(ブラウザから RDP する入口)。main が落ちたときの入口なので、JCOM 側の PC(固定 IP)に直接来る(docs/router.md)
 record("md-a", { name: "md.doany.io", type: "A", content: "61.21.173.41", proxied: false, ttl: 1 });
 record("md-aaaa", { name: "md.doany.io", type: "AAAA", content: "2405:1201:5201:3a00::2", proxied: false, ttl: 1 });
