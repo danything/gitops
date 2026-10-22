@@ -331,8 +331,14 @@ tracking-id が書き換わってから元を消す。`bootstrap/` へは、先�
 
 ## DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける
 
-**社内用や通信量が多いアプリは直接つなぐ。SaaS のように外へ出すアプリは Cloudflare のプロキシを通す**(本人)。
-やり方は [apps/external-dns/README.md](../apps/external-dns/README.md)。
+**Cloudflare を通すのが基本。遅延・通信量・Cloudflare が通さないものだけ直接つなぐ**(2026-10-22、本人)。
+やり方と直接つなぐものの一覧は [apps/external-dns/README.md](../apps/external-dns/README.md)。
+
+それまでは逆(社内用は直接、SaaS のように外へ出すものだけ Cloudflare)で、通すものに個別に注釈を付けていた。
+直接つなぐ理由のあるもの(UDP・853 / 6443・100MB を超える上り・2 段の名前・遅延)を洗い出すと、それ以外は社内用でも
+Cloudflare で困らなかったので、**例外の側に印を付ける**形に裏返した(`*.doany.io` を proxied にし、外すものに `cloudflare-proxied: "false"`)。
+止めずに切り替えるため、外すものの明示のレコードを先に作り、家の IP で引けるのを確かめてからワイルドカードを proxied にした(#500 → #501)。
+NetBird は管理画面だけ Cloudflare に分ける案もあったが、IdP・API・relay が同じ名前に同居していて得が無いので、丸ごと直接にした。
 
 **DNS もアプリのリポジトリで持つ(疎結合)。** 中央の IaC(Pulumi・DNSControl・OctoDNS)に一覧を置くと、アプリを足すたびに 2 か所を直す。
 ExternalDNS は HTTPRoute の注釈だけで決まり、自分が作ったレコード(所有の印の TXT 付き)にしか触れないので、メールや DDNS の apex と同居できる。
