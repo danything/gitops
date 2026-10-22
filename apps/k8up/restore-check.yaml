@@ -49,7 +49,7 @@ spec:
             # x509 のエラーを黙って retry し続け、何も言わずに止まって見える。
             # メモリの上限は bun(約 90 MB)の書き込みがページキャッシュに乗るぶん。64Mi では OOMKilled だった
             - name: restic
-              image: ghcr.io/k8up-io/k8up:v2.16.0
+              image: ghcr.io/k8up-io/k8up:v2.16.1
               command: [sh, -ec, "cp /usr/local/bin/restic /etc/ssl/certs/ca-certificates.crt /tools/"]
               securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
               volumeMounts:

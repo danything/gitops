@@ -58,7 +58,7 @@ spec:
           initContainers:
             # k8up のイメージに入っている restic でスナップショットの一覧を取る。読むだけ
             - name: snapshots
-              image: ghcr.io/k8up-io/k8up:v2.16.0
+              image: ghcr.io/k8up-io/k8up:v2.16.1
               command:
                 - sh
                 - -ec
