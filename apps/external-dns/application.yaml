@@ -1,5 +1,8 @@
 # ExternalDNS。**Cloudflare を通すアプリの DNS レコードを、アプリの HTTPRoute から作る**。
 #
+# **移行中(2026-10-22〜)。** 下の方針を裏返し、Cloudflare を通すのを基本、通さないものに "false" を付ける形にしている
+# (README.md「方針」の注記)。いまは true と false の両方を拾う。
+#
 # 方針:
 #   - 社内用や通信量が多いアプリは**直接つなぐ**。何もしない ── `*.doany.io` のワイルドカード
 #     (proxied ではない CNAME)で引ける
@@ -46,8 +49,8 @@ spec:
           - gateway-httproute
         domainFilters:
           - doany.io
-        # Cloudflare を通すと決めた HTTPRoute だけ(上の方針)
-        annotationFilter: external-dns.kubernetes.io/cloudflare-proxied in (true)
+        # 注釈のある HTTPRoute だけ。いまは移行中で両方(上の方針)。ワイルドカードを proxied にしたら false だけにする
+        annotationFilter: external-dns.kubernetes.io/cloudflare-proxied in (true,false)
         # HTTPRoute や注釈を消したら、レコードも消す
         policy: sync
         registry: txt

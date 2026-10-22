@@ -88,6 +88,9 @@ kind: HTTPRoute
 metadata:
   name: livekit
   namespace: matrix
+  annotations:
+    # Cloudflare を通さない(通話の合図の WebSocket。遅延を足さない。音声と映像は 8443 で IP に直接来る)。apps/external-dns/README.md
+    external-dns.kubernetes.io/cloudflare-proxied: "false"
 spec:
   parentRefs:
     - name: doany

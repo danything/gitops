@@ -4,6 +4,9 @@ kind: HTTPRoute
 metadata:
   name: adguardhome
   namespace: adguardhome
+  annotations:
+    # Cloudflare を通さない(同じ名前で DoT の 853 を受けている。Cloudflare は 853 を通さない)。apps/external-dns/README.md
+    external-dns.kubernetes.io/cloudflare-proxied: "false"
 spec:
   parentRefs:
     - name: doany
