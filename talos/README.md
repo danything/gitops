@@ -78,17 +78,23 @@ cert-manager と、SOPS 済みの Secret 2 つは machine config の中にいる
 
 ```shell
 ./talos/render.sh talos/clusterconfig
-talosctl apply-config -f talos/clusterconfig/controlplane.yaml
-talosctl upgrade-k8s --endpoint https://10.10.0.4:6443    # ← これが inlineManifests を reconcile する
+talosctl apply-config --mode=no-reboot -f talos/clusterconfig/controlplane.yaml   # 再起動が要るなら当てずに止まる
+talosctl get manifests -o yaml | grep -c '<新しくなるはずの版(例: cilium:v1.20.4)>'      # 反映を待つ(下)
+talosctl upgrade-k8s --to <versions.yaml の kubernetes の版> --endpoint https://10.10.0.4:6443    # ← これが inlineManifests を reconcile する
 ```
 
 `render.sh` は出力先を丸ごと消すので、`talos/clusterconfig/` に置いたものは消える。
+
+- **`upgrade-k8s` には必ず `--to` を付ける。** 省くと talosctl の既定の版に上がる(Talos の alpha の talosctl なら Kubernetes も alpha)。
+  版を変えないなら `versions.yaml` の今の版を渡す
+- **`apply-config` の直後に流さない。** machine config から `manifests` の資源が作り直されるまで少しかかり、その前に流すと**古いマニフェストで
+  「変更なし」のまま終わる**(2026-10-23 に Cilium 1.20.4 で踏んだ)。`talosctl get manifests` に新しい版が出てから流す
 
 - **`apply-config` だけでは inlineManifests は動かない。** 起動時にしか読まれない
 - **`upgrade-k8s` は版を上げなくても reconcile する。** SSA とインベントリで**更新も削除も**する
   ([../docs/talos.md](../docs/talos.md)「inlineManifests は「更新できない」ではない」)
 - **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。** 古い machine config のまま流すと**走っている Cilium が巻き戻る**
-- **`timeout waiting for: [Job/argocd/argocd-redis-secret-init status: 'NotFound']` で終わったら、もう一度流す。**
+- **`timeout waiting for: [Job/argocd/argocd-redis-secret-init status: 'NotFound']` で終わったら、もう一度流す。** 逆に `argocd-redis-secret-init` が `field is immutable` で落ちたら、前の回の Job が残っている。完了済みなので `kubectl -n argocd delete job argocd-redis-secret-init` してから流し直す。
   この Job は終わると 60 秒で消える(`ttlSecondsAfterFinished`)ので、待っている間に消えて時間切れになり、
   その後ろの Deployment まで当たらないことがある。
   当て終わったら `kubectl -n argocd get deploy -o wide` でイメージの版を見る
