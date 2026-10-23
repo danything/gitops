@@ -79,7 +79,17 @@ jobs:
       - name: ディスクイメージを取る
         run: |
           set -euo pipefail
-          mkdir -p /tmp/vm
+          # VM のディスクは疎なファイルで、ゲストが書いた分だけ runner のディスクを食う(イメージの取得で十数 GB)。
+          # / が埋まるとゲストには I/O エラーとして見え、etcd が落ちてクラスタが上がらない(2026-10-23)。
+          # 空きの大きい方に置く(runner によっては /mnt に別のディスクがある)
+          df -h / /mnt 2>/dev/null || true
+          free_kb() { df -Pk "$1" 2>/dev/null | awk 'NR==2 {print $4}'; }
+          if [ -d /mnt ] && [ "$(free_kb /mnt || echo 0)" -gt "$(free_kb /)" ]; then
+            sudo mkdir -p /mnt/vm && sudo chown "$(id -u):$(id -g)" /mnt/vm && ln -sfn /mnt/vm /tmp/vm
+          else
+            mkdir -p /tmp/vm
+          fi
+          echo "VM のディスク: $(readlink -f /tmp/vm)($(df -h "$(readlink -f /tmp/vm)" | awk 'NR==2 {print $4}') 空き)"
           curl -fsSL --retry 3 \
             "https://factory.talos.dev/image/${{ steps.v.outputs.schematic }}/${{ steps.v.outputs.version }}/metal-amd64.raw.zst" \
             | zstd -d -o /tmp/vm/disk.raw
@@ -279,6 +289,8 @@ jobs:
         if: failure()
         run: |
           set +e
+          # ゲストの I/O エラーは runner のディスクが埋まったときに出る(上の「ディスクイメージを取る」)
+          echo "::group::runner のディスク"; df -h / /mnt "$(readlink -f /tmp/vm)" 2>/dev/null; du -h --apparent-size /tmp/vm/disk.raw; du -h /tmp/vm/disk.raw; echo "::endgroup::"
           echo "::group::kubectl get pods -A"; kubectl get pods -A -o wide; echo "::endgroup::"
           echo "::group::events"; kubectl get events -A --sort-by=.lastTimestamp | tail -150; echo "::endgroup::"
           echo "::group::Running でない Pod の describe"
