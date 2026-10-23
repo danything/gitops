@@ -5,6 +5,7 @@ import * as cloudflare from "@pulumi/cloudflare";
 
 import "./entra.ts";
 import "./entra-ci.ts";
+export * from "./entra-smtp.ts";
 import "./notifications.ts";
 import "./dns.ts";
 import "./netbird.ts";
