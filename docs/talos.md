@@ -55,7 +55,7 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 | PV の置き場 | `UserVolumeConfig`。マウント先(`/var/mnt/<name>`)は kubelet に自動で通るので `extraMounts` は要らない([controlplane.yaml](../talos/controlplane.yaml))。ディスク上のラベルは `u-<name>` |
 | control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。**`KubeNodeConfig` を `$patch: delete` して `labels` だけ書き戻す**([controlplane.yaml](../talos/controlplane.yaml)) |
 | CNI を止める | `KubeFlannelCNIConfig` を `$patch: delete`、`KubeProxyConfig` を `enabled: false`([controlplane.yaml](../talos/controlplane.yaml))。**v1alpha1 の `cni.name: none` はもう書けない** |
-| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。Talos 1.14 以降は usermode の modprobe helper が無い(`/proc/sys/kernel/modprobe` が空)ので、`request_module` で依存を引くドライバは順番が狂うと失敗する(PT3 で踏んだ。[controlplane.yaml](../talos/controlplane.yaml)、上流に PR 中) |
+| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。Talos 1.14 以降は usermode の modprobe helper が無い(`/proc/sys/kernel/modprobe` が空)ので、`request_module` で依存を引くドライバは順番が狂うと失敗する(PT3 で踏んだ。[controlplane.yaml](../talos/controlplane.yaml)。上流は並び順ではなく、カーネルが必要な時に読み込む形で直す方針。ROADMAP) |
 
 ### PSA のラベル(Pod Security Admission が既定で `baseline`)
 

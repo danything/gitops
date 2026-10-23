@@ -28,9 +28,14 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 
 - [ ] **R2 の容量が下がり切るのを見る。** `host=main` を消した直後の restic の実データは **5.60 GiB**(2026-10-17)。
       日曜の prune のあと、`pulumi` ワークフローの週次の Summary で見る
-- [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)。PT3 のモジュールの読み順を守る上流の修正
-      ([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))が入ったら、[apps/cluster/pt3-rebind.yaml](apps/cluster/pt3-rebind.yaml) を外して
-      `talos/controlplane.yaml` の並び順だけにする。入ったら dvb-pt3 の extension の README も直す(上流)
+- [ ] **Exchange Online の SMTP AUTH(ユーザー名とパスワード)をやめる。** 使っているのは Infisical(`bootstrap/infisical/values.yaml`)、
+      yosegaki(blog のリポジトリ)、todoroku(Forgejo の doa/todoroku)の 3 つで、どれも `smtp.office365.com:587` に `info@doany.io` で送っている(2026-10-23 に
+      クラスタの全 Pod の env で確かめた)。Microsoft は **2026-12 末に既存テナントでも既定で無効**(管理者が戻せる)、最終の廃止日は 2027 年後半に発表。
+      移る先は OAuth(XOAUTH2)・Graph の sendMail・IP で許す SMTP リレー(コネクタ)のどれか
+- [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
+- [ ] **上流がカーネルにモジュールを必要な時に読ませる仕組み(modprobe の helper)を入れたら**、[apps/cluster/pt3-rebind.yaml](apps/cluster/pt3-rebind.yaml) を外し、
+      `talos/controlplane.yaml` の `kernel.modules` も `earth-pt3` だけにできるか確かめる。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
+      2026-10-23 に「並び順ではなく、カーネルが必要な時に読み込む形にすべき。こちらで別に実装する」(smira)として閉じられた。入ったら dvb-pt3 の extension の README も直す(上流)
 
 ## 済んだこと(記録)
 
