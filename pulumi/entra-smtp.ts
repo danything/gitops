@@ -10,13 +10,19 @@
 
 import * as azuread from "@pulumi/azuread";
 
+// **所有者を自分(apply の資格情報)にしておく。** OwnedBy では、持ち主でないアプリ登録のサービスプリンシパルは
+// 作れない(403 `the backing application of the service principal being created must in the local tenant`)。
+// アプリ専用のトークンで作っても持ち主には自動で入らなかった(2026-10-23)
+const self = azuread.getClientConfigOutput();
+
 const app = new azuread.Application("smtp-relay", {
   displayName: "smtp-relay",
   description: "apps/smtp-relay(SMTP → Graph の sendMail)。送れるのは Exchange の RBAC で info@doany.io だけ",
   signInAudience: "AzureADMyOrg",
+  owners: [self.objectId],
 });
 
-const sp = new azuread.ServicePrincipal("smtp-relay", { clientId: app.clientId });
+const sp = new azuread.ServicePrincipal("smtp-relay", { clientId: app.clientId, owners: [self.objectId] });
 
 // Exchange の New-ServicePrincipal と、送る側の SMTP のユーザー名(<テナント ID>@<クライアント ID>)に使う
 export const smtpRelayClientId = app.clientId;
