@@ -1,0 +1,13 @@
+# 送る側は smtp-relay.smtp-relay.svc:587(STARTTLS なし)。587 にしてあるのは、各アプリの既定の番号のままで済むように
+apiVersion: v1
+kind: Service
+metadata:
+  name: smtp-relay
+  namespace: smtp-relay
+spec:
+  selector:
+    app: smtp-relay
+  ports:
+    - name: smtp
+      port: 587
+      targetPort: smtp

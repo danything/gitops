@@ -1,0 +1,9 @@
+# PSA は restricted(特権も hostPort も要らない)。baseline に通らない namespace の一覧は docs/talos.md「PSA のラベル」で、ここは載らない。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smtp-relay
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

@@ -1,0 +1,23 @@
+# 中継に届いてよいのはメールを送るアプリだけ。TLS を使わないので、ほかの namespace からは届かないようにする。
+# 送る側を足すときはここにも足す(README.md)。出ていく方(Entra と Graph)は絞らない
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: smtp-relay
+  namespace: smtp-relay
+spec:
+  endpointSelector:
+    matchLabels:
+      app: smtp-relay
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: infisical
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: blog
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: todoroku
+      toPorts:
+        - ports:
+            - port: "8025"
+              protocol: TCP
