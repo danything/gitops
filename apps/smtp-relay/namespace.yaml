@@ -1,4 +1,4 @@
-# PSA は restricted(特権の要るものは無い)。一覧と背景は docs/talos.md「PSA のラベル」。
+# PSA は restricted(特権も hostPort も要らない)。baseline に通らない namespace の一覧は docs/talos.md「PSA のラベル」で、ここは載らない。
 apiVersion: v1
 kind: Namespace
 metadata:
