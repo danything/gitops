@@ -1,0 +1,66 @@
+# SMTP で受けて Microsoft Graph の sendMail で送る中継(https://github.com/JustinIven/smtp-oauth-relay)。README.md
+#
+# **秘密を持たない。** 送る側が SMTP AUTH のユーザー名に `<テナント ID>@<クライアント ID>`、パスワードに
+# Entra のアプリのクライアントシークレットを渡し、中継はそれでトークンを取って送るだけ。
+# 差出人(From)のメールボックスから送る。送れるメールボックスは Exchange 側で info@doany.io に絞ってある。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smtp-relay
+  namespace: smtp-relay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smtp-relay
+  template:
+    metadata:
+      labels:
+        app: smtp-relay
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: smtp-relay
+          image: ghcr.io/justiniven/smtp-oauth-relay:1.7.1
+          env:
+            # クラスタの中だけで受ける(Service だけ、外には出さない。network-policy.yaml)ので TLS は使わない
+            - name: TLS_SOURCE
+              value: "off"
+            - name: REQUIRE_TLS
+              value: "false"
+            - name: LOG_LEVEL
+              value: INFO
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - name: smtp
+              containerPort: 8025
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+          livenessProbe:
+            tcpSocket:
+              port: smtp
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              memory: 192Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

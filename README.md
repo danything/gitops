@@ -81,6 +81,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`k8up/`](apps/k8up/) | バックアップ(restic → Cloudflare R2)。PVC・DB のダンプ・etcd のスナップショット |
 | [`infisical/`](apps/infisical/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジ |
 | [`cluster/`](apps/cluster/) | ノードまわりの小物。metrics-server(Talos に無い。`kubectl top` と各 UI の使用量表示)と、PT3 をドライバに付け直す DaemonSet |
+| [`smtp-relay/`](apps/smtp-relay/) | メールの中継。アプリの SMTP を受けて Microsoft 365 へ Graph で送る(Exchange Online の SMTP AUTH の Basic 認証の廃止に備えて)。**送る側の設定は [apps/smtp-relay/README.md](apps/smtp-relay/README.md)** |
 | [`renovate/`](apps/renovate/) | Renovate(GitHub の danything・5ym と Forgejo の doa の全リポジトリの依存を上げる PR)。CronJob で 15 分おき。**秘密の入れ方は [apps/renovate/README.md](apps/renovate/README.md)** |
 | [`headlamp/`](apps/headlamp/) | Kubernetes の Web UI(`h.doany.io`)。認証は Entra、権限は `bootstrap/apiserver/` |
 | [`rybbit/`](apps/rybbit/) | Rybbit(`rt.doany.io`、アクセス解析。クッキー無し)+ ClickHouse + PostgreSQL + Redis。トドロクの離脱をファネル・ジャーニー・セッションリプレイで見る。**使い始めは [apps/rybbit/README.md](apps/rybbit/README.md)** |

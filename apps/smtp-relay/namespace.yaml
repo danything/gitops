@@ -1,0 +1,9 @@
+# PSA は restricted(特権の要るものは無い)。一覧と背景は docs/talos.md「PSA のラベル」。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smtp-relay
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
