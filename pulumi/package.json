@@ -8,7 +8,7 @@
     "typecheck": "tsc"
   },
   "devDependencies": {
-    "@types/bun": "1.4.3",
+    "@types/bun": "1.4.4",
     "cf": "1.0.0-beta.20",
     "typescript": "7.0.2"
   },
