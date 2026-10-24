@@ -70,7 +70,7 @@ spec:
       # hostNetwork だと nb.doany.io:443 に繋げず `Management: Disconnected` で止まる。
       containers:
         - name: netbird
-          image: netbirdio/netbird:0.81.3
+          image: netbirdio/netbird:0.81.4
           env:
             - name: NB_SETUP_KEY
               valueFrom:
