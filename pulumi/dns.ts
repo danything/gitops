@@ -36,7 +36,7 @@ record("caa-issuewild", { name: "doany.io", type: "CAA", ttl: 1, data: { flags: 
 // DNSSEC に対応した MX(Enable-DnssecForVerifiedDomain で払い出された)。DANE はこれで効く
 record("mx-dnssec", { name: "doany.io", type: "MX", content: "doany-io.o-v1.mx.microsoft", priority: 0, ttl: 3600 });
 record("autodiscover", { name: "autodiscover.doany.io", type: "CNAME", content: "autodiscover.outlook.com", proxied: false, ttl: 3600 }, "93eb5f05c05d9ca6ae8239cad26089e2");
-// 送るのは Exchange だけ(アプリも smtp.office365.com 経由)なので -all
+// 送るのは Exchange だけ(アプリも apps/smtp-relay → Graph の sendMail で Exchange から出る)なので -all
 record("spf", { name: "doany.io", type: "TXT", content: "v=spf1 include:spf.protection.outlook.com -all", ttl: 3600 }, "05522a739cbd45b787b93f1a700b8916");
 // DKIM。行き先は Get-DkimSigningConfig の Selector1CNAME / Selector2CNAME。明示しないとワイルドカードに吸われる
 record("dkim-selector1", { name: "selector1._domainkey.doany.io", type: "CNAME", content: "selector1-doany-io._domainkey.doany.q-v1.dkim.mail.microsoft", proxied: false, ttl: 3600 });
