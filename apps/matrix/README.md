@@ -43,7 +43,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 ## 通知のルーム
 
 **スペース「通知」**にまとめてある。部屋の名前は接頭辞を付けず短く(`server`・`argocd`・`ashi`・
-`todoroku`・`worklog`・`denpa`・`forgejo`・`feed`)。名前は表示用で、hookshot も webhook も部屋の ID で動くので、変えても影響しない。
+`todoroku`・`worklog`・`denpa`・`forgejo`・`contact`・`feed`)。名前は表示用で、hookshot も webhook も部屋の ID で動くので、変えても影響しない。
 
 - 作ったのは hookshot(`@hookshot:doany.io`)。`@info:doany.io` も作成者(room version 12 の `additional_creators`)
   なので、権限は最上位で外されない
@@ -65,6 +65,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | `worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
 | `denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
 | `forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
+| `contact` | doany.io のお問い合わせフォーム(danything/corp) | Infisical `/corp/corp-secrets` の `contact-webhook-url` |
 
 足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
 `connections` と render の env に足す。

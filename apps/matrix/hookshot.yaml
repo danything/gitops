@@ -127,6 +127,13 @@ data:
         state:
           name: Forgejo
           transformationFunction: *slack
+      # 部屋 contact: doany.io のお問い合わせフォーム(danything/corp。{text} を送る)
+      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
+        stateKey: ${HOOK_CONTACT}
+        roomId: "!7THc2PF3zZ5nOxyE2iIXi3R061dHVzh_DT0EDaJWewE"
+        state:
+          name: contact
+          transformationFunction: *slack
       # 部屋 server: Infisical の秘密の変更(プロジェクトの webhook。種類は general)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_INFISICAL}
@@ -246,6 +253,8 @@ spec:
               valueFrom: {secretKeyRef: {name: matrix, key: hook-denpa}}
             - name: HOOK_FORGEJO
               valueFrom: {secretKeyRef: {name: matrix, key: hook-forgejo}}
+            - name: HOOK_CONTACT
+              valueFrom: {secretKeyRef: {name: matrix, key: hook-contact}}
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
