@@ -23,7 +23,7 @@ spec:
   source:
     repoURL: ghcr.io/danything/charts
     chart: infisical-push-bridge
-    targetRevision: 0.1.1
+    targetRevision: 0.1.38
     helm:
       valuesObject:
         infisicalSecret:
