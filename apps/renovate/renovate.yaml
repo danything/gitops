@@ -139,7 +139,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: renovate
-              image: ghcr.io/renovatebot/renovate:44.181.3
+              image: ghcr.io/renovatebot/renovate:44.181.4
               # ENTRYPOINT(containerbase の初期化)は残して args だけ替える
               args: [bash, /scripts/run.sh]
               env:
