@@ -14,14 +14,18 @@ infisical:
         # Kubernetes auth の TokenReview で kubernetes.default.svc を叩くのを SSRF ガードが拒むため
         - name: ALLOW_INTERNAL_IP_CONNECTIONS
           value: "true"
+        # 送るのはクラスタの中の中継(apps/smtp-relay。Graph の sendMail)。ユーザー名は <テナント ID>@<smtp-relay のクライアント ID>、
+        # パスワードはそのクライアントシークレット。中継は TLS を話さない。
         # パスワードだけ Infisical 自身にある(smtp-secret.yaml)ので optional。まっさらな状態ではメール無しで
         # 上がり、operator が Secret を作ったあと rollout restart でメールが有効になる。
         - name: SMTP_HOST
-          value: smtp.office365.com
+          value: smtp-relay.smtp-relay.svc
         - name: SMTP_PORT
           value: "587"
         - name: SMTP_USERNAME
-          value: info@doany.io
+          value: "22ac977d-b140-4dc8-8150-90d645d3475b@fd45a316-97cc-4480-8da8-487109403520"
+        - name: SMTP_REQUIRE_TLS
+          value: "false"
         - name: SMTP_FROM_ADDRESS
           value: info@doany.io
         - name: SMTP_FROM_NAME
