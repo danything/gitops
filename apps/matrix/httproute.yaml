@@ -5,7 +5,7 @@
 #   lk.doany.io/*               → LiveKit と lk-jwt-service(通話。下のほう)
 #   m.doany.io/webhook/*        → hookshot(通知の受け口)
 #   m.doany.io/*                → Tuwunel(Matrix のクライアント API、OAuth、メディア)
-#   doany.io/.well-known/matrix/* → Tuwunel(ID を @…:doany.io にするための案内。doany.io 自体はブログ)
+#   doany.io/.well-known/matrix/* → Tuwunel(ID を @…:doany.io にするための案内。doany.io 自体はコーポレートサイト danything/corp)
 #
 # 同期(sliding sync)は長く待つ要求なので、Gateway の既定の時間切れ(Envoy は 15 秒)を延ばす。
 apiVersion: gateway.networking.k8s.io/v1
@@ -37,7 +37,7 @@ spec:
       timeouts:
         request: 300s
 ---
-# doany.io(ブログ)のうち /.well-known/matrix だけをこちらへ。apex は Gateway の別のリスナー(https-apex)。パスが長い一致が勝つので、ブログの HTTPRoute
+# doany.io(コーポレートサイト danything/corp)のうち /.well-known/matrix だけをこちらへ。apex は Gateway の別のリスナー(https-apex)。パスが長い一致が勝つので、corp の HTTPRoute
 # (PathPrefix /)より先に当たる。Tuwunel は Host を見ずに well_known.client を返す
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
