@@ -130,7 +130,7 @@ data:
       # 部屋 contact: doany.io のお問い合わせフォーム(danything/corp。{text} を送る)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_CONTACT}
-        roomId: "!7THc2PF3zZ5nOxyE2iIXi3R061dHVzh_DT0EDaJWewE"
+        roomId: "!zU_5HDLbyF3sgz5PvBJ9GAVEdfwFwuqBQAPWQilx9uo"
         state:
           name: contact
           transformationFunction: *slack
