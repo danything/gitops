@@ -86,7 +86,7 @@ hookshot の feeds で RSS / Atom を購読する(10 分おき)。購読はル�
 
 | 購読 | URL |
 | --- | --- |
-| doany.io のブログ | `https://doany.io/rss.xml` |
+| b.doany.io のブログ | `https://b.doany.io/rss.xml` |
 
 ## 通話(LiveKit)
 
