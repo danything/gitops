@@ -26,8 +26,6 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 
 ## Phase 3 — Talos 定常運用
 
-- [ ] **R2 の容量が下がり切るのを見る。** `host=main` を消した直後の restic の実データは **5.60 GiB**(2026-10-17)。
-      日曜の prune のあと、`pulumi` ワークフローの週次の Summary で見る
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
 - [ ] **上流がカーネルにモジュールを必要な時に読ませる仕組み(modprobe の helper)を入れたら**、[apps/cluster/pt3-rebind.yaml](apps/cluster/pt3-rebind.yaml) を外し、
       `talos/controlplane.yaml` の `kernel.modules` も `earth-pt3` だけにできるか確かめる。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
