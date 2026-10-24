@@ -345,3 +345,17 @@ ExternalDNS は HTTPRoute の注釈だけで決まり、自分が作ったレコ
 疎結合にできる候補(ExternalDNS・cloudflare-operator・Crossplane)のうち、DNS が主役で利用者が多いのが ExternalDNS。
 
 **Entra のリダイレクト URI は中央(`pulumi/entra.ts`)のまま。** 共用のアプリ登録 1 つに全アプリの URI が入るので、そもそも中央に集まる。
+
+## メールは Exchange Online の SMTP AUTH をやめ、クラスタの中の中継から Graph の sendMail で送る(2026-10-24)
+
+SMTP AUTH の Basic 認証は 2026-12 末に既定で無効になる。移る先の候補は OAuth(XOAUTH2)・Graph の `sendMail`・IP で許すコネクタ。
+
+- **XOAUTH2 は使えない。** `info@doany.io` は Exchange Online Kiosk で、Kiosk は SMTP の OAuth に対応していないとされる。
+  Infisical はそもそも SMTP のユーザー名とパスワードしか話せない
+- **コネクタ(IP で許す)は家の IP が固定でないので筋が悪い**
+- したがって **Graph の `sendMail`**。アプリごとに Graph を話させず、普通の SMTP を受けて Graph に渡す中継
+  ([smtp-oauth-relay](https://github.com/JustinIven/smtp-oauth-relay)、`apps/smtp-relay/`)を 1 つ置き、3 つのアプリは向け先だけ替えた
+- **Graph の `Mail.Send` をテナント全体には付けない。** 誰としてでも送れてしまうので、Exchange の RBAC for Applications で
+  送れるメールボックスを `info@doany.io` だけに絞った。初回は組織が dehydrated で `Enable-OrganizationCustomization`(取り消せない)が要り、
+  実体化まで数時間かかった
+- 中継は秘密を持たない(アプリが SMTP AUTH でクライアントシークレットを渡す)。クラスタの中だけで TLS なし、届く namespace は NetworkPolicy で絞る
