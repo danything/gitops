@@ -33,7 +33,8 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
       `talos/controlplane.yaml` の `kernel.modules` も `earth-pt3` だけにできるか確かめる。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
       2026-10-23 に「並び順ではなく、カーネルが必要な時に読み込む形にすべき。こちらで別に実装する」(smira)として閉じられた。
       その実装が [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724)(2026-10-23 に Open。説明に earth-pt3 → tc90522 が例として載っている)。
-      マージされて Talos のリリースに入り、Renovate の PR で上げたら確かめる。入ったら dvb-pt3 の extension の README も直す(上流)
+      2026-10-24 に v1.15.0-alpha.1 + この PR を自前で組んだ installer で実機を起こし、`earth-pt3` だけでチューナー 4 つが付き、pt3-rebind も付け直し不要だった(PR にも報告)。
+      ノードは今その installer で動いている。リリースに入ったら Renovate の PR で公式の版に戻し、`kernel.modules` を `earth-pt3` だけにして pt3-rebind を消す。入ったら dvb-pt3 の extension の README も直す(上流)
 
 ## 済んだこと(記録)
 
