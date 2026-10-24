@@ -95,6 +95,7 @@ talosctl upgrade-k8s --to <versions.yaml の kubernetes の版> --endpoint https
   ([../docs/talos.md](../docs/talos.md)「inlineManifests は「更新できない」ではない」)
 - **したがって `upgrade-k8s` の前には必ず `render.sh` → `apply-config`。** 古い machine config のまま流すと**走っている Cilium が巻き戻る**
 - **`timeout waiting for: [Job/argocd/argocd-redis-secret-init status: 'NotFound']` で終わったら、もう一度流す。** 逆に `argocd-redis-secret-init` が `field is immutable` で落ちたら、前の回の Job が残っている。完了済みなので `kubectl -n argocd delete job argocd-redis-secret-init` してから流し直す。
+  cert-manager を上げたときの `cert-manager-startupapicheck` も同じ(`kubectl -n cert-manager delete job cert-manager-startupapicheck`。2026-10-24 に 1.21.3 で踏んだ)。
   この Job は終わると 60 秒で消える(`ttlSecondsAfterFinished`)ので、待っている間に消えて時間切れになり、
   その後ろの Deployment まで当たらないことがある。
   当て終わったら `kubectl -n argocd get deploy -o wide` でイメージの版を見る
