@@ -50,8 +50,8 @@ record("mta-sts", { name: "_mta-sts.doany.io", type: "TXT", content: "v=STSv1; i
 record("tls-rpt", { name: "_smtp._tls.doany.io", type: "TXT", content: "v=TLSRPTv1; rua=mailto:info@doany.io", ttl: 3600 });
 
 // --- ドメインの確認 ---------------------------------------------------------------------------------
-// Google Search Console(2 つとも確認に使われている。消すと確認が外れる)
-record("google-site-verification-1", { name: "doany.io", type: "TXT", content: '"google-site-verification=WTZR-5D4XdnLy2p52RkTh37Qq6FhUf0XpPV01g6xTew"', ttl: 3600 }, "118ba3db9a2ea182ad55d806268be3cd");
+// Google Search Console のドメインの確認。もう 1 つあった WTZR-… は info@doany.io の分で、Search Console が
+// 「未使用の所有権トークン」と出した(その持ち主はもう確認済みの所有者ではない)ので 2026-10-25 に外した
 record("google-site-verification-2", { name: "doany.io", type: "TXT", content: "google-site-verification=py7V3FVpxDREahHV8QWIHKhJMU8hVUGVwHznj-HRiCU", ttl: 3600 }, "4465983a89e131cf6be2170696ac44f8");
 // GitHub の組織 danything のドメインの確認
 record("github-verification", { name: "_gh-danything-o.doany.io", type: "TXT", content: '"f39e74c26c"', ttl: 1 }, "71200b09aa051711661e46f5f2e95b60");
