@@ -7,7 +7,7 @@ crds:
 redis:
     image:
         repository: mirror.gcr.io/library/redis
-        tag: 8.10.2-alpine
+        tag: 8.10.3-alpine
 # Dex を使わず Entra ID に直接 OIDC(auth/deployment.yaml と同じアプリ登録)
 dex:
     enabled: false
