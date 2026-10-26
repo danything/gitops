@@ -265,7 +265,7 @@ spec:
               mountPath: /data
       containers:
         - name: hookshot
-          image: ghcr.io/matrix-org/matrix-hookshot:7.5.0
+          image: ghcr.io/matrix-org/matrix-hookshot:7.6.0
           ports:
             - containerPort: 9000
             - containerPort: 9993
