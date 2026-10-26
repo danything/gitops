@@ -1,2 +1,2 @@
 # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
-version: 10.11.1
+version: 10.11.3
