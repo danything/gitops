@@ -5,7 +5,7 @@
     "": {
       "name": "r2-drift",
       "dependencies": {
-        "@pulumi/azuread": "6.11.1",
+        "@pulumi/azuread": "6.11.2",
         "@pulumi/cloudflare": "6.23.1",
         "@pulumi/netbird": "file:sdks/netbird",
         "@pulumi/pulumi": "3.272.0",
@@ -203,7 +203,7 @@
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
 
-    "@pulumi/azuread": ["@pulumi/azuread@6.11.1", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-ivy6lBw+Ac2jPUgLJAy2oLUr7XtmBPo4GsM9nOAxZvdPLoftxW9GxujBZIQFFSBaOBAzNZfhgJjZEpBkNccvzw=="],
+    "@pulumi/azuread": ["@pulumi/azuread@6.11.2", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-n+9Q0onwDJAyg/t+Dn+sYl82uIMa5alCtJKTlGGZd/MB0nKa7GPxgbHDRumIX60lfUGqAVTSHhTo5dGxygexqw=="],
 
     "@pulumi/cloudflare": ["@pulumi/cloudflare@6.23.1", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-VaEZaHQFFpToKdG+OkjlLPXhChxhKCHNGqnJoBC0yZaTG2bb02Vh5gP3NOIjQLn7enKkZX3VzdEV5dM0gJJcJA=="],
 
