@@ -12,7 +12,7 @@ talos:
 kubernetes:
   # 上げるのは upgrade-k8s で、マイナーを飛ばさない。tools/Dockerfile の kubectl と同じ depName。
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
-  version: v1.37.1
+  version: v1.37.2
 
 gatewayAPI:
   # Gateway API の CRD(standard チャンネルで足りる)。
