@@ -17,7 +17,7 @@
     "@pulumi/azuread": "6.11.2",
     "@pulumi/cloudflare": "6.23.2",
     "@pulumi/netbird": "file:sdks/netbird",
-    "@pulumi/pulumi": "3.272.0"
+    "@pulumi/pulumi": "3.273.0"
   },
   "trustedDependencies": ["@pulumi/netbird"]
 }
