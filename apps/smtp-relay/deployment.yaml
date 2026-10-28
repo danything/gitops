@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: smtp-relay
-          image: ghcr.io/justiniven/smtp-oauth-relay:1.7.1
+          image: ghcr.io/justiniven/smtp-oauth-relay:1.8.0
           env:
             # クラスタの中だけで受ける(Service だけ、外には出さない。network-policy.yaml)ので TLS は使わない
             - name: TLS_SOURCE
