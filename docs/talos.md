@@ -34,8 +34,8 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 
 | 用途 | URL |
 | --- | --- |
-| ISO(Secure Boot オフ) | `https://factory.talos.dev/image/96371c8f…/v1.15.0-alpha.1/metal-amd64.iso`(Secure Boot 用の `metal-amd64-secureboot.iso` は UEFI に鍵登録が要るので使わない) |
-| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/96371c8f…:v1.15.0-alpha.1` |
+| ISO(Secure Boot オフ) | `https://factory.talos.dev/image/96371c8f…/v1.15.0-alpha.2/metal-amd64.iso`(Secure Boot 用の `metal-amd64-secureboot.iso` は UEFI に鍵登録が要るので使わない) |
+| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/96371c8f…:v1.15.0-alpha.2` |
 
 プレリリース(alpha / beta)も同じ形の URL で取れる。extension を足したくなったら schematic を作り直して ID を差し替え、
 `talosctl upgrade` で当てる(ISO を焼き直す必要はない)。
@@ -68,7 +68,7 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 | `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort)。**Talos の側で例外にしてある** |
 | `local-path-storage` | ヘルパー Pod の hostPath。[`talos/local-path.yaml`](../talos/local-path.yaml) がラベルを付ける |
 | `netbird` | hostPort 51820(routing peer の WireGuard)、NET_ADMIN 等、hostPath |
-| `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)、PT3 を付け直す DaemonSet([apps/cluster/pt3-rebind.yaml](../apps/cluster/pt3-rebind.yaml))。**ラベルは denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops だけを grep すると抜けて見える |
+| `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)。**ラベルは denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops だけを grep すると抜けて見える |
 | `adguardhome` | hostPort 53 / 853 |
 | `matrix` | hostPort 8443(LiveKit) |
 | `3proxy` | hostPort 3129(TLS 終端サイドカー) |

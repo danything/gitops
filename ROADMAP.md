@@ -27,12 +27,13 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 ## Phase 3 — Talos 定常運用
 
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
-- [ ] **上流がカーネルにモジュールを必要な時に読ませる仕組み(modprobe の helper)を入れたら**、[apps/cluster/pt3-rebind.yaml](apps/cluster/pt3-rebind.yaml) を外し、
-      `talos/controlplane.yaml` の `kernel.modules` も `earth-pt3` だけにできるか確かめる。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
-      2026-10-23 に「並び順ではなく、カーネルが必要な時に読み込む形にすべき。こちらで別に実装する」(smira)として閉じられた。
-      その実装が [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724)(2026-10-23 に Open。説明に earth-pt3 → tc90522 が例として載っている)。
-      2026-10-24 に v1.15.0-alpha.1 + この PR を自前で組んだ installer で実機を起こし、`earth-pt3` だけでチューナー 4 つが付き、pt3-rebind も付け直し不要だった(PR にも報告)。
-      ノードは今その installer で動いている。リリースに入ったら Renovate の PR で公式の版に戻し、`kernel.modules` を `earth-pt3` だけにして pt3-rebind を消す。入ったら dvb-pt3 の extension の README も直す(上流)
+- [x] **上流がカーネルにモジュールを必要な時に読ませる仕組み(modprobe の helper)を入れたら**、pt3-rebind を外し、
+      `talos/controlplane.yaml` の `kernel.modules` を `earth-pt3` だけにする。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
+      2026-10-23 に「並び順ではなく、カーネルが必要な時に読み込む形にすべき。こちらで別に実装する」(smira)として閉じられ、
+      その実装 [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724) が 2026-10-24 にマージされて v1.15.0-alpha.2 に入った。
+      2026-10-24 に v1.15.0-alpha.1 + この PR を自前で組んだ installer で実機を起こし、`earth-pt3` だけでチューナー 4 つが付くことは確かめてあった。
+      alpha.2 に上げる PR(#607)で pt3-rebind を消し、`kernel.modules` を `earth-pt3` だけにした。公式の alpha.2 に upgrade したら、チューナー 4 つが付くかを確かめる
+- [ ] dvb-pt3 の extension の README を直す(上流。alpha.2 からは復調・チューナーを書かなくてよい)
 
 ## 済んだこと(記録)
 

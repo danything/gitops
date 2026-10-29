@@ -71,7 +71,7 @@ ISO は Image Factory のもの(URL の schematic と版は `versions.yaml` と�
 (Windows なら Rufus の **DD イメージモード**。WSL からは USB が見えない)。
 
 ```shell
-curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca/v1.15.0-alpha.1/metal-amd64.iso
+curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca/v1.15.0-alpha.2/metal-amd64.iso
 ```
 
 - ISO の schematic は気にしなくてよい。ディスクに書かれるのは machine config の `--install-image`
@@ -221,7 +221,6 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 - [ ] `talosctl get routes -o yaml | grep -B10 'protocol: ra'` に `dst: ""`(IPv6 の既定経路)が残っている
 - [ ] netbird で外から VPN に入れる(ブラウザでは確かめられない)、AdGuard(`dig @10.10.0.4 example.com`)
 - [ ] **PT3**: `talosctl ls /dev/dvb` に adapter0〜3 と各 `frontend0`、`talosctl ls /dev/bus/usb` に B-CAS リーダー、録画が動く
-      (frontend が無いときは [../apps/cluster/pt3-rebind.yaml](../apps/cluster/pt3-rebind.yaml) が付け直しているか)
 - [ ] Renovate の CronJob が次の回で動く(`kubectl -n renovate get jobs`)、k8up の通知が翌日 OK ✅
 - [ ] etcd のスナップショットを 1 回手で取る(`kubectl -n k8up create job --from=cronjob/etcd-snapshot etcd-snapshot-first`)
 
