@@ -227,6 +227,8 @@ denpa の tuner-agent は Earthsoft PT3(`earth_pt3`)の `/dev/dvb` と B-CAS リ
 **公式 extension `siderolabs/dvb-pt3` を使う**([siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682))。
 v1.15.0-alpha.1 からしか無いので、**正式版を待つより PT3 を先に取り、本番を alpha に乗せている**。
 extension は `earth_pt3` を blacklist して配るので、`talos/controlplane.yaml` の `machine.kernel.modules` で読ませる。
+復調とチューナーのモジュールは、v1.15.0-alpha.2 から Talos がカーネルの要求(`request_module`)で読む([siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724))。
+それまでは 3 つも並べて書き、起動後に PT3 を付け直す DaemonSet(pt3-rebind)で順番の問題を避けていた。
 
 **駄目だったときの保険: KubeVirt の VM にパススルー。** PT3(05:00.0)は IOMMU グループ 36 に単独、B-CAS は USB(GemPC Twin 08e6:3437)。
 `intel_iommu=on` は schematic に残してあるが、vfio は `talos/controlplane.yaml` から外した(PT3 をホストのドライバと取り合う)ので、戻るなら足し直す。
