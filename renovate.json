@@ -58,6 +58,16 @@
     ],
     "packageRules": [
         {
+            "description": "renovate-config-validator を動かす Node は Renovate の engines (node ^24) に合わせる。26 にすると npx が engines を満たす古い Renovate を入れ、managerFilePatterns を知らずに落ちる (#595)。",
+            "matchFileNames": [
+                ".github/workflows/renovate-validate.yml"
+            ],
+            "matchDepNames": [
+                "node"
+            ],
+            "allowedVersions": "<25"
+        },
+        {
             "description": "bun.lock は pulumi install で作る(SDK が file:sdks/netbird で、Renovate 自身の bun install は落ちる)。bun.lock も package file なので matchFileNames に入れる。skipArtifactsUpdate は枝の全部の更新が指定しているときだけ効くので専用の枝にする。許可は apps/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS。",
             "matchFileNames": [
                 "pulumi/package.json",
