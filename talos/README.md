@@ -66,7 +66,7 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 
 | 変えたもの | やること | 停止 |
 | --- | --- | --- |
-| `versions.yaml` の `talos:`(または schematic) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>` | **再起動** |
+| `versions.yaml` の `talos:`(または schematic) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版> --k8s-endpoint https://10.10.0.4:6443` | **再起動** |
 | `versions.yaml` の `kubernetes:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
 | `controlplane.yaml` / `local-path.yaml` / `bootstrap/` のほぼ全部(cilium・cert-manager・apiserver/rbac.yaml・{argocd,infisical}/ の values・SOPS の Secret 2 つ) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
 
@@ -106,8 +106,12 @@ talosctl upgrade-k8s --to <versions.yaml の kubernetes の版> --endpoint https
 ### Talos 本体
 
 ```shell
-talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>
+talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版> --k8s-endpoint https://10.10.0.4:6443
 ```
+
+**`--k8s-endpoint` を必ず付ける。** 再起動の前にノードを cordon するが、既定では kubeconfig の endpoint(10.0.0.2)へ行き、
+作業用 PC からは届かない。付け忘れると `error cordoning node … i/o timeout` で**再起動せずに止まる**(書き込みは済んでいるので、付けて打ち直せばよい。
+2026-10-29 に alpha.2 で踏んだ。このフラグは v1.15.0-alpha.2 の talosctl から)。再起動の待ちは長いので、Claude Code の `!` では裏に回る。
 
 **A/B なので失敗すれば前のイメージに戻る。** ノードが 1 台なので再起動 = 全停止で、だから自動化しない
 (tuppr / system-upgrade-controller はどちらも自分が乗っているノードは上げないので 1 台では成立しない)。
