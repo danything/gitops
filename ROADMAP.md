@@ -32,7 +32,7 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
       2026-10-23 に「並び順ではなく、カーネルが必要な時に読み込む形にすべき。こちらで別に実装する」(smira)として閉じられ、
       その実装 [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724) が 2026-10-24 にマージされて v1.15.0-alpha.2 に入った。
       2026-10-24 に v1.15.0-alpha.1 + この PR を自前で組んだ installer で実機を起こし、`earth-pt3` だけでチューナー 4 つが付くことは確かめてあった。
-      alpha.2 に上げる PR(#607)で pt3-rebind を消し、`kernel.modules` を `earth-pt3` だけにした。公式の alpha.2 に upgrade したら、チューナー 4 つが付くかを確かめる
+      alpha.2 に上げる PR(#607)で pt3-rebind を消し、`kernel.modules` を `earth-pt3` だけにした。2026-10-29 に公式の alpha.2 へ upgrade し、earth_pt3 から tc90522・qm1d1c0042・mxl301rf が自動で読まれてチューナー 4 つ(adapter0〜3 と frontend0)が付くのを確かめた。Kubernetes も 1.37.2 になった
 - [ ] dvb-pt3 の extension の README を直す(上流。alpha.2 からは復調・チューナーを書かなくてよい)
 
 ## 済んだこと(記録)
