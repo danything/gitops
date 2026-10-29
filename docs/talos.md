@@ -34,8 +34,8 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 
 | 用途 | URL |
 | --- | --- |
-| ISO(Secure Boot オフ) | `https://factory.talos.dev/image/96371c8f…/v1.15.0-alpha.1/metal-amd64.iso`(Secure Boot 用の `metal-amd64-secureboot.iso` は UEFI に鍵登録が要るので使わない) |
-| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/96371c8f…:v1.15.0-alpha.1` |
+| ISO(Secure Boot オフ) | `https://factory.talos.dev/image/96371c8f…/v1.15.0-alpha.2/metal-amd64.iso`(Secure Boot 用の `metal-amd64-secureboot.iso` は UEFI に鍵登録が要るので使わない) |
+| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/96371c8f…:v1.15.0-alpha.2` |
 
 プレリリース(alpha / beta)も同じ形の URL で取れる。extension を足したくなったら schematic を作り直して ID を差し替え、
 `talosctl upgrade` で当てる(ISO を焼き直す必要はない)。

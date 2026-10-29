@@ -71,7 +71,7 @@ ISO は Image Factory のもの(URL の schematic と版は `versions.yaml` と�
 (Windows なら Rufus の **DD イメージモード**。WSL からは USB が見えない)。
 
 ```shell
-curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca/v1.15.0-alpha.1/metal-amd64.iso
+curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca/v1.15.0-alpha.2/metal-amd64.iso
 ```
 
 - ISO の schematic は気にしなくてよい。ディスクに書かれるのは machine config の `--install-image`
