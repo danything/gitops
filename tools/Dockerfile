@@ -6,7 +6,7 @@ FROM golang:1.27-trixie AS age
 ARG AGE_VERSION=v1.3.2
 RUN CGO_ENABLED=0 go install "filippo.io/age/cmd/...@${AGE_VERSION}"
 
-FROM node:26.12.1-trixie-slim
+FROM node:26.13.0-trixie-slim
 ARG TARGETARCH
 
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
@@ -24,7 +24,7 @@ ARG RESTIC_VERSION=v0.19.1
 # renovate: datasource=github-releases depName=pulumi/pulumi
 ARG PULUMI_VERSION=v3.273.0
 # renovate: datasource=npm depName=cf
-ARG CF_VERSION=1.0.0-beta.24
+ARG CF_VERSION=1.0.0-beta.25
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl bzip2 git openssh-client less openssl \
