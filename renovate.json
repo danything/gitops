@@ -58,16 +58,6 @@
     ],
     "packageRules": [
         {
-            "description": "renovate-config-validator を動かす Node は Renovate の engines (node ^24) に合わせる。26 にすると npx が engines を満たす古い Renovate を入れ、managerFilePatterns を知らずに落ちる (#595)。",
-            "matchFileNames": [
-                ".github/workflows/renovate-validate.yml"
-            ],
-            "matchDepNames": [
-                "node"
-            ],
-            "allowedVersions": "<25"
-        },
-        {
             "description": "bun.lock は pulumi install で作る(SDK が file:sdks/netbird で、Renovate 自身の bun install は落ちる)。bun.lock も package file なので matchFileNames に入れる。skipArtifactsUpdate は枝の全部の更新が指定しているときだけ効くので専用の枝にする。許可は apps/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS。",
             "matchFileNames": [
                 "pulumi/package.json",
@@ -119,7 +109,9 @@
             "allowedVersions": "<18"
         },
         {
-            "description": "Talos・Kubernetes・Gateway API は自動マージしない(ノード 1 台で全停止、CRD は全経路が乗り換わる)。適用は人。talosctl のイメージと手元の CLI もノードの版と一緒に上げる。",
+            "description": "Talos・Kubernetes・Gateway API は自動マージしない(ノード 1 台で全停止、CRD は全経路が乗り換わる)。適用は人。talosctl のイメージと手元の CLI もノードの版と一緒に上げる。版の比べ方は semver にする。既定の semver-coerced は v1.15.0-alpha.1 と alpha.2 を同じ 1.15.0 とみなし、alpha・beta の更新を出さない。talosctl のイメージには開発版のタグ(v1.15.0-alpha.2-9-g567501669)もあるので、正式な版・alpha・beta・rc だけを許す。",
+            "versioning": "semver",
+            "allowedVersions": "/^v\\d+\\.\\d+\\.\\d+(-(alpha|beta|rc)\\.\\d+)?$/",
             "groupName": "talos",
             "groupSlug": "talos",
             "automerge": false,

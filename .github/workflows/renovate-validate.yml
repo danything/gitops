@@ -20,8 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # Node は Renovate の engines(package.json の engines.node)を毎回読んで合わせる。版を書いて固定すると Renovate が
+      # 上げたあとも古いまま残り、Renovate より新しくすると npx が engines を満たす古い Renovate を入れて落ちる(#595)
+      - id: engines
+        run: echo "node=$(npm view renovate engines.node)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: ${{ steps.engines.outputs.node }}
       # 版は固定しない(最新の Renovate が受け付けるかを見る)
       - run: npx --yes --package renovate renovate-config-validator --strict
