@@ -7,7 +7,7 @@
 | | |
 | --- | --- |
 | `env.age` | バックアップ先の資格情報(R2 の鍵、restic のパスワード)。age のパスフレーズで暗号化 |
-| `sops-age.key.age` | `bootstrap/` と `talos/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
+| `sops-age.key.age` | `bootstrap/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
 | [pv.sh](pv.sh) | PV のデータを k8up の `Restore` で戻す道具(下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
@@ -33,8 +33,8 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 
 | 層 | 何で戻すか |
 | --- | --- |
-| ホストの設定 | **machine config**。`talos/render.sh` が repo から描く(`talos/secrets.yaml` が同じなら同じクラスタ CA) |
-| k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config と Argo CD(Application `bootstrap`)が当てる |
+| ホストの設定 | **machine config**。`bootstrap/render.sh` が repo から描く(`bootstrap/talos-secrets.sops.yaml` が同じなら同じクラスタ CA) |
+| k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config が当てる |
 | Infisical の DB | **手元の restic で直接**(k8up の資格情報 `k8up-global` が Infisical から来るので、k8up では戻せない) |
 | ほかの PV データ | **k8up の `Restore`**([pv.sh](pv.sh)) |
 
@@ -45,7 +45,7 @@ git に無い状態まで一度に戻したいときの近道で、主経路で�
 
 **コマンドは全部 `tools/t.ps1 --admin` で入ったコンテナのシェルで打つ**(`HOME` はリポジトリの `.home/` で、
 age 鍵と restic の資格情報はそこに残る。ノードにシェルは無い)。**talosctl / kubectl の資格情報は t.ps1 が用意する** ──
-talosconfig も管理者の kubeconfig も `talos/secrets.yaml` の CA からその場で作る(ファイルでは持たない)
+talosconfig も管理者の kubeconfig も `bootstrap/talos-secrets.sops.yaml` の CA からその場で作る(ファイルでは持たない)
 ([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。GitHub の操作(5)だけ手元の `gh`。
 
 - **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno4)にしか届かない**(10.0.0.2 は届かない)。t.ps1 の行き先はそこに固定してある
@@ -57,13 +57,13 @@ talosconfig も管理者の kubeconfig も `talos/secrets.yaml` の CA からそ
 
 ```shell
 mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age   # パスフレーズ
-./talos/render.sh talos/clusterconfig       # `valid for metal mode` まで出ること
+./bootstrap/render.sh bootstrap/clusterconfig       # `valid for metal mode` まで出ること
 ```
 
-- **`talos/secrets.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver/ca.crt`・
+- **`bootstrap/talos-secrets.sops.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver-ca.crt`・
   Infisical の Kubernetes auth(7)が合わなくなる
-- **`render.sh` は出力先を丸ごと消して作り直す。** `talos/clusterconfig/` に kubeconfig などを置いていたら消える
-- 版は [../talos/versions.yaml](../talos/versions.yaml)。**上げるなら建て直しの日ではない日に**
+- **`render.sh` は出力先を丸ごと消して作り直す。** `bootstrap/clusterconfig/` に kubeconfig などを置いていたら消える
+- 版は [../bootstrap/versions.yaml](../bootstrap/versions.yaml)。**上げるなら建て直しの日ではない日に**
 
 ## 2. ISO で起動する
 
@@ -78,7 +78,7 @@ curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05
 - **Secure Boot が Disabled**(RBSU は POST 中に F9 → Server Security → Secure Boot Settings)。Boot Mode は UEFI のまま
 - POST 中に **F11** で USB を選ぶ(iLO の Virtual Media なら Image File CD-ROM/DVD に ISO の URL を貼り、Reset して F11)
 - コンソールに maintenance mode の IP が出る。インタフェースが `eno1` / `eno2` / `eno4`、インストール先が `/dev/sda`(447 GB)であること
-  (違ったら `talos/controlplane.yaml` / `main.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
+  (違ったら `bootstrap/talos.sops.yaml` / `main.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
 
 ```shell
 IP=<コンソールに出た IP>
@@ -89,7 +89,7 @@ talosctl get disks --insecure -n $IP -e $IP
 ## 3. 当てる(インストールは無人で進む)
 
 ```shell
-talosctl apply-config --insecure -n $IP -e $IP -f talos/clusterconfig/controlplane.yaml
+talosctl apply-config --insecure -n $IP -e $IP -f bootstrap/clusterconfig/controlplane.yaml
 ```
 
 `UnattendedInstallConfig` があるので、ディスクに書いて自分で再起動する。**ここで SSD が上書きされる。**
@@ -109,19 +109,19 @@ kubectl get pods -A        # cilium・coredns・local-path・argocd・cert-manag
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
 
-`talosctl kubeconfig` は使わない(取り消せない 1 年の証明書が呼ぶたびに出る)。t.ps1 が `secrets.yaml` の CA でその場で作る。
+`talosctl kubeconfig` は使わない(取り消せない 1 年の証明書が呼ぶたびに出る)。t.ps1 が `talos-secrets.sops.yaml` の CA でその場で作る。
 
-## 5. 残りの bootstrap/ が入るのを見る(ArgoCD)
+## 5. Gateway・auth などが入るのを見る(ArgoCD)
 
-手ですることは無い。ArgoCD の Application `bootstrap`([../bootstrap/argocd/repos.yaml](../bootstrap/argocd/repos.yaml))が
+手ですることは無い。ArgoCD の `gitops` の Application([../bootstrap/argocd/repos.yaml](../bootstrap/argocd/repos.yaml) の ApplicationSet が作る)が `apps/` の
 `ClusterIssuer`・Gateway・auth・`InfisicalSecret` を当てる。
 
 ```shell
-kubectl -n argocd get application bootstrap    # InfisicalSecret の CRD が来るまでは何度か落ちて retry で戻る
+kubectl -n argocd get application gitops       # InfisicalSecret の CRD が来るまでは何度か落ちて retry で戻る
 kubectl get certificate -A                      # Gateway に証明書が付く
 ```
 
-Argo CD はこの間に `apps/` と各リポジトリの `deploy/` を同期しはじめる。**中身はまだ空**なので、
+Argo CD はこの間に `apps/` の残りと各リポジトリの `deploy/` も同期しはじめる。**中身はまだ空**なので、
 Infisical の Secret を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。
 
 ## 6. Infisical の DB を戻す
@@ -155,7 +155,7 @@ sh recovery/infisical.sh ca apply    # 差し替えて、operator を蹴り直�
 kubectl get infisicalsecret -A       # 全部 Ready になる。k8up/k8up-global もここで入り、k8up が動き出す
 ```
 
-`secrets.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
+`talos-secrets.sops.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
 
 ## 8. PV データを戻す(k8up)
 
@@ -237,7 +237,7 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | ノードが上がらない | iLO のコンソール。ダッシュボードに版と健全性が出る |
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
-| 非公開イメージが引けない | `talos/controlplane.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
-| bootstrap apply が TLS で落ちる | `secrets.yaml` を作り直した。`bootstrap/apiserver/ca.crt` を新しい `secrets.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
+| 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
+| bootstrap apply が TLS で落ちる | `talos-secrets.sops.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `talos-secrets.sops.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
-| inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」) |
+| inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../bootstrap/talos.md](../bootstrap/talos.md)「上げ方 / 当て直し方」) |

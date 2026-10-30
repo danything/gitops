@@ -1,9 +1,0 @@
-# cert-manager の chart の値。描いて machine config に載せるのは ../../talos/render.sh。
-
-# 無いと Gateway の `cert-manager.io/cluster-issuer` 注釈から Certificate を作らず、証明書が 1 枚も出ない
-config:
-  enableGatewayAPI: true
-
-# CRD は描かせない(1.30 MB で描き出しの 97%)。render.sh が URL で渡す。
-crds:
-  enabled: false

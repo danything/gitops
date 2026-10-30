@@ -1,3 +1,5 @@
+# bootstrap/ で ArgoCD が当てるのはこのファイルだけ(machine config の `apps` が拾う。場所は argocd-values.yaml の
+# extraObjects に焼いてあるので、動かすと machine config を当て直すことになる)。平文のマニフェストは apps/ にある。
 # Forgejo 側は別の ApplicationSet(下の `repos-forgejo`)に分ける。generator が 1 つでも失敗すると
 # Application を 1 本も作らないので、まっさらなクラスタ(Forgejo も forgejo-repo-creds もまだ無い)で
 # 同居させると自力で抜けられない。2 つの template は同じ形を保つこと。
@@ -72,42 +74,6 @@ spec:
           enabled: {{ .autoSync }}
           prune: {{ .prune }}
           selfHeal: {{ .selfHeal }}
----
-# bootstrap/ の平文のマニフェスト(Gateway・auth・ClusterIssuer・InfisicalSecret など)。
-# machine config が持つもの(値・版・SOPS・Namespace・apiserver/・cilium/)と、`apps` が持つこのファイルは外す。
-# `*` は `/` もまたぐ。
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: bootstrap
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/danything/gitops.git
-    targetRevision: main
-    path: bootstrap
-    directory:
-      recurse: true
-      exclude: '{*values.yaml,*version.yaml,*.sops.yaml,apiserver/*,cilium/*,argocd/repos.yaml,argocd/namespace.yaml,cert-manager/namespace.yaml,infisical/namespace.yaml}'
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: argocd
-  syncPolicy:
-    # 平文のマニフェストを apps/ へ移す間、自動の同期(と prune)を止める。移す PR で bootstrap/ の中身が
-    # 入れ替わったとき、古い exclude のまま同期して移したもの(auth の Namespace ごと)を消さないため。
-    # 移し終えたらこの Application ごと消す(finalizer が無いので、消しても中のリソースは残る)。
-    automated:
-      enabled: false
-      prune: true
-      selfHeal: true
-    # InfisicalSecret の CRD は別の Application が入れるので、まっさらなクラスタでは最初は落ちる
-    retry:
-      limit: 10
-      backoff:
-        duration: 15s
-        factor: 2
-        maxDuration: 5m
 ---
 # Forgejo(fj.doany.io)の doa を見る。失敗の理由は `get applicationset repos-forgejo -o yaml` の ErrorOccurred。
 apiVersion: argoproj.io/v1alpha1

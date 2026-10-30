@@ -1,5 +1,5 @@
 # Talos と Kubernetes の版。Renovate が書き換えるが、適用は手で(ノード 1 台なので upgrade は全停止)。
-# 手順は README.md「上げ方 / 当て直し方」。
+# 手順は talos.md「上げ方 / 当て直し方」。
 
 talos:
   # Factory のレジストリはタグ一覧を返さないので github-releases で追う。tools/Dockerfile の talosctl と同じ depName。

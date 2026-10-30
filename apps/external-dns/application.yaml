@@ -11,7 +11,7 @@
 #     HTTPRoute の無い名前(ks・px・*.s)だけは pulumi/dns.ts に明示する
 #
 # だから「注釈がある = Cloudflare を通さない = 明示のレコードを持つ」。注釈の無い HTTPRoute には触れない
-# (annotationFilter)。CNAME の宛先は Gateway の注釈(bootstrap/gateway/ の external-dns.kubernetes.io/target)。
+# (annotationFilter)。CNAME の宛先は Gateway の注釈(apps/gateway/ の external-dns.kubernetes.io/target)。
 # 前の方針の名残で "true" が付いた HTTPRoute があっても拾わない(ワイルドカードで Cloudflare を通るので同じ結果になる)。
 #
 # **ExternalDNS が触るのは自分で作ったレコードだけ。** 作ったレコードの隣に所有の印の TXT

@@ -1,4 +1,4 @@
-# 公開経路。証明書は Gateway(bootstrap/gateway/)のワイルドカードなので指定しない。
+# 公開経路。証明書は Gateway(apps/gateway/)のワイルドカードなので指定しない。
 # 振り分けは /api が backend、ほかは client。上流の Caddyfile はほかに /.well-known/oauth-* と
 # /.well-known/openid-configuration(MCP クライアント向けの OAuth の案内。Rybbit が OAuth サーバになる側)も
 # backend に流すが、MCP は使わないので置かない。Gateway API の PathPrefix は / 区切りの要素単位で、

@@ -9,6 +9,12 @@
             "**/*.yaml"
         ]
     },
+    "helm-values": {
+        "description": "bootstrap/ の chart の値は <name>-values.yaml という名前なので、既定のパターン(values.yaml)に足す。",
+        "managerFilePatterns": [
+            "/^bootstrap/[^/]+-values\\.yaml$/"
+        ]
+    },
     "customManagers": [
         {
             "description": "tools/Dockerfile の `# renovate:` の次の行の `ARG 名前=版`。managerFilePatterns の正規表現は `/…/` で囲む(囲まないと glob と読まれ何にも当たらない)。",
@@ -21,14 +27,14 @@
             ]
         },
         {
-            "description": "versions.yaml / version.yaml の `# renovate:` の次の行の version。",
+            "description": "bootstrap/ の `# renovate:` の次の行の version。versions.yaml は `version: 版`、chart の <name>-values.yaml は値を邪魔しないようコメントの `# version: 版`(どちらも render.sh が読む)。",
             "customType": "regex",
             "managerFilePatterns": [
-                "/^talos/versions\\.yaml$/",
-                "/^bootstrap/[^/]+/version\\.yaml$/"
+                "/^bootstrap/versions\\.yaml$/",
+                "/^bootstrap/[^/]+-values\\.yaml$/"
             ],
             "matchStrings": [
-                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*version:\\s*(?<currentValue>\\S+)"
+                "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*(?:#\\s*)?version:\\s*(?<currentValue>\\S+)"
             ]
         },
         {
@@ -142,13 +148,13 @@
             ]
         },
         {
-            "description": "values.yaml で上書きしているイメージも chart と同じ扱い(machine config に載る)。",
+            "description": "<name>-values.yaml で上書きしているイメージも chart と同じ扱い(machine config に載る)。",
             "matchDatasources": [
                 "docker"
             ],
             "matchFileNames": [
-                "bootstrap/argocd/values.yaml",
-                "bootstrap/infisical/values.yaml"
+                "bootstrap/argocd-values.yaml",
+                "bootstrap/infisical-values.yaml"
             ],
             "groupName": "bootstrap charts",
             "groupSlug": "bootstrap-charts",

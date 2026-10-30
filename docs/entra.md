@@ -46,4 +46,4 @@ kubectl logs -n auth deploy/auth --since=10m | grep AuthSuccess
 ```
 
 **`OIDC_GROUPS_CLAIM` を generic な `oidc` プロバイダで使うと `groups` スコープを勝手に要求し、Entra に AADSTS650053 で断られる**
-(`bootstrap/auth/deployment.yaml` のコメント)。いまは `entra-id` プロバイダで `OAUTH2_PROXY_SCOPE` も明示している。
+(`apps/auth/deployment.yaml` のコメント)。いまは `entra-id` プロバイダで `OAUTH2_PROXY_SCOPE` も明示している。

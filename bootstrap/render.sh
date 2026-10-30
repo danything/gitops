@@ -1,8 +1,8 @@
 #!/bin/sh
-# machine config を作る: ./talos/render.sh talos/clusterconfig
-# chart の値は bootstrap/*/values.yaml が正本。ここに写さない(../docs/decisions.md)。
+# machine config を作る: ./bootstrap/render.sh bootstrap/clusterconfig
+# chart の値と版は bootstrap/<name>-values.yaml が正本。ここに写さない(../docs/decisions.md)。
 # SOPS は自分で復号する。CI は鍵が無いので SECRETS などの env にダミーを渡す。
-# 出力は秘密を含み、出力先は丸ごと作り直す。当て方は talos/README.md。
+# 出力は秘密を含み、出力先は丸ごと作り直す。当て方は talos.md。
 set -eu
 
 OUT=${1:?usage: render.sh <output-dir>}
@@ -23,7 +23,7 @@ SECRETS=${SECRETS:-}
 if [ -z "$SECRETS" ]; then
 	OWN_SECRETS=$WORK/secrets.yaml
 	SECRETS=$OWN_SECRETS
-	sops -d talos/secrets.yaml > "$SECRETS"
+	sops -d bootstrap/talos-secrets.sops.yaml > "$SECRETS"
 fi
 
 # 手で書く部分。password の値だけ SOPS で暗号化してある(../.sops.yaml)。CI は ENC をダミーにしたものを渡す。
@@ -31,25 +31,26 @@ fi
 CONTROLPLANE=${CONTROLPLANE:-}
 if [ -z "$CONTROLPLANE" ]; then
 	CONTROLPLANE=$WORK/controlplane.yaml
-	sops -d talos/controlplane.yaml > "$CONTROLPLANE"
+	sops -d bootstrap/talos.sops.yaml > "$CONTROLPLANE"
 fi
-! grep -q 'ENC\[' "$CONTROLPLANE" || { echo "ERROR: controlplane.yaml に暗号文が残っている" >&2; exit 1; }
+! grep -q 'ENC\[' "$CONTROLPLANE" || { echo "ERROR: talos.sops.yaml に暗号文が残っている" >&2; exit 1; }
 
 # キーを名前で引く(位置で数えるとブロックが増えたとき別の値を掴む)。yq は版で構文が違うので awk。
 ver() { # $1=トップレベルのキー  $2=その下のキー
-	awk -v top="$1:" -v key="  $2: " '$0 == top {f=1; next} /^[^ #]/ {f=0} f && index($0, key) == 1 {print substr($0, length(key)+1); exit}' talos/versions.yaml
+	awk -v top="$1:" -v key="  $2: " '$0 == top {f=1; next} /^[^ #]/ {f=0} f && index($0, key) == 1 {print substr($0, length(key)+1); exit}' bootstrap/versions.yaml
 }
 TALOS=$(ver talos version)
 SCHEMATIC=$(ver talos schematic)
 K8S=$(ver kubernetes version)
 GWAPI=$(ver gatewayAPI version)
-bver() { sed -n 's/^version: //p' "bootstrap/$1/version.yaml"; }
+# chart の版は <name>-values.yaml の先頭の `# version:` の行(Renovate が上げる)。最初の 1 行だけ見る。
+bver() { sed -n '/^# version: /{s/^# version: *//p;q;}' "bootstrap/$1-values.yaml"; }
 CILIUM=$(bver cilium)
 CERTMGR=$(bver cert-manager)
 ARGOCD=$(bver argocd)
 INFISICAL=$(bver infisical)
 for v in "$TALOS" "$SCHEMATIC" "$K8S" "$GWAPI" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL"; do
-	[ -n "$v" ] || { echo "ERROR: versions.yaml / version.yaml から版を読めなかった" >&2; exit 1; }
+	[ -n "$v" ] || { echo "ERROR: versions.yaml / *-values.yaml の # version: から版を読めなかった" >&2; exit 1; }
 done
 echo "talos=$TALOS k8s=$K8S gateway-api=$GWAPI"
 echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD infisical-standalone=$INFISICAL"
@@ -59,23 +60,60 @@ inline() { # $1=name  stdin=manifest
 	sed 's/^/    /'
 }
 
-# chart と repo は version.yaml の `# renovate:` 行から読む。namespace.yaml は先頭に付ける(最初は誰も作らない)。
+# helm の描き出しに namespace を補う(chart によっては書かず、Talos の適用では default に落ちる)。
+add_namespace() { # $1=namespace  stdin=helm の描き出し
+	awk -v ns="$1" '
+BEGIN {
+	# クラスタスコープのものには足さない(足すと API が弾く)
+	split("Namespace ClusterRole ClusterRoleBinding CustomResourceDefinition " \
+	      "ValidatingWebhookConfiguration MutatingWebhookConfiguration APIService " \
+	      "StorageClass PriorityClass RuntimeClass IngressClass PersistentVolume " \
+	      "ClusterIssuer CiliumClusterwideNetworkPolicy", a, " ")
+	for (i in a) cluster[a[i]] = 1
+	n = 0
+}
+/^---$/ { flush(); print; next }
+{ buf[n++] = $0 }
+END { flush() }
+
+function flush(   i, kind, mi, hasns, inmeta) {
+	if (n == 0) return
+	kind = ""; mi = -1; hasns = 0; inmeta = 0
+	for (i = 0; i < n; i++) {
+		if (buf[i] ~ /^kind: /)     { kind = substr(buf[i], 7) }
+		if (buf[i] ~ /^metadata:$/) { mi = i; inmeta = 1; continue }
+		if (inmeta && buf[i] ~ /^[^ ]/) inmeta = 0
+		if (inmeta && buf[i] ~ /^  namespace:/) hasns = 1
+	}
+	for (i = 0; i < n; i++) {
+		print buf[i]
+		if (i == mi && !hasns && kind != "" && !(kind in cluster))
+			print "  namespace: " ns
+	}
+	n = 0
+}'
+}
+
+# chart と repo は <name>-values.yaml の `# renovate:` の行から読む。
+# kube-system 以外は Namespace を先頭に付ける(chart は描かず、最初は誰も作らない)。
 # `updatedAt` は infisical の chart が付ける時刻(values で消せない)。残すと当て直すたびに再起動する。
 chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 	_n=$1 _ns=$2
 	shift 2
-	_d=bootstrap/$_n
-	_repo=$(sed -n 's/.* registryUrl=\([^ ]*\).*/\1/p' "$_d/version.yaml")
-	_chart=$(sed -n 's/.* depName=\([^ ]*\).*/\1/p' "$_d/version.yaml")
+	_f=bootstrap/$_n-values.yaml
+	_repo=$(sed -n 's/^# renovate:.* registryUrl=\([^ ]*\).*/\1/p' "$_f")
+	_chart=$(sed -n 's/^# renovate:.* depName=\([^ ]*\).*/\1/p' "$_f")
 	[ -n "$_repo" ] && [ -n "$_chart" ] \
-		|| { echo "ERROR: $_d/version.yaml の # renovate: の行から chart と repo を読めなかった" >&2; exit 1; }
+		|| { echo "ERROR: $_f の # renovate: の行から chart と repo を読めなかった" >&2; exit 1; }
 	helm repo add --force-update "$_n" "$_repo" >/dev/null
 	{
-		if [ -f "$_d/namespace.yaml" ]; then cat "$_d/namespace.yaml"; echo ---; fi
+		if [ "$_ns" != kube-system ]; then
+			printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n---\n' "$_ns"
+		fi
 		helm template "$_n" "$_n/$_chart" \
-			--version "$(bver "$_n")" -n "$_ns" -f "$_d/values.yaml" "$@" --kube-version "$K8S" \
+			--version "$(bver "$_n")" -n "$_ns" -f "$_f" "$@" --kube-version "$K8S" \
 			| sed '/^ *updatedAt: "/d' \
-			| awk -v ns="$_ns" -f talos/add-namespace.awk
+			| add_namespace "$_ns"
 	} | inline "$_n" > "$WORK/inline-$_n.yaml"
 	echo "  $_n -> $(wc -c < "$WORK/inline-$_n.yaml") バイト"
 }
@@ -83,16 +121,16 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 # `--api-versions` が無いと helm template は GatewayClass を黙って描かず、公開経路が全部死ぬ。
 chart cilium kube-system --api-versions gateway.networking.k8s.io/v1/GatewayClass
 
-inline local-path < talos/local-path.yaml > "$WORK/inline-local-path.yaml"
+inline local-path < bootstrap/local-path.yaml > "$WORK/inline-local-path.yaml"
 
-# CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(repos.yaml の bootstrap は apiserver/ を外す)。
-inline apiserver-rbac < bootstrap/apiserver/rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
+# CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(ArgoCD は bootstrap/ を repos.yaml しか見ない)。
+inline apiserver-rbac < bootstrap/apiserver-rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
-# 秘密の値は secret-values.sops.yaml を values.yaml に重ねる。infisical は chart がパスワードを
+# 秘密の値は <name>-secret-values.sops.yaml を <name>-values.yaml に重ねる。infisical は chart がパスワードを
 # 平文 env に焼くので ArgoCD に置けない(../docs/decisions.md)。
 secret_values() { # $1=name  $2=env の上書き
 	if [ -n "$2" ]; then echo "$2"; return 0; fi
-	sops -d "bootstrap/$1/secret-values.sops.yaml" > "$WORK/$1-secret-values.yaml"
+	sops -d "bootstrap/$1-secret-values.sops.yaml" > "$WORK/$1-secret-values.yaml"
 	echo "$WORK/$1-secret-values.yaml"
 }
 # 先に変数に取る。`chart … -f "$(secret_values …)"` だと復号の失敗を `set -e` が拾わない
@@ -101,7 +139,7 @@ INFISICAL_SV=$(secret_values infisical "${INFISICAL_SECRET_VALUES:-}")
 chart argocd argocd -f "$ARGOCD_SV"
 chart infisical infisical -f "$INFISICAL_SV"
 
-# CRD は URL で渡す(理由は values.yaml の `crds`)。版は chart の appVersion から取る。
+# CRD は URL で渡す(理由は argocd-values.yaml の `crds`)。版は chart の appVersion から取る。
 ARGOCD_APP=$(helm show chart argocd/argo-cd --version "$ARGOCD" 2>/dev/null \
 	| sed -n 's/^appVersion: *//p' | tr -d "\"'")
 [ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
@@ -128,10 +166,10 @@ inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書�
 	sops -d "$2" > "$WORK/plain-$1.yaml"
 	inline "$1" < "$WORK/plain-$1.yaml" > "$WORK/inline-$1.yaml"
 }
-inline_secret infisical-secrets bootstrap/infisical/secrets.sops.yaml "${INFISICAL_SECRET:-}"
-inline_secret cloudflare-secret bootstrap/cert-manager/cloudflare-secret.sops.yaml "${CLOUDFLARE_SECRET:-}"
+inline_secret infisical-secrets bootstrap/infisical-secrets.sops.yaml "${INFISICAL_SECRET:-}"
+inline_secret cloudflare-secret bootstrap/cert-manager-cloudflare-secret.sops.yaml "${CLOUDFLARE_SECRET:-}"
 
-# cert-manager の CRD も URL(理由は values.yaml の `crds`)。
+# cert-manager の CRD も URL(理由は cert-manager-values.yaml の `crds`)。
 cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig
@@ -187,7 +225,7 @@ for c in argocd cert-manager; do
 	! grep -q 'kind: CustomResourceDefinition' "$WORK/inline-$c.yaml" \
 		|| { echo "ERROR: $c の CRD が inline に入っている" >&2; exit 1; }
 done
-# Hubble の証明書はクラスタ内で作る(cilium/values.yaml の `hubble.tls`)
+# Hubble の証明書はクラスタ内で作る(cilium-values.yaml の `hubble.tls`)
 ! grep -q '^    kind: Secret$' "$WORK/inline-cilium.yaml" \
 	|| { echo "ERROR: cilium の inline に Secret(Hubble の証明書)が入っている" >&2; exit 1; }
 talosctl validate --config "$OUT/controlplane.yaml" --mode metal
