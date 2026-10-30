@@ -6,7 +6,7 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 
 | | 何を | いつ |
 | --- | --- | --- |
-| **machine config**(このディレクトリ) | Talos の設定、Helm で入れるもの(cilium・cert-manager・argocd・infisical)、`apiserver-rbac.yaml`、`local-path.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([talos.md](talos.md)「上げ方 / 当て直し方」) |
+| **machine config**(このディレクトリ) | Talos の設定、Helm で入れるもの(cilium・cert-manager・argocd・infisical・lvm-localpv)、`apiserver-rbac.yaml`、`storage.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([talos.md](talos.md)「上げ方 / 当て直し方」) |
 | **ArgoCD**(`apps/`) | 平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など)。2026-10 まではここにあって、Application `bootstrap` が当てていた | main へのマージ(prune / selfHeal 付き) |
 
 ## ファイル
@@ -24,7 +24,8 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 | [infisical-values.sops.yaml](infisical-values.sops.yaml) | chart の値と版(DB と Redis のパスワードだけ SOPS)。2 つめのドキュメントが infisical の起動に要る Secret(`ENCRYPTION_KEY` など) |
 | [cert-manager-values.sops.yaml](cert-manager-values.sops.yaml) | chart の値と版。2 つめのドキュメントが DNS-01 の Cloudflare のトークンの Secret(トークンだけ SOPS) |
 | [apiserver-rbac.yaml](apiserver-rbac.yaml) / [apiserver-ca.crt](apiserver-ca.crt) | API サーバの入口の RBAC と CA(下の「API サーバの入口」) |
-| [local-path.yaml](local-path.yaml) | local-path-provisioner |
+| [lvm-localpv-values.yaml](lvm-localpv-values.yaml) | chart の値と版(OpenEBS LVM LocalPV。PVC の置き場。下の「PVC の置き場」) |
+| [storage.yaml](storage.yaml) | StorageClass `local-path`・VolumeSnapshotClass・thin プールを作る DaemonSet(chart が描かないもの) |
 | [argocd-repos.yaml](argocd-repos.yaml) | ArgoCD が当てる唯一のファイル(下の「ArgoCD が当てるもの」) |
 
 **SOPS(age)で暗号化したファイルは名前を `*.sops.yaml` で終える**(`.sops.yaml` の規則もその名前にしか一致しないので、
@@ -69,7 +70,7 @@ Talos・Kubernetes・Gateway API の版も同じ形で、[talos.sops.yaml](talos
 `render.sh` が復号してから helm に渡す。**2 つめのドキュメントがあれば、それは chart とは別に machine config に載せる Secret**
 (infisical の `infisical-secrets`、cert-manager の Cloudflare のトークン。ArgoCD は復号できないのでここに置く)で、
 `render.sh` が `---` で分けて別の inlineManifest にする。
-argocd・infisical の版は自動マージしない(`renovate.json` の `bootstrap charts`)。
+argocd・infisical の版は自動マージしない(`renovate.json` の `bootstrap charts`)。lvm-localpv も(`openebs lvm`。`storage.yaml` の lvm-driver のイメージと同じ PR)。
 Namespace は chart が描かないので、`render.sh` が kube-system 以外のものに付ける。
 
 ## git と live がずれていないか
@@ -106,6 +107,25 @@ kubectl -n kube-system exec ds/cilium -c cilium-agent -- cilium-dbg service list
 kubectl -n kube-system get gateway doany
 ```
 
+## PVC の置き場
+
+**OpenEBS LVM LocalPV**(thin)。PVC ごとに VG `data` の thin プールから LV を切り、xfs で渡す。
+infisical の Postgres が要るので bootstrap 層に居る。選んだ理由と組んだ形は [../docs/decisions.md](../docs/decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」。
+
+| 何を | 誰が |
+| --- | --- |
+| パーティション `r-lvm` と VG `data` | Talos([talos.sops.yaml](talos.sops.yaml) の `RawVolumeConfig` / `LVMVolumeGroupConfig`)。**入れ直したときにしか作られない** |
+| thin プール `data_thinpool`(VG の 90%) | [storage.yaml](storage.yaml) の DaemonSet `lvm-thinpool`。出来たらノードに `doany.io/lvm-thinpool=ready` を付ける |
+| CSI ドライバ(`local.csi.openebs.io`) | chart([lvm-localpv-values.yaml](lvm-localpv-values.yaml))。ノードの Pod は上のラベルが付いてから動く |
+| StorageClass `local-path`(既定)・VolumeSnapshotClass `lvm`(既定) | [storage.yaml](storage.yaml) |
+| snapshot-controller と VolumeSnapshot の CRD | `render.sh` が external-snapshotter のタグの URL で(版は [talos.sops.yaml](talos.sops.yaml) の先頭) |
+
+- **PVC の requests が本当の上限。** 足りなくなったら PVC の requests を上げる(`allowVolumeExpansion: true`。スナップショットのある PVC は広げられない)
+- **thin プールが溢れると全部の PVC の書き込みが止まる。** `kubectl -n kube-system get pods -l app=lvm-thinpool` が 90% で NotReady になる。
+  埋まり具合は `kubectl -n kube-system exec ds/lvm-thinpool -c watch -- lvs data`。足すときは VG の残り(1 割)から
+  `kubectl -n kube-system exec ds/lvm-thinpool -c watch -- lvextend -L +10G data/data_thinpool`
+- **新しい PVC の直下は root の 0755。** root 以外で書くアプリは Pod に `fsGroup` を付ける
+
 ## Secret
 
 平文の Secret はアプリのリポジトリにはコミットしない。値は **Infisical**(https://il.doany.io、このクラスタでセルフホスト)が持ち、
@@ -113,7 +133,7 @@ kubectl -n kube-system get gateway doany
 
 - **本体**(chart + Postgres/Redis)だけがここ(machine config)。`infisical-values.sops.yaml` の 2 つめのドキュメントの
   `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる(クラスタで一番失ってはいけない値)。
-  Postgres の PVC は `local-path` で、`pg_dump` を k8up が日次で取っている。
+  Postgres の PVC は既定の `local-path`(OpenEBS LVM)で、`pg_dump` を k8up が日次で取っている。
 - **公開経路・operator・push-bridge は [`apps/infisical/`](../apps/infisical/)**(ArgoCD 自身は operator に依存しないので、ここに置く理由がない)。
 - 認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
   Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を付けてある。

@@ -8,8 +8,8 @@
 「ホスト設定」は machine config(git 管理)、「PV データ」だけがバックアップツールの仕事になる
 (手順は [../recovery/README.md](../recovery/README.md))。**ツール選定は PV データの部分にしか効かない。**
 
-変えないと決めてあるもの: restic のリポジトリ形式・パスフレーズ・バケット、local-path の PV ディレクトリ構造
-(`pvc-<uid>_<ns>_<name>`)、Infisical のデータと `ENCRYPTION_KEY`、ArgoCD + ApplicationSet + 各 repo の `deploy/argocd.yaml`、
+変えないと決めてあるもの: restic のリポジトリ形式・パスフレーズ・バケット、StorageClass の名前 `local-path`
+(中身は Z440 で OpenEBS LVM に替えた。名前は各リポジトリの PVC が名指ししている)、Infisical のデータと `ENCRYPTION_KEY`、ArgoCD + ApplicationSet + 各 repo の `deploy/argocd.yaml`、
 **復元手順は公開で秘密を含まない**という性質。
 
 ## Z440 へは Talos のまま移す
@@ -98,7 +98,7 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
-| **machine config** | **`bootstrap/` の全部**(`argocd-repos.yaml` を除く)。inline が 8 つ(cilium / local-path / `apiserver-rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
+| **machine config** | **`bootstrap/` の全部**(`argocd-repos.yaml` を除く)。inline が 9 つ(cilium / lvm-localpv / `storage.yaml` / `apiserver-rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、URL で 10 個(CRD が gateway-api / argocd ×3 / cert-manager / VolumeSnapshot ×3、snapshot-controller ×2) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
 | **ArgoCD** | `apps/`。`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、本体が machine config に居る部品の平文のマニフェストもここ(2026-10 までは `bootstrap/` に混ぜて Application `bootstrap` が当てていた)。**infisical の本体は来ない**(下の「infisical だけは ArgoCD に移せない」) | — |
 
 - **CRD だけ URL で渡すのは大きさの都合。** 埋めると machine config が 341 KB → 4 MB を超える。
@@ -300,9 +300,30 @@ LVM の設定は v1.14 のドキュメントにあり、siderolabs/talos#12309 �
 StorageClass を変えた PVC を作り直すだけで中身が埋まるので、ストレージの乗り換えも同じ手で済む。
 入口(Gateway・AdGuard・LiveKit)と API の宛先は 1 台の IP に固定されているので、そのときは VIP(Cilium の L2 Announcements、Talos の共有 VIP)も要る。
 
-確かめていないこと: OpenEBS LVM LocalPV が Talos で動くか(`dm-snapshot` モジュール、読み取り専用のルートで LVM のコマンドが通るか)、
-VolSync の restic mover と R2 の組み合わせ、restic が戻したファイルの持ち主、**thin プールが溢れたときの挙動と見張り**
-(データとメタデータのどちらが溢れても書き込みが止まる。スナップショットを定期的に取るので、余裕と見張りが要る)。
+### 組んだ形(2026-10-31。効くのは Z440 で入れ直したとき)
+
+- **VG は Talos、thin プールは DaemonSet。** `RawVolumeConfig` `lvm`(EPHEMERAL の残り全部)を `LVMVolumeGroupConfig` で VG `data` にする。
+  Talos の `LVMLogicalVolumeConfig` は linear と raid だけで thin を作れない。OpenEBS は thin プールが無いと**最初の PVC と同じ大きさ**で作り、
+  あとから広げない(Talos に dmeventd が無く、自動の拡張も効かない)。なので [bootstrap/storage.yaml](../bootstrap/storage.yaml) の
+  `lvm-thinpool` が VG の 90% で作り、出来たらノードにラベルを付け、OpenEBS のノードの Pod はそのラベルで初めて動く。
+  LVM のメタデータを書くのを OpenEBS と取り合わないため(コンテナごとにロックが別)、`lvm-thinpool` が書くのはプールが無いか小さいときだけ
+- **Talos の側で要ったもの**: `dm_thin_pool` のモジュール(Talos のカーネルではモジュールで、コンテナからは読めない)。
+  `dm-snapshot` は組み込み。起動時の VG の有効化は Talos がする(`thin_check` が無いのは lvm2 が飛ばす)。Talos は知らない LV を消さない
+- **StorageClass の名前は `local-path` のまま**(既定)。各リポジトリの PVC は書き換えない。`thinProvision: "yes"`(スナップショットから戻せるのは thin だけ)、
+  xfs(ext4 は `lost+found` を作り、PGDATA がボリュームの直下の Postgres の initdb が落ちる)
+- **`storageCapacity: false`。** thin なので PVC の大きさの合計はプールを超えてよい(denpa は 1Ti と 300Gi)。true だと kube-scheduler が
+  プールの空きより大きい PVC を Pending にする
+- **snapshot-controller と VolumeSnapshot の CRD は chart の同梱を使わず**、external-snapshotter のタグの URL で入れる(版は `talos.sops.yaml` の先頭)。
+  クラスタに 1 つのもので、VolSync も使う
+- **talos-boot が確かめていること**: VG と thin プール(VG の 9 割)、PVC が xfs で bind、VolumeSnapshot が readyToUse、
+  スナップショットから作った PVC に中身が戻る、再起動のあとも PV と infisical の Postgres が戻る
+
+local-path から変わったこと: **PVC の requests が本当の上限になった**(local-path はディスクの残り全部が使えた。
+`recovery/pv.sh` の `fit` が戻す前に見る)、**新しい PVC の直下が root の 0755**(local-path は 0777。root 以外で書くアプリは `fsGroup` が要る)。
+
+確かめていないこと: VolSync の restic mover と R2 の組み合わせ、**thin プールが溢れたときの挙動と見張り**
+(データとメタデータのどちらが溢れても書き込みが止まる。いまは `lvm-thinpool` が 90% で NotReady になるだけで、通知は無い。
+スナップショットを定期的に取るようになったら、余裕と通知が要る)。
 
 ## VPN を wg-easy から NetBird にした
 

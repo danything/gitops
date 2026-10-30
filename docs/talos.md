@@ -52,21 +52,20 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 | カーネル引数 | `machine.install.extraKernelArgs` は使えない(同じく衝突)。**schematic の `customization.extraKernelArgs`** |
 | host DNS | `ResolverConfig`。**既定で有効**なので普通は書かなくてよい |
 | bond とそのメンバー | `BondConfig` / `LinkConfig`。v1alpha1 の `machine.network.interfaces` は bond の MAC を指定できない([talos.sops.yaml](../bootstrap/talos.sops.yaml)) |
-| PV の置き場 | `UserVolumeConfig`。マウント先(`/var/mnt/<name>`)は kubelet に自動で通るので `extraMounts` は要らない([talos.sops.yaml](../bootstrap/talos.sops.yaml))。ディスク上のラベルは `u-<name>` |
+| PV の置き場 | `RawVolumeConfig`(フォーマットしないパーティション。ラベルは `r-<name>`)を `LVMVolumeGroupConfig` で VG にする。thin の LV は Talos では作れない([talos.sops.yaml](../bootstrap/talos.sops.yaml)、[bootstrap/README.md](../bootstrap/README.md)「PVC の置き場」)。ボリュームは**未割り当ての領域にしか作られない**ので、切り方を変えるのは入れ直すときだけ |
 | control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。**`KubeNodeConfig` を `$patch: delete` して `labels` だけ書き戻す**([talos.sops.yaml](../bootstrap/talos.sops.yaml)) |
 | CNI を止める | `KubeFlannelCNIConfig` を `$patch: delete`、`KubeProxyConfig` を `enabled: false`([talos.sops.yaml](../bootstrap/talos.sops.yaml))。**v1alpha1 の `cni.name: none` はもう書けない** |
-| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。v1.15.0-alpha.2 からはカーネルの要求(`request_module`)でも読むので、書くのは自分からは読まれないものだけでよい(PT3 は `earth-pt3` だけ。[talos.sops.yaml](../bootstrap/talos.sops.yaml)、[decisions.md](decisions.md)「PT3 チューナー」) |
+| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。v1.15.0-alpha.2 からはカーネルの要求(`request_module`)でも読むので、書くのは自分からは読まれないものだけでよい(PT3 は `earth-pt3` だけ。OpenEBS の thin プールの `dm_thin_pool` も書いてある。[talos.sops.yaml](../bootstrap/talos.sops.yaml)、[decisions.md](decisions.md)「PT3 チューナー」) |
 
 ### PSA のラベル(Pod Security Admission が既定で `baseline`)
 
 `KubeAdmissionControlConfig` に `enforce: baseline`(例外は `kube-system` のみ)が入っている。
 **`hostPath` / `privileged` / `hostNetwork` / `hostPort` を使う workload は namespace にラベルが要る**(baseline は hostPort も弾く)。
-ラベルが無いと Pod が作られず、local-path のヘルパー Pod なら PVC が Pending のまま止まる。
+ラベルが無いと Pod が作られない(ReplicaSet や DaemonSet の events に出るだけで、Pod の一覧には何も出ない)。
 
 | namespace | baseline に通らない理由 |
 | --- | --- |
-| `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort)。**Talos の側で例外にしてある** |
-| `local-path-storage` | ヘルパー Pod の hostPath。[`bootstrap/local-path.yaml`](../bootstrap/local-path.yaml) がラベルを付ける |
+| `kube-system` | Cilium(privileged・hostNetwork・hostPath・SYS_ADMIN/NET_ADMIN・hostPort)、OpenEBS LVM と `lvm-thinpool`(privileged・hostPath の `/dev`)。**Talos の側で例外にしてある** |
 | `netbird` | hostPort 51820(routing peer の WireGuard)、NET_ADMIN 等、hostPath |
 | `denpa` | privileged・hostPath(`/dev/dvb`・`/dev/bus`・`/dev/dri`)。**ラベルは denpa リポジトリの `deploy/namespace.yaml`** にあり、gitops だけを grep すると抜けて見える |
 | `adguardhome` | hostPort 53 / 853 |

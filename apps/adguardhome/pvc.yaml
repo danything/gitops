@@ -28,4 +28,5 @@ spec:
   storageClassName: local-path
   resources:
     requests:
-      storage: 5Gi
+      # クエリログ(deployment.yaml の querylog.interval)の 2 本ぶん。LVM なのでこれが本当の上限になる
+      storage: 30Gi

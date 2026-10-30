@@ -8,8 +8,8 @@
 新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」)。talhelper は使わない。
 
 **組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分は [talos.sops.yaml](talos.sops.yaml) の 1 本だけで、
-他から描いてくる部分(Cilium・cert-manager・argocd・infisical は `<name>-values(.sops).yaml` から、
-local-path-provisioner は [local-path.yaml](local-path.yaml) から)と 1 か所で組む。**値をどこにも二度書かない**のが目的。
+他から描いてくる部分(Cilium・cert-manager・argocd・infisical・lvm-localpv は `<name>-values(.sops).yaml` から、
+StorageClass と thin プールは [storage.yaml](storage.yaml) から)と 1 か所で組む。**値をどこにも二度書かない**のが目的。
 CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を使う
 (別の作り方をすると「CI は通るが実機では通らない」が起きる)。
 
@@ -63,11 +63,11 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 | --- | --- | --- |
 | `talos.sops.yaml` の先頭の Talos の `# version:`(または `# schematic:`) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版> --k8s-endpoint https://10.10.0.4:6443` | **再起動** |
 | `talos.sops.yaml` の先頭の Kubernetes の `# version:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <新しい版>` | 無し |
-| `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values(.sops).yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`local-path.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <今の版>`(下の「inlineManifests を直したとき」) | 場合による |
+| `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values(.sops).yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`storage.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <今の版>`(下の「inlineManifests を直したとき」) | 場合による |
 
 ### inlineManifests を直したとき
 
-**Cilium・local-path・`apiserver-rbac.yaml`・ArgoCD・infisical・
+**Cilium・OpenEBS LVM(`storage.yaml` も)・`apiserver-rbac.yaml`・ArgoCD・infisical・
 cert-manager と、SOPS 済みの Secret 2 つは machine config の中にいる。**
 だから**マニフェストを直しただけでは何も起きない。** 描き直して当てる:
 

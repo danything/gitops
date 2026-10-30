@@ -18,8 +18,11 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 - [ ] AMT(10.0.0.5)、Z440 用の schematic(GPU の extension と SOL の `console=`)、NIC の別名(`LinkAliasConfig`)
 - [ ] 移して確かめる。docs の「iLO(10.0.0.3)」を AMT に直す
 - [ ] **ストレージとバックアップを入れ替える**(入れ直しのついでに。理由は [docs/decisions.md](docs/decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)
-  - [ ] ディスクの切り方: `u-local-path` をやめ、`RawVolumeConfig` + `LVMVolumeGroupConfig` でボリュームグループ(thin プール)にする
-  - [ ] OpenEBS LVM LocalPV と snapshot-controller(CRD 込み)を入れる。Talos で動くかを先に QEMU(talos-boot)で確かめる
+  - [x] ディスクの切り方: `u-local-path` をやめ、`RawVolumeConfig` + `LVMVolumeGroupConfig` で VG `data` にする。
+        thin プールは Talos で作れないので `bootstrap/storage.yaml` の DaemonSet が作る(書いてあるだけ。効くのは Z440 で入れ直したとき)
+  - [x] OpenEBS LVM LocalPV と snapshot-controller(CRD 込み)を入れる。StorageClass は名前を `local-path` のまま OpenEBS に。
+        talos-boot で PVC・VolumeSnapshot・スナップショットからの PVC・再起動のあとまでを確かめている
+  - [ ] Z440 で入れ直し、`recovery/pv.sh - restore-all` で戻す([docs/z440-migration.md](docs/z440-migration.md) の 4〜7)
   - [ ] VolSync(restic mover、copyMethod: Snapshot)を入れ、PVC ごとに ReplicationSource。R2 は PVC ごとに別の経路
   - [ ] 戻しは populator(PVC の `dataSourceRef`)。移設のときは `recovery/pv.sh restore-all`(k8up の restic から)で戻し、そのあと VolSync に切り替える
   - [ ] k8up・`backupcommand`・notify・restore-check を VolSync に合わせて畳む。k8up のリポジトリは保持期間(月次 6 か月)が切れるまで残す

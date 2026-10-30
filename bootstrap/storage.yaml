@@ -1,0 +1,149 @@
+# PVC の置き場(OpenEBS LVM LocalPV。chart は lvm-localpv-values.yaml)のうち、chart が描かないもの。render.sh が inline に載せる。
+#
+# - VG `data` は Talos が作る(talos.sops.yaml の RawVolumeConfig `lvm` と LVMVolumeGroupConfig)。thin プール `data_thinpool` は
+#   Talos では作れない(LVMLogicalVolumeConfig は linear と raid だけ)ので、下の lvm-thinpool が作る
+# - StorageClass は既定の `local-path` 1 つ。名前は local-path-provisioner の頃のまま(各リポジトリの PVC が名指ししている)。
+#   PVC を守るのは Retain ではなく日次の restic(docs/decisions.md「PVC を守る仕掛けをやめた」)
+# - kube-system に置く(Talos は kube-system を Pod Security の対象から外している。どれも特権が要る)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: local.csi.openebs.io
+parameters:
+  storage: lvm
+  volgroup: data
+  # thin でないとスナップショットから戻せない(OpenEBS の制限)。PVC の大きさは上限で、書いた分だけプールを使う
+  thinProvision: "yes"
+  # ext4 は lost+found を作り、PGDATA がボリュームの直下の Postgres(forgejo・rybbit)が initdb で落ちる
+  csi.storage.k8s.io/fstype: xfs
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: lvm
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: local.csi.openebs.io
+deletionPolicy: Delete
+---
+# thin プールを作り、出来たらノードにラベルを付けて OpenEBS のノードの Pod を動かす(lvm-localpv-values.yaml の nodeSelector)。
+# OpenEBS は thin プールが無いと最初の PVC と同じ大きさで作り、あとから広げない(Talos には dmeventd が無く、自動の拡張も効かない)。
+# LVM のメタデータを書くのは OpenEBS と 1 か所にしたい(コンテナごとにロックが別なので、同時に書くと片方が消える)ので、
+# 書くのはプールが無いか小さいときだけにして、ふだんは見るだけ。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lvm-thinpool
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lvm-thinpool
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lvm-thinpool
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lvm-thinpool
+subjects:
+  - kind: ServiceAccount
+    name: lvm-thinpool
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lvm-thinpool
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: lvm-thinpool
+  template:
+    metadata:
+      labels:
+        app: lvm-thinpool
+    spec:
+      serviceAccountName: lvm-thinpool
+      priorityClassName: system-node-critical
+      initContainers:
+        # データは VG の 90%。残りは溢れかけたときに足す分(`lvextend -L +10G data/data_thinpool`)。
+        # メタデータは 1GiB(作るときに足りるだけ取る。溢れるとデータより先に全部の書き込みが止まる)。
+        # 版は chart と同じ lvm-driver(中身は Alpine の lvm2。renovate.json で chart と一緒に上がる)
+        - name: pool
+          image: mirror.gcr.io/openebs/lvm-driver:1.10.1
+          command: [sh, -euc]
+          args:
+            - |
+              VG=data POOL=data_thinpool
+              # 入れ直した直後は Talos が VG を作るまで待つ
+              until vgs "$VG" >/dev/null 2>&1; do echo "VG $VG を待つ"; sleep 5; done
+              # 起動時は Talos も有効にする。先に動いたときのため
+              vgchange -ay "$VG"
+              if ! lvs "$VG/$POOL" >/dev/null 2>&1; then
+                lvcreate --type thin-pool -l 90%VG --poolmetadatasize 1g --wipesignatures y --yes -n "$POOL" "$VG"
+              fi
+              # OpenEBS が作った小さいプール(最後の PV を消すとプールごと消し、次の PVC の大きさで作り直す)を広げる
+              n() { tr -d ' '; }
+              want=$(( $(vgs --noheadings --units b --nosuffix -o vg_size "$VG" | n) * 90 / 100 ))
+              have=$(lvs --noheadings --units b --nosuffix -o lv_size "$VG/$POOL" | n)
+              if [ "$have" -lt $(( want - 1073741824 )) ]; then lvextend -l 90%VG "$VG/$POOL"; fi
+              meta=$(lvs --noheadings --units b --nosuffix -o lv_metadata_size "$VG/$POOL" | n)
+              if [ "$meta" -lt 1073741824 ]; then lvextend --poolmetadatasize 1g "$VG/$POOL"; fi
+              lvs -a -o lv_name,lv_size,data_percent,metadata_percent "$VG"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+        - name: label
+          image: registry.k8s.io/kubectl:v1.37.2
+          args: [label, node, $(NODE), doany.io/lvm-thinpool=ready, --overwrite]
+          env:
+            - name: NODE
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+      # 埋まり具合を 1 時間ごとにログへ出す。90% を超えたら NotReady になる(`kubectl -n kube-system get pods` で見える)
+      containers:
+        - name: watch
+          image: mirror.gcr.io/openebs/lvm-driver:1.10.1
+          command: [sh, -c]
+          args:
+            - while :; do lvs -o lv_name,lv_size,data_percent,metadata_percent data/data_thinpool; sleep 3600; done
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - set -- $(lvs --noheadings -o data_percent,metadata_percent data/data_thinpool); [ "${1%%.*}" -lt 90 ] && [ "${2%%.*}" -lt 90 ]
+            periodSeconds: 300
+            timeoutSeconds: 30
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 1m
+              memory: 16Mi
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory

@@ -93,7 +93,7 @@ talosctl apply-config --insecure -n $IP -e $IP -f bootstrap/clusterconfig/contro
 ```
 
 `UnattendedInstallConfig` があるので、ディスクに書いて自分で再起動する。**ここで SSD が上書きされる。**
-`STATE` / `EPHEMERAL` / `u-local-path` が `ready` になったら USB を抜いてよい(挿したままだとブート順によっては
+`STATE` / `EPHEMERAL` / `r-lvm`(PV 用。VG `data` になる)が `ready` になったら USB を抜いてよい(挿したままだとブート順によっては
 また maintenance mode で上がる):
 
 ```shell
@@ -105,7 +105,8 @@ talosctl get volumestatus    # EPHEMERAL は 64GiB 上限。違ったら入れ�
 ```shell
 talosctl bootstrap         # 単一ノードなので 1 回だけ
 kubectl get nodes          # Ready / control-plane / talos.sops.yaml の先頭の kubernetes の版
-kubectl get pods -A        # cilium・coredns・local-path・argocd・cert-manager・infisical が Running
+kubectl get pods -A        # cilium・coredns・lvm-thinpool・lvm-localpv・snapshot-controller・argocd・cert-manager・infisical が Running
+kubectl -n kube-system logs ds/lvm-thinpool -c pool   # 最後に data_thinpool(VG の 90%)が出る。出なければ PVC が 1 つも bind しない
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
 
@@ -163,7 +164,7 @@ kubectl get infisicalsecret -A       # 全部 Ready になる。k8up/k8up-global
 残りの namespace を 1 つずつ「止める → 戻す → 起こす」:
 
 ```shell
-sh recovery/pv.sh - plan-all      # 読むだけ。namespace ごとに何をするかを出す。先にこれを見る
+sh recovery/pv.sh - plan-all      # 読むだけ。namespace ごとに何をするかと、PVC に入るか(fit)を出す。先にこれを見る
 sh recovery/pv.sh - restore-all
 ```
 
@@ -172,7 +173,8 @@ sh recovery/pv.sh - restore-all
 1. `argo-pause`(selfHeal が replicas を戻して、戻している最中にアプリが起き上がるので)
 2. `forgejo restore` ── **Forgejo を先に。** 非公開アプリのイメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、
    Argo CD が読むマニフェストも、それを読むトークン(Forgejo の DB)も全部 Forgejo にあるので、戻すまで 1 本も上がらない
-3. `argo-resume` して ApplicationSet のエラーが消え、**残りの namespace と PVC が全部出そろって全部の `plan` が通る**まで待ち(10 分。通らなければ forgejo だけ戻した状態で止まる)、また `argo-pause`
+3. `argo-resume` して ApplicationSet のエラーが消え、**残りの namespace と PVC が全部出そろって全部の `plan` が通る**まで待ち(10 分。通らなければ forgejo だけ戻した状態で止まる)、
+   **全部が PVC に入るか(`fit`)を見て**(入らなければ同じく止まる)、また `argo-pause`
 4. restic の host(forgejo・infisical・etcd を除く)を 1 つずつ `<ns> restore`
 5. `argo-resume`
 
@@ -192,7 +194,9 @@ sh recovery/pv.sh - restore-all
 - **`Succeeded` は「戻った」の意味ではない。** `pv.sh` は `Restored N files` と(SELinux 以外の)エラー数を出すので、それを見る。
   SQLite は大きさを restic と突き合わせてから付け替える
 - `pv.sh` がやっていることと理由(root で走らせる・数字だけの ID を引用符で囲む・バイナリを標準入力で流さない)は [pv.sh](pv.sh) の冒頭
-- PVC が `Pending`(local-path は使う Pod が付くまで bind しない)でも、Restore の Pod が付けば bind する
+- PVC が `Pending`(StorageClass は使う Pod が付くまで bind しない)でも、Restore の Pod が付けば bind する
+- **PVC の requests が本当の上限**(OpenEBS LVM。local-path の頃はディスクの残り全部が使えた)。`fit` が `restic stats` の大きさと
+  requests を比べ、9 割を超えるものがあれば `plan-all` は 1 で終わり、`restore-all` は上書きする前に止まる。PVC を大きくするか、restic から要らないものを消す
 
 ## 9. 確かめる
 
@@ -236,7 +240,7 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | --- | --- |
 | ノードが上がらない | iLO のコンソール。ダッシュボードに版と健全性が出る |
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
-| PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
+| PVC が Bound しない | `kubectl -n kube-system logs ds/lvm-thinpool -c pool`(VG `data` が無い = `talosctl get volumestatus` の `r-lvm`)、ノードに `doany.io/lvm-thinpool=ready` が付いて `lvm-localpv-node` が動いているか、`kubectl -n kube-system logs ds/lvm-localpv-node -c openebs-lvm-plugin` |
 | 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
 | cilium-drift が TLS で落ちる | `talos-secrets.sops.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `talos-secrets.sops.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |

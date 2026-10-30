@@ -44,6 +44,7 @@ TALOS=$(tver siderolabs/talos)
 SCHEMATIC=$(sed -n '/^# schematic: /{s/^# schematic: *//p;q;}' bootstrap/talos.sops.yaml)
 K8S=$(tver kubernetes/kubernetes)
 GWAPI=$(tver kubernetes-sigs/gateway-api)
+SNAP=$(tver kubernetes-csi/external-snapshotter)
 # chart の値は <name>-values.yaml、秘密を含むものは <name>-values.sops.yaml(秘密のキーだけ SOPS)。
 vfile() { # $1=name
 	if [ -f "bootstrap/$1-values.sops.yaml" ]; then echo "bootstrap/$1-values.sops.yaml"; else echo "bootstrap/$1-values.yaml"; fi
@@ -54,11 +55,12 @@ CILIUM=$(bver cilium)
 CERTMGR=$(bver cert-manager)
 ARGOCD=$(bver argocd)
 INFISICAL=$(bver infisical)
-for v in "$TALOS" "$SCHEMATIC" "$K8S" "$GWAPI" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL"; do
+LVM=$(bver lvm-localpv)
+for v in "$TALOS" "$SCHEMATIC" "$K8S" "$GWAPI" "$SNAP" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL" "$LVM"; do
 	[ -n "$v" ] || { echo "ERROR: talos.sops.yaml / <name>-values(.sops).yaml の # version: から版を読めなかった" >&2; exit 1; }
 done
-echo "talos=$TALOS k8s=$K8S gateway-api=$GWAPI"
-echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD infisical-standalone=$INFISICAL"
+echo "talos=$TALOS k8s=$K8S gateway-api=$GWAPI external-snapshotter=$SNAP"
+echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD infisical-standalone=$INFISICAL lvm-localpv=$LVM"
 
 inline() { # $1=name  stdin=manifest
 	printf 'apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\nname: %s\nmanifest: |-\n' "$1"
@@ -146,7 +148,10 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 # `--api-versions` が無いと helm template は GatewayClass を黙って描かず、公開経路が全部死ぬ。
 chart cilium kube-system --api-versions gateway.networking.k8s.io/v1/GatewayClass
 
-inline local-path < bootstrap/local-path.yaml > "$WORK/inline-local-path.yaml"
+# PVC の置き場。infisical の Postgres が要るので bootstrap 層に置く。chart(CSI ドライバ)と、
+# chart が描かないもの(StorageClass・VolumeSnapshotClass・thin プール)は storage.yaml。
+chart lvm-localpv kube-system
+inline storage < bootstrap/storage.yaml > "$WORK/inline-storage.yaml"
 
 # CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(ArgoCD は bootstrap/ を argocd-repos.yaml しか見ない)。
 inline apiserver-rbac < bootstrap/apiserver-rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
@@ -194,6 +199,28 @@ name: gateway-api
 url: https://github.com/kubernetes-sigs/gateway-api/releases/download/${GWAPI}/standard-install.yaml
 PATCH
 
+# VolumeSnapshot の CRD 3 つと snapshot-controller(kube-system)。上流の置き場のまま、タグで固定して渡す。
+# グループのスナップショット(groupsnapshot.storage.k8s.io)は機能を有効にしていないので入れない。
+SNAPURL=https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/$SNAP
+for c in volumesnapshotclasses volumesnapshotcontents volumesnapshots; do
+	cat >> "$WORK/external-crds.yaml" <<PATCH
+apiVersion: v1alpha1
+kind: KubeExternalManifestConfig
+name: snapshot-$c-crd
+url: $SNAPURL/client/config/crd/snapshot.storage.k8s.io_$c.yaml
+---
+PATCH
+done
+for m in rbac setup; do
+	cat >> "$WORK/external-crds.yaml" <<PATCH
+apiVersion: v1alpha1
+kind: KubeExternalManifestConfig
+name: snapshot-controller-$m
+url: $SNAPURL/deploy/kubernetes/snapshot-controller/$m-snapshot-controller.yaml
+---
+PATCH
+done
+
 set -- --with-secrets "$SECRETS" \
 	--kubernetes-version "$K8S" \
 	--install-image "factory.talos.dev/installer/${SCHEMATIC}:${TALOS}"
@@ -210,7 +237,12 @@ echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'kind: GatewayClass' io.cilium/gateway-controller \
-	'name: local-path' rancher.io/local-path /var/mnt/local-path \
+	'kind: RawVolumeConfig' 'kind: LVMVolumeGroupConfig' 'name: dm_thin_pool' \
+	'name: lvm-localpv' lvm-localpv-node lvm-localpv-controller 'storageCapacity: false' 'doany.io/lvm-thinpool: ready' \
+	'name: storage' 'name: local-path' 'provisioner: local.csi.openebs.io' 'volgroup: data' \
+	'kind: VolumeSnapshotClass' 'name: lvm-thinpool' \
+	"external-snapshotter/$SNAP/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml" \
+	"external-snapshotter/$SNAP/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml" \
 	hubble-generate-certs \
 	'name: apiserver-rbac' 'name: cilium-drift' \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
@@ -225,7 +257,9 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
 # 無いことを見る側(flannel はドキュメントが在るだけで有効になる)
-for n in KubeFlannelCNIConfig /var/local-path-provisioner; do
+# (snapshot-controller と VolumeSnapshot の CRD は URL で入れるので、chart の同梱が混ざると 2 つになる)
+for n in KubeFlannelCNIConfig rancher.io/local-path UserVolumeConfig \
+	sig-storage/snapshot-controller volumesnapshots.snapshot.storage.k8s.io; do
 	! grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に残っている" >&2; exit 1; }
 done
 # CRD は inline に入れない(入ると MB 単位で増える)。包む前のファイルを見る。

@@ -1,0 +1,31 @@
+# chart と版。Renovate が上げ、render.sh が読む(README.md「Helm で入れるもの」)。
+# renovate: datasource=helm depName=lvm-localpv registryUrl=https://openebs.github.io/lvm-localpv
+# version: 1.10.1
+# OpenEBS LVM LocalPV の chart の値。PVC を talos.sops.yaml の VG `data` の thin プールの LV にする。
+# StorageClass・VolumeSnapshotClass・thin プールを作る DaemonSet は storage.yaml、
+# snapshot-controller と VolumeSnapshot の CRD は render.sh が URL で入れる(版は talos.sops.yaml の先頭)。
+#
+# 容量で Pod の置き場を絞らせない。thin なので PVC の大きさは上限でしかなく、合計がプールを超えてよい
+# (denpa は 1Ti と 300Gi)。true だと kube-scheduler が「プールの空き < PVC」のものを置けずに Pending にする。
+storageCapacity: false
+# 匿名の利用統計(Google Analytics)を送らない
+analytics:
+  enabled: false
+crds:
+  # LVMVolume などの CRD は小さいので inline に入れる。VolumeSnapshot の CRD は render.sh が external-snapshotter から入れる
+  csi:
+    volumeSnapshots:
+      enabled: false
+lvmController:
+  # snapshot-controller はクラスタに 1 つ(VolSync も使う)なので、chart の同梱ではなく render.sh が入れる
+  snapshotController:
+    enabled: false
+lvmNode:
+  # thin プールが出来てから動かす(storage.yaml の lvm-thinpool がこのラベルを付ける)。
+  # 先に PVC を受けると、OpenEBS が最初の PVC と同じ大きさの小さい thin プールを作ってしまう。
+  nodeSelector:
+    doany.io/lvm-thinpool: ready
+lvmPlugin:
+  image:
+    # Docker Hub の匿名の取得は絞られるので mirror.gcr.io(Docker Hub の pull-through キャッシュ。中身は同じ)
+    registry: mirror.gcr.io/
