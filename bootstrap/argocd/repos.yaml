@@ -94,7 +94,11 @@ spec:
     server: https://kubernetes.default.svc
     namespace: argocd
   syncPolicy:
+    # 平文のマニフェストを apps/ へ移す間、自動の同期(と prune)を止める。移す PR で bootstrap/ の中身が
+    # 入れ替わったとき、古い exclude のまま同期して移したもの(auth の Namespace ごと)を消さないため。
+    # 移し終えたらこの Application ごと消す(finalizer が無いので、消しても中のリソースは残る)。
     automated:
+      enabled: false
       prune: true
       selfHeal: true
     # InfisicalSecret の CRD は別の Application が入れるので、まっさらなクラスタでは最初は落ちる
