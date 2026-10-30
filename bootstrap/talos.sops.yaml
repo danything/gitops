@@ -1,5 +1,5 @@
 # ノード main の machine config のうち、手で書く部分の全部。render.sh が `gen config --config-patch` に渡す。
-# chart から描く部分(Cilium・ArgoCD・infisical・cert-manager・local-path)と版は render.sh が足す。
+# chart から描く部分(Cilium・ArgoCD・infisical・cert-manager・local-path)は render.sh が足す。版は下のコメント。
 #
 # **SOPS で password の値だけ暗号化してある**(../.sops.yaml)。平文の部分はそのまま直してよい。
 # パスワードを変えるときは `sops edit bootstrap/talos.sops.yaml`。render.sh が `sops -d` してから渡す。
@@ -7,6 +7,25 @@
 #
 # 型付きドキュメントと v1alpha1 で書く場所が決まっている(../docs/talos.md「machine config の作法」)。
 # ドキュメントは上から順に当たる(KubeNodeConfig の delete → 書き戻し は順番に意味がある)。
+#
+# Talos・Kubernetes・Gateway API の版と schematic。chart の <name>-values.yaml と同じく、`# renovate:` の次の
+# `# version:` の行を Renovate が上げ、render.sh が読む(値にすると machine config に混ざるのでコメント)。
+# 適用は手で(ノード 1 台なので upgrade は全停止)。手順は talos.md「上げ方 / 当て直し方」。
+#
+# Talos。Factory のレジストリはタグ一覧を返さないので github-releases で追う。tools/Dockerfile の talosctl と同じ depName。
+# dvb-pt3 が v1.15.0-alpha.1 からなので alpha に乗っている(Renovate は次の alpha / beta も出す)。
+# renovate: datasource=github-releases depName=siderolabs/talos
+# version: v1.15.0-alpha.2
+# 拡張(dvb-pt3、intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ Image Factory の ID。
+# schematic: 96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca
+#
+# Kubernetes。上げるのは upgrade-k8s で、マイナーを飛ばさない。tools/Dockerfile の kubectl と同じ depName。
+# renovate: datasource=github-releases depName=kubernetes/kubernetes
+# version: v1.37.2
+#
+# Gateway API の CRD(standard チャンネルで足りる)。
+# renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
+# version: v1.7.0
 machine:
     sysctls:
         # 無いと IPv6 の既定経路が消える(Kubernetes が forwarding=1 にすると accept_ra=1 は RA を無視する)
@@ -63,7 +82,7 @@ sops:
     mac_only_encrypted: true
     version: 3.13.3
 ---
-# カーネル引数と拡張は machine.install に書けないので schematic に入れている(versions.yaml)。
+# カーネル引数と拡張は machine.install に書けないので schematic に入れている(このファイルの先頭の `# schematic:`)。
 apiVersion: v1alpha1
 kind: UnattendedInstallConfig
 provisioning:

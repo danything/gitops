@@ -1,6 +1,6 @@
 #!/bin/sh
 # machine config を作る: ./bootstrap/render.sh bootstrap/clusterconfig
-# chart の値と版は bootstrap/<name>-values.yaml が正本。ここに写さない(../docs/decisions.md)。
+# chart の値と版は bootstrap/<name>-values(.sops).yaml、Talos などの版は talos.sops.yaml の先頭のコメントが正本。ここに写さない(../docs/decisions.md)。
 # SOPS は自分で復号する。CI は鍵が無いので SECRETS などの env にダミーを渡す。
 # 出力は秘密を含み、出力先は丸ごと作り直す。当て方は talos.md。
 set -eu
@@ -35,22 +35,27 @@ if [ -z "$CONTROLPLANE" ]; then
 fi
 ! grep -q 'ENC\[' "$CONTROLPLANE" || { echo "ERROR: talos.sops.yaml に暗号文が残っている" >&2; exit 1; }
 
-# キーを名前で引く(位置で数えるとブロックが増えたとき別の値を掴む)。yq は版で構文が違うので awk。
-ver() { # $1=トップレベルのキー  $2=その下のキー
-	awk -v top="$1:" -v key="  $2: " '$0 == top {f=1; next} /^[^ #]/ {f=0} f && index($0, key) == 1 {print substr($0, length(key)+1); exit}' bootstrap/versions.yaml
+# 版はどれもコメントの `# renovate:` の次の `# version:` の行(Renovate が上げる)。
+# Talos・Kubernetes・Gateway API は talos.sops.yaml の先頭。depName で引く(位置で数えると行が増えたとき別の版を掴む)。
+tver() { # $1=depName
+	awk -v dep="depName=$1" 'f {if (sub(/^# version: */, "")) print; exit} /^# renovate: / && $NF == dep {f=1}' bootstrap/talos.sops.yaml
 }
-TALOS=$(ver talos version)
-SCHEMATIC=$(ver talos schematic)
-K8S=$(ver kubernetes version)
-GWAPI=$(ver gatewayAPI version)
-# chart の版は <name>-values.yaml の先頭の `# version:` の行(Renovate が上げる)。最初の 1 行だけ見る。
-bver() { sed -n '/^# version: /{s/^# version: *//p;q;}' "bootstrap/$1-values.yaml"; }
+TALOS=$(tver siderolabs/talos)
+SCHEMATIC=$(sed -n '/^# schematic: /{s/^# schematic: *//p;q;}' bootstrap/talos.sops.yaml)
+K8S=$(tver kubernetes/kubernetes)
+GWAPI=$(tver kubernetes-sigs/gateway-api)
+# chart の値は <name>-values.yaml、秘密を含むものは <name>-values.sops.yaml(秘密のキーだけ SOPS)。
+vfile() { # $1=name
+	if [ -f "bootstrap/$1-values.sops.yaml" ]; then echo "bootstrap/$1-values.sops.yaml"; else echo "bootstrap/$1-values.yaml"; fi
+}
+# chart の版はその先頭の `# version:`。最初の 1 行だけ見る。
+bver() { sed -n '/^# version: /{s/^# version: *//p;q;}' "$(vfile "$1")"; }
 CILIUM=$(bver cilium)
 CERTMGR=$(bver cert-manager)
 ARGOCD=$(bver argocd)
 INFISICAL=$(bver infisical)
 for v in "$TALOS" "$SCHEMATIC" "$K8S" "$GWAPI" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL"; do
-	[ -n "$v" ] || { echo "ERROR: versions.yaml / *-values.yaml の # version: から版を読めなかった" >&2; exit 1; }
+	[ -n "$v" ] || { echo "ERROR: talos.sops.yaml / <name>-values(.sops).yaml の # version: から版を読めなかった" >&2; exit 1; }
 done
 echo "talos=$TALOS k8s=$K8S gateway-api=$GWAPI"
 echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD infisical-standalone=$INFISICAL"
@@ -94,13 +99,33 @@ function flush(   i, kind, mi, hasns, inmeta) {
 }'
 }
 
-# chart と repo は <name>-values.yaml の `# renovate:` の行から読む。
+# <name>-values.sops.yaml は先に復号して $WORK/<name>-values.yaml に置く。2 つめのドキュメントがあれば、それは
+# machine config に別に載せる Secret(ArgoCD は復号できない)なので $WORK/<name>-secret.yaml に分ける。
+# CI は鍵が無いので <NAME>_VALUES に平文(ENC[…] をダミーにしたもの)を渡す。
+# `sops -d … | awk` と繋がない: pipefail が無いので、復号に失敗しても空のまま黙って進む。
+decrypt() { # $1=name  $2=env の上書き
+	if [ -n "$2" ]; then
+		cp "$2" "$WORK/$1-all.yaml"
+	else
+		sops -d "bootstrap/$1-values.sops.yaml" > "$WORK/$1-all.yaml"
+	fi
+	! grep -q 'ENC\[' "$WORK/$1-all.yaml" || { echo "ERROR: $1-values.sops.yaml に暗号文が残っている" >&2; exit 1; }
+	awk -v v="$WORK/$1-values.yaml" -v s="$WORK/$1-secret.yaml" \
+		'NR == 1 && $0 == "---" {next} !d && $0 == "---" {d=1; next} {print > (d ? s : v)}' "$WORK/$1-all.yaml"
+}
+decrypt argocd "${ARGOCD_VALUES:-}"
+decrypt infisical "${INFISICAL_VALUES:-}"
+decrypt cert-manager "${CERT_MANAGER_VALUES:-}"
+
+# chart と repo は <name>-values(.sops).yaml の `# renovate:` の行から読む。
 # kube-system 以外は Namespace を先頭に付ける(chart は描かず、最初は誰も作らない)。
 # `updatedAt` は infisical の chart が付ける時刻(values で消せない)。残すと当て直すたびに再起動する。
 chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 	_n=$1 _ns=$2
 	shift 2
-	_f=bootstrap/$_n-values.yaml
+	_f=$(vfile "$_n")
+	_v=$_f
+	case $_f in *.sops.yaml) _v=$WORK/$_n-values.yaml ;; esac
 	_repo=$(sed -n 's/^# renovate:.* registryUrl=\([^ ]*\).*/\1/p' "$_f")
 	_chart=$(sed -n 's/^# renovate:.* depName=\([^ ]*\).*/\1/p' "$_f")
 	[ -n "$_repo" ] && [ -n "$_chart" ] \
@@ -111,7 +136,7 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 			printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n---\n' "$_ns"
 		fi
 		helm template "$_n" "$_n/$_chart" \
-			--version "$(bver "$_n")" -n "$_ns" -f "$_f" "$@" --kube-version "$K8S" \
+			--version "$(bver "$_n")" -n "$_ns" -f "$_v" "$@" --kube-version "$K8S" \
 			| sed '/^ *updatedAt: "/d' \
 			| add_namespace "$_ns"
 	} | inline "$_n" > "$WORK/inline-$_n.yaml"
@@ -126,20 +151,11 @@ inline local-path < bootstrap/local-path.yaml > "$WORK/inline-local-path.yaml"
 # CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(ArgoCD は bootstrap/ を argocd-repos.yaml しか見ない)。
 inline apiserver-rbac < bootstrap/apiserver-rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
-# 秘密の値は <name>-secret-values.sops.yaml を <name>-values.yaml に重ねる。infisical は chart がパスワードを
-# 平文 env に焼くので ArgoCD に置けない(../docs/decisions.md)。
-secret_values() { # $1=name  $2=env の上書き
-	if [ -n "$2" ]; then echo "$2"; return 0; fi
-	sops -d "bootstrap/$1-secret-values.sops.yaml" > "$WORK/$1-secret-values.yaml"
-	echo "$WORK/$1-secret-values.yaml"
-}
-# 先に変数に取る。`chart … -f "$(secret_values …)"` だと復号の失敗を `set -e` が拾わない
-ARGOCD_SV=$(secret_values argocd "${ARGOCD_SECRET_VALUES:-}")
-INFISICAL_SV=$(secret_values infisical "${INFISICAL_SECRET_VALUES:-}")
-chart argocd argocd -f "$ARGOCD_SV"
-chart infisical infisical -f "$INFISICAL_SV"
+chart argocd argocd
+# infisical は chart がパスワードを平文 env に焼くので ArgoCD に置けない(../docs/decisions.md)。
+chart infisical infisical
 
-# CRD は URL で渡す(理由は argocd-values.yaml の `crds`)。版は chart の appVersion から取る。
+# CRD は URL で渡す(理由は argocd-values.sops.yaml の `crds`)。版は chart の appVersion から取る。
 ARGOCD_APP=$(helm show chart argocd/argo-cd --version "$ARGOCD" 2>/dev/null \
 	| sed -n 's/^appVersion: *//p' | tr -d "\"'")
 [ -n "$ARGOCD_APP" ] || { echo "ERROR: argo-cd の appVersion を読めなかった" >&2; exit 1; }
@@ -156,20 +172,12 @@ done
 
 chart cert-manager cert-manager
 
-# ArgoCD が復号できない Secret(infisical の起動用と DNS-01 用)。`sops -d … | inline` と繋がない:
-# pipefail が無いので復号に失敗しても空の manifest が黙って出て、needle(name: だけ)も通る。
-inline_secret() { # $1=inline の名前  $2=SOPS ファイル  $3=env の上書き
-	if [ -n "$3" ]; then
-		inline "$1" < "$3" > "$WORK/inline-$1.yaml"
-		return 0
-	fi
-	sops -d "$2" > "$WORK/plain-$1.yaml"
-	inline "$1" < "$WORK/plain-$1.yaml" > "$WORK/inline-$1.yaml"
-}
-inline_secret infisical-secrets bootstrap/infisical-secrets.sops.yaml "${INFISICAL_SECRET:-}"
-inline_secret cloudflare-secret bootstrap/cert-manager-cloudflare-secret.sops.yaml "${CLOUDFLARE_SECRET:-}"
+# ArgoCD が復号できない Secret(infisical の起動用と DNS-01 用)。<name>-values.sops.yaml の 2 つめのドキュメント
+# (上の decrypt が分けたもの。無ければ `<` が失敗して止まる)。
+inline infisical-secrets < "$WORK/infisical-secret.yaml" > "$WORK/inline-infisical-secrets.yaml"
+inline cloudflare-secret < "$WORK/cert-manager-secret.yaml" > "$WORK/inline-cloudflare-secret.yaml"
 
-# cert-manager の CRD も URL(理由は cert-manager-values.yaml の `crds`)。
+# cert-manager の CRD も URL(理由は cert-manager-values.sops.yaml の `crds`)。
 cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1
 kind: KubeExternalManifestConfig

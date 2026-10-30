@@ -46,7 +46,7 @@ spec:
             runAsNonRoot: true
           initContainers:
             # talosctl だけのイメージ(シェルが無い)なので、取るだけを init に分ける。
-            # 版は bootstrap/versions.yaml と揃える(クライアントとノードの版は離れすぎないこと)。
+            # 版は bootstrap/talos.sops.yaml の先頭の Talos の版と揃える(クライアントとノードの版は離れすぎないこと)。
             - name: snapshot
               image: ghcr.io/siderolabs/talosctl:v1.15.0-alpha.2
               # ノードは 1 台。Pod からノードの 50000 に直接届く(Talos はファイアウォールを張っていない)

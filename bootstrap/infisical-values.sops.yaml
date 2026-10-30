@@ -1,0 +1,127 @@
+# chart と版。Renovate が上げ、render.sh が読む(README.md「Helm で入れるもの」)。
+# renovate: datasource=helm depName=infisical-standalone registryUrl=https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+# version: 1.12.0
+# infisical-standalone の chart の値(Postgres + Redis 同梱)。
+# 秘密(DB と Redis のパスワード、2 つめのドキュメントの Secret の鍵)の値だけ SOPS で暗号化してある(../.sops.yaml)。
+# 平文の部分はそのまま直してよい。秘密を変えるときは `sops edit bootstrap/infisical-values.sops.yaml`。
+# 各ドキュメントの末尾の `sops:` は SOPS のメタデータ(触らない)。
+# 描いて machine config に載せるのは render.sh(ArgoCD に置けない理由は docs/decisions.md)。
+infisical:
+    # 無いと名前が infisical-infisical-standalone-infisical になる
+    fullnameOverride: infisical
+    replicaCount: 1
+    image:
+        # Docker Hub の匿名取得は絞られるので mirror.gcr.io から。chart の既定の tag は遅れるので固定する
+        repository: mirror.gcr.io/infisical/infisical
+        tag: v0.167.4
+    # ENCRYPTION_KEY / AUTH_SECRET / SITE_URL は下の 2 つめのドキュメント(render.sh が別の inlineManifest にする)
+    kubeSecretRef: infisical-secrets
+    extraEnv:
+        # Kubernetes auth の TokenReview で kubernetes.default.svc を叩くのを SSRF ガードが拒むため
+        - name: ALLOW_INTERNAL_IP_CONNECTIONS
+          value: "true"
+        # 送るのはクラスタの中の中継(apps/smtp-relay。Graph の sendMail)。ユーザー名は <テナント ID>@<smtp-relay のクライアント ID>、
+        # パスワードはそのクライアントシークレット。中継は TLS を話さない。
+        # パスワードだけ Infisical 自身にある(smtp-secret.yaml)ので optional。まっさらな状態ではメール無しで
+        # 上がり、operator が Secret を作ったあと rollout restart でメールが有効になる。
+        - name: SMTP_HOST
+          value: smtp-relay.smtp-relay.svc
+        - name: SMTP_PORT
+          value: "587"
+        - name: SMTP_USERNAME
+          value: 22ac977d-b140-4dc8-8150-90d645d3475b@fd45a316-97cc-4480-8da8-487109403520
+        - name: SMTP_REQUIRE_TLS
+          value: "false"
+        - name: SMTP_FROM_ADDRESS
+          value: info@doany.io
+        - name: SMTP_FROM_NAME
+          value: Infisical
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+                name: infisical-smtp
+                key: SMTP_PASSWORD
+                optional: true
+ingress:
+    # 公開は Gateway(apps/infisical/httproute.yaml)
+    enabled: false
+    nginx:
+        # 同梱の ingress-nginx の切り替えも兼ねる
+        enabled: false
+postgresql:
+    enabled: true
+    auth:
+        username: infisical
+        database: infisicalDB
+        password: ENC[AES256_GCM,data:wlMm2O23q4WNlRwffwVYsUUk4KkPNpuD91naRVZbgtqQ+c4NMDk9jNNn15HT8GCo,iv:nJx7sPa8QQaCA7B9fmvHRdBInMgGW6A8EnylaiK1nnw=,tag:tIr2dIACNDX6uqcZWHtGVQ==,type:str]
+        postgresPassword: ENC[AES256_GCM,data:UShd+eP5OksJW8Iy4COXWdAWsUd8fVsb+MiPlRwL8oU=,iv:wmHmVSU5HWsS0D8ykTHgWUiQ6ydP8QHzy8y3RomI+R4=,tag:njAsN+kX7/HiQCt5XZbrdg==,type:str]
+    primary:
+        persistence:
+            # chart を消しても PVC は残る。後ろ盾は k8up の日次 pg_dump
+            storageClass: local-path
+            size: 5Gi
+        podAnnotations:
+            k8up.io/backupcommand: /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" /opt/bitnami/postgresql/bin/pg_dump -U infisical -d infisicalDB --clean --if-exists'
+            k8up.io/file-extension: .sql
+redis:
+    enabled: true
+    auth:
+        password: ENC[AES256_GCM,data:M+WupyRhc2FOxY3GGrQjeagXLYl1je2lsVPOTAbx3mGjjueG4/4IUgjeKK5EBmhT,iv:LbzZElFqO6IvxcvJ0RKiG3uqwHUC33WvwQVCtokhDKM=,tag:0kDzNb0WIMotjRwz0N2fFg==,type:str]
+    master:
+        persistence:
+            # キューとキャッシュだけ
+            enabled: false
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB0dkw4ODdPQTlIRjQ5eGQ5
+            Z3pPdWpzaXJzUVZINHJZSithNDNHRU4rZ0RvCjJBZ2xNYnU2K0pUaDV3K0dEMkFZ
+            VzhnaU1GYVYvcHVkbFRZMzhoVkdQSTQKLS0tIG5jOTl0RDVaalozQnUyZDBYdk83
+            dWJMVkFKbWFYVUM3bzQwU1NFbEI4bzAKKCsNzczSTCeeQXf6nWJMGQp0cKlz7S9/
+            qtsRZw60oOBsT5FVXjkteih1JsiKMPZ1lQ/Pyo+m9HG1dHRDo26Clw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    lastmodified: "2026-10-30T15:08:34Z"
+    mac: ENC[AES256_GCM,data:prnnSJpB8SQTP/U4slFI3PfBrbVI1EbEFErwoaaN+kqWhqZnbua7zTqAMFwzmygJ525Ku88sqi2Wt1k1RwPoaGFR1FMObgmAPw1UavZ6MFp5Cv2r7bnvhnRxQL12KTko79t+8I3mzVmOCu8QsQ1eQV/WXMxBMuigNsEGW+msjWQ=,iv:AjIP77ppC18nE5Nc4Apkr+EjBjvzMbV0kHAYOaI2YNM=,tag:ultvRWNfPiNRO3QcltR2yQ==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# Infisical 自身の根っこの秘密(DB の暗号鍵など)。Infisical がほかの秘密を全部持つための層なので、
+# Infisical からは取れない。値のキーだけ SOPS で暗号化してある(../../.sops.yaml)。
+#
+# ENCRYPTION_KEY encrypts everything Infisical stores in Postgres. Losing or
+# changing it makes the whole database unreadable -- it's the one value here
+# that must survive.
+# AUTH_SECRET only signs sessions and can be rotated (everyone gets logged
+# out).
+apiVersion: v1
+kind: Secret
+metadata:
+    name: infisical-secrets
+    namespace: infisical
+type: Opaque
+stringData:
+    ENCRYPTION_KEY: ENC[AES256_GCM,data:9A0VreQ45AuqNv1OrT2WUIeL80dLumA9GIBBXf7NUmg=,iv:0syrMhtgIJz27uwwmovB4TxsD8knSFW1wl3lOaOqtlc=,tag:DjO8DoPPGR4YQXrdKc5VLw==,type:str]
+    AUTH_SECRET: ENC[AES256_GCM,data:5QChOKF42iagvY+GkHm6Z5vGqivQ0xJToFK9tDaVjhjAcCOak0hDHjaWM0w=,iv:haTEfu2atH+R6OqYnWZhQ7Ujnt0o0X5F45Twn7tMM2A=,tag:jn2PYb3wJ0O16ZQ5SjNHQg==,type:str]
+    SITE_URL: https://il.doany.io
+    TELEMETRY_ENABLED: "false"
+    CLIENT_ID_GITHUB_LOGIN: ENC[AES256_GCM,data:PhxlBNJyAbj0MpnNrx+b1woqlXw=,iv:RZ0J1dO4O6pLdxgrnXQmDL2HDnqDSLGnK5KiQjNUngU=,tag:e+lJugHw6z910GnwF4MWPA==,type:str]
+    CLIENT_SECRET_GITHUB_LOGIN: ENC[AES256_GCM,data:80QRjNxUoW/r7PVTvimqYDCaw6XRsL4LuH7BROIpqOSgFQPCY1AVnQ==,iv:oFAmKI9d50dfYy9GeZ7mMYeYyDHEs3tjcwPl9nJM86o=,tag:f8/ROablE0uN/o20dHvS/A==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB0dkw4ODdPQTlIRjQ5eGQ5
+            Z3pPdWpzaXJzUVZINHJZSithNDNHRU4rZ0RvCjJBZ2xNYnU2K0pUaDV3K0dEMkFZ
+            VzhnaU1GYVYvcHVkbFRZMzhoVkdQSTQKLS0tIG5jOTl0RDVaalozQnUyZDBYdk83
+            dWJMVkFKbWFYVUM3bzQwU1NFbEI4bzAKKCsNzczSTCeeQXf6nWJMGQp0cKlz7S9/
+            qtsRZw60oOBsT5FVXjkteih1JsiKMPZ1lQ/Pyo+m9HG1dHRDo26Clw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    lastmodified: "2026-10-30T15:08:34Z"
+    mac: ENC[AES256_GCM,data:prnnSJpB8SQTP/U4slFI3PfBrbVI1EbEFErwoaaN+kqWhqZnbua7zTqAMFwzmygJ525Ku88sqi2Wt1k1RwPoaGFR1FMObgmAPw1UavZ6MFp5Cv2r7bnvhnRxQL12KTko79t+8I3mzVmOCu8QsQ1eQV/WXMxBMuigNsEGW+msjWQ=,iv:AjIP77ppC18nE5Nc4Apkr+EjBjvzMbV0kHAYOaI2YNM=,tag:ultvRWNfPiNRO3QcltR2yQ==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3

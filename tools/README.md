@@ -5,7 +5,7 @@
 
 ```powershell
 tools/t.ps1 cf r2 buckets list
-tools/t.ps1 sops -d bootstrap/infisical-secrets.sops.yaml
+tools/t.ps1 sops -d bootstrap/infisical-values.sops.yaml
 $env:INFISICAL_PROFILE = 'info@doany.io--doa'; tools/t.ps1 infisical secrets --env prod --path /matrix/matrix
 tools/t.ps1 kubectl get pods -A           # クラスタは読み取り用で繋ぐ
 tools/t.ps1 --admin kubectl apply -f x.yaml  # 書くときだけ管理者(下の「クラスタの資格情報」)

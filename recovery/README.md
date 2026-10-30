@@ -63,11 +63,11 @@ mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/so
 - **`bootstrap/talos-secrets.sops.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver-ca.crt`・
   Infisical の Kubernetes auth(7)が合わなくなる
 - **`render.sh` は出力先を丸ごと消して作り直す。** `bootstrap/clusterconfig/` に kubeconfig などを置いていたら消える
-- 版は [../bootstrap/versions.yaml](../bootstrap/versions.yaml)。**上げるなら建て直しの日ではない日に**
+- 版は [../bootstrap/talos.sops.yaml](../bootstrap/talos.sops.yaml) の先頭のコメント。**上げるなら建て直しの日ではない日に**
 
 ## 2. ISO で起動する
 
-ISO は Image Factory のもの(URL の schematic と版は `versions.yaml` と揃える)。ハイブリッドなのでそのまま書けばよい
+ISO は Image Factory のもの(URL の schematic と版は `talos.sops.yaml` の先頭と揃える)。ハイブリッドなのでそのまま書けばよい
 (Windows なら Rufus の **DD イメージモード**。WSL からは USB が見えない)。
 
 ```shell
@@ -104,7 +104,7 @@ talosctl get volumestatus    # EPHEMERAL は 64GiB 上限。違ったら入れ�
 
 ```shell
 talosctl bootstrap         # 単一ノードなので 1 回だけ
-kubectl get nodes          # Ready / control-plane / versions.yaml の kubernetes: の版
+kubectl get nodes          # Ready / control-plane / talos.sops.yaml の先頭の kubernetes の版
 kubectl get pods -A        # cilium・coredns・local-path・argocd・cert-manager・infisical が Running
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```

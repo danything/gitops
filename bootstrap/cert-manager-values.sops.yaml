@@ -1,0 +1,54 @@
+# chart と版。Renovate が上げ、render.sh が読む(README.md「Helm で入れるもの」)。
+# renovate: datasource=helm depName=cert-manager registryUrl=https://charts.jetstack.io
+# version: v1.21.3
+# cert-manager の chart の値。描いて machine config に載せるのは render.sh。
+# 2 つめのドキュメントは DNS-01 の Cloudflare のトークンの Secret(render.sh が別の inlineManifest にする)。
+# トークンの値だけ SOPS で暗号化してある(../.sops.yaml)。平文の部分はそのまま直してよい。
+# トークンを変えるときは `sops edit bootstrap/cert-manager-values.sops.yaml`。
+# 無いと Gateway の `cert-manager.io/cluster-issuer` 注釈から Certificate を作らず、証明書が 1 枚も出ない
+config:
+    enableGatewayAPI: true
+# CRD は描かせない(1.30 MB で描き出しの 97%)。render.sh が URL で渡す。
+crds:
+    enabled: false
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBXU1F4Zm1WUlEyazlkQnNn
+            SGY5RlA0STcrMnAza09xK0EvUUNDT1RUS0Y0ClVkTldGV3JOY2JpaXZsckVrZGc5
+            N2lLTEhONkVoQUxjellzVUlDWUlkT3MKLS0tIGEwMERWMEw4M1VpaGJKcUxuT2c4
+            akZhRkh1NEFOd1FrZW5TYlp0WHhXQ2MKWQE2OfQMCXzs+qRFYK4O59GXlFFBenf8
+            IyM3TTxcSYEkM35DpB/oe7wnfrOyeDuxh5PLzedVyywkmYZQblInSQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    lastmodified: "2026-10-30T15:08:34Z"
+    mac: ENC[AES256_GCM,data:lwkLBKlc/fbnJvJYCNC+gxvoJrR58uYugPX/0E5rX6X5NtLwjl2d89xi06nhhrpcIpunpWESWA6d/2myhrIOJTo9NUGxgbJbQXsZHbnRvV07c7oR2a29W9R3rtKKeJTl9IGc5GSoyo4sJ4PygoaHYzQmRgN8K5GVAI7BNJswmd4=,iv:SOqIQsANQ/8+/0jG4njrGzSDRivPyRQUAGwuUxQUpVM=,tag:e0fbD5/Gk4Rhyj2hwBvllQ==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+apiVersion: v1
+kind: Secret
+metadata:
+    name: cloudflare-api-token
+    namespace: cert-manager
+type: Opaque
+stringData:
+    CF_DNS_API_TOKEN: ENC[AES256_GCM,data:Dq6Sr7TlvtUZplvnt+jsCgXuUQN8BRChiVPwpBePegX14w97NpPyy7yS855XSmyB/QaTFMA=,iv:DS1c37QF8sR6b/jc6Pc8JsMWTAyxXQ3FGpXfwZQ10gU=,tag:+D2lg3ugr6BucyNZKg3I/g==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBXU1F4Zm1WUlEyazlkQnNn
+            SGY5RlA0STcrMnAza09xK0EvUUNDT1RUS0Y0ClVkTldGV3JOY2JpaXZsckVrZGc5
+            N2lLTEhONkVoQUxjellzVUlDWUlkT3MKLS0tIGEwMERWMEw4M1VpaGJKcUxuT2c4
+            akZhRkh1NEFOd1FrZW5TYlp0WHhXQ2MKWQE2OfQMCXzs+qRFYK4O59GXlFFBenf8
+            IyM3TTxcSYEkM35DpB/oe7wnfrOyeDuxh5PLzedVyywkmYZQblInSQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    lastmodified: "2026-10-30T15:08:34Z"
+    mac: ENC[AES256_GCM,data:lwkLBKlc/fbnJvJYCNC+gxvoJrR58uYugPX/0E5rX6X5NtLwjl2d89xi06nhhrpcIpunpWESWA6d/2myhrIOJTo9NUGxgbJbQXsZHbnRvV07c7oR2a29W9R3rtKKeJTl9IGc5GSoyo4sJ4PygoaHYzQmRgN8K5GVAI7BNJswmd4=,iv:SOqIQsANQ/8+/0jG4njrGzSDRivPyRQUAGwuUxQUpVM=,tag:e0fbD5/Gk4Rhyj2hwBvllQ==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
