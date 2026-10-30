@@ -60,6 +60,19 @@
             "datasourceTemplate": "github-releases",
             "depNameTemplate": "pulumi/pulumi-terraform-provider",
             "extractVersionTemplate": "^v(?<version>.+)$"
+        },
+        {
+            "description": "CI の Pulumi CLI (pulumi.yml の pulumi-version-file)。中身は版だけ。下の pulumi のまとめに入れて SDK (@pulumi/pulumi) と同じ PR にし、pulumi install も流す (CLI を上げると bun.lock の sdks/netbird の行が変わる)。",
+            "customType": "regex",
+            "managerFilePatterns": [
+                "/^pulumi/\\.pulumi-version$/"
+            ],
+            "matchStrings": [
+                "^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$"
+            ],
+            "datasourceTemplate": "github-releases",
+            "depNameTemplate": "pulumi/pulumi",
+            "extractVersionTemplate": "^v(?<version>.+)$"
         }
     ],
     "packageRules": [
@@ -68,7 +81,8 @@
             "matchFileNames": [
                 "pulumi/package.json",
                 "pulumi/bun.lock",
-                "pulumi/Pulumi.yaml"
+                "pulumi/Pulumi.yaml",
+                "pulumi/.pulumi-version"
             ],
             "skipArtifactsUpdate": true,
             "groupName": "pulumi",

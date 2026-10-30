@@ -207,7 +207,7 @@
 
     "@pulumi/cloudflare": ["@pulumi/cloudflare@6.23.2", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-0pkVCTydiMJD9vQmRt0V50cMFeWW8AinAaY/PjKPbC7X5aSYKooZ0F30oVVY/Ewi7o5/utBO+5ciqzz1/hYREA=="],
 
-    "@pulumi/netbird": ["@pulumi/netbird@file:sdks/netbird", { "dependencies": { "@pulumi/pulumi": "^3.238.0", "@types/node": "^20", "typescript": "^4.7.0" } }],
+    "@pulumi/netbird": ["@pulumi/netbird@file:sdks/netbird", { "dependencies": { "@pulumi/pulumi": "^3.269.0", "@types/node": "^20", "typescript": "^4.7.0" }, "hasInstallScript": true }],
 
     "@pulumi/pulumi": ["@pulumi/pulumi@3.273.0", "", { "dependencies": { "@grpc/grpc-js": "^1.10.1", "@logdna/tail-file": "^2.0.6", "@npmcli/arborist": "^9.0.0", "@opentelemetry/api": "^1.9", "@opentelemetry/core": "^2.9", "@opentelemetry/exporter-trace-otlp-grpc": "^0.220", "@opentelemetry/exporter-zipkin": "^2.9", "@opentelemetry/instrumentation": "^0.220", "@opentelemetry/instrumentation-grpc": "^0.220", "@opentelemetry/resources": "^2.9", "@opentelemetry/sdk-trace-base": "^2.9", "@opentelemetry/sdk-trace-node": "^2.9", "@opentelemetry/semantic-conventions": "^1.42", "@types/google-protobuf": "^3.15.5", "@types/semver": "^7.5.6", "execa": "^5.1.0", "google-protobuf": "^3.21.4", "ini": "^2.0.0", "js-yaml": "^4.3.2", "minimist": "^1.2.6", "normalize-package-data": "^6.0.0", "require-from-string": "^2.0.1", "semver": "^7.5.2", "source-map-support": "^0.5.6", "upath": "^1.1.0" }, "peerDependencies": { "ts-node": ">= 7.0.1 < 12", "typescript": ">= 3.8.3 < 7" }, "optionalPeers": ["ts-node", "typescript"] }, "sha512-Yh2k0Kry4u5LM730KUO5HZFnqHdlW9ypoQ8zgO0Tqam1G6urFXjIUTUaLxvWrdsm6gKCoyVS6CPdeOGcV+Msvg=="],
 
