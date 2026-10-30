@@ -132,26 +132,7 @@
             ]
         },
         {
-            "description": "argo-cd と infisical の chart は自動マージしない(壊れると直す道具ごと止まる)。当てるのは render.sh → apply-config → upgrade-k8s。",
-            "matchDatasources": [
-                "helm"
-            ],
-            "matchDepNames": [
-                "argo-cd",
-                "infisical-standalone"
-            ],
-            "groupName": "bootstrap charts",
-            "groupSlug": "bootstrap-charts",
-            "automerge": false,
-            "addLabels": [
-                "needs-review"
-            ]
-        },
-        {
-            "description": "<name>-values.sops.yaml で上書きしているイメージも chart と同じ扱い(machine config に載る)。",
-            "matchDatasources": [
-                "docker"
-            ],
+            "description": "argo-cd と infisical の chart と、その値で上書きしているイメージは自動マージしない(壊れると直す道具ごと止まる)。当てるのは render.sh → apply-config → upgrade-k8s。",
             "matchFileNames": [
                 "bootstrap/argocd-values.sops.yaml",
                 "bootstrap/infisical-values.sops.yaml"
