@@ -1,7 +1,9 @@
 # chart と版。Renovate が上げ、render.sh が読む(README.md「Helm で入れるもの」)。
 # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
 # version: 10.11.6
-# argo-cd の chart の値。秘密の値は argocd-secret-values.sops.yaml。描いて machine config に載せるのは render.sh。
+# argo-cd の chart の値。描いて machine config に載せるのは render.sh。
+# 秘密(通知先の URL と GitHub App の鍵)の値だけ SOPS で暗号化してある(../.sops.yaml)。平文の部分はそのまま直してよい。
+# 秘密を変えるときは `sops edit bootstrap/argocd-values.sops.yaml`。末尾の `sops:` は SOPS のメタデータ(触らない)。
 # CRD は描かせない(1.83 MB で描き出しの 95%)。render.sh が URL で渡す。
 crds:
     install: false
@@ -49,8 +51,10 @@ notifications:
         # helm の空の Secret が外で管理する argocd-notifications-secret と取り合う
         create: false
     # 通知の設定は chart が argocd-notifications-cm を描き直すのでここに書く(別に当てると消える)。
-    # notifiers は secret-values.sops.yaml。送り先は Matrix の hookshot だが、名前は mattermost のまま
-    # (テンプレートと subscriptions が参照している)。
+    # 送り先は Matrix の hookshot だが、名前は mattermost のまま(テンプレートと subscriptions が参照している)。
+    # URL に hookshot のトークンが入るので SOPS。
+    notifiers:
+        service.webhook.mattermost: ENC[AES256_GCM,data:yayWjIQtLo0vROVJzTzGOKQluK9mXVs7/jajbOwsox7EBbS7vwoOIA/byWRzFWkt9HW2kaMZmVRqKcLSdIroxLHT1SIOYbkRYkWUvDgadHznpe/c+W98YMZMTXuO7NIrMSjMv6qu0fY5oq+gwSzCFW9GdJGYN0lovAg1iZSlNlQzfYOrTrChSfweGvpm,iv:iE3w1IZ/RlEwv/2TzHN6RDVut7siJ3Qrn4cLpjgTyxw=,tag:OKmtpWKDg8aN8ejO7hJq/A==,type:str]
     templates:
         template.app-sync-result: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.operationState.phase}} {{if eq .app.status.operationState.phase \"Succeeded\"}}✅{{else if eq .app.status.operationState.phase \"Running\"}}\U0001F680{{else}}❌{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
         template.app-health-status: "webhook:\n  mattermost:\n    method: POST\n    body: |\n      {\"text\": \"[ArgoCD] {{.app.metadata.name}}: {{.app.status.health.status}} {{if eq .app.status.health.status \"Healthy\"}}\U0001F49A{{else if eq .app.status.health.status \"Progressing\"}}\U0001F504{{else if eq .app.status.health.status \"Degraded\"}}\U0001F494{{else if eq .app.status.health.status \"Suspended\"}}⏸️{{else if eq .app.status.health.status \"Missing\"}}❓{{else}}❔{{end}} ({{now | date \"2006-01-02 15:04:05\"}})\"}\n"
@@ -82,7 +86,8 @@ notifications:
 # (ApplicationSet)は argocd-repos.yaml に置く。
 extraObjects:
     # danything/* を読む GitHub App の repo-creds(git から取れないのでここに置く)。名前は UI で作ったときのもの。
-    # 鍵は argocd-secret-values.sops.yaml。リストは値ファイルを重ねると丸ごと置き換わるので、map を toYaml して 1 要素にする。
+    # 鍵は下の githubAppRepoCreds(SOPS)。map を toYaml して 1 要素にしているのは、秘密を別の値ファイルに分けて
+    # 重ねていたころの名残(リストは重ねると丸ごと置き換わる)。
     - '{{ toYaml .Values.githubAppRepoCreds }}'
     # app-of-apps。path は bootstrap/ そのものなので include で 1 ファイルに絞る。広げると bootstrap/ の他のファイル
     # (chart の値や SOPS 済み)まで当てようとし、prune/selfHeal の対象になって、消すと ArgoCD が消える。
@@ -119,4 +124,20 @@ githubAppRepoCreds:
         url: https://github.com/danything
         githubAppID: "4434943"
         githubAppInstallationID: "150067651"
-        # githubAppPrivateKey は secret-values.sops.yaml
+        githubAppPrivateKey: ENC[AES256_GCM,data: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,iv:GsTukiQf06bhZdWcEi9tc0Zc2aeZIP28fPJserbghb8=,tag:f9xMApGZWHuA/NfpeA62jw==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBrVHk0UUFhL1llakZPbUFk
+            UXV3ZlA0SmVTUVM0QzZGdDJTeUZhdUlHK2xRClpsM1ZPT0dvOXVTNUsyeWpodGVx
+            OGh2MmVQRWovb0xhRHEvVFdnbFVzUFEKLS0tIGFMUXozS2ZCVFREY1dzYVBaTUlz
+            OTFhS016SHpLbWhaUCt5aEtadHF5SzgKKv01f2rkIp1+igCJ7s7gmAEwu6zg1Joo
+            kPmcW7H+UUKySYI3pNEsDUbFfsRpcdL/is9Mhpc6BsZuq4wqkIYs0Q==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    lastmodified: "2026-10-30T15:08:34Z"
+    mac: ENC[AES256_GCM,data:IUTmLKy52nMOMJcPFmc823XbNmgCBvDHeoeDPpIYJwliohLnUwtZ+imdxp7/h7OocaP/Q19cxs+S+4q//1h4rV9qA7YZo33mWU8CUoRVfdsJWy0YZ3lhiJEJR4xtbsCXfWHKWeXQYV87TO79+kcYZ8WBbn25yeDhebBh+N9mx0k=,iv:flt6viuRm96UTSBa62rnIDlMAL6kHyLjI5766RoTDXg=,tag:D/A3SFgZ3vztLIwK1i003w==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3

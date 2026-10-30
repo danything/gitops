@@ -42,13 +42,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: bootstrap/versions.yaml から版と schematic を読む
+      - name: bootstrap/talos.sops.yaml の先頭のコメントから版と schematic を読む
         id: v
         run: |
           set -euo pipefail
-          VER=$(yq -r '.talos.version' bootstrap/versions.yaml)
-          SCH=$(yq -r '.talos.schematic' bootstrap/versions.yaml)
-          K8S=$(yq -r '.kubernetes.version' bootstrap/versions.yaml)
+          # render.sh の tver と同じ読み方(`# renovate:` の depName の次の `# version:`)
+          tver() { awk -v dep="depName=$1" 'f {if (sub(/^# version: */, "")) print; exit} /^# renovate: / && $NF == dep {f=1}' bootstrap/talos.sops.yaml; }
+          VER=$(tver siderolabs/talos)
+          SCH=$(sed -n '/^# schematic: /{s/^# schematic: *//p;q;}' bootstrap/talos.sops.yaml)
+          K8S=$(tver kubernetes/kubernetes)
+          [ -n "$VER" ] && [ -n "$SCH" ] && [ -n "$K8S" ] || { echo "::error::talos.sops.yaml から版を読めなかった"; exit 1; }
           echo "  talos=$VER schematic=$SCH k8s=$K8S"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "schematic=$SCH" >> "$GITHUB_OUTPUT"
@@ -102,27 +105,35 @@ jobs:
           # (ダミーは fj.doany.io に置いたまま。ghcr.io に置くと kubelet の取得が 403 で落ちる)
           yq 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
             bootstrap/talos.sops.yaml > /tmp/controlplane.yaml
-          # *-values.yaml は本物、*-secret-values.sops.yaml だけダミー(通知先もそこにしか無い)。
-          # extraObjects は app-of-apps と repo-creds。CI で本物を同期させない
-          echo 'extraObjects: []' > /tmp/argocd-secret-values.yaml
-          # SMTP の env を抜く(リストなので丸ごと置き換える)
-          yq '{"infisical": {"extraEnv": [.infisical.extraEnv[] | select(.name | test("^SMTP_") | not)]},
-            "postgresql": {"auth": {"password": "ci-dummy"}}, "redis": {"auth": {"password": "ci-dummy"}}}' \
-            bootstrap/infisical-values.yaml > /tmp/infisical-secret-values.yaml
-          # ENCRYPTION_KEY は 16 バイトの hex でないと infisical が起動しない
-          yq -I4 "del(.sops) | del(.stringData.CLIENT_ID_GITHUB_LOGIN) | del(.stringData.CLIENT_SECRET_GITHUB_LOGIN)
-            | .stringData.ENCRYPTION_KEY = \"$(openssl rand -hex 16)\"
-            | .stringData.AUTH_SECRET = \"$(openssl rand -base64 32)\"
-            | .stringData.TELEMETRY_ENABLED = \"false\"" \
-            bootstrap/infisical-secrets.sops.yaml > /tmp/infisical-secret.yaml
-          yq 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
-            bootstrap/cert-manager-cloudflare-secret.sops.yaml > /tmp/cloudflare-secret.yaml
-          for f in /tmp/controlplane.yaml /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
+          # <name>-values.sops.yaml も秘密の値だけ暗号化してある。平文の部分は本物を使う。
+          # argocd: 秘密(通知先と GitHub App の鍵)は抜く。extraObjects は app-of-apps と repo-creds。CI で本物を同期させない
+          yq -I4 'del(.sops) | del(.notifications.notifiers) | del(.githubAppRepoCreds.stringData.githubAppPrivateKey)
+            | .extraObjects = []' \
+            bootstrap/argocd-values.sops.yaml > /tmp/argocd-values.yaml
+          # infisical: 1 つめ(chart の値)はパスワードをダミーにして SMTP の env を抜く。2 つめ(Secret)は作り直す
+          # (ENCRYPTION_KEY は 16 バイトの hex でないと infisical が起動しない)。render.sh は `---` で分ける
+          {
+            yq -I4 'select(document_index == 0) | del(.sops)
+              | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"
+              | .infisical.extraEnv |= map(select(.name | test("^SMTP_") | not))' \
+              bootstrap/infisical-values.sops.yaml
+            echo ---
+            yq -I4 "select(document_index == 1) | del(.sops)
+              | del(.stringData.CLIENT_ID_GITHUB_LOGIN) | del(.stringData.CLIENT_SECRET_GITHUB_LOGIN)
+              | .stringData.ENCRYPTION_KEY = \"$(openssl rand -hex 16)\"
+              | .stringData.AUTH_SECRET = \"$(openssl rand -base64 32)\"
+              | .stringData.TELEMETRY_ENABLED = \"false\"" \
+              bootstrap/infisical-values.sops.yaml
+          } > /tmp/infisical-values.yaml
+          # cert-manager: 2 つめ(DNS-01 の Secret)のトークンをダミーに
+          yq -I4 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
+            bootstrap/cert-manager-values.sops.yaml > /tmp/cert-manager-values.yaml
+          for f in /tmp/controlplane.yaml /tmp/argocd-values.yaml /tmp/infisical-values.yaml /tmp/cert-manager-values.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done
           SECRETS=/tmp/secrets.yaml CONTROLPLANE=/tmp/controlplane.yaml \
-            ARGOCD_SECRET_VALUES=/tmp/argocd-secret-values.yaml INFISICAL_SECRET_VALUES=/tmp/infisical-secret-values.yaml \
-            INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
+            ARGOCD_VALUES=/tmp/argocd-values.yaml INFISICAL_VALUES=/tmp/infisical-values.yaml \
+            CERT_MANAGER_VALUES=/tmp/cert-manager-values.yaml \
             ./bootstrap/render.sh /tmp/out
           talosctl config endpoint 127.0.0.1
           talosctl config node "$NODE"
@@ -185,7 +196,7 @@ jobs:
           until kubectl get node main >/dev/null 2>&1; do sleep 5; done
           kubectl wait --for=condition=Ready node/main --timeout=10m
           V=$(kubectl get node main -o jsonpath='{.status.nodeInfo.kubeletVersion}')
-          [ "$V" = "${{ steps.v.outputs.k8s }}" ] || { echo "::error::kubelet が $V(versions.yaml は ${{ steps.v.outputs.k8s }})"; exit 1; }
+          [ "$V" = "${{ steps.v.outputs.k8s }}" ] || { echo "::error::kubelet が $V(talos.sops.yaml は ${{ steps.v.outputs.k8s }})"; exit 1; }
           echo "  node/main Ready, $V"
           ro kube-system ds/cilium
           ro kube-system ds/cilium-envoy

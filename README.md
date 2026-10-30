@@ -18,7 +18,7 @@
 | | |
 | --- | --- |
 | `apps/` | Argo CD が再帰的に同期するアプリのマニフェスト。**`_` で始まるディレクトリは同期しない** (動かしていないものの置き場。下の「動かしていないもの」) |
-| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層。**ここにあるものは全部 machine config に載る**([render.sh](bootstrap/render.sh) が `helm template` して inlineManifest にする)。ノードの Talos の設定(**v1.14 以降の形**。手で書くのは [talos.sops.yaml](bootstrap/talos.sops.yaml) の 1 本。PR ごとに [talos-boot](.github/workflows/talos-boot.yml) が生成物を検証して VM で起動する)、Helm で入れるもの(Cilium・Argo CD 本体・Infisical・cert-manager。部品ごとに `<name>-values.yaml` 1 本)、RBAC、SOPS 済みのもの |
+| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層。**ここにあるものは全部 machine config に載る**([render.sh](bootstrap/render.sh) が `helm template` して inlineManifest にする)。ノードの Talos の設定(**v1.14 以降の形**。手で書くのは [talos.sops.yaml](bootstrap/talos.sops.yaml) の 1 本。PR ごとに [talos-boot](.github/workflows/talos-boot.yml) が生成物を検証して VM で起動する)、Helm で入れるもの(Cilium・Argo CD 本体・Infisical・cert-manager。部品ごとに `<name>-values.yaml` 1 本。秘密を含むものは `<name>-values.sops.yaml` で、秘密の値だけ SOPS)、RBAC、SOPS 済みのもの |
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
 | [`mado/`](mado/) | **`main` が落ちたときの入口**。JCOM 側の PC(10.10.0.2)で [mado](https://github.com/danything/mado)(OIDC でログインしてブラウザから RDP する exe)を動かす(`md.doany.io`。クラスタの外) |
 | [`recovery/`](recovery/) | **まっさらから建て直す入口**(手順・PV を戻す道具・暗号化した鍵)。git と restic だけで戻す |
@@ -43,7 +43,7 @@ Argo CD が git を読む GitHub App 鍵、cert-manager の Cloudflare トーク
 ```shell
 # 鍵はリポジトリの .home/(git に入らない)に置く。コマンドは tools/t.ps1 で動かす(tools/README.md)
 tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
-tools/t.ps1 sops -d bootstrap/infisical-secrets.sops.yaml      # 中を見る(画面に出すと平文になるので注意)
+tools/t.ps1 sops -d bootstrap/infisical-values.sops.yaml      # 中を見る(画面に出すと平文になるので注意)
 ```
 
 ## ホスト名の付け方

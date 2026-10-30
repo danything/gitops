@@ -10,9 +10,9 @@
         ]
     },
     "helm-values": {
-        "description": "bootstrap/ の chart の値は <name>-values.yaml という名前なので、既定のパターン(values.yaml)に足す。",
+        "description": "bootstrap/ の chart の値は <name>-values.yaml(秘密を含むものは <name>-values.sops.yaml)という名前なので、既定のパターン(values.yaml)に足す。",
         "managerFilePatterns": [
-            "/^bootstrap/[^/]+-values\\.yaml$/"
+            "/^bootstrap/[^/]+-values(\\.sops)?\\.yaml$/"
         ]
     },
     "customManagers": [
@@ -27,11 +27,11 @@
             ]
         },
         {
-            "description": "bootstrap/ の `# renovate:` の次の行の version。versions.yaml は `version: 版`、chart の <name>-values.yaml は値を邪魔しないようコメントの `# version: 版`(どちらも render.sh が読む)。",
+            "description": "bootstrap/ の `# renovate:` の次の行のコメントの `# version: 版`(値を邪魔しないようコメントにしている。render.sh が読む)。Talos・Kubernetes・Gateway API は talos.sops.yaml の先頭、chart は <name>-values(.sops).yaml の先頭。SOPS のファイルは mac_only_encrypted なので平文の行を書き換えても復号できる。",
             "customType": "regex",
             "managerFilePatterns": [
-                "/^bootstrap/versions\\.yaml$/",
-                "/^bootstrap/[^/]+-values\\.yaml$/"
+                "/^bootstrap/talos\\.sops\\.yaml$/",
+                "/^bootstrap/[^/]+-values(\\.sops)?\\.yaml$/"
             ],
             "matchStrings": [
                 "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*(?:#\\s*)?version:\\s*(?<currentValue>\\S+)"
@@ -148,13 +148,13 @@
             ]
         },
         {
-            "description": "<name>-values.yaml で上書きしているイメージも chart と同じ扱い(machine config に載る)。",
+            "description": "<name>-values.sops.yaml で上書きしているイメージも chart と同じ扱い(machine config に載る)。",
             "matchDatasources": [
                 "docker"
             ],
             "matchFileNames": [
-                "bootstrap/argocd-values.yaml",
-                "bootstrap/infisical-values.yaml"
+                "bootstrap/argocd-values.sops.yaml",
+                "bootstrap/infisical-values.sops.yaml"
             ],
             "groupName": "bootstrap charts",
             "groupSlug": "bootstrap-charts",

@@ -31,7 +31,7 @@ SMTP AUTH をやめて **Graph の `sendMail`** で送る。Infisical のよう�
 | パスワード | Infisical の `/infisical/infisical-smtp` の `SMTP_PASSWORD`(Infisical と todoroku が使う)、`/yosegaki/yosegaki-secrets` の `smtp-password` |
 | 差出人 | `info@doany.io`(ほかのアドレスは Exchange が拒む) |
 
-使っているのは Infisical(`bootstrap/infisical-values.yaml`)、yosegaki(blog のリポジトリ)、todoroku(Forgejo の doa/todoroku)。
+使っているのは Infisical(`bootstrap/infisical-values.sops.yaml`)、yosegaki(blog のリポジトリ)、todoroku(Forgejo の doa/todoroku)。
 **送る側を足すときは network-policy.yaml にその namespace を足す。**
 
 ## Entra のアプリと Exchange の絞り込み(1 回だけ。済み)

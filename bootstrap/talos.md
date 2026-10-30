@@ -1,15 +1,15 @@
 # talos
 
 ノード `main`(HP ProLiant DL360 Gen9)の machine config。**v1.14 以降の型付きドキュメントの形で書いてある**
-(版は [versions.yaml](versions.yaml)。1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
+(版は [talos.sops.yaml](talos.sops.yaml) の先頭のコメント。1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
 **入れ方(まっさらから建てる手順)は [../recovery/README.md](../recovery/README.md)。** ここは組み立てと当て直し。
 
-**版と schematic の出どころは [versions.yaml](versions.yaml)。** Renovate がそこを見て、
+**版と schematic の出どころは [talos.sops.yaml](talos.sops.yaml) の先頭のコメント(`# version:` と `# schematic:`)。** Renovate がそこを見て、
 新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」)。
-コマンドに埋めてある版と schematic も、変えるときは versions.yaml と揃えること。talhelper は使わない。
+コマンドに埋めてある版と schematic も、変えるときはそこと揃えること。talhelper は使わない。
 
 **組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分は [talos.sops.yaml](talos.sops.yaml) の 1 本だけで、
-他から描いてくる部分(Cilium・cert-manager・argocd・infisical は `<name>-values.yaml` から、
+他から描いてくる部分(Cilium・cert-manager・argocd・infisical は `<name>-values(.sops).yaml` から、
 local-path-provisioner は [local-path.yaml](local-path.yaml) から)と 1 か所で組む。**値をどこにも二度書かない**のが目的。
 CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を使う
 (別の作り方をすると「CI は通るが実機では通らない」が起きる)。
@@ -48,7 +48,7 @@ talosctl gen secrets -o bootstrap/talos-secrets.sops.yaml && sops -e -i bootstra
 **fj.doany.io はこれだけでは取れない。** 公開 DNS の A(WAN 側)にはノードから届かないので、
 ノードの名前解決で fj.doany.io をノード自身(10.0.0.2 の Gateway)に向ける(talos.sops.yaml の `StaticHostConfig`)。
 
-CI には age の鍵を渡さないので、talos.sops.yaml の `ENC[…]` を `ci-dummy` に置き換えて経路だけ通している(`cert-manager-cloudflare-secret.sops.yaml` と同じやり方)。
+CI には age の鍵を渡さないので、talos.sops.yaml の `ENC[…]` を `ci-dummy` に置き換えて経路だけ通している(`<name>-values.sops.yaml` も同じやり方)。
 
 **talos.sops.yaml は PR ごとに CI が検証する。** 使い捨ての秘密で `render.sh` を通す。`render.sh` は `talosctl validate --mode metal` に加えて、
 生成物に想定の設定(`ks.doany.io`・OIDC の issuer・bond の `balance-alb` など)が実際に入っているかまで見る
@@ -66,9 +66,9 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 
 | 変えたもの | やること | 停止 |
 | --- | --- | --- |
-| `versions.yaml` の `talos:`(または schematic) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版> --k8s-endpoint https://10.10.0.4:6443` | **再起動** |
-| `versions.yaml` の `kubernetes:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
-| `talos.sops.yaml` と、`bootstrap/` の残りの全部(`*-values.yaml`・`*-secret-values.sops.yaml`・`apiserver-rbac.yaml`・`local-path.yaml`・SOPS の Secret 2 つ) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
+| `talos.sops.yaml` の先頭の Talos の `# version:`(または `# schematic:`) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版> --k8s-endpoint https://10.10.0.4:6443` | **再起動** |
+| `talos.sops.yaml` の先頭の Kubernetes の `# version:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
+| `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values.yaml`・`*-values.sops.yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`local-path.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
 
 ### inlineManifests を直したとき
 
@@ -80,13 +80,13 @@ cert-manager と、SOPS 済みの Secret 2 つは machine config の中にいる
 ./bootstrap/render.sh bootstrap/clusterconfig
 talosctl apply-config --mode=no-reboot -f bootstrap/clusterconfig/controlplane.yaml   # 再起動が要るなら当てずに止まる
 talosctl get manifests -o yaml | grep -c '<新しくなるはずの版(例: cilium:v1.20.4)>'      # 反映を待つ(下)
-talosctl upgrade-k8s --to <versions.yaml の kubernetes の版> --endpoint https://10.10.0.4:6443    # ← これが inlineManifests を reconcile する
+talosctl upgrade-k8s --to <talos.sops.yaml の先頭の kubernetes の版> --endpoint https://10.10.0.4:6443    # ← これが inlineManifests を reconcile する
 ```
 
 `render.sh` は出力先を丸ごと消すので、`bootstrap/clusterconfig/` に置いたものは消える。
 
 - **`upgrade-k8s` には必ず `--to` を付ける。** 省くと talosctl の既定の版に上がる(Talos の alpha の talosctl なら Kubernetes も alpha)。
-  版を変えないなら `versions.yaml` の今の版を渡す
+  版を変えないなら `talos.sops.yaml` の先頭の今の版を渡す
 - **`apply-config` の直後に流さない。** machine config から `manifests` の資源が作り直されるまで少しかかり、その前に流すと**古いマニフェストで
   「変更なし」のまま終わる**(2026-10-23 に Cilium 1.20.4 で踏んだ)。`talosctl get manifests` に新しい版が出てから流す
 
@@ -100,7 +100,7 @@ talosctl upgrade-k8s --to <versions.yaml の kubernetes の版> --endpoint https
   その後ろの Deployment まで当たらないことがある。
   当て終わったら `kubectl -n argocd get deploy -o wide` でイメージの版を見る
 - **何も変えていなければ `apply-config --dry-run` の差分は出ない。** 描くたびに変わる値は潰してある
-  (Hubble の証明書はクラスタの中で作る、infisical の `postgres-password` は secret-values.sops.yaml に固定、`updatedAt` は `render.sh` が落とす)。
+  (Hubble の証明書はクラスタの中で作る、infisical の `postgres-password` は infisical-values.sops.yaml に固定、`updatedAt` は `render.sh` が落とす)。
   差分が出たら、それは本当に変わったもの
 
 ### Talos 本体

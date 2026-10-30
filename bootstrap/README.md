@@ -17,27 +17,28 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 | --- | --- |
 | [render.sh](render.sh) | machine config を組む。下のファイルを全部読む |
 | [talos.md](talos.md) | Talos の組み立てと当て直し方 |
-| [talos.sops.yaml](talos.sops.yaml) | 手で書く machine config(`password` の値だけ SOPS) |
+| [talos.sops.yaml](talos.sops.yaml) | 手で書く machine config(`password` の値だけ SOPS)。先頭のコメントに Talos・Kubernetes・Gateway API の版と schematic |
 | [talos-secrets.sops.yaml](talos-secrets.sops.yaml) | クラスタの CA 一式(丸ごと SOPS) |
-| [versions.yaml](versions.yaml) | Talos・Kubernetes・Gateway API の版と schematic |
-| `<name>-values.yaml` | chart の値と版(cilium・cert-manager・argocd・infisical。下の「Helm で入れるもの」) |
-| `<name>-secret-values.sops.yaml` | chart の値のうち秘密だけ(argocd・infisical。丸ごと SOPS) |
-| [infisical-secrets.sops.yaml](infisical-secrets.sops.yaml) | infisical の起動に要る Secret(`ENCRYPTION_KEY` など) |
-| [cert-manager-cloudflare-secret.sops.yaml](cert-manager-cloudflare-secret.sops.yaml) | DNS-01 の Cloudflare のトークン |
+| [cilium-values.yaml](cilium-values.yaml) | chart の値と版(下の「Helm で入れるもの」) |
+| [argocd-values.sops.yaml](argocd-values.sops.yaml) | chart の値と版。通知先の URL と GitHub App の鍵だけ SOPS |
+| [infisical-values.sops.yaml](infisical-values.sops.yaml) | chart の値と版(DB と Redis のパスワードだけ SOPS)。2 つめのドキュメントが infisical の起動に要る Secret(`ENCRYPTION_KEY` など) |
+| [cert-manager-values.sops.yaml](cert-manager-values.sops.yaml) | chart の値と版。2 つめのドキュメントが DNS-01 の Cloudflare のトークンの Secret(トークンだけ SOPS) |
 | [apiserver-rbac.yaml](apiserver-rbac.yaml) / [apiserver-ca.crt](apiserver-ca.crt) | API サーバの入口の RBAC と CA(下の「API サーバの入口」) |
 | [local-path.yaml](local-path.yaml) | local-path-provisioner |
 | [argocd-repos.yaml](argocd-repos.yaml) | ArgoCD が当てる唯一のファイル(下の「ArgoCD が当てるもの」) |
 
 **SOPS(age)で暗号化したファイルは名前を `*.sops.yaml` で終える**(`.sops.yaml` の規則もその名前にしか一致しないので、
 別の名前では暗号化できない)。復号鍵はクラスタにも CI にも渡さない。
-鍵は [`recovery/sops-age.key.age`](../recovery/)。**中を編集するときも `sops edit` を通すこと。** MAC は暗号化して
-いない値も含めて計算されるので、**平文で 1 行足すだけでも `sops -d` が MAC 不一致で落ちる**
-(例外は `talos.sops.yaml` で、`mac_only_encrypted` なので平文の部分は直接直せる)。
+鍵は [`recovery/sops-age.key.age`](../recovery/)。
+`talos-secrets.sops.yaml` 以外は**秘密のキーの値だけ**を暗号化し(`.sops.yaml` の `encrypted_regex`)、`mac_only_encrypted` で
+MAC も暗号化した値だけを見る。なので**平文の部分(コメントの `# version:` も)は sops を通さず直接直してよい**
+(Renovate もそうする)。秘密の値を足す・変えるときは `sops edit`。**秘密のキーを新しく足すときは `.sops.yaml` の
+`encrypted_regex` にも足す**(当たらないキーは平文のまま書かれる)。`talos-secrets.sops.yaml` は丸ごとなので `sops edit` だけ。
 
 ## ArgoCD が当てるもの
 
 **ここで ArgoCD が当てるのは [argocd-repos.yaml](argocd-repos.yaml) だけ。** machine config に載っている
-`apps` の Application(`argocd-values.yaml` の `extraObjects`)が拾い、そこから ApplicationSet が `apps/` を当てる。
+`apps` の Application(`argocd-values.sops.yaml` の `extraObjects`)が拾い、そこから ApplicationSet が `apps/` を当てる。
 場所(`path: bootstrap` と `include: argocd-repos.yaml`)が machine config に焼いてあるので、名前を変えると machine config を当て直すことになる。
 そのときは **main にマージしてから当てる**。マージから当てるまでの間、`apps` は古い path が無くて ComparisonError で止まるだけ
 (何も消さない)。逆に先に当てると、新しい include が main の何にも当たらず空の描き出しになる(自動同期は空にする
@@ -53,7 +54,8 @@ ArgoCD に任せる。
 ## Helm で入れるもの
 
 どれも `render.sh` が `helm template` して machine config に載せる。どれも同じ形で、
-**`<name>-values.yaml` の 1 本**に chart・repo・版と値をまとめる。先頭の 2 行が chart と版:
+**`<name>-values.yaml` の 1 本**(秘密を含むものは `<name>-values.sops.yaml`)に chart・repo・版と値をまとめる。
+先頭の 2 行が chart と版:
 
 ```yaml
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io
@@ -62,7 +64,11 @@ ArgoCD に任せる。
 
 `# renovate:` の行から `render.sh` が chart(`depName`)と repo(`registryUrl`)を、次の `# version:` の行から版を読む。
 版をコメントにしているのは、値として書くと chart に渡ってしまうから。Renovate も同じ 2 行を見て上げる(`renovate.json` の customManagers)。
-argocd と infisical は、値のうち秘密だけを `<name>-secret-values.sops.yaml`(SOPS、丸ごと暗号化)に分けて上に重ねる。
+Talos・Kubernetes・Gateway API の版も同じ形で、[talos.sops.yaml](talos.sops.yaml) の先頭のコメントにある。
+秘密を含む argocd・infisical・cert-manager は `<name>-values.sops.yaml` で、秘密の値だけ暗号化してある(上の SOPS の段落)。
+`render.sh` が復号してから helm に渡す。**2 つめのドキュメントがあれば、それは chart とは別に machine config に載せる Secret**
+(infisical の `infisical-secrets`、cert-manager の Cloudflare のトークン。ArgoCD は復号できないのでここに置く)で、
+`render.sh` が `---` で分けて別の inlineManifest にする。
 argocd・infisical の版は自動マージしない(`renovate.json` の `bootstrap charts`)。
 Namespace は chart が描かないので、`render.sh` が kube-system 以外のものに付ける。
 
@@ -113,7 +119,7 @@ kubectl -n kube-system get gateway doany
 認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
 
 - `infisical-*` … Infisical 本体(chart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
-  `infisical-secrets.sops.yaml` の `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
+  `infisical-values.sops.yaml` の 2 つめのドキュメントの `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
   (クラスタで一番失ってはいけない値)。Postgres の PVC は既定の `local-path` で、`pg_dump` を k8up が日次で取っている。
 - **operator と push-bridge はここには無い**(`apps/infisical/operator.yaml`、`apps/infisical/push-bridge.yaml`)。
   ArgoCD 自身は operator に依存しないので、bootstrap に置く理由がない。
