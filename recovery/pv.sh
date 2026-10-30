@@ -171,6 +171,7 @@ plan() {
 # PVC の大きさ(requests)をバイトに。使っている単位(Ki・Mi・Gi・Ti と単位なし)だけ読む
 bytes() { # $1=量
 	case $1 in
+		*.*) echo "ERROR: $NS: PVC の大きさ $1 は小数なので読めない(整数の Gi などに)" >&2; return 1 ;;
 		*Ki) echo $((${1%Ki} * 1024)) ;;
 		*Mi) echo $((${1%Mi} * 1048576)) ;;
 		*Gi) echo $((${1%Gi} * 1073741824)) ;;
@@ -187,6 +188,7 @@ fit() {
 	_f=$(mktemp)
 	plan > "$_f"
 	bad=0
+	# plan の行は「順番 操作 引数…」で、folder の引数は「PVC スナップショット」(plan の folder の行と揃える)
 	while read -r _ op pvc id _; do
 		[ "$op" = folder ] || continue
 		need=$(restic stats --mode restore-size --json "$id" | sed -n 's/.*"total_size":\([0-9]*\).*/\1/p')
@@ -316,7 +318,9 @@ case $OP in
 		sh "$0" - argo-resume ;;
 	backup-all) # 入れ直す前の最後のバックアップ。Schedule に backup のある namespace ごとに Backup を作り、全部終わるまで待つ
 		t=final-$(date -u +%Y%m%d%H%M)
-		for ns in $($K get schedule -A -o jsonpath='{range .items[?(@.spec.backup)]}{.metadata.namespace}{"\n"}{end}'); do
+		nss=$($K get schedule -A -o jsonpath='{range .items[?(@.spec.backup)]}{.metadata.namespace}{"\n"}{end}')
+		[ -n "$nss" ] || { echo "backup のある Schedule が 1 つも無い(kubectl get schedule -A で見る)" >&2; exit 1; }
+		for ns in $nss; do
 			# Schedule と同じ形(tags は prune の歯止め、root は 0600 のファイルを読むため。apps/k8up/schedules.yaml)
 			$K create -f - >/dev/null <<B
 apiVersion: k8up.io/v1

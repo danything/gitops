@@ -49,6 +49,8 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [nodes]
+    # ノードは main 1 台(talos.sops.yaml の hostname)。台を増やしたら足す
+    resourceNames: [main]
     verbs: [get, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -95,7 +97,8 @@ spec:
               # 起動時は Talos も有効にする。先に動いたときのため
               vgchange -ay "$VG"
               if ! lvs "$VG/$POOL" >/dev/null 2>&1; then
-                lvcreate --type thin-pool -l 90%VG --poolmetadatasize 1g --wipesignatures y --yes -n "$POOL" "$VG"
+                # --wipesignatures は thin プールには付けられない(Talos が新しいパーティションの先頭を消してある)
+                lvcreate --type thin-pool -l 90%VG --poolmetadatasize 1g --yes -n "$POOL" "$VG"
               fi
               # OpenEBS が作った小さいプール(最後の PV を消すとプールごと消し、次の PVC の大きさで作り直す)を広げる
               n() { tr -d ' '; }
