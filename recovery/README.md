@@ -109,7 +109,7 @@ kubectl get pods -A        # cilium・coredns・local-path・argocd・cert-manag
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
 
-`talosctl kubeconfig` は使わない(取り消せない 1 年の証明書が呼ぶたびに出る)。t.ps1 が `secrets.yaml` の CA でその場で作る。
+`talosctl kubeconfig` は使わない(取り消せない 1 年の証明書が呼ぶたびに出る)。t.ps1 が `talos-secrets.sops.yaml` の CA でその場で作る。
 
 ## 5. Gateway・auth などが入るのを見る(ArgoCD)
 
@@ -155,7 +155,7 @@ sh recovery/infisical.sh ca apply    # 差し替えて、operator を蹴り直�
 kubectl get infisicalsecret -A       # 全部 Ready になる。k8up/k8up-global もここで入り、k8up が動き出す
 ```
 
-`secrets.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
+`talos-secrets.sops.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
 
 ## 8. PV データを戻す(k8up)
 
@@ -238,6 +238,6 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
 | 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
-| bootstrap apply が TLS で落ちる | `secrets.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `secrets.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
+| bootstrap apply が TLS で落ちる | `talos-secrets.sops.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `talos-secrets.sops.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
 | inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../bootstrap/talos.md](../bootstrap/talos.md)「上げ方 / 当て直し方」) |
