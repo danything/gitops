@@ -34,7 +34,7 @@ new netbird.NameserverGroup(
 new netbird.DnsSettings("settings", { disabledManagementGroups: [] }, { provider });
 
 // *.doany.io を家の Gateway に向ける (外向きの IPv4 は家のルーターで折り返せず届かない)。
-// nb.doany.io だけは外向きのまま (内部に向けると、トンネルが切れたときに戻ってこられない)
+// nb.doany.io は外向きのまま (内部に向けると、トンネルが切れたときに戻ってこられない)。ほかの例外は下の md・autodiscover
 const zone = new netbird.DnsZone(
   "doany-io",
   { name: "doany.io", domain: "doany.io", enabled: true, enableSearchDomain: false, distributionGroups: [ALL] },

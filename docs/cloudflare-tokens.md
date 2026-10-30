@@ -25,7 +25,7 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 - **external-dns / cloudflare-ddns:** Infisical の値を差し替える。operator が Secret を書き換え、
   push-bridge が同期させる。Deployment の `secrets.infisical.com/auto-reload` 注釈で入れ替わる。
 - **todoroku-pulumi (state):** Forgejo の 2 つの secrets を差し替える(S3 の鍵の導き方は下の doany-restic と同じ)。
-- **cert-manager:** `tools/t.ps1 sops bootstrap/cert-manager-values.sops.yaml` で書き換えてコミットする。
+- **cert-manager:** `tools/t.ps1 sops edit bootstrap/cert-manager-values.sops.yaml` で書き換えてコミットする。
 - **doany-restic(R2):** S3 の鍵はトークンから導く。アクセスキー ID はトークンの ID、シークレットはトークンの値の
   SHA-256(16 進)。**2 か所を両方変える**。Infisical が古いとバックアップが落ち(k8up の通知で気づく)、`env.age` が古いと建て直しで Infisical を戻せない(こちらは誰も気づかない)。
   1. Infisical `/k8up/k8up-global` の `accessKeyId` / `secretAccessKey`

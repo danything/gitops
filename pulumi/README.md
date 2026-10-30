@@ -116,7 +116,7 @@ apply 用は「自分が所有者のアプリ登録」しか書けない。所�
   し、作り直した bun.lock を同じ枝にコミットさせる。手元・CI と同じ `pulumi install` で作るので、CI の lock の確認とずれない。
   実行の許可は [apps/renovate/renovate.yaml](../apps/renovate/renovate.yaml) の `RENOVATE_ALLOWED_COMMANDS`
 - `*.doany.io` を家の 10.0.0.2 に向けているのは、exit ノード越しに家の外向きの IPv4 を引くと折り返しで届かないため。
-  `nb.doany.io` だけは外向きのアドレスで例外にしている。アドレスは書かず、2 段の名前 `nb.origin.doany.io` (ゾーンのワイルドカードに当たらず Cloudflare で引かれ、cloudflare-ddns が追従させる) に CNAME で向ける
+  家の Gateway に無い名前は例外にしている。`nb.doany.io` はアドレスを書かず、2 段の名前 `nb.origin.doany.io` (ゾーンのワイルドカードに当たらず Cloudflare で引かれ、cloudflare-ddns が追従させる) に CNAME で向ける。`md.doany.io` (mado) と `autodiscover` は外向きと同じ先を書く
 
 | 鍵 | どこ | NetBird のサービスユーザー |
 | --- | --- | --- |

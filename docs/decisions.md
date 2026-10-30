@@ -50,7 +50,7 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 | R2 の鍵 + restic のパスフレーズ | `recovery/env.age`(公開 repo) | **パスフレーズで直接**(`age -d`) |
 | SOPS の age 秘密鍵 | `recovery/sops-age.key.age`(公開 repo) | **パスフレーズで直接**(`age -d`) |
 | Talos の `secrets.yaml` | `bootstrap/talos-secrets.sops.yaml`(公開 repo・SOPS 済み) | 上の age 鍵で(`sops -d`) |
-| `bootstrap/` の Secret 4 つ | 公開 repo・SOPS 済み | 同上 |
+| `bootstrap/` の残りの `*.sops.yaml`(chart の値の秘密、fj.doany.io の資格情報) | 公開 repo・SOPS 済み | 同上 |
 
 **`recovery/` の 2 つだけ `age -p` なのは、それが「まだ何も無い状態で最初に開けるもの」だから。**
 それ以外は age 鍵さえ手に入れば開くので、`bootstrap/` と同じ SOPS に揃えてある。

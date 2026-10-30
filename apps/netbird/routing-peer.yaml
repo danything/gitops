@@ -106,7 +106,7 @@ spec:
             - name: data
               mountPath: /var/lib/netbird
             # カーネルの wireguard が使えないときのユーザ空間フォールバック用。
-            # Talos でもカーネル組み込みは確認済み(bootstrap/talos.md)なので通常は使わない
+            # Talos でもカーネル組み込みは確認済みなので通常は使わない
             - name: tun
               mountPath: /dev/net/tun
       volumes:

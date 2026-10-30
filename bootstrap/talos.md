@@ -1,12 +1,11 @@
 # talos
 
 ノード `main`(HP ProLiant DL360 Gen9)の machine config。**v1.14 以降の型付きドキュメントの形で書いてある**
-(版は [talos.sops.yaml](talos.sops.yaml) の先頭のコメント。1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
+(1.13 以前とは別物。作法は [../docs/talos.md](../docs/talos.md))。
 **入れ方(まっさらから建てる手順)は [../recovery/README.md](../recovery/README.md)。** ここは組み立てと当て直し。
 
 **版と schematic の出どころは [talos.sops.yaml](talos.sops.yaml) の先頭のコメント(`# version:` と `# schematic:`)。** Renovate がそこを見て、
-新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」)。
-コマンドに埋めてある版と schematic も、変えるときはそこと揃えること。talhelper は使わない。
+新しい Talos が出たら PR を作る。**適用は自動化しない**(下の「適用は CI にやらせない」)。talhelper は使わない。
 
 **組み立ては [render.sh](render.sh) が全部やる。** 手で書く部分は [talos.sops.yaml](talos.sops.yaml) の 1 本だけで、
 他から描いてくる部分(Cilium・cert-manager・argocd・infisical は `<name>-values(.sops).yaml` から、
@@ -18,17 +17,13 @@ CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を�
 ./bootstrap/render.sh bootstrap/clusterconfig     # 出力先は丸ごと消して作り直す(.gitignore 済み)
 ```
 
-**描いた machine config(`clusterconfig/controlplane.yaml`)を丸ごとコミットしないのは**、生成物の 9 割が chart を描いたもの(約 300 KB の 1 行文字列)で、
-読めず、chart や Kubernetes の版を上げるたびに描き直しのコミットが要るから。
+描いた machine config はコミットしない(理由は [../docs/decisions.md](../docs/decisions.md)「machine config と Cilium の chart をどう連動させるか」)。
 **inlineManifest をファイルで指す仕組みは Talos に無い**(machine config はノードが読むので手元のパスは書けない。
 外を指せるのは URL の `KubeExternalManifestConfig` だけで、CRD はそれで渡している)。ファイルを包むのは render.sh の `inline`。
 
-**秘密は 2 か所、どちらも SOPS でコミット済み**(規則は [`../.sops.yaml`](../.sops.yaml)。**平文は git に入れない**)。
-
-- [talos-secrets.sops.yaml](talos-secrets.sops.yaml): クラスタの CA 一式(`talosctl gen secrets` の形)。丸ごと暗号化
-- [talos.sops.yaml](talos.sops.yaml): `password` の値(下の fj.doany.io の資格情報)**だけ**をその場で暗号化。
-  ほかは平文のまま読めて、`sops` を通さず直接直せる(`mac_only_encrypted`)。パスワードを変えるときだけ `sops edit bootstrap/talos.sops.yaml`。
-  SOPS は**ドキュメントごとに `sops:` のメタデータを付け、インデントを 4 にする**(触らない)。render.sh は `sops -d` してから渡す
+**Talos の秘密は 2 か所、どちらも SOPS でコミット済み**(暗号化の決まりは [README.md](README.md) の「ファイル」の下)。
+[talos-secrets.sops.yaml](talos-secrets.sops.yaml) はクラスタの CA 一式(`talosctl gen secrets` の形)で丸ごと、
+[talos.sops.yaml](talos.sops.yaml) は `password` の値(下の fj.doany.io の資格情報)**だけ**。
 
 **`talos-secrets.sops.yaml` を作り直すと別のクラスタになる**(`apiserver-ca.crt` と Infisical の Kubernetes auth の CA も
 替えることになる)ので触らない。まっさらから組むときだけ:
@@ -67,8 +62,8 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 | 変えたもの | やること | 停止 |
 | --- | --- | --- |
 | `talos.sops.yaml` の先頭の Talos の `# version:`(または `# schematic:`) | `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版> --k8s-endpoint https://10.10.0.4:6443` | **再起動** |
-| `talos.sops.yaml` の先頭の Kubernetes の `# version:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <版>` | 無し |
-| `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values.yaml`・`*-values.sops.yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`local-path.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s` | 場合による |
+| `talos.sops.yaml` の先頭の Kubernetes の `# version:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <新しい版>` | 無し |
+| `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values(.sops).yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`local-path.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <今の版>`(下の「inlineManifests を直したとき」) | 場合による |
 
 ### inlineManifests を直したとき
 
@@ -87,6 +82,8 @@ talosctl upgrade-k8s --to <talos.sops.yaml の先頭の kubernetes の版> --end
 
 - **`upgrade-k8s` には必ず `--to` を付ける。** 省くと talosctl の既定の版に上がる(Talos の alpha の talosctl なら Kubernetes も alpha)。
   版を変えないなら `talos.sops.yaml` の先頭の今の版を渡す
+- **`--endpoint https://10.10.0.4:6443` も付ける。** `upgrade-k8s` は Kubernetes の API に直接繋ぎに行き、既定ではクラスタの
+  endpoint(10.0.0.2)へ行くので作業用 PC からは届かない
 - **`apply-config` の直後に流さない。** machine config から `manifests` の資源が作り直されるまで少しかかり、その前に流すと**古いマニフェストで
   「変更なし」のまま終わる**(2026-10-23 に Cilium 1.20.4 で踏んだ)。`talosctl get manifests` に新しい版が出てから流す
 
@@ -119,7 +116,5 @@ talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版> --k8s-end
 
 ### 当てても効かないもの
 
-- **ディスクの割り方**(talos.sops.yaml の `VolumeConfig` / `UserVolumeConfig`)。ボリュームは**まだ確保されていないときにしか
-  効かない**ので、あとから `apply-config` しても黙って無視される。変えるには入れ直し
-- **`talosctl upgrade-k8s` は Kubernetes の API に直接繋ぎに行く。** 既定ではクラスタの endpoint(10.0.0.2)へ行き、
-  作業用 PC からは届かないので `--endpoint https://10.10.0.4:6443` を渡す
+**ディスクの割り方**(talos.sops.yaml の `VolumeConfig` / `UserVolumeConfig`)。ボリュームは**まだ確保されていないときにしか
+効かない**ので、あとから `apply-config` しても黙って無視される。変えるには入れ直し。

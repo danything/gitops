@@ -39,7 +39,7 @@ esac
 if [ "${GITOPS_ADMIN:-}" = 1 ]; then role=admin; else role=readonly; fi
 mkdir -p -m 700 "$shm"
 cd /repo
-nokey() { [ -s ~/.config/sops/age/keys.txt ] || die "age の鍵が無い(README「Infisical より下の層」の 1 行目で .home に置く)"; }
+nokey() { [ -s ~/.config/sops/age/keys.txt ] || die "age の鍵が無い(README「秘密の扱い」の 1 行目で .home に置く)"; }
 
 # CA($1 = os か k8s)で件名 $2・鍵 $4(ed25519 / EC)の証明書を作り $3.crt / $3.key / $3.ca に置く。
 # ノードの時計の遅れを見て 5 分前から有効にする。CA の鍵が出る $w はすぐ消す。
