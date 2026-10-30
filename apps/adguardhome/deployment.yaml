@@ -7,7 +7,9 @@ metadata:
     # AdGuard 自身の認証は切ってある(`users: []`)。守っているのは前段の oauth2-proxy
     # (apps/auth/adguard-proxy.yaml、Entra のアプリロール `admin`)。
     # Web の口はクラスタ内からは無認証になる。外からは Gateway 経由だけで、その手前に SSO がある。
-    # クエリログの保持(querylog.interval)は 90d だと querylog.json が 2 GB に育ちバックアップに乗るので 7d。
+    # クエリログの保持(querylog.interval)は 1d。2026-10 末に 1 日 10 GB 近く書くようになり、7d では querylog.json が
+    # 68 GB に育った(バックアップにも乗る)。PVC は LVM で大きさどおりの上限があるので、ファイル 2 本(今と 1 つ前)が
+    # adguardhome-work(pvc.yaml)に収まる長さにする。量が戻ったら延ばしてよい。
 spec:
   replicas: 1
   # hostPort を持つので同じポートを 2 つの Pod が同時に掴めない。RollingUpdate だと
@@ -139,7 +141,7 @@ spec:
                 querylog:
                   dir_path: ""
                   ignored: []
-                  interval: 7d
+                  interval: 1d
                   size_memory: 1000
                   enabled: true
                   ignored_enabled: false

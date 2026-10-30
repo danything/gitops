@@ -1,6 +1,9 @@
-# Talos に移したノード main を SSD ごと Z440 に移す
+# Talos に移したノード main を Z440 に移す(入れ直して restic から戻す)
 
-DL360 Gen9 で動いている `main`を、**SSD ごと** HP Z440 に移す計画(ROADMAP の Phase 2.5)。
+DL360 Gen9 で動いている `main` を HP Z440 に移す計画(ROADMAP の Phase 2.5)。
+**SSD は持っていくが、中身は持っていかない。** Z440 で Talos を入れ直し(SSD は上書きされる)、PV のデータは k8up の restic から戻す
+([../recovery/README.md](../recovery/README.md) の建て直しと同じ道)。入れ直すのは、ディスクの切り方をこのときしか変えられないから
+(PV の置き場を local-path から OpenEBS LVM LocalPV にする。「2. NIC と bond0」の下の「ディスク」)。
 あとで小さいサーバ(Talos)に 10.0 と 10.10 のあいだのルーターを任せ、Z440 は 10.0 側だけにする予定(「終わったら」)。
 
 ## 構成と、Z440 での扱い
@@ -49,12 +52,31 @@ selector:
 # BondConfig の links: [lan0]、LinkConfig の name: jcom0
 ```
 
-**ディスク**: `disk.dev_path == "/dev/sda"` は Z440 でも SSD 1 本なら同じになるはず(`talosctl get disks` で見る。`bootstrap/talos.sops.yaml` の注)。
-**入れ直しのついでに、local-path の `u-local-path` を LVM のボリュームグループに切り替える**(ROADMAP の Phase 2.5、
-[decisions.md](decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)。ボリュームは未割り当ての領域にしか作れないので、このときしか切り直せない。
+**Z440 の MAC を `LinkAliasConfig` に `||` で足してから描く**(手順 4)。足さないと Z440 で別名が当たらず、10.0 側が上がらない。
 
-**この config は DL360 では効かない**(MAC が当たらず 10.0 側が上がらない)ので、普通に当てない。
-`talosctl apply-config --mode=staged` で**次の起動から**効くように置き、電源を切る直前にやる(手順 4)。
+### ディスク
+
+`disk.dev_path == "/dev/sda"` は Z440 でも SSD 1 本なら同じになるはず(maintenance mode で `talosctl get disks` を見る。`bootstrap/talos.sops.yaml` の注)。
+**入れ直しで、PV の置き場を local-path の `u-local-path`(xfs のパーティション 1 つ)から LVM に切り替える**
+([decisions.md](decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)。ボリュームは未割り当ての領域にしか作れないので、このときしか切り直せない。
+
+| | 大きさ(447GB の SSD) | 作るもの |
+| --- | --- | --- |
+| EFI・BOOT・META・STATE | 数 GiB | Talos |
+| `EPHEMERAL`(/var) | 64GiB で頭打ち | Talos(`VolumeConfig`) |
+| `r-lvm` | 残り全部(380GiB ほど) | Talos(`RawVolumeConfig`)。VG `data` の唯一の PV(`LVMVolumeGroupConfig`) |
+| thin プール `data_thinpool` | VG の 90%(340GiB ほど)。残りは溢れかけたときに足す分 | [lvm-thinpool](../bootstrap/storage.yaml)(Talos は thin を作れない) |
+| PVC ごとの thin の LV(xfs) | PVC の requests が上限。書いた分だけプールを使う | OpenEBS LVM LocalPV(StorageClass は既定の `local-path`。名前は前のまま) |
+
+local-path との違いで気を付けること:
+
+- **PVC の requests が本当の上限になる。** local-path はディスクの残り全部が使えたので、`adguardhome-work`(5Gi)に 68 GB 入っていた。
+  戻す前に `recovery/pv.sh - plan-all` が PVC に入るかを見る(`fit`。入らなければ止まる)
+- **thin なので合計はプールを超えてよい**(denpa は 1Ti と 300Gi)。代わりに**プールが溢れると全部の PVC の書き込みが止まる。**
+  `kubectl -n kube-system get pods -l app=lvm-thinpool` が 90% で NotReady になる(ログに 1 時間ごとの使用率)。
+  denpa の残量の表示(statfs)は PVC の大きさで見るので、プールの空きより多く出る
+- **新しい PVC の直下は root の 0755**(local-path は 0777 だった)。root 以外で書くアプリは `fsGroup` が要る(worklog に足した。ほかは付いているか root)
+- etcd は `EPHEMERAL` に居るので、プールが溢れても巻き込まれない
 
 ## 3. リモート管理: Intel AMT
 
@@ -110,26 +132,58 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
   **ノードが止まっていると外からは届かない**。小さいサーバに入口を置けば、止まっていても外から電源を入れ直せる
 - **ノード自身からは自分の AMT に届かない**(NIC を OS と分け合っていて、自分宛ては折り返さない)。ほかの機器か NetBird の端末から使う
 
-## 4. 移す直前
+## 4. 移す直前(DL360 で)
 
-1. **k8up のバックアップが成功している**こと: 夜のぶん(03:00 JST の通知)が OK ✅。手で確かめるなら
-   `kubectl -n k8up create job --from=cronjob/k8up-notify notify-manual`([../apps/k8up/README.md](../apps/k8up/README.md))
-2. 計画停止を知らせる(止まるもの: 全部の Web、DNS、NetBird、Matrix、録画)
-3. Z440 用の config を置く: `render.sh` → `talosctl -n 10.0.0.2 apply-config --mode=staged -f bootstrap/clusterconfig/controlplane.yaml`
-4. `talosctl -n 10.0.0.2 shutdown`
+コマンドは全部 `tools/t.ps1 --admin` のシェルで打つ([../recovery/README.md](../recovery/README.md)「道具と経路」)。
+LVM への切り替えは main に入っていること(入れたあと DL360 の Argo CD は `adguardhome-work` を 30Gi に広げられずに同期のエラーを出すが、
+local-path が広げられないだけで、入れ直せば消える)。worklog の `fsGroup`(fj.doany.io の doa/worklog-cloud#179)も入っていること。
+
+1. **AdGuard のクエリログを消す**(Web の「設定 → 一般設定 → クエリログを消去」)。`querylog.json` が 68 GB あり、
+   最後のバックアップに乗ると、戻すときに `adguardhome-work`(30Gi)に入らず `plan-all` が止まる。
+   消す前に、どの端末が 1 日 10 GB も引いているかを見ておく(2026-10 末から。前は 1 日 0.3 GB ほど)
+2. **Z440 の MAC を `LinkAliasConfig` に足して main にマージ**(「2. NIC と bond0」)。talos-boot が通ること
+3. machine config を描く: `./bootstrap/render.sh bootstrap/clusterconfig`(`valid for metal mode` まで出ること)。
+   Talos の ISO を USB に書いておく([../recovery/README.md](../recovery/README.md) の 2)
+4. 計画停止を知らせる(止まるもの: 全部の Web、DNS、NetBird、Matrix、録画)。録画の予約が入っていない時間にする
+5. **最後のバックアップ**。ここから先に書かれたものは戻らない:
+
+   ```shell
+   sh recovery/pv.sh - backup-all          # Schedule のある namespace を全部、今すぐ取って待つ。全部 Succeeded になること
+   kubectl -n k8up create job --from=cronjob/etcd-snapshot etcd-snapshot-final
+   ```
+
+6. `talosctl -n 10.0.0.2 shutdown`
 
 ## 5. 載せ替え
 
 CPU(グリスを塗り直す)・メモリ 5 枚(Z440 に先に 1 枚ある)・SSD・PT3・USB 機器を Z440 に移す。仮の v3 の CPU は外す。
 LAN は「2. NIC と bond0」のとおりにつなぐ。最初の起動はモニタ(Arc)とキーボードをつないでおく。
 
-## 6. 起動して確かめる
+## 6. Z440 で入れ直して戻す
+
+[../recovery/README.md](../recovery/README.md) の 2〜10 をそのまま流す。違うのは次のところ:
+
+- **2. ISO で起動する**: USB を挿して、起動中に **F9**(ブートメニュー)で USB を選ぶ。AMT の IDE-R で ISO をつないでもよい(「3. リモート管理」。
+  UEFI のまま IDE-R から起動できるかは未確認)。maintenance mode の IP は Arc の画面に出る。
+  `talosctl get links --insecure` で **Z440 の MAC が 2. で足したものと一致する**こと、`talosctl get disks --insecure` で `/dev/sda` が 447GB の SSD であること
+- **3. 当てる**: SSD は上書きされる(古いパーティションは消え、新しいパーティションは Talos が作るときに先頭を消す)。
+  `talosctl get volumestatus` で `EPHEMERAL`(64GiB)と **`r-lvm`**(残り全部)が `ready`
+- **4. クラスタを起こす**: 「Running」に `lvm-thinpool`・`lvm-localpv-node`・`lvm-localpv-controller`・`snapshot-controller`(kube-system)も入る。
+  `kubectl -n kube-system logs ds/lvm-thinpool -c pool` の最後に `data_thinpool` が VG の 90% で出ていること。
+  `kubectl get sc` で `local-path`(default)の PROVISIONER が `local.csi.openebs.io`
+- **8. PV データを戻す**: `sh recovery/pv.sh - plan-all` の最後の「PVC に入るか」が全部通ること(入らないものは PVC を大きくするか restic から消す)
+
+## 7. 起動して確かめる
 
 - [ ] BIOS で CPU(E5-2696 v4、22 コア)とメモリ 48GB が見える
-- [ ] SSD から起動する(UEFI の起動の選択に出なければ、SSD の `EFI/BOOT/BOOTX64.EFI` を選ぶ)
+- [ ] 入れたあと SSD から起動する(UEFI の起動の選択に出なければ、SSD の `EFI/BOOT/BOOTX64.EFI` を選ぶ)
+- [ ] [../recovery/README.md](../recovery/README.md) の 9 の確かめ(公開している名前・IPv6・DNS・NetBird・PT3 など)
 - [ ] `talosctl -n 10.0.0.2 get addresses`: `bond0` に 10.0.0.2 と `240f:6d:842b:1::2`、`jcom0` に 10.10.0.4。
       `talosctl get links bond0` の MAC が `e6:2c:1b:1a:a0:39`
 - [ ] `kubectl get nodes` が Ready、`kubectl get pods -A` で止まっているものが無い
+- [ ] `kubectl get pvc -A` が全部 Bound、`kubectl -n kube-system get pods -l app=lvm-thinpool` が Ready。
+      埋まり具合は `kubectl -n kube-system exec ds/lvm-thinpool -c watch -- lvs data`
+- [ ] **一度 `talosctl -n 10.0.0.2 reboot` して、全部の Pod が戻る**(thin プールと LV を Talos が起動時に有効にする。talos-boot も見ている)
 - [ ] Web(`https://fj.doany.io` など)が家の中と外から開く。外からの IPv6 でも届く([router.md](router.md) の確かめ方)
 - [ ] DNS: 10.0.0.2 と 10.10.0.4 の両方で引ける
 - [ ] NetBird がつながり、10.10.0.0/24 に届く
@@ -139,13 +193,10 @@ LAN は「2. NIC と bond0」のとおりにつなぐ。最初の起動はモニ
 
 ## 戻し方
 
-SSD とほかの部品を DL360 に戻し、iLO(10.0.0.3)のコンソールで見ながら起動する。
-**staged で置いた Z440 用の config のままでは、DL360 で 10.0 側が上がらない。** Z440 で動いているうちに戻すなら、
-DL360 用の config を `apply-config --mode=staged` してから `shutdown` して移す。
-
-**別案(要検証)**: 別名の `match` に**両方の機械の MAC を `||` で並べ**、DL360 でも Z440 でも効く config を 1 つにする。
-移す前に DL360 で普通に当てて効くことを確かめられ、戻すときも何も変えなくてよい。
-DL360 の `eno2`(bond の 2 本目)のように、片方の機械にしか無い口の別名がエラーにならないかを先に確かめる。
+**SSD は入れ直した時点で上書きされるので、DL360 に挿し戻しても元には戻らない。** 戻すときも同じ道
+(DL360 に SSD を戻し、iLO(10.0.0.3)のコンソールで ISO から起動して、同じ config で入れ直し、restic から戻す)。
+別名の `match` には両方の機械の MAC が `||` で並んでいるので、config は DL360 でもそのまま効く。
+最後のバックアップより後に Z440 で書かれたものは、戻す前にもう一度 `backup-all` で取る。
 
 ## 終わったら
 

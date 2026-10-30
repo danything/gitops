@@ -6,6 +6,8 @@
 #
 #   - plan-all / restore-all   全部(namespace は `-`)。plan は読むだけ。restore-all が README の 8 そのもの
 #   plan / restore             その namespace の最新のスナップショットを経路の形で戻す(下の「まとめて戻す」)
+#   fit                        folder で戻すものが PVC(LVM なので requests が上限)に入るか。plan-all と restore-all も見る
+#   backup-all                 全 namespace の Backup を今すぐ作って待つ(入れ直す前の最後のバックアップ。namespace は `-`)
 #
 #   以下は restore が使う部品。手で続けるときにも使う
 #   argo-pause / argo-resume   Argo CD の application-controller を 0 / 1 にする。止めないと selfHeal が
@@ -166,6 +168,44 @@ plan() {
 	sort -n "$_o"
 }
 
+# PVC の大きさ(requests)をバイトに。使っている単位(Ki・Mi・Gi・Ti と単位なし)だけ読む
+bytes() { # $1=量
+	case $1 in
+		*.*) echo "ERROR: $NS: PVC の大きさ $1 は小数なので読めない(整数の Gi などに)" >&2; return 1 ;;
+		*Ki) echo $((${1%Ki} * 1024)) ;;
+		*Mi) echo $((${1%Mi} * 1048576)) ;;
+		*Gi) echo $((${1%Gi} * 1073741824)) ;;
+		*Ti) echo $((${1%Ti} * 1099511627776)) ;;
+		*[!0-9]*) echo "ERROR: $NS: PVC の大きさ $1 を読めない" >&2; return 1 ;;
+		*) echo "$1" ;;
+	esac
+}
+
+# folder で戻すものが PVC に入るか。**PVC は LVM の LV で、requests の大きさが本当の上限**(local-path の頃は
+# ディスクの残り全部が使えたので、小さく書いた PVC に大きなデータが入っていた。2026-10 の adguardhome-work は 5Gi に 68 GB)。
+# xfs の分を見込んで 9 割を超えたら止める。restic の stats は 1 つずつ R2 を読むので、plan(待つ間に何度も呼ぶ)とは分ける
+fit() {
+	_f=$(mktemp)
+	plan > "$_f"
+	bad=0
+	# plan の行は「順番 操作 引数…」で、folder の引数は「PVC スナップショット」(plan の folder の行と揃える)
+	while read -r _ op pvc id _; do
+		[ "$op" = folder ] || continue
+		need=$(restic stats --mode restore-size --json "$id" | sed -n 's/.*"total_size":\([0-9]*\).*/\1/p')
+		req=$($K -n "$NS" get pvc "$pvc" -o jsonpath='{.spec.resources.requests.storage}')
+		have=$(bytes "$req") || exit 1
+		[ -n "$need" ] || { echo "ERROR: $NS: restic stats $id が読めない" >&2; exit 1; }
+		if [ "$need" -gt $((have / 10 * 9)) ]; then
+			echo "ERROR: $NS: $pvc は $req、戻すものは $((need / 1048576)) MiB(9 割を超える)。PVC を大きくするか、restic から要らないものを消す" >&2
+			bad=1
+		else
+			echo "$NS: $pvc $((need / 1048576)) MiB / $req"
+		fi
+	done < "$_f"
+	rm -f "$_f"
+	[ "$bad" = 0 ]
+}
+
 restore() {
 	steps=$(plan)
 	[ -n "$steps" ] || { echo "$NS: 戻すものが無い"; return 0; }
@@ -232,14 +272,21 @@ case $OP in
 	stop) stop "$@" ;;
 	start) start ;;
 	plan) restic_env; plan ;;
+	fit) restic_env; fit ;;
 	restore) restic_env; restore ;;
-	plan-all) # 読むだけ。forgejo と各 namespace で何をするかを出す。1 つでも決められなければ 1
+	plan-all) # 読むだけ。forgejo と各 namespace で何をするかと、PVC に入るかを出す。1 つでも決められない・入らなければ 1
 		restic_env
-		plan_all forgejo $(hosts) ;;
+		H=$(hosts)
+		rc=0
+		plan_all forgejo $H || rc=1
+		echo "== PVC に入るか(folder のもの)"
+		for h in forgejo $H; do sh "$0" "$h" fit || rc=1; done
+		exit $rc ;;
 	restore-all) # README の 8 を通しで。Forgejo を先に戻し、非公開アプリが出てくるのを待ってから残り
 		restic_env
 		# Forgejo の plan が通らなければ何も触らない
 		plan_all forgejo >/dev/null || { echo "forgejo の plan が通らない(plan-all で見る)" >&2; exit 1; }
+		sh "$0" forgejo fit || { echo "forgejo の PVC に入らない" >&2; exit 1; }
 		# 待っても直らないもの(戻し方が決まっていない経路。plan の終了コード 2)も、触る前に止める。
 		# namespace がまだ無いものはここでは見えない(Forgejo の後でしか出てこない)
 		bad=
@@ -262,9 +309,38 @@ case $OP in
 			sleep 20
 		done
 		[ -n "$ok" ] || { plan_all $H >/dev/null || true; echo "10 分待っても上の plan が通らない。forgejo だけ戻した状態で止めた(Argo CD は動いている)" >&2; exit 1; }
+		# どこも上書きする前に、全部が PVC に入るかを見る
+		big=
+		for h in $H; do sh "$0" "$h" fit >/dev/null || big="$big $h"; done
+		[ -z "$big" ] || { echo "PVC に入らないものがある:$big(上の ERROR。forgejo だけ戻した状態で止めた。Argo CD は動いている)" >&2; exit 1; }
 		sh "$0" - argo-pause
 		for h in $H; do sh "$0" "$h" restore; done
 		sh "$0" - argo-resume ;;
+	backup-all) # 入れ直す前の最後のバックアップ。Schedule に backup のある namespace ごとに Backup を作り、全部終わるまで待つ
+		t=final-$(date -u +%Y%m%d%H%M)
+		nss=$($K get schedule -A -o jsonpath='{range .items[?(@.spec.backup)]}{.metadata.namespace}{"\n"}{end}')
+		[ -n "$nss" ] || { echo "backup のある Schedule が 1 つも無い(kubectl get schedule -A で見る)" >&2; exit 1; }
+		for ns in $nss; do
+			# Schedule と同じ形(tags は prune の歯止め、root は 0600 のファイルを読むため。apps/k8up/schedules.yaml)
+			$K create -f - >/dev/null <<B
+apiVersion: k8up.io/v1
+kind: Backup
+metadata: {name: $t, namespace: $ns}
+spec: {tags: [k8up], podSecurityContext: {runAsUser: 0, runAsGroup: 0}}
+B
+			echo "backup $ns/$t"
+		done
+		# operator が 1 つずつ流す(リポジトリのロック)。30 分で切る
+		st=
+		for _ in $(seq 1 180); do
+			st=$($K get backup -A --field-selector "metadata.name=$t" \
+				-o jsonpath='{range .items[*]}{.metadata.namespace} {.status.conditions[?(@.type=="Completed")].reason}{"\n"}{end}')
+			echo "$st" | awk 'NF < 2 {n++} END {exit (n > 0)}' && break
+			sleep 10
+		done
+		echo "$st"
+		! echo "$st" | awk 'NF < 2 || $2 != "Succeeded" {f=1} END {exit !f}' \
+			|| { echo "終わっていないか、Succeeded でないものがある(kubectl get backup -A で見る)" >&2; exit 1; } ;;
 	folder) folder "$1" "$2" ;;
 	sqlite) # $1=pvc $2=ファイル名 $3=snapshot $4=中のパス
 		restic_env

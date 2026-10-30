@@ -37,8 +37,8 @@ env:
 jobs:
   boot:
     runs-on: ubuntu-latest
-    # 実測 8 分
-    timeout-minutes: 30
+    # 実測 8 分(PVC と再起動を足す前)
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
 
@@ -93,7 +93,7 @@ jobs:
           curl -fsSL --retry 3 \
             "https://factory.talos.dev/image/${{ steps.v.outputs.schematic }}/${{ steps.v.outputs.version }}/metal-amd64.raw.zst" \
             | zstd -d -o /tmp/vm/disk.raw
-          # EPHEMERAL の maxSize 64GiB と u-local-path の minSize 50GiB が両方取れる大きさ
+          # EPHEMERAL の maxSize 64GiB と r-lvm(LVM の PV)の minSize 50GiB が両方取れる大きさ
           truncate -s 140G /tmp/vm/disk.raw
           cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vm/OVMF_VARS.fd
 
@@ -206,14 +206,18 @@ jobs:
           until kubectl -n kube-system get secret hubble-server-certs hubble-relay-client-certs >/dev/null 2>&1; do sleep 5; done
           ro kube-system deploy/hubble-relay
           ro kube-system deploy/hubble-ui
-          ro local-path-storage deploy/local-path-provisioner
+          # PVC の置き場(bootstrap/storage.yaml)。thin プールが出来てラベルが付くまで OpenEBS のノードの Pod は出てこない
+          ro kube-system ds/lvm-thinpool
+          ro kube-system ds/lvm-localpv-node
+          ro kube-system deploy/lvm-localpv-controller
+          ro kube-system deploy/snapshot-controller
           ro cert-manager deploy/cert-manager
           ro cert-manager deploy/cert-manager-webhook
           ro cert-manager deploy/cert-manager-cainjector
           ro argocd deploy/argocd-server
           ro argocd deploy/argocd-repo-server
           ro argocd sts/argocd-application-controller
-          # postgres の PVC は local-path なので、ここで PV の経路も見ている
+          # postgres の PVC は既定の StorageClass(OpenEBS LVM の thin)なので、ここで PV の経路も見ている
           ro infisical deploy/infisical
           kubectl -n infisical wait --for=jsonpath='{.status.phase}'=Bound pvc --all --timeout=1m
           # 上の一覧に無い Pod の取りこぼし止め
@@ -263,7 +267,7 @@ jobs:
           set -euo pipefail
           fail() { echo "::error::$*"; exit 1; }
           talosctl get volumestatus -o json > /tmp/vol.json
-          for v in EPHEMERAL u-local-path; do
+          for v in EPHEMERAL r-lvm; do
             P=$(jq -rs --arg v "$v" '.[] | select(.metadata.id == $v) | .spec.phase' /tmp/vol.json)
             [ "$P" = ready ] || fail "volume $v が ready でない($P)"
             echo "  volume $v: $P"
@@ -294,6 +298,94 @@ jobs:
           done
           fail "bond0 に RA 由来の IPv6 既定経路が無い"
 
+      - name: PVC・スナップショット・スナップショットからの戻し
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          # thin プールは VG の 90%(bootstrap/storage.yaml)。OpenEBS が最初の PVC の大きさで作ったものではないこと
+          kubectl -n kube-system exec ds/lvm-thinpool -c watch -- lvs -a -o lv_name,lv_size,data_percent,metadata_percent,lv_attr data
+          VG=$(kubectl -n kube-system exec ds/lvm-thinpool -c watch -- vgs --noheadings --units b --nosuffix -o vg_size data | tr -d ' ')
+          POOL=$(kubectl -n kube-system exec ds/lvm-thinpool -c watch -- lvs --noheadings --units b --nosuffix -o lv_size data/data_thinpool | tr -d ' ')
+          [ $((POOL * 100 / VG)) -ge 85 ] || fail "thin プールが VG の $((POOL * 100 / VG))%(90% のはず)"
+
+          # 既定の StorageClass で書き、スナップショットを取り、そこから別の PVC を作って同じ中身が読めるか(VolSync の populator の前提)
+          cat > /tmp/pvc.yaml <<'YAML'
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: t-src
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources: {requests: {storage: 1Gi}}
+          ---
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: t-src
+          spec:
+            securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+            containers:
+              - name: c
+                image: mirror.gcr.io/library/busybox:1.38
+                # 再起動で起き直しても書き直さない(下の「再起動しても PV が戻る」が中身の残りを見る)
+                command: [sh, -c, '[ -f /data/marker ] || echo hello > /data/marker; sleep 86400']
+                securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+                volumeMounts: [{name: v, mountPath: /data}]
+            volumes: [{name: v, persistentVolumeClaim: {claimName: t-src}}]
+          YAML
+          kubectl apply -f /tmp/pvc.yaml
+          kubectl wait --for=condition=Ready pod/t-src --timeout=3m
+          kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/t-src --timeout=1m
+          [ "$(kubectl exec t-src -- cat /data/marker)" = hello ] || fail "PVC に書けていない"
+          FS=$(kubectl exec t-src -- sh -c "grep ' /data ' /proc/mounts | cut -d' ' -f3")
+          [ "$FS" = xfs ] || fail "PVC が xfs でない($FS)"
+          echo "  PVC t-src: Bound, xfs, 書けた"
+
+          cat > /tmp/snap.yaml <<'YAML'
+          apiVersion: snapshot.storage.k8s.io/v1
+          kind: VolumeSnapshot
+          metadata:
+            name: t-snap
+          spec:
+            source: {persistentVolumeClaimName: t-src}
+          YAML
+          kubectl apply -f /tmp/snap.yaml
+          kubectl wait --for=jsonpath='{.status.readyToUse}'=true volumesnapshot/t-snap --timeout=3m
+          echo "  VolumeSnapshot t-snap: readyToUse(既定の VolumeSnapshotClass $(kubectl get volumesnapshot t-snap -o jsonpath='{.spec.volumeSnapshotClassName}'))"
+
+          # t-dst はスナップショットの中身を読むだけ(書かない)
+          sed -e 's/name: t-src$/name: t-dst/' -e 's/claimName: t-src/claimName: t-dst/' \
+            -e 's/\[ -f \/data\/marker \] || echo hello > \/data\/marker; //' /tmp/pvc.yaml \
+            | yq '(select(.kind == "PersistentVolumeClaim") | .spec.dataSource) = {"apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": "t-snap"}' \
+            > /tmp/dst.yaml
+          ! grep -q 'echo hello' /tmp/dst.yaml || fail "t-dst が書いてしまう形になっている"
+          grep -q 'kind: VolumeSnapshot' /tmp/dst.yaml || fail "t-dst に dataSource が付いていない"
+          kubectl apply -f /tmp/dst.yaml
+          kubectl wait --for=condition=Ready pod/t-dst --timeout=3m
+          [ "$(kubectl exec t-dst -- cat /data/marker)" = hello ] || fail "スナップショットから戻した PVC に中身が無い"
+          echo "  PVC t-dst(t-snap から): 中身が戻った"
+          kubectl -n kube-system exec ds/lvm-thinpool -c watch -- lvs -a -o lv_name,lv_size,pool_lv,origin,data_percent data
+
+      - name: 再起動しても PV が戻る
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          # thin プールと LV は Talos が起動時に有効にする(thin_check が無いのは飛ばされる)。
+          # lvm-thinpool の pool も起動のたびに走るので、壊さないことも見ている
+          talosctl reboot --wait --timeout 8m
+          until kubectl get --raw /readyz >/dev/null 2>&1; do sleep 5; done
+          kubectl wait --for=condition=Ready node/main --timeout=5m
+          for p in t-src t-dst; do
+            until kubectl wait --for=condition=Ready "pod/$p" --timeout=10s >/dev/null 2>&1; do sleep 5; done
+            [ "$(kubectl exec "$p" -- cat /data/marker)" = hello ] || fail "再起動のあと $p の中身が無い"
+          done
+          kubectl -n infisical rollout status statefulset/postgresql --timeout=5m
+          kubectl -n kube-system rollout status ds/lvm-thinpool --timeout=3m
+          kubectl -n kube-system logs ds/lvm-thinpool -c pool
+          echo "  再起動のあとも t-src・t-dst・infisical の Postgres が上がった"
+
       - name: 失敗したときの様子
         if: failure()
         run: |
@@ -308,6 +400,18 @@ jobs:
           echo "::endgroup::"
           echo "::group::GatewayClass / Gateway / Certificate"
           kubectl get gatewayclass,gateway -A -o yaml; kubectl get certificate -A
+          echo "::endgroup::"
+          echo "::group::PVC の置き場(LVM)"
+          kubectl get sc,volumesnapshotclass,pvc,pv,volumesnapshot,volumesnapshotcontent -A
+          kubectl -n kube-system get lvmnode,lvmvolume,lvmsnapshot -o yaml | tail -120
+          kubectl -n kube-system logs ds/lvm-thinpool -c pool --tail=50
+          kubectl -n kube-system logs ds/lvm-localpv-node -c openebs-lvm-plugin --tail=80
+          kubectl -n kube-system logs deploy/lvm-localpv-controller -c openebs-lvm-plugin --tail=50
+          kubectl -n kube-system logs deploy/lvm-localpv-controller -c csi-provisioner --tail=50
+          kubectl -n kube-system logs deploy/lvm-localpv-controller -c csi-snapshotter --tail=50
+          kubectl -n kube-system logs deploy/snapshot-controller --tail=50
+          talosctl get volumestatus
+          talosctl get rd | awk 'tolower($4) ~ /lvm/ {print $4}' | while read -r r; do talosctl get "$r" -o yaml 2>/dev/null | head -60; done
           echo "::endgroup::"
           echo "::group::talosctl services"; talosctl services; echo "::endgroup::"
           echo "::group::talosctl get links / addresses / routes"

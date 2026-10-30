@@ -1,5 +1,5 @@
 # ノード main の machine config のうち、手で書く部分の全部。render.sh が `gen config --config-patch` に渡す。
-# chart から描く部分(Cilium・ArgoCD・infisical・cert-manager・local-path)は render.sh が足す。版は下のコメント。
+# chart から描く部分(Cilium・ArgoCD・infisical・cert-manager・OpenEBS LVM)は render.sh が足す。版は下のコメント。
 #
 # **SOPS で password の値だけ暗号化してある**(../.sops.yaml)。平文の部分はそのまま直してよい。
 # パスワードを変えるときは `sops edit bootstrap/talos.sops.yaml`。render.sh が `sops -d` してから渡す。
@@ -26,6 +26,10 @@
 # Gateway API の CRD(standard チャンネルで足りる)。
 # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
 # version: v1.7.0
+#
+# VolumeSnapshot の CRD と snapshot-controller(storage.yaml の VolumeSnapshotClass が使う)。
+# renovate: datasource=github-releases depName=kubernetes-csi/external-snapshotter
+# version: v8.7.0
 machine:
     sysctls:
         # 無いと IPv6 の既定経路が消える(Kubernetes が forwarding=1 にすると accept_ra=1 は RA を無視する)
@@ -43,13 +47,15 @@ machine:
         # `talosctl get links` で見て足す(無い名前の行は効かないだけ)
         net.ipv6.conf.eno4.disable_ipv6: "1"
     network:
-        # local-path の PV の nodeAffinity が main を指している
+        # PV の nodeAffinity(OpenEBS の openebs.io/nodename)が main を指している
         hostname: main
     # PT3 のドライバ(../docs/decisions.md「PT3 チューナー」)。dvb-pt3 は earth_pt3 を blacklist しているので明示で読ませる。
     # 復調とチューナー(tc90522・qm1d1c0042・mxl301rf)は、v1.15.0-alpha.2 から Talos がカーネルの要求で読む(siderolabs/talos#14724)。
     kernel:
         modules:
             - name: earth-pt3
+            # PVC の thin プール(storage.yaml)。Talos のカーネルではモジュールで、OpenEBS のコンテナからは読めない
+            - name: dm_thin_pool
     # etcd スナップショットの日次取得(../apps/k8up/etcd-snapshot.yaml)のため、Pod から Talos API を叩く。
     # 役割は os:etcd:backup だけ、namespace も k8up に絞る(os:admin を Pod に置かずに済む唯一の仕組み)。
     features:
@@ -112,7 +118,7 @@ sops:
 # ディスクの割り方。既定だと EPHEMERAL(/var)が全部を取り、PVC の暴走で etcd ごと道連れになる。
 # ボリュームの設定は未確保のときにしか効かない(あとから書き足しても黙って無視され、直すには入れ直し)。
 # EPHEMERAL に maxSize が無いと grow が全部持っていく(siderolabs/talos#12713)。
-# 64GiB は実機の使用量(containerd 22G ほか)から。残りが local-path 用。
+# 64GiB は実機の使用量(containerd 22G ほか)から。残りが PV 用(下の RawVolumeConfig `lvm`)。
 apiVersion: v1alpha1
 kind: VolumeConfig
 name: EPHEMERAL
@@ -138,21 +144,42 @@ sops:
     mac_only_encrypted: true
     version: 3.13.3
 ---
-# PV データの置き場。/var/mnt/<name> 固定で、local-path.yaml の paths がここを指す。
+# PV データの置き場。残りを全部 LVM の PV にする(パーティションのラベルは r-lvm。中身は Talos は触らない)。
+# 447GB の SSD なら EPHEMERAL の 64GiB を引いて 380GiB ほど。minSize は talos-boot の VM のディスクでも取れる大きさ。
 apiVersion: v1alpha1
-kind: UserVolumeConfig
-name: local-path
+kind: RawVolumeConfig
+name: lvm
 provisioning:
     diskSelector:
         match: system_disk
     minSize: 50GiB
     grow: true
-filesystem:
-    type: xfs
-# /var 系は既定で nosuid,nodev,noexec になり、PVC の中の実行ファイル(Forgejo のサーバ側フック)が動かない。
-# コンテナは PSA と securityContext で押さえている。
-mount:
-    secure: false
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBIQnpITHlrS0lxZkZXb3dy
+            UmNMYUhFamtsR2Rpb3BTMXozYjQwQkoxOEhFClFOeDRQV2tTYTBlL09RUS9oMUZG
+            ZHZwNXVnYzA4dkIyME0rbnc0Zm44SEUKLS0tIDhTNmNMU1ZVeGEwbzltTDdpVVRP
+            M0FiWEJ2MHIzRkU2WHRxWlo3N0FsNlEKgYVZr+vTicTztpwMQ7oj/yLEk12f/JZX
+            uMTe29EqIoB7gE/SCG9z+qoLXd4NHrA1lfrLjTDSCYNEhGiDyMhIMQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-30T16:40:35Z"
+    mac: ENC[AES256_GCM,data:HeBfzNkyaDPxwfMepe0/4U5g0tAUyMf9AZMYly5La46tj8Ap5K4z9jp3tcOR9tADq1nCBhgtIKDiLmrNqOOWLShV1jDVM35hpBDHMpYuJjAGish8pBZUb3TetvSa1fnzOE24JrCZxpaK69q5V9akQzKIlhM/qgRhU7jFqPhyDT8=,iv:8QW9fMoDnME0qsE/TMcpi3zKgl+Oy+9mN8jzRY7XnN4=,tag:gOxsxLzsRPBx8iQjY5RW/A==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
+# 上の r-lvm 1 つで VG `data` を作る。thin プール(data_thinpool)は Talos では作れないので
+# storage.yaml の lvm-thinpool が作り、その上に OpenEBS LVM LocalPV が PVC ごとの thin の LV を切る。
+# Talos は足すだけで、知らない LV(OpenEBS のもの)を消さない。起動時の有効化も Talos がする。
+apiVersion: v1alpha1
+kind: LVMVolumeGroupConfig
+name: data
+provisioning:
+    volumeSelector:
+        match: volume_id == "r-lvm"
 sops:
     age:
         - enc: |

@@ -129,7 +129,7 @@
             "allowedVersions": "<18"
         },
         {
-            "description": "Talos・Kubernetes・Gateway API は自動マージしない(ノード 1 台で全停止、CRD は全経路が乗り換わる)。適用は人。talosctl のイメージと手元の CLI もノードの版と一緒に上げる。版の比べ方は semver にする。既定の semver-coerced は v1.15.0-alpha.1 と alpha.2 を同じ 1.15.0 とみなし、alpha・beta の更新を出さない。talosctl のイメージには開発版のタグ(v1.15.0-alpha.2-9-g567501669)もあるので、正式な版・alpha・beta・rc だけを許す。",
+            "description": "Talos・Kubernetes・Gateway API は自動マージしない(ノード 1 台で全停止、CRD は全経路が乗り換わる)。適用は人。talosctl のイメージと手元の CLI、bootstrap/storage.yaml の kubectl のイメージもノードの版と一緒に上げる。版の比べ方は semver にする。既定の semver-coerced は v1.15.0-alpha.1 と alpha.2 を同じ 1.15.0 とみなし、alpha・beta の更新を出さない。talosctl のイメージには開発版のタグ(v1.15.0-alpha.2-9-g567501669)もあるので、正式な版・alpha・beta・rc だけを許す。",
             "versioning": "semver",
             "allowedVersions": "/^v\\d+\\.\\d+\\.\\d+(-(alpha|beta|rc)\\.\\d+)?$/",
             "groupName": "talos",
@@ -142,7 +142,21 @@
                 "kubernetes/kubernetes",
                 "kubernetes-sigs/gateway-api",
                 "ghcr.io/siderolabs/talosctl",
-                "siderolabs/talos"
+                "siderolabs/talos",
+                "registry.k8s.io/kubectl"
+            ]
+        },
+        {
+            "description": "OpenEBS LVM LocalPV の chart と、bootstrap/storage.yaml の lvm-thinpool が使う同じ lvm-driver のイメージは同じ PR で上げる(LVM のコマンドを揃える)。全部の PVC の土台なので自動マージしない。当てるのは render.sh → apply-config → upgrade-k8s。",
+            "matchDepNames": [
+                "lvm-localpv",
+                "mirror.gcr.io/openebs/lvm-driver"
+            ],
+            "groupName": "openebs lvm",
+            "groupSlug": "openebs-lvm",
+            "automerge": false,
+            "addLabels": [
+                "needs-review"
             ]
         },
         {
