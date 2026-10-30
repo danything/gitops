@@ -79,12 +79,13 @@ notifications:
             - on-sync-result
             - on-health-change
 # ArgoCD が自分を管理し始める種。chart は各要素を `tpl` に通すので、Go テンプレートを含むもの
-# (ApplicationSet)は repos.yaml に置く。
+# (ApplicationSet)は argocd-repos.yaml に置く。
 extraObjects:
     # danything/* を読む GitHub App の repo-creds(git から取れないのでここに置く)。名前は UI で作ったときのもの。
     # 鍵は argocd-secret-values.sops.yaml。リストは値ファイルを重ねると丸ごと置き換わるので、map を toYaml して 1 要素にする。
     - '{{ toYaml .Values.githubAppRepoCreds }}'
-    # app-of-apps。include を広げると bootstrap/ の他のファイルまで prune/selfHeal の対象になり、消すと ArgoCD が消える。
+    # app-of-apps。path は bootstrap/ そのものなので include で 1 ファイルに絞る。広げると bootstrap/ の他のファイル
+    # (chart の値や SOPS 済み)まで当てようとし、prune/selfHeal の対象になって、消すと ArgoCD が消える。
     - apiVersion: argoproj.io/v1alpha1
       kind: Application
       metadata:
@@ -95,9 +96,9 @@ extraObjects:
         source:
             repoURL: https://github.com/danything/gitops.git
             targetRevision: main
-            path: bootstrap/argocd
+            path: bootstrap
             directory:
-                include: repos.yaml
+                include: argocd-repos.yaml
         destination:
             server: https://kubernetes.default.svc
             namespace: argocd

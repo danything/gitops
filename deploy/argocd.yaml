@@ -1,4 +1,4 @@
-# このリポジトリの Application の設定(bootstrap/argocd/repos.yaml の ApplicationSet が読む)
+# このリポジトリの Application の設定(bootstrap/argocd-repos.yaml の ApplicationSet が読む)
 name: gitops
 namespace: ''
 
