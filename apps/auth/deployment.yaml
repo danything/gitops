@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: auth
-          image: quay.io/oauth2-proxy/oauth2-proxy:latest
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
           args:
             - --http-address=0.0.0.0:4180
             # X-Forwarded-* はクラスタ内(Gateway の Envoy)からだけ信じる

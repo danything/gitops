@@ -60,6 +60,19 @@
             "datasourceTemplate": "github-releases",
             "depNameTemplate": "pulumi/pulumi-terraform-provider",
             "extractVersionTemplate": "^v(?<version>.+)$"
+        },
+        {
+            "description": "CI の Pulumi CLI (pulumi.yml の pulumi-version-file)。中身は版だけ。SDK (package.json) と tools の CLI と同じ pulumi/pulumi なので、同じ PR で揃って上がる。",
+            "customType": "regex",
+            "managerFilePatterns": [
+                "/^pulumi/\\.pulumi-version$/"
+            ],
+            "matchStrings": [
+                "^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$"
+            ],
+            "datasourceTemplate": "github-releases",
+            "depNameTemplate": "pulumi/pulumi",
+            "extractVersionTemplate": "^v(?<version>.+)$"
         }
     ],
     "packageRules": [
