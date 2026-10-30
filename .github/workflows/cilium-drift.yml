@@ -26,14 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: chart の版を読む
-        id: v
-        run: |
-          set -euo pipefail
-          V=$(sed -n '/^# version: /{s/^# version: *//p;q;}' bootstrap/cilium-values.yaml)
-          echo "chart=$V" >> "$GITHUB_OUTPUT"
-          echo "cilium chart $V"
-
       - name: OIDC トークンを取る
         id: token
         run: |
@@ -59,8 +51,11 @@ jobs:
           echo "kube-version=$KV"
           export HOWTO="bootstrap/talos.md「inlineManifests を直したとき」の render.sh → apply-config → upgrade-k8s を流すこと"
 
+          # chart の版は render.sh の bver と同じく先頭の `# version:`
+          V=$(sed -n '/^# version: /{s/^# version: *//p;q;}' bootstrap/cilium-values.yaml)
+          echo "cilium chart $V"
           helm repo add cilium https://helm.cilium.io >/dev/null
-          helm template cilium cilium/cilium --version "${{ steps.v.outputs.chart }}" \
+          helm template cilium cilium/cilium --version "$V" \
             -n kube-system -f bootstrap/cilium-values.yaml --kube-version "$KV" \
             --show-only templates/cilium-configmap.yaml \
             | yq -o=json '.data' > rendered.json
