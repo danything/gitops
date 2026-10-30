@@ -129,7 +129,7 @@ CI から Forgejo の API・git・レジストリに**長く生きる秘密な�
 
 **forgejo-bot の 2 つは見送った。**forgejo-bot のものは 16.0.5 では画面にも CLI・API にも一覧・変更・削除の手段が無く
 (forgejo-bot は画面にログインできない。`ENABLE_INTERNAL_SIGNIN: "false"`)、止めるには DB の `authorized_integration` の行を触ることになる。
-v17 以降で管理の手段が揃ったら、表のルールで `forgejo admin user create-authorized-integration --username forgejo-bot …` を本番で打ち、
+17.0.1 でも CLI は `create-authorized-integration` だけで、一覧・削除は無い(2026-10-31 に確かめた)。管理の手段が揃ったら、表のルールで `forgejo admin user create-authorized-integration --username forgejo-bot …` を本番で打ち、
 出力の `audience`(`u:<ユーザー ID>:<UUID>`。秘密ではない)を表の変数に入れて、ワークフローの PR
 (doa/tamasagashi#106・doa/todoroku#368・doa/worklog-cloud#148。閉じてある)を出し直す。急いで止めるなら forgejo-bot を bots チームから外す
 (`prohibit_login` はレジストリを止めない)。doa の ID は 2、リポジトリ ID は todoroku 1・tamasagashi 3・worklog-cloud 4(変更の CLI が無いので、足すときは作り直し)。
