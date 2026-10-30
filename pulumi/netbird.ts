@@ -41,8 +41,13 @@ const zone = new netbird.DnsZone(
   opts("db2rqbn4p630008pv62g"),
 );
 
-const record = (key: string, name: string, type: "A" | "AAAA" | "CNAME", content: string, id: string, extra = {}) =>
-  new netbird.DnsRecord(key, { zoneId: zone.id, name, type, content, ttl: 300 }, { ...opts(`db2rqbn4p630008pv62g:${id}`), ...extra });
+// id は NetBird の画面で作ったものを取り込んだときの ID。ここで作るものは null
+const record = (key: string, name: string, type: "A" | "AAAA" | "CNAME", content: string, id: string | null, extra = {}) =>
+  new netbird.DnsRecord(
+    key,
+    { zoneId: zone.id, name, type, content, ttl: 300 },
+    { ...(id ? opts(`db2rqbn4p630008pv62g:${id}`) : { provider }), ...extra },
+  );
 
 record("wildcard", "*.doany.io", "A", "10.0.0.2", "db2rtin4p630008pv9qg");
 // ワイルドカードは 1 段ぶんしか拾わない (x.s.doany.io は *.doany.io に当たらない)
@@ -51,6 +56,13 @@ record("wildcard-s", "*.s.doany.io", "A", "10.0.0.2", "db2rsg74p630008pv8ag");
 // 2 段の名前に CNAME で向けると、このゾーンのワイルドカードに当たらず Cloudflare の家の IP に追従する。
 // 同じ名前に CNAME と A / AAAA は並べられない。alias は以前のキー (nb-a) を作り直さないため
 record("nb", "nb.doany.io", "CNAME", "nb.origin.doany.io", "db2rtjf4p630008pv9s0", { aliases: [{ name: "nb-a" }] });
+
+// 家の Gateway に無い名前は、ワイルドカードに吸われないよう外向きと同じ先を書く (dns.ts と揃える)。
+// md.doany.io は JCOM 側の PC の mado (../mado/)。NetBird につないだまま開けなかった (2026-10-30)
+record("md-a", "md.doany.io", "A", "61.21.173.41", null);
+record("md-aaaa", "md.doany.io", "AAAA", "2405:1201:5201:3a00::2", null);
+// Outlook の自動設定 (Microsoft 365)
+record("autodiscover", "autodiscover.doany.io", "CNAME", "autodiscover.outlook.com", null);
 
 // --- 自宅の LAN への経路 -------------------------------------------------------------------------------
 const NETWORK = "daf7f7n13kb0009ahci0";
