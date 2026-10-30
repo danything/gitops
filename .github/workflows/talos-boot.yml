@@ -328,7 +328,8 @@ jobs:
             containers:
               - name: c
                 image: mirror.gcr.io/library/busybox:1.38
-                command: [sh, -c, 'echo hello > /data/marker && sleep 86400']
+                # 再起動で起き直しても書き直さない(下の「再起動しても PV が戻る」が中身の残りを見る)
+                command: [sh, -c, '[ -f /data/marker ] || echo hello > /data/marker; sleep 86400']
                 securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
                 volumeMounts: [{name: v, mountPath: /data}]
             volumes: [{name: v, persistentVolumeClaim: {claimName: t-src}}]
@@ -353,10 +354,13 @@ jobs:
           kubectl wait --for=jsonpath='{.status.readyToUse}'=true volumesnapshot/t-snap --timeout=3m
           echo "  VolumeSnapshot t-snap: readyToUse(既定の VolumeSnapshotClass $(kubectl get volumesnapshot t-snap -o jsonpath='{.spec.volumeSnapshotClassName}'))"
 
+          # t-dst はスナップショットの中身を読むだけ(書かない)
           sed -e 's/name: t-src$/name: t-dst/' -e 's/claimName: t-src/claimName: t-dst/' \
-            -e "s|echo hello > /data/marker \&\& ||" /tmp/pvc.yaml \
-            | yq 'select(.kind == "PersistentVolumeClaim").spec.dataSource = {"apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": "t-snap"}' \
+            -e 's/\[ -f \/data\/marker \] || echo hello > \/data\/marker; //' /tmp/pvc.yaml \
+            | yq '(select(.kind == "PersistentVolumeClaim") | .spec.dataSource) = {"apiGroup": "snapshot.storage.k8s.io", "kind": "VolumeSnapshot", "name": "t-snap"}' \
             > /tmp/dst.yaml
+          ! grep -q 'echo hello' /tmp/dst.yaml || fail "t-dst が書いてしまう形になっている"
+          grep -q 'kind: VolumeSnapshot' /tmp/dst.yaml || fail "t-dst に dataSource が付いていない"
           kubectl apply -f /tmp/dst.yaml
           kubectl wait --for=condition=Ready pod/t-dst --timeout=3m
           [ "$(kubectl exec t-dst -- cat /data/marker)" = hello ] || fail "スナップショットから戻した PVC に中身が無い"
