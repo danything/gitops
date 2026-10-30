@@ -89,13 +89,10 @@ sops:
     version: 3.13.3
 ---
 # Infisical 自身の根っこの秘密(DB の暗号鍵など)。Infisical がほかの秘密を全部持つための層なので、
-# Infisical からは取れない。値のキーだけ SOPS で暗号化してある(../../.sops.yaml)。
+# Infisical からは取れない。値のキーだけ SOPS で暗号化してある(../.sops.yaml)。
 #
-# ENCRYPTION_KEY encrypts everything Infisical stores in Postgres. Losing or
-# changing it makes the whole database unreadable -- it's the one value here
-# that must survive.
-# AUTH_SECRET only signs sessions and can be rotated (everyone gets logged
-# out).
+# ENCRYPTION_KEY は Infisical が Postgres に置く全部を暗号化する鍵。失くしたり変えたりすると DB が丸ごと読めなくなる。
+# ここで唯一、何があっても残すべき値。AUTH_SECRET はセッションの署名だけなので、入れ替えてよい(全員ログアウトになる)。
 apiVersion: v1
 kind: Secret
 metadata:

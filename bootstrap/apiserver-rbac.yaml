@@ -1,8 +1,5 @@
 # GitHub Actions がこのクラスタで何をしてよいかの定義。使うのは cilium-drift.yml だけで、読むだけ。
 #
-# 2026-10-17 まで bootstrap-apply.yml が bootstrap/ を当てるための書き込み権限もここにあった。
-# いまは平文の層は ArgoCD が apps/ から当てる(2026-10 までは bootstrap/ の Application `bootstrap`)。
-#
 # 当てるのは machine config。このファイルは [render.sh](render.sh) が
 # inlineManifest に描くので、machine config を当てた時点で入っている(このファイルが正本で、写しは作らない)。
 apiVersion: rbac.authorization.k8s.io/v1
