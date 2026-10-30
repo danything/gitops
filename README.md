@@ -4,13 +4,13 @@
 
 ## 仕組み
 
-[`bootstrap/argocd/repos.yaml`](bootstrap/argocd/repos.yaml) の ApplicationSet が org 内のリポジトリを走査し、
+[`bootstrap/argocd-repos.yaml`](bootstrap/argocd-repos.yaml) の ApplicationSet が org 内のリポジトリを走査し、
 各リポジトリの `deploy/argocd.yaml` を見つけて Argo CD の Application を生成する。
 このリポジトリがどうデプロイされるか(同期対象パス・autoSync 等)もクラスタ側ではなく
 [`deploy/argocd.yaml`](deploy/argocd.yaml) で決まる。**Argo CD が同期するのは `apps/` 以下だけ**
-(`bootstrap/` は machine config 側。Argo CD が見るのは `bootstrap/argocd/repos.yaml` の 1 本だけ)。
+(`bootstrap/` は machine config 側。Argo CD が見るのは `bootstrap/argocd-repos.yaml` の 1 本だけ)。
 
-`repos.yaml` は Argo CD の chart が作る `apps` Application が拾うので、**まっさらなクラスタでも CI を待たずに走りはじめる**
+`argocd-repos.yaml` は Argo CD の chart が作る `apps` Application が拾うので、**まっさらなクラスタでも CI を待たずに走りはじめる**
 (詳しくは [`bootstrap/README.md`](bootstrap/README.md))。
 
 ## ディレクトリ
@@ -90,10 +90,10 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`rybbit/`](apps/rybbit/) | Rybbit(`rt.doany.io`、アクセス解析。クッキー無し)+ ClickHouse + PostgreSQL + Redis。トドロクの離脱をファネル・ジャーニー・セッションリプレイで見る。**使い始めは [apps/rybbit/README.md](apps/rybbit/README.md)** |
 
 **動かしていないもの**は `apps/_<name>/` に置いてある。`_` で始まるディレクトリは Argo CD が同期しない
-([bootstrap/argocd/repos.yaml](bootstrap/argocd/repos.yaml) の `directory.exclude`。全リポジトリ共通の決まり)ので、
+([bootstrap/argocd-repos.yaml](bootstrap/argocd-repos.yaml) の `directory.exclude`。全リポジトリ共通の決まり)ので、
 クラスタには何も作らない。動かすときは `git mv apps/_<name> apps/<name>`。いまは無い。
 
 **アプリの多くはこのリポジトリに無い。** 各アプリのリポジトリの `deploy/` に置いてあり、
-`bootstrap/argocd/repos.yaml` の ApplicationSet が拾う(上の「仕組み」)。
+`bootstrap/argocd-repos.yaml` の ApplicationSet が拾う(上の「仕組み」)。
 `kubectl -n argocd get applications` が実際の一覧。
 

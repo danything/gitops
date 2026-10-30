@@ -123,7 +123,7 @@ chart cilium kube-system --api-versions gateway.networking.k8s.io/v1/GatewayClas
 
 inline local-path < bootstrap/local-path.yaml > "$WORK/inline-local-path.yaml"
 
-# CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(ArgoCD は bootstrap/ を repos.yaml しか見ない)。
+# CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(ArgoCD は bootstrap/ を argocd-repos.yaml しか見ない)。
 inline apiserver-rbac < bootstrap/apiserver-rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
 # 秘密の値は <name>-secret-values.sops.yaml を <name>-values.yaml に重ねる。infisical は chart がパスワードを

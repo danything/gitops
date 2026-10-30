@@ -113,7 +113,7 @@ kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting 
 
 ## 5. Gateway・auth などが入るのを見る(ArgoCD)
 
-手ですることは無い。ArgoCD の `gitops` の Application([../bootstrap/argocd/repos.yaml](../bootstrap/argocd/repos.yaml) の ApplicationSet が作る)が `apps/` の
+手ですることは無い。ArgoCD の `gitops` の Application([../bootstrap/argocd-repos.yaml](../bootstrap/argocd-repos.yaml) の ApplicationSet が作る)が `apps/` の
 `ClusterIssuer`・Gateway・auth・`InfisicalSecret` を当てる。
 
 ```shell

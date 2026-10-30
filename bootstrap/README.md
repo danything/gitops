@@ -1,7 +1,7 @@
 # bootstrap
 
 クラスタそのものを組む層。**ここにあるものは全部 machine config に載る**([render.sh](render.sh) が描く)。
-ArgoCD はここを見ない(例外は [argocd/repos.yaml](argocd/repos.yaml) だけ。下の「ArgoCD が当てるもの」)。
+ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) だけ。下の「ArgoCD が当てるもの」)。
 層の分け方は [docs/decisions.md](../docs/decisions.md)「層の分け方」。
 
 | | 何を | いつ |
@@ -26,7 +26,7 @@ ArgoCD はここを見ない(例外は [argocd/repos.yaml](argocd/repos.yaml) �
 | [cert-manager-cloudflare-secret.sops.yaml](cert-manager-cloudflare-secret.sops.yaml) | DNS-01 の Cloudflare のトークン |
 | [apiserver-rbac.yaml](apiserver-rbac.yaml) / [apiserver-ca.crt](apiserver-ca.crt) | API サーバの入口の RBAC と CA(下の「API サーバの入口」) |
 | [local-path.yaml](local-path.yaml) | local-path-provisioner |
-| [argocd/repos.yaml](argocd/repos.yaml) | ArgoCD が当てる唯一のファイル(下の「ArgoCD が当てるもの」) |
+| [argocd-repos.yaml](argocd-repos.yaml) | ArgoCD が当てる唯一のファイル(下の「ArgoCD が当てるもの」) |
 
 **SOPS(age)で暗号化したファイルは名前を `*.sops.yaml` で終える**(`.sops.yaml` の規則もその名前にしか一致しないので、
 別の名前では暗号化できない)。復号鍵はクラスタにも CI にも渡さない。
@@ -36,9 +36,12 @@ ArgoCD はここを見ない(例外は [argocd/repos.yaml](argocd/repos.yaml) �
 
 ## ArgoCD が当てるもの
 
-**ここで ArgoCD が当てるのは [argocd/repos.yaml](argocd/repos.yaml) だけ。** machine config に載っている
+**ここで ArgoCD が当てるのは [argocd-repos.yaml](argocd-repos.yaml) だけ。** machine config に載っている
 `apps` の Application(`argocd-values.yaml` の `extraObjects`)が拾い、そこから ApplicationSet が `apps/` を当てる。
-場所が machine config に焼いてあるので、このファイルだけディレクトリに入っている(動かすと machine config を当て直すことになる)。
+場所(`path: bootstrap` と `include: argocd-repos.yaml`)が machine config に焼いてあるので、名前を変えると machine config を当て直すことになる。
+そのときは **main にマージしてから当てる**。マージから当てるまでの間、`apps` は古い path が無くて ComparisonError で止まるだけ
+(何も消さない)。逆に先に当てると、新しい include が main の何にも当たらず空の描き出しになる(自動同期は空にする
+prune を `allowEmpty` 無しでは拒むが、頼らない)。
 
 ArgoCD の平文のマニフェストは `apps/` にある:
 [apps/gateway/](../apps/gateway/)(Gateway と http → https)、[apps/auth/](../apps/auth/)(SSO の oauth2-proxy)、
