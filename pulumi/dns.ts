@@ -19,7 +19,7 @@ record("wildcard", { name: "*.doany.io", type: "CNAME", content: "doany.io", pro
 // するので、明示しないと Cloudflare に吸われる(apps/external-dns/README.md)
 //   ks: API サーバ。6443 は Cloudflare が通さないポート(CI の cilium-drift.yml が使う)
 //   px: 3proxy。hostPort の 3129 に直接来る
-//   *.s: 2 段の名前(bootstrap/auth の sub)。Cloudflare の無料の証明書は 1 段しか守れない
+//   *.s: 2 段の名前(apps/auth の sub)。Cloudflare の無料の証明書は 1 段しか守れない
 record("ks", { name: "ks.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 });
 record("px", { name: "px.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 });
 record("wildcard-s", { name: "*.s.doany.io", type: "CNAME", content: "doany.io", proxied: false, ttl: 1 });

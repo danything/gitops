@@ -8,7 +8,7 @@ const APPLICATION_OBJECT_ID = "89e18065-3ead-401f-b2dd-6fd5228e2f75";
 
 // [ホスト, パス, 何のため]。並びはホスト名の順
 const WEB_REDIRECTS: [string, string, string][] = [
-  ["a.doany.io", "/oauth2/callback", "auth(oauth2-proxy。bootstrap/auth/)"],
+  ["a.doany.io", "/oauth2/callback", "auth(oauth2-proxy。apps/auth/)"],
   ["ac.doany.io", "/auth/callback", "Argo CD"],
   ["ah.doany.io", "/oauth2/callback", "AdGuard Home の前段(oauth2-proxy)"],
   ["as.doany.io", "/auth/callback", "ashi"],
