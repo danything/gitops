@@ -17,4 +17,4 @@ kubernetes:
 gatewayAPI:
   # Gateway API の CRD(standard チャンネルで足りる)。
   # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-  version: v1.6.3
+  version: v1.7.0
