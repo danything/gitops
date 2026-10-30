@@ -169,8 +169,9 @@ jobs:
           N1=$(name "$MAC_ENO1"); N2=$(name "$MAC_ENO2"); N4=$(name "$MAC_ENO4")
           echo "  eno1 -> $N1  eno2 -> $N2  eno4 -> $N4"
           [ -n "$N1" ] && [ -n "$N2" ] && [ -n "$N4" ] || { echo "::error::NIC の名前が引けない"; exit 1; }
-          sed -e "s/\beno1\b/$N1/g" -e "s/\beno2\b/$N2/g" -e "s/\beno4\b/$N4/g" \
-            /tmp/out/controlplane.yaml > /tmp/vm/controlplane.yaml
+          # NIC は MAC で選ぶ(LinkAliasConfig)ので、実機の MAC を VM の MAC に差し替える。sysctl はカーネルの名前で書くので名前も
+          sed -e "s/30:e1:71:60:fe:a8/$MAC_ENO1/g" -e "s/30:e1:71:60:fe:a9/$MAC_ENO2/g" -e "s/30:e1:71:60:fe:ab/$MAC_ENO4/g" \
+            -e "s/\beno4\b/$N4/g" /tmp/out/controlplane.yaml > /tmp/vm/controlplane.yaml
           talosctl apply-config --insecure -e 127.0.0.1 -n 127.0.0.1 -f /tmp/vm/controlplane.yaml
 
       - name: bootstrap して kubeconfig を取る
