@@ -62,7 +62,7 @@
             "extractVersionTemplate": "^v(?<version>.+)$"
         },
         {
-            "description": "CI の Pulumi CLI (pulumi.yml の pulumi-version-file)。中身は版だけ。SDK (package.json) と tools の CLI と同じ pulumi/pulumi なので、同じ PR で揃って上がる。",
+            "description": "CI の Pulumi CLI (pulumi.yml の pulumi-version-file)。中身は版だけ。下の pulumi のまとめに入れて SDK (@pulumi/pulumi) と同じ PR にし、pulumi install も流す (CLI を上げると bun.lock の sdks/netbird の行が変わる)。",
             "customType": "regex",
             "managerFilePatterns": [
                 "/^pulumi/\\.pulumi-version$/"
@@ -81,7 +81,8 @@
             "matchFileNames": [
                 "pulumi/package.json",
                 "pulumi/bun.lock",
-                "pulumi/Pulumi.yaml"
+                "pulumi/Pulumi.yaml",
+                "pulumi/.pulumi-version"
             ],
             "skipArtifactsUpdate": true,
             "groupName": "pulumi",

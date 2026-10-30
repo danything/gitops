@@ -149,7 +149,7 @@ node を探しに行く)。**`cf` の出力は API の封筒を外した `result
 
 | | どこで固定 | 追うもの |
 | --- | --- | --- |
-| Pulumi の CLI | [.pulumi-version](.pulumi-version) | Renovate(SDK の `@pulumi/pulumi`・tools の CLI と同じ pulumi/pulumi なので揃って上がる) |
+| Pulumi の CLI | [.pulumi-version](.pulumi-version) | Renovate(pulumi のまとめで SDK の `@pulumi/pulumi` と同じ PR。CLI を上げると `pulumi install` で bun.lock も変わる) |
 | SDK・provider・`cf` | [bun.lock](bun.lock) | Renovate |
 | NetBird の provider と包むプラグイン | [Pulumi.yaml](Pulumi.yaml) の `packages` | Renovate (自動マージしない) |
 | bun | [.bun-version](.bun-version) | Renovate |
