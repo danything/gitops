@@ -1,7 +1,9 @@
-talos/clusterconfig/
-# **平文のまま置かないこと。** talos/secrets.yaml と controlplane.yaml は SOPS 済みのものをコミットする
-# (talos/README.md)。書きかけの平文はこの名前に逃がす。
-talos/secrets.plain.yaml
+bootstrap/clusterconfig/
+# 2026-10 までの出力先(talos/ を bootstrap/ にまとめる前)。手元に残っていても入らないように
+/talos/
+# **平文のまま置かないこと。** bootstrap/talos-secrets.sops.yaml と talos.sops.yaml は SOPS 済みのものをコミットする
+# (bootstrap/talos.md)。書きかけの平文はこの名前に逃がす。
+bootstrap/talos-secrets.plain.yaml
 # 平文の kubeconfig / talosconfig も置かない。どちらも tools/t.ps1 が毎回その場で作る
 # (tools/README.md「クラスタの資格情報」)。talosctl kubeconfig と gen config がこの名前で書き出す
 kubeconfig

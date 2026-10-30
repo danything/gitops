@@ -2,7 +2,7 @@
 # chart から描く部分(Cilium・ArgoCD・infisical・cert-manager・local-path)と版は render.sh が足す。
 #
 # **SOPS で password の値だけ暗号化してある**(../.sops.yaml)。平文の部分はそのまま直してよい。
-# パスワードを変えるときは `sops edit talos/controlplane.yaml`。render.sh が `sops -d` してから渡す。
+# パスワードを変えるときは `sops edit bootstrap/talos.sops.yaml`。render.sh が `sops -d` してから渡す。
 # 各ドキュメントの末尾の `sops:` は SOPS のメタデータ(触らない)。
 #
 # 型付きドキュメントと v1alpha1 で書く場所が決まっている(../docs/talos.md「machine config の作法」)。
@@ -417,7 +417,7 @@ sops:
     mac_only_encrypted: true
     version: 3.13.3
 ---
-# 外から入る CI(cilium-drift.yml の OIDC トークン)と人(Entra)の認証。権限の中身は ../bootstrap/apiserver/rbac.yaml。
+# 外から入る CI(cilium-drift.yml の OIDC トークン)と人(Entra)の認証。権限の中身は apiserver-rbac.yaml。
 apiVersion: v1alpha1
 kind: KubeAuthenticationConfig
 # `anonymous` を消さないこと。与えると既定を置き換えるので、書き忘れると

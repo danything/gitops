@@ -1,13 +1,13 @@
 # cilium の値が git とクラスタでズレていないかを見る(読むだけ。権限は cilium-config の get だけ)。
 # cilium は inlineManifest なので、人が render.sh → apply-config → upgrade-k8s を流すまで届かない。
-# 当てるのは自動化しない(talos/README.md)。
+# 当てるのは自動化しない(bootstrap/talos.md)。
 name: cilium drift
 
 on:
   push:
     branches: [main]
     paths:
-      - bootstrap/cilium/**
+      - bootstrap/cilium-values.yaml
       - .github/workflows/cilium-drift.yml
   # クラスタ側だけ手でいじったときのため
   schedule:
@@ -30,7 +30,7 @@ jobs:
         id: v
         run: |
           set -euo pipefail
-          V=$(yq -r '.version' bootstrap/cilium/version.yaml)
+          V=$(sed -n '/^# version: /{s/^# version: *//p;q;}' bootstrap/cilium-values.yaml)
           echo "chart=$V" >> "$GITHUB_OUTPUT"
           echo "cilium chart $V"
 
@@ -44,24 +44,24 @@ jobs:
           echo "::add-mask::${T}"
           echo "token=${T}" >> "$GITHUB_OUTPUT"
 
-      - name: values.yaml から ConfigMap を描いて live と比べる
+      - name: cilium-values.yaml から ConfigMap を描いて live と比べる
         env:
           T: ${{ steps.token.outputs.token }}
         run: |
           set -euo pipefail
           k() {
             kubectl --server=https://ks.doany.io:6443 \
-                    --certificate-authority=bootstrap/apiserver/ca.crt \
+                    --certificate-authority=bootstrap/apiserver-ca.crt \
                     --token="$T" "$@"
           }
           # --kube-version が無いと helm の既定版で描かれて偽の差分が出る
           KV=$(k version -o json | jq -r .serverVersion.gitVersion)
           echo "kube-version=$KV"
-          export HOWTO="talos/README.md「inlineManifests を直したとき」の render.sh → apply-config → upgrade-k8s を流すこと"
+          export HOWTO="bootstrap/talos.md「inlineManifests を直したとき」の render.sh → apply-config → upgrade-k8s を流すこと"
 
           helm repo add cilium https://helm.cilium.io >/dev/null
           helm template cilium cilium/cilium --version "${{ steps.v.outputs.chart }}" \
-            -n kube-system -f bootstrap/cilium/values.yaml --kube-version "$KV" \
+            -n kube-system -f bootstrap/cilium-values.yaml --kube-version "$KV" \
             --show-only templates/cilium-configmap.yaml \
             | yq -o=json '.data' > rendered.json
 

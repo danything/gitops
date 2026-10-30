@@ -66,7 +66,7 @@ spec:
         app: netbird-routing-peer
     spec:
       # hostNetwork にしない。Pod のネットワークからでも LAN には届く(Cilium が masquerade する)。
-      # ホストからは公開 DNS の A(WAN 側)に届かない(talos/controlplane.yaml の StaticHostConfig)ので、
+      # ホストからは公開 DNS の A(WAN 側)に届かない(bootstrap/talos.sops.yaml の StaticHostConfig)ので、
       # hostNetwork だと nb.doany.io:443 に繋げず `Management: Disconnected` で止まる。
       containers:
         - name: netbird
@@ -106,7 +106,7 @@ spec:
             - name: data
               mountPath: /var/lib/netbird
             # カーネルの wireguard が使えないときのユーザ空間フォールバック用。
-            # Talos でもカーネル組み込みは確認済み(talos/README.md)なので通常は使わない
+            # Talos でもカーネル組み込みは確認済み(bootstrap/talos.md)なので通常は使わない
             - name: tun
               mountPath: /dev/net/tun
       volumes:

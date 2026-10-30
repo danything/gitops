@@ -1,4 +1,4 @@
-# talos/render.sh の machine config を runner の QEMU(KVM)で起動し、クラスタが立つところまで見る。
+# bootstrap/render.sh の machine config を runner の QEMU(KVM)で起動し、クラスタが立つところまで見る。
 # 秘密はゼロ(使い捨てとダミー)。外に副作用を出さない: ArgoCD の extraObjects と通知先、
 # 本物の ClusterIssuer(自己署名に差し替え)、infisical の SMTP を抜く。手順の元は docs/talos.md。
 name: talos boot
@@ -7,13 +7,9 @@ on:
   pull_request:
     # YAML のアンカーは読むが、マージキー `<<:` は読まない
     paths: &paths
-      - talos/**
-      - bootstrap/cilium/**
-      - bootstrap/cert-manager/**
-      - bootstrap/argocd/**
-      - bootstrap/infisical/**
-      - bootstrap/gateway/**
-      - bootstrap/apiserver/**
+      - bootstrap/**
+      - apps/argocd/httproute.yaml
+      - apps/gateway/**
       - .github/workflows/talos-boot.yml
   push:
     branches: [main]
@@ -46,13 +42,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: versions.yaml から版と schematic を読む
+      - name: bootstrap/versions.yaml から版と schematic を読む
         id: v
         run: |
           set -euo pipefail
-          VER=$(yq -r '.talos.version' talos/versions.yaml)
-          SCH=$(yq -r '.talos.schematic' talos/versions.yaml)
-          K8S=$(yq -r '.kubernetes.version' talos/versions.yaml)
+          VER=$(yq -r '.talos.version' bootstrap/versions.yaml)
+          SCH=$(yq -r '.talos.schematic' bootstrap/versions.yaml)
+          K8S=$(yq -r '.kubernetes.version' bootstrap/versions.yaml)
           echo "  talos=$VER schematic=$SCH k8s=$K8S"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "schematic=$SCH" >> "$GITHUB_OUTPUT"
@@ -102,32 +98,32 @@ jobs:
         run: |
           set -euo pipefail
           talosctl gen secrets -o /tmp/secrets.yaml
-          # controlplane.yaml は password(fj.doany.io)だけ暗号化してある。ダミーに置き換える
+          # talos.sops.yaml は password(fj.doany.io)だけ暗号化してある。ダミーに置き換える
           # (ダミーは fj.doany.io に置いたまま。ghcr.io に置くと kubelet の取得が 403 で落ちる)
           yq 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
-            talos/controlplane.yaml > /tmp/controlplane.yaml
-          # values.yaml は本物、secret-values.sops.yaml だけダミー(通知先もそこにしか無い)。
+            bootstrap/talos.sops.yaml > /tmp/controlplane.yaml
+          # *-values.yaml は本物、*-secret-values.sops.yaml だけダミー(通知先もそこにしか無い)。
           # extraObjects は app-of-apps と repo-creds。CI で本物を同期させない
           echo 'extraObjects: []' > /tmp/argocd-secret-values.yaml
           # SMTP の env を抜く(リストなので丸ごと置き換える)
           yq '{"infisical": {"extraEnv": [.infisical.extraEnv[] | select(.name | test("^SMTP_") | not)]},
             "postgresql": {"auth": {"password": "ci-dummy"}}, "redis": {"auth": {"password": "ci-dummy"}}}' \
-            bootstrap/infisical/values.yaml > /tmp/infisical-secret-values.yaml
+            bootstrap/infisical-values.yaml > /tmp/infisical-secret-values.yaml
           # ENCRYPTION_KEY は 16 バイトの hex でないと infisical が起動しない
           yq -I4 "del(.sops) | del(.stringData.CLIENT_ID_GITHUB_LOGIN) | del(.stringData.CLIENT_SECRET_GITHUB_LOGIN)
             | .stringData.ENCRYPTION_KEY = \"$(openssl rand -hex 16)\"
             | .stringData.AUTH_SECRET = \"$(openssl rand -base64 32)\"
             | .stringData.TELEMETRY_ENABLED = \"false\"" \
-            bootstrap/infisical/secrets.sops.yaml > /tmp/infisical-secret.yaml
+            bootstrap/infisical-secrets.sops.yaml > /tmp/infisical-secret.yaml
           yq 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
-            bootstrap/cert-manager/cloudflare-secret.sops.yaml > /tmp/cloudflare-secret.yaml
+            bootstrap/cert-manager-cloudflare-secret.sops.yaml > /tmp/cloudflare-secret.yaml
           for f in /tmp/controlplane.yaml /tmp/infisical-secret.yaml /tmp/cloudflare-secret.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done
           SECRETS=/tmp/secrets.yaml CONTROLPLANE=/tmp/controlplane.yaml \
             ARGOCD_SECRET_VALUES=/tmp/argocd-secret-values.yaml INFISICAL_SECRET_VALUES=/tmp/infisical-secret-values.yaml \
             INFISICAL_SECRET=/tmp/infisical-secret.yaml CLOUDFLARE_SECRET=/tmp/cloudflare-secret.yaml \
-            ./talos/render.sh /tmp/out
+            ./bootstrap/render.sh /tmp/out
           talosctl config endpoint 127.0.0.1
           talosctl config node "$NODE"
 
@@ -234,7 +230,7 @@ jobs:
             selfSigned: {}
           YAML
           until kubectl apply -f /tmp/issuer.yaml 2>/dev/null; do sleep 5; done
-          until kubectl apply -f bootstrap/gateway/gateway.yaml -f bootstrap/gateway/redirect-https.yaml -f bootstrap/argocd/httproute.yaml; do sleep 5; done
+          until kubectl apply -f apps/gateway/gateway.yaml -f apps/gateway/redirect-https.yaml -f apps/argocd/httproute.yaml; do sleep 5; done
           kubectl -n kube-system wait --for=condition=Ready certificate --all --timeout=3m
           kubectl -n kube-system wait --for=condition=Programmed gateway/doany --timeout=3m
           # http は https への 301、https は argocd-server まで
@@ -261,17 +257,17 @@ jobs:
             echo "  volume $v: $P"
           done
 
-          WANT=$(yq -r 'select(.kind == "BondConfig") | .hardwareAddr' talos/controlplane.yaml)
+          WANT=$(yq -r 'select(.kind == "BondConfig") | .hardwareAddr' bootstrap/talos.sops.yaml)
           GOT=$(talosctl get links bond0 -o json | jq -r .spec.hardwareAddr)
-          [ "$GOT" = "$WANT" ] || fail "bond0 の MAC が $GOT(controlplane.yaml は $WANT)"
+          [ "$GOT" = "$WANT" ] || fail "bond0 の MAC が $GOT(talos.sops.yaml は $WANT)"
           echo "  bond0 hardwareAddr: $GOT"
 
-          # 以下は forwarding=1 のあとで見ないと意味が無い(controlplane.yaml の accept_ra)
+          # 以下は forwarding=1 のあとで見ないと意味が無い(talos.sops.yaml の accept_ra)
           F=$(talosctl read /proc/sys/net/ipv6/conf/bond0/forwarding)
           [ "$F" = 1 ] || fail "bond0 の forwarding が $F。前提が成り立っていない"
 
           # グローバルな IPv6 は静的な ::2 だけ(SLAAC は autoconf=0 で止めている)
-          STATIC=$(yq -r 'select(.kind == "BondConfig") | .addresses[].address | select(test(":"))' talos/controlplane.yaml)
+          STATIC=$(yq -r 'select(.kind == "BondConfig") | .addresses[].address | select(test(":"))' bootstrap/talos.sops.yaml)
           GLOBAL=$(talosctl get addresses -o json \
             | jq -rs '.[] | select(.spec.linkName == "bond0" and .spec.family == "inet6" and .spec.scope != "link") | .spec.address' | sort)
           echo "  bond0 の IPv6(link-local 以外): $(echo $GLOBAL)"

@@ -1,5 +1,8 @@
-# infisical-standalone の chart の値(Postgres + Redis 同梱)。DB と Redis のパスワードは secret-values.sops.yaml。
-# 描いて machine config に載せるのは talos/render.sh(ArgoCD に置けない理由は docs/decisions.md)。
+# chart と版。Renovate が上げ、render.sh が読む(README.md「Helm で入れるもの」)。
+# renovate: datasource=helm depName=infisical-standalone registryUrl=https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+# version: 1.12.0
+# infisical-standalone の chart の値(Postgres + Redis 同梱)。DB と Redis のパスワードは infisical-secret-values.sops.yaml。
+# 描いて machine config に載せるのは render.sh(ArgoCD に置けない理由は docs/decisions.md)。
 infisical:
     # 無いと名前が infisical-infisical-standalone-infisical になる
     fullnameOverride: infisical

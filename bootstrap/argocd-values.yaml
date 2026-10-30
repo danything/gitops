@@ -1,4 +1,7 @@
-# argo-cd の chart の値。秘密の値は secret-values.sops.yaml。描いて machine config に載せるのは talos/render.sh。
+# chart と版。Renovate が上げ、render.sh が読む(README.md「Helm で入れるもの」)。
+# renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
+# version: 10.11.6
+# argo-cd の chart の値。秘密の値は argocd-secret-values.sops.yaml。描いて machine config に載せるのは render.sh。
 # CRD は描かせない(1.83 MB で描き出しの 95%)。render.sh が URL で渡す。
 crds:
     install: false
@@ -79,9 +82,9 @@ notifications:
 # (ApplicationSet)は repos.yaml に置く。
 extraObjects:
     # danything/* を読む GitHub App の repo-creds(git から取れないのでここに置く)。名前は UI で作ったときのもの。
-    # 鍵は secret-values.sops.yaml。リストは値ファイルを重ねると丸ごと置き換わるので、map を toYaml して 1 要素にする。
+    # 鍵は argocd-secret-values.sops.yaml。リストは値ファイルを重ねると丸ごと置き換わるので、map を toYaml して 1 要素にする。
     - '{{ toYaml .Values.githubAppRepoCreds }}'
-    # app-of-apps。include を広げると values.yaml まで prune/selfHeal の対象になり、消すと ArgoCD が消える。
+    # app-of-apps。include を広げると bootstrap/ の他のファイルまで prune/selfHeal の対象になり、消すと ArgoCD が消える。
     - apiVersion: argoproj.io/v1alpha1
       kind: Application
       metadata:

@@ -5,7 +5,7 @@ metadata:
   namespace: adguardhome
   annotations:
     # AdGuard 自身の認証は切ってある(`users: []`)。守っているのは前段の oauth2-proxy
-    # (bootstrap/auth/adguard-proxy.yaml、Entra のアプリロール `admin`)。
+    # (apps/auth/adguard-proxy.yaml、Entra のアプリロール `admin`)。
     # Web の口はクラスタ内からは無認証になる。外からは Gateway 経由だけで、その手前に SSO がある。
     # クエリログの保持(querylog.interval)は 90d だと querylog.json が 2 GB に育ちバックアップに乗るので 7d。
 spec:

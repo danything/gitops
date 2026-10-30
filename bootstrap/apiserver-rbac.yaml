@@ -1,9 +1,9 @@
 # GitHub Actions がこのクラスタで何をしてよいかの定義。使うのは cilium-drift.yml だけで、読むだけ。
 #
 # 2026-10-17 まで bootstrap-apply.yml が bootstrap/ を当てるための書き込み権限もここにあった。
-# いまは bootstrap/ の平文の層は ArgoCD(bootstrap/argocd/repos.yaml の `bootstrap`)が当てる。
+# いまは平文の層は ArgoCD が apps/ から当てる(2026-10 までは bootstrap/ の Application `bootstrap`)。
 #
-# 当てるのは machine config。このファイルは [../../talos/render.sh](../../talos/render.sh) が
+# 当てるのは machine config。このファイルは [render.sh](render.sh) が
 # inlineManifest に描くので、machine config を当てた時点で入っている(このファイルが正本で、写しは作らない)。
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -27,14 +27,14 @@ roleRef:
   kind: ClusterRole
   name: cilium-drift
 subjects:
-  # talos/controlplane.yaml の claimMappings.username.expression が作る名前。
+  # talos.sops.yaml の claimMappings.username.expression が作る名前。
   # `sub` は組織 ID / リポジトリ ID 入りの形に変わったので使っていない。
   - apiGroup: rbac.authorization.k8s.io
     kind: User
     name: "gha:danything/gitops:refs/heads/main"
 ---
 # ここから下は人。Entra の id_token を Headlamp が API サーバへ転送してくる
-# (talos/controlplane.yaml の 2 つめの issuer)。アプリロール admin を持つ人は
+# (talos.sops.yaml の 2 つめの issuer)。アプリロール admin を持つ人は
 # entra:admin、それ以外は entra:viewer のグループになって届く。
 #
 # CI と同じくこのファイルは machine config に載るので、クラスタを作り直した

@@ -1,6 +1,6 @@
 ﻿# 運用のコマンドを wslc (WSL コンテナ) で動かす。中身は compose.yaml の tools を wslc-compose run する。例:
 #   tools/t.ps1 infisical login --domain https://il.doany.io/api
-#   tools/t.ps1 sops -d bootstrap/infisical/secrets.sops.yaml
+#   tools/t.ps1 sops -d bootstrap/infisical-secrets.sops.yaml
 #   tools/t.ps1 kubectl get pods -A          # クラスタは読み取り用で繋ぐ
 #   tools/t.ps1 --admin kubectl apply -f x   # 書くときだけ管理者 (tools/README.md「クラスタの資格情報」)
 # 引数が無ければシェルに入る。Dockerfile を変えたら次の実行で作り直す (変わっていなければキャッシュで一瞬)。

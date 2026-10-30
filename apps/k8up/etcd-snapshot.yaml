@@ -5,7 +5,7 @@
 # (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書など)まで含めて**一瞬で戻したいとき**の近道。
 # 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
 #
-# Talos API への権限は `os:etcd:backup` だけ(talos/controlplane.yaml)。
+# Talos API への権限は `os:etcd:backup` だけ(bootstrap/talos.sops.yaml)。
 # 下の ServiceAccount を見て Talos が同名の Secret に talosconfig を書く。
 #
 # **通知は何も足さなくてよい。** notify は過去 8 日に出てきた (host, path) を
@@ -46,7 +46,7 @@ spec:
             runAsNonRoot: true
           initContainers:
             # talosctl だけのイメージ(シェルが無い)なので、取るだけを init に分ける。
-            # 版は talos/versions.yaml と揃える(クライアントとノードの版は離れすぎないこと)。
+            # 版は bootstrap/versions.yaml と揃える(クライアントとノードの版は離れすぎないこと)。
             - name: snapshot
               image: ghcr.io/siderolabs/talosctl:v1.15.0-alpha.2
               # ノードは 1 台。Pod からノードの 50000 に直接届く(Talos はファイアウォールを張っていない)

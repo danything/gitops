@@ -18,7 +18,7 @@
 1. **Infisical に 2 つ入れる(同期より先に)**
    - `/forgejo/forgejo-db`: `postgres-password` ── 英数字だけのランダム(`openssl rand -hex 32` など)。
      postgres は最初の起動でしかパスワードを設定しないので、**後から変えるなら DB 側も変える**
-   - `/forgejo/forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく bootstrap/auth にも平文で書いてある)、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
+   - `/forgejo/forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく apps/auth にも平文で書いてある)、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
 2. Entra のアプリ登録 Main のリダイレクト URI に `https://fj.doany.io/user/oauth2/entra/callback`([pulumi/entra.ts](../../pulumi/entra.ts) にある)
 3. main にマージ → ArgoCD が同期
 4. **管理者を作る**(1 度だけ)。Entra のメールと同じにしておくと、Entra でログインしたときに自動で紐づいて管理者になる。
@@ -139,7 +139,7 @@ yui のもの(repo-config)は画面(設定 → 承認済みインテグレーシ
 
 ## ノードからイメージを取る
 
-アプリ側に `imagePullSecrets` は要らない([../../talos/README.md](../../talos/README.md)「fj.doany.io の資格情報」)。
+アプリ側に `imagePullSecrets` は要らない([../../bootstrap/talos.md](../../bootstrap/talos.md)「fj.doany.io の資格情報」)。
 
 ## マージはスカッシュ
 

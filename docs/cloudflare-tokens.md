@@ -11,7 +11,7 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 | `external-dns (doany.io DNS write)` | アカウント | `doany.io` の Zone Read + DNS Write | Infisical `/external-dns/external-dns` の `cloudflare-api-token` | apps/external-dns |
 | `doany-restic` | アカウント | R2 バケット `doany-restic` だけの Object Read & Write | Infisical `/k8up/k8up-global`、`recovery/env.age` | k8up、復元(手元の restic) |
 | cloudflare-ddns | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | Infisical `/cloudflare-ddns/cloudflare-ddns-secrets` の `CLOUDFLARE_API_TOKEN` | apps/cloudflare-ddns |
-| cert-manager | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | SOPS の `bootstrap/cert-manager/cloudflare-secret.sops.yaml` | cert-manager(DNS-01) |
+| cert-manager | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | SOPS の `bootstrap/cert-manager-cloudflare-secret.sops.yaml` | cert-manager(DNS-01) |
 | `todoroku-pulumi (state)` | アカウント | R2 バケット `todoroku-pulumi` だけの Object Read & Write | Forgejo `doa/todoroku` の secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`(ID と値の SHA-256) | todoroku の `infra/`(Pulumi の state) |
 | `gitops pulumi apply` / `preview` | アカウント | pulumi/README.md「鍵と state」 | GitHub の secrets | gitops の Pulumi |
 
@@ -25,7 +25,7 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 - **external-dns / cloudflare-ddns:** Infisical の値を差し替える。operator が Secret を書き換え、
   push-bridge が同期させる。Deployment の `secrets.infisical.com/auto-reload` 注釈で入れ替わる。
 - **todoroku-pulumi (state):** Forgejo の 2 つの secrets を差し替える(S3 の鍵の導き方は下の doany-restic と同じ)。
-- **cert-manager:** `tools/t.ps1 sops bootstrap/cert-manager/cloudflare-secret.sops.yaml` で書き換えてコミットする。
+- **cert-manager:** `tools/t.ps1 sops bootstrap/cert-manager-cloudflare-secret.sops.yaml` で書き換えてコミットする。
 - **doany-restic(R2):** S3 の鍵はトークンから導く。アクセスキー ID はトークンの ID、シークレットはトークンの値の
   SHA-256(16 進)。**2 か所を両方変える**。Infisical が古いとバックアップが落ち(k8up の通知で気づく)、`env.age` が古いと建て直しで Infisical を戻せない(こちらは誰も気づかない)。
   1. Infisical `/k8up/k8up-global` の `accessKeyId` / `secretAccessKey`

@@ -6,7 +6,7 @@
 #   username トークンを作ったユーザー名
 #   password Forgejo のアクセストークン(read:repository と read:organization だけ)
 #
-# GitHub App の資格情報(bootstrap/argocd/values.yaml の extraObjects)と違って Infisical から取ってよい。
+# GitHub App の資格情報(bootstrap/argocd-values.yaml の extraObjects)と違って Infisical から取ってよい。
 # Forgejo 自体が ArgoCD と Infisical の上に載っているので、復旧の順番が逆転しない。
 apiVersion: secrets.infisical.com/v1alpha1
 kind: InfisicalSecret

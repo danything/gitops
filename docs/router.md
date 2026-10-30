@@ -20,7 +20,7 @@
 | 項目 | 値 |
 | --- | --- |
 | LAN | `10.0.0.0/24`、ルーターは `10.0.0.1` |
-| ノード `main` | `10.0.0.2`(bond0)、`240f:6d:842b:1::2`。**ノード側の静的設定**(`talos/controlplane.yaml`。DHCP は使わない。既定経路は `10.0.0.1`、IPv6 は RA を受ける) |
+| ノード `main` | `10.0.0.2`(bond0)、`240f:6d:842b:1::2`。**ノード側の静的設定**(`bootstrap/talos.sops.yaml`。DHCP は使わない。既定経路は `10.0.0.1`、IPv6 は RA を受ける) |
 | 別の LAN | `10.10.0.0/24`(ゲートウェイ `10.10.0.1`)。ノードの eno4 が `10.10.0.4`(静的。既定経路には使わない) |
 | DHCP | ルーターが配る。`10.0.0.10` から 128 個、リース 24 時間。固定割り当て・除外は 0 件。DHCPv6 のアドレス割り当ては自動 |
 | DNS | **ルーターの DHCP には DNS の欄が無い**(配るのはルーター自身の `10.0.0.1`)。AdGuard Home を使うのは、端末側で指定したものと、NetBird の端末(NetBird の DNS 設定で AdGuard を引く。pulumi/netbird.ts) |
@@ -54,10 +54,10 @@ AdGuard Home は問い合わせ元を絞っておらず(apps/adguardhome/deploym
 「IPv6ホスト公開設定」の既定を「遮断」にし、ノード `main` だけをエントリで公開している(既定の「公開」だと LAN の全端末に外から IPv6 で直接届く)。
 
 - **エントリは MAC アドレスで指す**(bond0 の `e6:2c:1b:1a:a0:39`。`talosctl -n 10.0.0.2 get links bond0` で見る。ルーターの「接続端末 情報画面」にも同じ値が出る)。IPv6 アドレスで指すと、RA のプレフィックスが変わったときに外れる
-- **この MAC はノードの設定で固定している**(`talos/controlplane.yaml` の `BondConfig` の `hardwareAddr`)。固定しないと bond は先頭のメンバーの MAC を引き継ぎ、
+- **この MAC はノードの設定で固定している**(`bootstrap/talos.sops.yaml` の `BondConfig` の `hardwareAddr`)。固定しないと bond は先頭のメンバーの MAC を引き継ぎ、
   再起動で変わってエントリが外れる。NIC を替えても Z440 に移しても、この値は変わらない
 - **公開する AAAA は静的な `::2`。** cloudflare-ddns の `local.iface.stable:bond0` は一時アドレス以外から選ぶので、SLAAC のアドレスがあると
-  そちらを書いてしまう。`bond0` は `autoconf=0`(talos/controlplane.yaml)で SLAAC を付けない
+  そちらを書いてしまう。`bond0` は `autoconf=0`(bootstrap/talos.sops.yaml)で SLAAC を付けない
 - 公開の中身は DMZ と同じ(IPv6 すべて・ポート any)。ノードで受けているものは IPv6 でも全部外に出る
 - `fj` / `nb` / `m` / `ks` / `lk` などの AAAA はノード(`240f:6d:842b:1::2`)を指すので、**このエントリを消すと IPv6 の利用者から直接つなぐアプリが見えなくなる**
 - 確かめ方: 別の回線の IPv6 から名前で開く(アドレス直打ちは SNI が無く Gateway が切る)。J:COM 側の PC から

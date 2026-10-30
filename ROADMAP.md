@@ -28,7 +28,7 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
 - [x] **上流がカーネルにモジュールを必要な時に読ませる仕組み(modprobe の helper)を入れたら**、pt3-rebind を外し、
-      `talos/controlplane.yaml` の `kernel.modules` を `earth-pt3` だけにする。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
+      `bootstrap/talos.sops.yaml` の `kernel.modules` を `earth-pt3` だけにする。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
       2026-10-23 に「並び順ではなく、カーネルが必要な時に読み込む形にすべき。こちらで別に実装する」(smira)として閉じられ、
       その実装 [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724) が 2026-10-24 にマージされて v1.15.0-alpha.2 に入った。
       2026-10-24 に v1.15.0-alpha.1 + この PR を自前で組んだ installer で実機を起こし、`earth-pt3` だけでチューナー 4 つが付くことは確かめてあった。

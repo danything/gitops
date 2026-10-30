@@ -49,14 +49,14 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 | --- | --- | --- |
 | R2 の鍵 + restic のパスフレーズ | `recovery/env.age`(公開 repo) | **パスフレーズで直接**(`age -d`) |
 | SOPS の age 秘密鍵 | `recovery/sops-age.key.age`(公開 repo) | **パスフレーズで直接**(`age -d`) |
-| Talos の `secrets.yaml` | `talos/secrets.yaml`(公開 repo・SOPS 済み) | 上の age 鍵で(`sops -d`) |
+| Talos の `secrets.yaml` | `bootstrap/talos-secrets.sops.yaml`(公開 repo・SOPS 済み) | 上の age 鍵で(`sops -d`) |
 | `bootstrap/` の Secret 4 つ | 公開 repo・SOPS 済み | 同上 |
 
 **`recovery/` の 2 つだけ `age -p` なのは、それが「まだ何も無い状態で最初に開けるもの」だから。**
 それ以外は age 鍵さえ手に入れば開くので、`bootstrap/` と同じ SOPS に揃えてある。
 
 **`talosconfig` は保存しない。** `secrets.yaml` から `talosctl gen config` で毎回出てくる派生物で、
-TTL も付いている。使い捨てにするほうが安全(../talos/README.md)。
+TTL も付いている。使い捨てにするほうが安全(../bootstrap/talos.md)。
 
 R2 の鍵を GitHub の秘密(gist・Actions)に置かないのは、GitHub のトークンがあちこちに散っているため。
 GitHub 側が丸ごと漏れても、バックアップ(を消せる鍵)だけは無事な状態を残す。
@@ -98,27 +98,27 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
-| **machine config** | **`bootstrap/` のほぼ全部。** inline が 8 つ(cilium / local-path / `apiserver/rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | 入力(`talos/secrets.yaml` など)が SOPS 済みで、生成物は git に置かない |
-| **ArgoCD** | `bootstrap/` の残り(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、平文のもの。Application `bootstrap`)と `apps/`(**infisical は来ない**。下の「infisical だけは ArgoCD に移せない」) | — |
+| **machine config** | **`bootstrap/` の全部**(`argocd/repos.yaml` を除く)。inline が 8 つ(cilium / local-path / `apiserver-rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、CRD だけ URL で 5 つ(gateway-api / argocd ×3 / cert-manager) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
+| **ArgoCD** | `apps/`。`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、本体が machine config に居る部品の平文のマニフェストもここ(2026-10 までは `bootstrap/` に混ぜて Application `bootstrap` が当てていた)。**infisical の本体は来ない**(下の「infisical だけは ArgoCD に移せない」) | — |
 
 - **CRD だけ URL で渡すのは大きさの都合。** 埋めると machine config が 341 KB → 4 MB を超える。
-  `KubeExternalManifestConfig` は Talos がそのために用意している入口([talos/render.sh](../talos/render.sh))
+  `KubeExternalManifestConfig` は Talos がそのために用意している入口([bootstrap/render.sh](../bootstrap/render.sh))
 - **平文の残りは ArgoCD。** 鶏と卵にならない ──
   ArgoCD が動くのに要るもの(本体・repo の資格情報・入口の `apps`)は全部 machine config にあり、この層に頼っていない。
   この層が要る CRD も machine config が入れる(`InfisicalSecret` の CRD だけ `apps/` から来るので、最初の何回かは retry)。
 - **SOPS の Secret を machine config に入れる。** 復号鍵はクラスタにも CI にも渡さないので、ArgoCD からは当てられない。
-  machine config の入力(`talos/secrets.yaml`)もクラスタ CA の秘密鍵を含む SOPS なので信頼水準は変わらず、起動時点で存在する
+  machine config の入力(`bootstrap/talos-secrets.sops.yaml`)もクラスタ CA の秘密鍵を含む SOPS なので信頼水準は変わらず、起動時点で存在する
 - **Helm を実行する場所はクラスタの外(手元の生成時)だけ。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
   ArgoCD も同じ扱いにすればクラスタ内に Helm コントローラを持たなくて済む。版の追従は Renovate
 
 ## machine config と Cilium の chart をどう連動させるか
 
 **machine config を「派生物」にする。** `helm template` の出力を `KubeInlineManifestConfig` に包んで `--config-patch` として渡す
-([talos/render.sh](../talos/render.sh))ので、Cilium の値がリポジトリに二度書かれない。Renovate は
-`bootstrap/cilium/version.yaml` を見ていて、machine config は毎回そこから描き直されるだけ。
+([bootstrap/render.sh](../bootstrap/render.sh))ので、Cilium の値がリポジトリに二度書かれない。Renovate は
+`bootstrap/cilium-values.yaml` の先頭の `# version:` を見ていて、machine config は毎回そこから描き直されるだけ。
 
-**`helm upgrade` は使わない。** 更新経路は「`values.yaml` を直す → 描き直す → `upgrade-k8s`」。古い machine config のまま
-`upgrade-k8s` を流すと走っている Cilium が巻き戻る([../talos/README.md](../talos/README.md)「上げ方 / 当て直し方」)。
+**`helm upgrade` は使わない。** 更新経路は「`cilium-values.yaml` を直す → 描き直す → `upgrade-k8s`」。古い machine config のまま
+`upgrade-k8s` を流すと走っている Cilium が巻き戻る([../bootstrap/talos.md](../bootstrap/talos.md)「上げ方 / 当て直し方」)。
 流し忘れは [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で live と突き合わせる。
 bootstrap のあとに `helm install` する案は、再構築のたびに「CNI が無いので何も動かない」状態での手作業が増えるので採らない。
 
@@ -156,7 +156,7 @@ hostPort ならノードの全アドレスで受けられ、送信元 IP も保�
 
 | 対象 | hostPort |
 | --- | --- |
-| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind し、外からの通信はそこに直接届く。Service の nodePort はランダムなままでよい(`bootstrap/cilium/values.yaml` の `nodePort`) |
+| Gateway(`cilium-gateway-doany`) | 80 / 443。Envoy が hostNetwork で bind し、外からの通信はそこに直接届く。Service の nodePort はランダムなままでよい(`bootstrap/cilium-values.yaml` の `nodePort`) |
 | adguardhome | 53 UDP・53 TCP・853 TCP |
 | matrix の LiveKit | 8443 UDP・8443 TCP |
 | 3proxy(tls-terminator サイドカー) | 3129 TCP |
@@ -195,7 +195,7 @@ Entra のトークンは大きく(セッション実測 4293 バイト)、Cookie
 Gateway に sticky cookie が無い(要るのは tamasagashi 1 本。更新中に HTML と CSS/JS が別の Pod から返る 404 を防ぐため)。
 Gateway API の session persistence は experimental チャネル限定、Cilium は 1.21 から(cilium/cilium#48029)、
 `sessionAffinity: ClientIP` は Gateway 経路に効かない。いまは replicas 1 で穴を受け入れている。
-**1.21 に上げるときに Gateway API CRD を experimental に替え(`talos/render.sh` の URL)、tamasagashi の HTTPRoute に `sessionPersistence` を足す。**
+**1.21 に上げるときに Gateway API CRD を experimental に替え(`bootstrap/render.sh` の URL)、tamasagashi の HTTPRoute に `sessionPersistence` を足す。**
 それまでにアプリを複数 replica にするなら、セッション固定が無いことを先に確かめる。
 
 ## chart を配るときと、chart で入れるとき
@@ -226,12 +226,12 @@ Gateway API の session persistence は experimental チャネル限定、Cilium
 denpa の tuner-agent は Earthsoft PT3(`earth_pt3`)の `/dev/dvb` と B-CAS リーダーに依存している。
 **公式 extension `siderolabs/dvb-pt3` を使う**([siderolabs/pkgs#1682](https://github.com/siderolabs/pkgs/pull/1682))。
 v1.15.0-alpha.1 からしか無いので、**正式版を待つより PT3 を先に取り、本番を alpha に乗せている**。
-extension は `earth_pt3` を blacklist して配るので、`talos/controlplane.yaml` の `machine.kernel.modules` で読ませる。
+extension は `earth_pt3` を blacklist して配るので、`bootstrap/talos.sops.yaml` の `machine.kernel.modules` で読ませる。
 復調とチューナーのモジュールは、v1.15.0-alpha.2 から Talos がカーネルの要求(`request_module`)で読む([siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724))。
 それまでは 3 つも並べて書き、起動後に PT3 を付け直す DaemonSet(pt3-rebind)で順番の問題を避けていた。
 
 **駄目だったときの保険: KubeVirt の VM にパススルー。** PT3(05:00.0)は IOMMU グループ 36 に単独、B-CAS は USB(GemPC Twin 08e6:3437)。
-`intel_iommu=on` は schematic に残してあるが、vfio は `talos/controlplane.yaml` から外した(PT3 をホストのドライバと取り合う)ので、戻るなら足し直す。
+`intel_iommu=on` は schematic に残してあるが、vfio は `bootstrap/talos.sops.yaml` から外した(PT3 をホストのドライバと取り合う)ので、戻るなら足し直す。
 **自前 extension を `imager` で焼く案は採らない**(アップグレードのたびに自前ビルドになる)。
 
 ## 依存の更新をどこまで自動で入れるか
@@ -322,14 +322,14 @@ v0.65.0 から management/signal/relay が 1 つの combined コンテナなの�
 ## 公開経路(HTTPRoute)をどこに置くか
 
 **それぞれが公開しているものと同じ場所**に置く
-(このリポジトリの `apps/<name>/httproute.yaml`、各アプリのリポジトリの `deploy/httproute.yaml`、`bootstrap/` の argocd / auth / redirect-https)。
+(このリポジトリの `apps/<name>/httproute.yaml`、各アプリのリポジトリの `deploy/httproute.yaml`。argocd・auth・gateway の経路も `apps/` の下)。
 
-`bootstrap/` の経路も ArgoCD(Application `bootstrap`)が当てる。ArgoCD が壊れても当たっている経路は消えず、
+これらは全部 ArgoCD が当てる。ArgoCD が壊れても当たっている経路は消えず、
 直すのは Headlamp か `tools/t.ps1 --admin` の kubectl で足りる。
 外部露出の一覧は `kubectl get httproute,grpcroute -A` が正確で、git を読むより早い(一覧の一枚は作らない)。
 
 **落とさずに動かす**: ArgoCD は「git から消えた + 自分が追跡している」ものを prune する。別リポジトリへは移送先を**先に**マージして
-tracking-id が書き換わってから元を消す。`bootstrap/` へは、先に live に `Prune=false` を効かせてから移し、tracking-id 注釈を剥がす。
+tracking-id が書き換わってから元を消す。同じリポジトリの中で Application をまたぐときは、元の Application の自動同期を先に止めてから移す(2026-10 に `bootstrap` から `apps/` へ移したときのやり方)。
 
 ## DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける
 

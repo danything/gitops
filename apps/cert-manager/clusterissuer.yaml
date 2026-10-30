@@ -1,4 +1,4 @@
-# ワイルドカードを取るので DNS-01。トークンは cert-manager の namespace の Secret(cloudflare-secret.sops.yaml)。
+# ワイルドカードを取るので DNS-01。トークンは cert-manager の namespace の Secret(bootstrap/cert-manager-cloudflare-secret.sops.yaml。machine config に載る)。
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

@@ -1,5 +1,5 @@
 #!/bin/sh
-# kubectl / talosctl / helm の入口(tools/README.md「クラスタの資格情報」)。繋ぐときだけ talos/secrets.yaml の CA で
+# kubectl / talosctl / helm の入口(tools/README.md「クラスタの資格情報」)。繋ぐときだけ bootstrap/talos-secrets.sops.yaml の CA で
 # 1 日で切れる証明書を作り、/dev/shm(tmpfs)に置いて渡す。平文はディスクに書かない。
 # 既定は読み取り用。管理者は `tools/t.ps1 --admin …`(GITOPS_ADMIN=1)のときだけ。
 set -eu
@@ -52,7 +52,7 @@ mint() {
 		set -e
 		umask 077
 		for k in crt key; do
-			sops -d --extract "[\"certs\"][\"$1\"][\"$k\"]" talos/secrets.yaml >"$w/ca.$k.b64"
+			sops -d --extract "[\"certs\"][\"$1\"][\"$k\"]" bootstrap/talos-secrets.sops.yaml >"$w/ca.$k.b64"
 			base64 -d "$w/ca.$k.b64" >"$w/ca.$k"
 		done
 		# Talos の ed25519 は独自の見出し。中身は PKCS#8 なので見出しだけ直す
@@ -72,7 +72,7 @@ mint() {
 	rc=$?
 	set -e
 	rm -rf "$w"
-	[ $rc = 0 ] || { rm -f "$3".*; die "証明書を作れなかった(talos/secrets.yaml を age の鍵で開けるか)"; }
+	[ $rc = 0 ] || { rm -f "$3".*; die "証明書を作れなかった(bootstrap/talos-secrets.sops.yaml を age の鍵で開けるか)"; }
 }
 
 # 作業用 PC の LAN 側のノードの口(10.0.0.2 は手元から届かず、NetBird はクラスタが落ちると使えない)
@@ -103,7 +103,7 @@ if [ ! -s "$out" ]; then
 		# talosctl kubeconfig は 1 年もつ証明書を出すので使わない
 		subj=/O=system:masters/CN=tools-admin
 	else
-		# Headlamp の Entra の viewer と同じ権限(bootstrap/apiserver/rbac.yaml)
+		# Headlamp の Entra の viewer と同じ権限(bootstrap/apiserver-rbac.yaml)
 		subj=/O=entra:viewer/CN=tools-readonly
 	fi
 	mint k8s "$subj" "$out.c.$$" ec

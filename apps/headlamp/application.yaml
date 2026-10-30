@@ -5,7 +5,7 @@
 #
 # 認証は Entra の OIDC。Headlamp は利用者の id_token を API サーバへ転送するだけで、
 # 権限を持たない。誰が何をできるかは apiserver 側で決まる
-# (talos/controlplane.yaml と bootstrap/apiserver/rbac.yaml)。アプリロール admin を
+# (bootstrap/talos.sops.yaml と bootstrap/apiserver-rbac.yaml)。アプリロール admin を
 # 持つ人は cluster-admin、それ以外は読み取り専用。
 #
 # コールバックは Headlamp が要求のホストから組み立てる(Envoy が x-forwarded-proto を

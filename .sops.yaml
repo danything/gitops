@@ -2,21 +2,22 @@
 # (env.age と同じパスフレーズ)。復号は
 #   tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
 # のあと `tools/t.ps1 sops -d`(tools/t.ps1 の中の ~ はリポジトリの .home/)。
+# 上から順に見て、最初に当たった規則を使う。
 creation_rules:
-  # secret-values.sops.yaml は秘密しか入れないので丸ごと
-  - path_regex: ^bootstrap/[^/]+/secret-values\.sops\.yaml$
-    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-  # 残りはキーだけ(構造をレビューできるように)。bootstrap/ で暗号化するファイルは `.sops.yaml` で終える
-  # (ArgoCD の `bootstrap` はその名前で外す)。
-  - path_regex: ^bootstrap/.*\.sops\.yaml$
-    encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+  # <name>-secret-values.sops.yaml は秘密しか入れないので丸ごと
+  - path_regex: ^bootstrap/[^/]+-secret-values\.sops\.yaml$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
   # 手で書く machine config。秘密は password の値だけ(fj.doany.io)。平文の部分は sops を通さず直接直せるよう
   # mac_only_encrypted(MAC が暗号化した値だけを見る)。SOPS はドキュメントごとに sops: を付け、インデントを 4 にする
-  - path_regex: ^talos/controlplane\.yaml$
+  - path_regex: ^bootstrap/talos\.sops\.yaml$
     encrypted_regex: ^password$
     mac_only_encrypted: true
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
   # 全部が秘密なので丸ごと(CA 一式)
-  - path_regex: ^talos/secrets\.yaml$
+  - path_regex: ^bootstrap/talos-secrets\.sops\.yaml$
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+  # 残りはキーだけ(構造をレビューできるように)。上に当たらなかった bootstrap/ の `*.sops.yaml` はここに落ちるので最後に置く。
+  # bootstrap/ で暗号化するファイルは `.sops.yaml` で終える(どの規則もその名前にしか当たらない)。
+  - path_regex: ^bootstrap/[^/]+\.sops\.yaml$
+    encrypted_regex: ^(ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r

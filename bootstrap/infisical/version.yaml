@@ -1,2 +1,0 @@
-# renovate: datasource=helm depName=infisical-standalone registryUrl=https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
-version: 1.12.0
