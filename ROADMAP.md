@@ -27,9 +27,6 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 ## Phase 3 — Talos 定常運用
 
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
-- [ ] **次に machine config を当てるときに、inline に入るコメントを直す。** `infisical-values.sops.yaml` の 2 つ目のドキュメント
-      (英語のまま、`../../.sops.yaml` は `../.sops.yaml`)、`apiserver-rbac.yaml` の古い `bootstrap-apply.yml` の話、`local-path.yaml`。
-      コメントも inlineManifests にそのまま入るので、直すと描いたものが変わる(当てるついでにやる)
 
 ## 済んだこと(記録)
 
