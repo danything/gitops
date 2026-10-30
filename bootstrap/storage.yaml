@@ -92,21 +92,23 @@ spec:
           args:
             - |
               VG=data POOL=data_thinpool
+              # dmeventd は無い(Talos にもこのイメージにも)。見張らせようとすると失敗の終了コードで返る(再起動のあとに踏んだ)
+              C='activation { monitoring = 0 }'
               # 入れ直した直後は Talos が VG を作るまで待つ
               until vgs "$VG" >/dev/null 2>&1; do echo "VG $VG を待つ"; sleep 5; done
               # 起動時は Talos も有効にする。先に動いたときのため
-              vgchange -ay "$VG"
+              vgchange --config "$C" -ay "$VG"
               if ! lvs "$VG/$POOL" >/dev/null 2>&1; then
                 # --wipesignatures は thin プールには付けられない(Talos が新しいパーティションの先頭を消してある)
-                lvcreate --type thin-pool -l 90%VG --poolmetadatasize 1g --yes -n "$POOL" "$VG"
+                lvcreate --config "$C" --type thin-pool -l 90%VG --poolmetadatasize 1g --yes -n "$POOL" "$VG"
               fi
               # OpenEBS が作った小さいプール(最後の PV を消すとプールごと消し、次の PVC の大きさで作り直す)を広げる
               n() { tr -d ' '; }
               want=$(( $(vgs --noheadings --units b --nosuffix -o vg_size "$VG" | n) * 90 / 100 ))
               have=$(lvs --noheadings --units b --nosuffix -o lv_size "$VG/$POOL" | n)
-              if [ "$have" -lt $(( want - 1073741824 )) ]; then lvextend -l 90%VG "$VG/$POOL"; fi
+              if [ "$have" -lt $(( want - 1073741824 )) ]; then lvextend --config "$C" -l 90%VG "$VG/$POOL"; fi
               meta=$(lvs --noheadings --units b --nosuffix -o lv_metadata_size "$VG/$POOL" | n)
-              if [ "$meta" -lt 1073741824 ]; then lvextend --poolmetadatasize 1g "$VG/$POOL"; fi
+              if [ "$meta" -lt 1073741824 ]; then lvextend --config "$C" --poolmetadatasize 1g "$VG/$POOL"; fi
               lvs -a -o lv_name,lv_size,data_percent,metadata_percent "$VG"
           securityContext:
             privileged: true
@@ -134,7 +136,7 @@ spec:
                 - sh
                 - -c
                 - set -- $(lvs --noheadings -o data_percent,metadata_percent data/data_thinpool); [ "${1%%.*}" -lt 90 ] && [ "${2%%.*}" -lt 90 ]
-            periodSeconds: 300
+            periodSeconds: 60
             timeoutSeconds: 30
           securityContext:
             privileged: true
