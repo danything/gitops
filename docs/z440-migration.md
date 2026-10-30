@@ -93,7 +93,7 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 2. Image Factory の schematic の `customization.extraKernelArgs` に `console=tty0` と `console=ttyS<番号>,115200n8` を足し、
    新しい schematic ID で `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>`(再起動する)。
    カーネル引数は machine config に書けない(`bootstrap/talos.sops.yaml` の注、[talos.md](talos.md))。
-   schematic ID は `bootstrap/talos.sops.yaml` の先頭の `# schematic:` と `main.yaml` の注も揃える。**Arc の extension を足すのも同じ手順**なので一緒にやる
+   schematic ID は `bootstrap/talos.sops.yaml` の先頭の `# schematic:` に書く(Renovate と render.sh はそこを読む)。**Arc の extension を足すのも同じ手順**なので一緒にやる
    (`siderolabs/i915` で足りるか要確認。Arc B シリーズなどは `siderolabs/xe`。**両方は入れない** ── 同じ GPU を取り合う)
 
 ### つなぎ方

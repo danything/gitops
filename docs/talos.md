@@ -34,8 +34,8 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 
 | 用途 | URL |
 | --- | --- |
-| ISO(Secure Boot オフ) | `https://factory.talos.dev/image/96371c8f…/v1.15.0-alpha.2/metal-amd64.iso`(Secure Boot 用の `metal-amd64-secureboot.iso` は UEFI に鍵登録が要るので使わない) |
-| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/96371c8f…:v1.15.0-alpha.2` |
+| ISO(Secure Boot オフ) | `https://factory.talos.dev/image/<schematic>/<版>/metal-amd64.iso`(Secure Boot 用の `metal-amd64-secureboot.iso` は UEFI に鍵登録が要るので使わない) |
+| `--install-image` と `talosctl upgrade --image` | `factory.talos.dev/installer/<schematic>:<版>` |
 
 プレリリース(alpha / beta)も同じ形の URL で取れる。extension を足したくなったら schematic を作り直して ID を差し替え、
 `talosctl upgrade` で当てる(ISO を焼き直す必要はない)。
@@ -55,7 +55,7 @@ curl -X POST --data-binary @schematic.yaml https://factory.talos.dev/schematics
 | PV の置き場 | `UserVolumeConfig`。マウント先(`/var/mnt/<name>`)は kubelet に自動で通るので `extraMounts` は要らない([talos.sops.yaml](../bootstrap/talos.sops.yaml))。ディスク上のラベルは `u-<name>` |
 | control-plane への scheduling 許可 | v1alpha1 の `allowSchedulingOnControlPlanes` は弾かれる。**`KubeNodeConfig` を `$patch: delete` して `labels` だけ書き戻す**([talos.sops.yaml](../bootstrap/talos.sops.yaml)) |
 | CNI を止める | `KubeFlannelCNIConfig` を `$patch: delete`、`KubeProxyConfig` を `enabled: false`([talos.sops.yaml](../bootstrap/talos.sops.yaml))。**v1alpha1 の `cni.name: none` はもう書けない** |
-| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。Talos 1.14 以降は usermode の modprobe helper が無い(`/proc/sys/kernel/modprobe` が空)ので、`request_module` で依存を引くドライバは順番が狂うと失敗する(PT3 で踏んだ。[talos.sops.yaml](../bootstrap/talos.sops.yaml)。上流は並び順ではなく、カーネルが必要な時に読み込む形で直す方針。ROADMAP) |
+| カーネルモジュール | `machine.kernel.modules`。**並べた順ではなく名前の順に読まれる**。v1.15.0-alpha.2 からはカーネルの要求(`request_module`)でも読むので、書くのは自分からは読まれないものだけでよい(PT3 は `earth-pt3` だけ。[talos.sops.yaml](../bootstrap/talos.sops.yaml)、[decisions.md](decisions.md)「PT3 チューナー」) |
 
 ### PSA のラベル(Pod Security Admission が既定で `baseline`)
 
@@ -124,7 +124,7 @@ Sidero のドキュメントの「Talos only creates missing resources from inli
 [.github/workflows/talos-boot.yml](../.github/workflows/talos-boot.yml) が PR ごとに描いた machine config を QEMU で起動して見る。
 見つけた穴は直した場所(`bootstrap/talos.sops.yaml`・`bootstrap/render.sh`)に理由を書いてある。
 
-VM では確かめられないもの: PT3 のモジュールの読み順、bond のフェイルオーバーの復旧方向(落とす方向は 8 秒以内で `talosctl` は途切れない)。
+VM では確かめられないもの: PT3(実機のカードが要る)、bond のフェイルオーバーの復旧方向(落とす方向は 8 秒以内で `talosctl` は途切れない)。
 
 - **v1.14 以降の `talosctl` は `--nodes` / `--endpoints` がグローバルフラグではない。** `talosctl get links --insecure -n … -e …` の順で書く。
   `talosctl apply-config -m reboot` は無い(`auto` / `no-reboot` / `staged` / `try`)
@@ -147,7 +147,7 @@ LoadBalancer とクライアント IP も decisions.md「ルーティングの�
 | --- | --- | --- |
 | イメージ | カーネル引数、system extension(GPU ドライバ等) | Image Factory で schematic を作って `talosctl upgrade` |
 | machine config | CNI、kube-proxy、ディスク、ネットワーク、`bootstrap/` の chart と SOPS のファイル | `render.sh` → `apply-config`(inlineManifests は `upgrade-k8s` まで) |
-| Kubernetes | ワークロード | Argo CD(`apps/`・`bootstrap/` の残りの平文・各リポジトリの `deploy/`) |
+| Kubernetes | ワークロード | Argo CD(`apps/`・各リポジトリの `deploy/`) |
 
 SSH もシェルもパッケージマネージャも無く gRPC API だけなので、**障害時は「直さず作り直す」**。
 デバッグは `talosctl dmesg` / `logs` / `read`、debug コンテナ。

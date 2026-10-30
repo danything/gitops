@@ -27,14 +27,12 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 ## Phase 3 — Talos 定常運用
 
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
-- [x] **上流がカーネルにモジュールを必要な時に読ませる仕組み(modprobe の helper)を入れたら**、pt3-rebind を外し、
-      `bootstrap/talos.sops.yaml` の `kernel.modules` を `earth-pt3` だけにする。並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
-      2026-10-23 に「並び順ではなく、カーネルが必要な時に読み込む形にすべき。こちらで別に実装する」(smira)として閉じられ、
-      その実装 [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724) が 2026-10-24 にマージされて v1.15.0-alpha.2 に入った。
-      2026-10-24 に v1.15.0-alpha.1 + この PR を自前で組んだ installer で実機を起こし、`earth-pt3` だけでチューナー 4 つが付くことは確かめてあった。
-      alpha.2 に上げる PR(#607)で pt3-rebind を消し、`kernel.modules` を `earth-pt3` だけにした。2026-10-29 に公式の alpha.2 へ upgrade し、earth_pt3 から tc90522・qm1d1c0042・mxl301rf が自動で読まれてチューナー 4 つ(adapter0〜3 と frontend0)が付くのを確かめた。Kubernetes も 1.37.2 になった
 
 ## 済んだこと(記録)
 
 - **Talos へ移した(2026-10-17)。** git から建て直し、PV を restic から戻した([recovery/README.md](recovery/README.md))
 - **バックアップと復元の確認を自動に。** restic + k8up で日次、etcd も日次、月次の取り出し確認、machine config は PR ごとに QEMU で起動([apps/k8up/README.md](apps/k8up/README.md))
+- **PT3 の付け直し(pt3-rebind)を外した(2026-10-29)。** 並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
+  「カーネルが必要な時に読み込む形にすべき」(smira)として閉じられ、その実装 [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724) が
+  v1.15.0-alpha.2 に入った。#607 で `kernel.modules` を `earth-pt3` だけにし、alpha.2(Kubernetes 1.37.2)に上げて、
+  tc90522・qm1d1c0042・mxl301rf が自動で読まれてチューナー 4 つ(adapter0〜3 と frontend0)が付くのを確かめた

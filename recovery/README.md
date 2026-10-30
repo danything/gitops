@@ -11,7 +11,7 @@
 | [pv.sh](pv.sh) | PV のデータを k8up の `Restore` で戻す道具(下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
-**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる(`pv.sh - plan-all` は 2026-10-20 に本番の restic と突き合わせて、全 namespace の判定が上の表どおりになるのを確かめた)。
+**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる(`pv.sh - plan-all` は 2026-10-20 に本番の restic と突き合わせて、全 namespace の判定が 8 の表どおりになるのを確かめた)。
 
 **手動のリハーサルは回さない。** 中身は月次の [restore-check](../apps/k8up/restore-check.yaml)、machine config は
 [talos-boot](../.github/workflows/talos-boot.yml) が確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
@@ -78,7 +78,7 @@ curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05
 - **Secure Boot が Disabled**(RBSU は POST 中に F9 → Server Security → Secure Boot Settings)。Boot Mode は UEFI のまま
 - POST 中に **F11** で USB を選ぶ(iLO の Virtual Media なら Image File CD-ROM/DVD に ISO の URL を貼り、Reset して F11)
 - コンソールに maintenance mode の IP が出る。インタフェースが `eno1` / `eno2` / `eno4`、インストール先が `/dev/sda`(447 GB)であること
-  (違ったら `bootstrap/talos.sops.yaml` / `main.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
+  (違ったら `bootstrap/talos.sops.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
 
 ```shell
 IP=<コンソールに出た IP>
@@ -238,6 +238,6 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | local-path の ConfigMap に `setup` / `teardown` があるか |
 | 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
-| bootstrap apply が TLS で落ちる | `talos-secrets.sops.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `talos-secrets.sops.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
+| cilium-drift が TLS で落ちる | `talos-secrets.sops.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `talos-secrets.sops.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
 | inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../bootstrap/talos.md](../bootstrap/talos.md)「上げ方 / 当て直し方」) |

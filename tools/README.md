@@ -33,7 +33,7 @@ tools/t.ps1        # 引数なしならシェルに入る
   クラスタの資格情報はここにも置かない(下の「クラスタの資格情報」)。
   `.home/` は本人だけが読める ACL にする
 - **`git clean -fdx` で消える**(無視しているファイルも消すため)。age 鍵は `recovery/sops-age.key.age` から戻せる
-  (README「Infisical より下の層」)、ほかはログインし直せば戻る
+  (README「秘密の扱い」)、ほかはログインし直せば戻る
 - Dockerfile を変えると、次の `tools/t.ps1` でイメージを作り直す(変わっていなければキャッシュで一瞬)
 - パイプやリダイレクトのときは TTY を付けない(`tools/t.ps1` が見分ける)
 - PowerShell でパイプしたもの(`tools/t.ps1 sops -d … | tools/t.ps1 --admin kubectl apply -f -`)は、`t.ps1` がコンテナの標準入力に流し直す。
@@ -80,7 +80,7 @@ tools/t.ps1        # 引数なしならシェルに入る
   1 秒ほど以上かかるコマンドの出力が落ちて `ERROR_INVALID_HANDLE` で終わるので、`t.ps1` はそのときだけ空のパイプを渡す。
   NUL かどうかは標準入力の種類(`GetFileType`)で見分けるので、ファイルや外のパイプからの入力は今までどおり届く
 - NetBird の exit ノード越しだと `*.doany.io` を外向きの IPv4 で引いたときに届かないので、NetBird の DNS ゾーンで
-  内部の 10.0.0.2 に向けている(`nb.doany.io` だけは例外)
+  内部の 10.0.0.2 に向けている(`nb`・`md`・`autodiscover` は例外。[../pulumi/netbird.ts](../pulumi/netbird.ts))
 
 ## 入れるものの確かめ方
 

@@ -43,7 +43,7 @@ metadata:
 - アプリから見える接続元は Cloudflare の IP。本当の接続元は `CF-Connecting-IP`(Rybbit は自分で読む)
 - 応答が 100 秒を超えると 524、リクエストの本文は 100MB まで(無料プラン)
 - SSL は Full (strict)(`pulumi/dns.ts` の zone 設定)。Gateway の Let's Encrypt の証明書で足りる
-- NetBird につないでいる端末は、NetBird の DNS(`pulumi/netbird.ts`)で `*.doany.io` を 10.0.0.2 に引くので Cloudflare を通らない
+- NetBird につないでいる端末は、NetBird の DNS(`pulumi/netbird.ts`)で `*.doany.io` を 10.0.0.2 に引くので Cloudflare を通らない(`nb`・`md`・`autodiscover` を除く)
 
 ## 触るもの・触らないもの
 

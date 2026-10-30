@@ -74,8 +74,7 @@ Namespace は chart が描かないので、`render.sh` が kube-system 以外�
 
 ## git と live がずれていないか
 
-**cilium は [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で見ている**(値が `cilium-config` という
-ConfigMap に出ているので、読むだけの権限で比べられる)。**残りは見ていない。** 当て忘れは `upgrade-k8s` の差分に出るので、
+**cilium だけは [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が見ている**(下の「cilium」)。**残りは見ていない。**
 直したら流す(流し忘れたことは誰も教えてくれない)。描くたびに変わる値は潰してあるので、
 `apply-config --dry-run` に出る差分は全部本物([talos.md](talos.md)「inlineManifests を直したとき」)。
 
@@ -89,18 +88,13 @@ ConfigMap に出ているので、読むだけの権限で比べられる)。**�
 `render.sh` がここから描く派生物(二度書かない。decisions.md「machine config と Cilium の chart をどう連動させるか」)。
 **どの設定が何のために要るかは [cilium-values.yaml](cilium-values.yaml) のコメントにある**(ここには写さない)。
 
-### 描き直すたびに Hubble の証明書が入れ替わる
-
-チャートの `hubble/tls-helm/*` は毎回 `genCA` / `genSignedCert` で作り直す
-(`cilium.io/helm-template-non-idempotent: "true"`)。**値を 1 行も変えなくても、`hubble-ca-secret` /
-`hubble-server-certs` / `hubble-relay-client-certs` の 3 つは `upgrade-k8s` の差分に出る。**
-実害は無い(エージェントも Relay もファイルの入れ替わりに追従する。Pod の再起動は要らない)。
-`cilium-dbg status` の `Hubble: Ok` と `hubble-relay` の Ready で確かめる。
+**Hubble の証明書はクラスタの中の CronJob が作る**(`hubble.tls.auto.method: cronJob`)。chart の既定(`helm`)は描くたびに
+作り直して machine config に秘密鍵が載り、値を変えなくても `upgrade-k8s` の差分に出ていた。
 
 ### ズレは CI が見ている
 
 **当て忘れとクラスタ側の直接編集は [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が見つける。**
-`cilium-values.yaml` から ConfigMap を描いて live と突き合わせるだけで、**読むだけ**(権限は `cilium-config` の `get` 1 つ)。
+`cilium-values.yaml` から `cilium-config` の ConfigMap を描いて live と突き合わせるだけで、**読むだけ**(権限は `cilium-config` の `get` 1 つ)。
 `cilium-values.yaml` を触ったときと毎週月曜に走る。当てるのは自動化しない(Talos API の os:admin を CI に置かない)。
 
 ### 当てたあとに確認すること
@@ -115,18 +109,15 @@ kubectl -n kube-system get gateway doany
 ## Secret
 
 平文の Secret はアプリのリポジトリにはコミットしない。値は **Infisical**(https://il.doany.io、このクラスタでセルフホスト)が持ち、
-**Infisical 純正 operator**(`apps/infisical/operator.yaml`)が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
-認証は Kubernetes 方式（TokenReview・長命の資格情報なし）。
+**Infisical 純正 operator** が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
 
-- `infisical-*` … Infisical 本体(chart + Postgres/Redis)。公開経路は [`apps/infisical/httproute.yaml`](../apps/infisical/httproute.yaml)。
-  `infisical-values.sops.yaml` の 2 つめのドキュメントの `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる
-  (クラスタで一番失ってはいけない値)。Postgres の PVC は既定の `local-path` で、`pg_dump` を k8up が日次で取っている。
-- **operator と push-bridge はここには無い**(`apps/infisical/operator.yaml`、`apps/infisical/push-bridge.yaml`)。
-  ArgoCD 自身は operator に依存しないので、bootstrap に置く理由がない。
-  認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
-  Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を
-  付けてある)。SA と RBAC は `apps/infisical/operator-rbac.yaml`。
-  operator 側に長期の資格情報は無い(`identityId` は秘密ではない)。
+- **本体**(chart + Postgres/Redis)だけがここ(machine config)。`infisical-values.sops.yaml` の 2 つめのドキュメントの
+  `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる(クラスタで一番失ってはいけない値)。
+  Postgres の PVC は `local-path` で、`pg_dump` を k8up が日次で取っている。
+- **公開経路・operator・push-bridge は [`apps/infisical/`](../apps/infisical/)**(ArgoCD 自身は operator に依存しないので、ここに置く理由がない)。
+- 認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
+  Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を付けてある。
+  `apps/infisical/operator-rbac.yaml`)。長命の資格情報はどこにも無い(`identityId` は秘密ではない)。
 
 ### API サーバの入口(GitHub Actions と人)
 
@@ -140,10 +131,9 @@ kubeconfig も age 鍵も GitHub に置いていない。
 Headlamp が利用者本人の id_token を API サーバへ転送する。アプリロール `admin` を持つ人は
 `entra:admin` で cluster-admin、それ以外は `entra:viewer` で読み取り専用(組み込みの `view`
 ＋ CRD とノードぶんの `readonly-extra`)。**振り分けは CEL で、割り当ては Entra 側で完結する。**
-ここに置いたのは、ArgoCD も CI も要らずに効く層だから ── 締め出されたときに直せる。
-認証設定([talos.sops.yaml](talos.sops.yaml))も [apiserver-rbac.yaml](apiserver-rbac.yaml) も
-machine config に載っているので、変えたら `render.sh` → `apply-config`(RBAC は inlineManifest なので `upgrade-k8s` まで)。
-**ArgoCD には当てさせない**(締め出されたときに直せる層に置く)。
+認証設定([talos.sops.yaml](talos.sops.yaml))も [apiserver-rbac.yaml](apiserver-rbac.yaml) も machine config に載せ、
+**ArgoCD には当てさせない**(ArgoCD も CI も要らずに効く層なので、締め出されたときに直せる)。
+変えたら `render.sh` → `apply-config`(RBAC は inlineManifest なので `upgrade-k8s` まで)。
 
 ### Infisical の中の構成
 
