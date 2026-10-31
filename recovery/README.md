@@ -188,10 +188,13 @@ sh recovery/pv.sh - restore-all
 | `/<ns>-<app>.db`(SQLite) | `sqlite`。PVC は `<app>-db`、無ければ `<app>-data`(denpa)。ファイル名は `<app>.db`。**folder を先に**流すので、`denpa.db*` を除いて取った `/data/denpa-data` を置いてから DB を戻す順になる |
 | `/<ns>-postgres.sql` | `pgload`。ダンプを置く間は `deploy/postgres` も止め(LVM の PV は 2 つの Pod から同時にマウントできない)、起こしてから流す。ユーザーと DB は `plan` の時点で deploy/postgres の env から決める(forgejo は `forgejo` / `forgejo`、rybbit は `rybbit` / `analytics`。ダンプは `--clean` 付き) |
 | `/netbird-backup.tar` | `untar`(`store.db*` `idp.db*` `events.db*` を消してから)。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
-| `/matrix-backup.tar` | Tuwunel 自身のバックアップ(`backups/`)と `media/` の tar。新しく作られた `db/` を消して展開し、**1 回だけ `--restore-backup` 付きで起こす**(引数は Argo CD を戻すと selfHeal が消す) |
+| `/matrix-backup.tar` | Tuwunel 自身のバックアップ(`backups/`)と `media/` の tar。新しく作られた `db/` を消して展開し、**1 回だけ `--restore-backup` 付きで起こす**(戻し終えたら `pv.sh` が引数を外す。マニフェストに args が無いので Argo CD は消さない) |
 
 表に無い経路、namespace や PVC が無いものは `plan` の時点で止まる(黙って飛ばさない。「まだ Argo CD が作っていない」と「やめたアプリの残り」を区別できないので)。やめたアプリの残りは restic から消しておく([../deploy/k8up/README.md](../deploy/k8up/README.md)「やめたアプリの残り」)。新しい形の経路を足したら pv.sh の `plan` とこの表に足す。
 
+- **戻すのはこのクラスタができる前のスナップショットだけ**(kube-system の namespace ができた時刻より前。`RESTORE_BEFORE` で上書きできる)。
+  k8up の Schedule は 7 のあと動き出し、戻す前の空の PVC を取ったものが「いちばん新しい」になるため(2026-10-31 に matrix・rybbit で踏んだ)
+- **SQLite を戻して `WARNING: … の持ち主が root のまま` と出たら**、アプリが非 root なら書けないので `pv.sh <ns> shell <pvc> 'chown -R <uid>:<gid> .'` で直す
 - **`Succeeded` は「戻った」の意味ではない。** `pv.sh` は `Restored N files` と(SELinux 以外の)エラー数を出すので、それを見る。
   SQLite は大きさを restic と突き合わせてから付け替える
 - `pv.sh` がやっていることと理由(root で走らせる・数字だけの ID を引用符で囲む・バイナリを標準入力で流さない)は [pv.sh](pv.sh) の冒頭

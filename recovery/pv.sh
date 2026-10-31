@@ -119,7 +119,7 @@ unhelper() { $K -n "$NS" delete pod "h-$1" --wait=false >/dev/null; }
 # スナップショットの経路の形で操作が決まる(README の 8 の表)。namespace = restic の host。
 #   /data/<pvc>          folder
 #   /<ns>-<app>.db       sqlite。PVC は <app>-db、無ければ <app>-data。ファイル名は <app>.db
-#   /<ns>-postgres.sql   pgload(deploy/postgres は止めずに残す。ユーザーと DB は plan で deploy の env から)
+#   /<ns>-postgres.sql   pgload(ダンプを置く間だけ deploy/postgres も止める。ユーザーと DB は plan で deploy の env から)
 #   /netbird-backup.tar  untar
 #   /matrix-backup.tar   Tuwunel の --restore-backup(README の 8 の下)
 # 順番は folder → sqlite → tar → pgload(denpa は /data/denpa-data を先に置いてから denpa.db を戻す)。
@@ -128,9 +128,27 @@ unhelper() { $K -n "$NS" delete pod "h-$1" --wait=false >/dev/null; }
 # **namespace や PVC が無いのは飛ばさずに止める。** 「まだ Argo CD が作っていない」と「やめたアプリの残り」を
 # 区別できないので。やめたアプリの残りは restic から消す(../deploy/k8up/README.md「やめたアプリの残り」)。
 
-latest() { # $1=host → 「ID 経路」を経路ごとに 1 行(いちばん新しいもの)
-	restic snapshots --host "$1" --latest 1 --json \
-		| bun -e 'for (const s of JSON.parse(await Bun.stdin.text()) ?? []) for (const p of s.paths) console.log(s.id, p)'
+# **このクラスタができる前のものだけを見る。** k8up の Schedule は k8up-global(README の 7)が入ると動き出すので、
+# 戻すより先に空の PVC を取ったスナップショットが「いちばん新しい」になる(2026-10-31 の Z440 への移行で、matrix と
+# rybbit が空のものから戻った)。境目は kube-system の namespace ができた時刻。`RESTORE_BEFORE`(ISO 8601)で上書きできる
+before() {
+	[ -n "${RESTORE_BEFORE:-}" ] && { echo "$RESTORE_BEFORE"; return; }
+	$K get ns kube-system -o jsonpath='{.metadata.creationTimestamp}'
+}
+
+latest() { # $1=host → 「ID 経路」を経路ごとに 1 行(境目より前でいちばん新しいもの)
+	_b=$(before)
+	[ -n "$_b" ] || { echo "ERROR: 境目の時刻が読めない(RESTORE_BEFORE で渡す)" >&2; exit 1; }
+	restic snapshots --host "$1" --json \
+		| B="$_b" bun -e '
+const before = Date.parse(process.env.B);
+const pick = new Map();
+for (const s of JSON.parse(await Bun.stdin.text()) ?? []) {
+	if (Date.parse(s.time) >= before) continue;
+	const key = s.paths.join("\n");
+	if (!pick.has(key) || Date.parse(pick.get(key).time) < Date.parse(s.time)) pick.set(key, s);
+}
+for (const s of pick.values()) for (const p of s.paths) console.log(s.id, p);'
 }
 
 pvc_exists() { $K -n "$NS" get pvc "$1" >/dev/null 2>&1; }
@@ -211,6 +229,7 @@ restore() {
 	[ -n "$steps" ] || { echo "$NS: 戻すものが無い"; return 0; }
 	echo "== $NS"; echo "$steps" | sed 's/^/  /'
 	keep=; echo "$steps" | grep -q ' pgload ' && keep=postgres
+	unrestore=
 	stop $keep
 	# 一覧は fd 3 で読む(標準入力に流すと、中で呼ぶコマンドが残りの行を食いうる)
 	while read -r _ op a b c d <&3; do
@@ -226,13 +245,21 @@ restore() {
 				helper "$a"
 				$K -n "$NS" exec "h-$a" -- sh -euc "cd /pvc; rm -rf db backups media; tar -xf ${c#/}; rm -f ${c#/}; chown -R 65532:65532 .; ls backups"
 				unhelper "$a"
-				# 1 回だけ。Argo CD を戻すと selfHeal が引数を消す
-				$K -n "$NS" patch sts tuwunel -p '{"spec":{"template":{"spec":{"containers":[{"name":"tuwunel","args":["--restore-backup"]}]}}}}' >/dev/null ;;
+				# 1 回だけ。**Argo CD は消さない**(マニフェストに args が無いので差分にならない)ので、
+				# 起きて戻し終えたら下の start のあとで外す
+				$K -n "$NS" patch sts tuwunel -p '{"spec":{"template":{"spec":{"containers":[{"name":"tuwunel","args":["--restore-backup"]}]}}}}' >/dev/null
+				unrestore=1 ;;
 		esac
 	done 3<<STEPS
 $steps
 STEPS
 	start
+	if [ -n "$unrestore" ]; then
+		# --restore-backup で 1 回起きて戻し終えるのを待ってから、引数を外す(外すともう 1 回起き直す)
+		$K -n "$NS" rollout status sts/tuwunel --timeout=10m >/dev/null
+		$K -n "$NS" patch sts tuwunel --type json -p '[{"op":"remove","path":"/spec/template/spec/containers/0/args"}]' >/dev/null
+		echo "tuwunel: --restore-backup を外した"
+	fi
 }
 
 # 戻す namespace = restic の host(forgejo は先に別で戻す。infisical・etcd は別の手順)
@@ -352,7 +379,11 @@ B
 		$K -n "$NS" exec "h-$1" -- sh -euc "cd /pvc
 got=\$(stat -c %s $f); [ \"\$got\" = \"$want\" ] || { echo \"size mismatch \$got != $want\"; exit 1; }
 o=\$(stat -c %u:%g $2 2>/dev/null || stat -c %u:%g .); m=\$(stat -c %a $2 2>/dev/null || echo 644)
-rm -f $2 $2-wal $2-shm $2-journal; mv $f $2; chown \$o $2; chmod \$m $2; ls -ln $2"
+rm -f $2 $2-wal $2-shm $2-journal; mv $f $2; chown \$o $2; chmod \$m $2; ls -ln $2
+[ \"\$o\" != 0:0 ] || echo \"WARNING: $2 の持ち主が root のまま\""
+		# 新しい PVC でアプリがまだ一度も書いていないと、持ち主の手がかりが無く root のままになる。SQLite は
+		# ディレクトリにも書くので、非 root のアプリは SQLITE_READONLY_DIRECTORY で落ちる(2026-10-31 の worklog)。
+		# そのときは `sh recovery/pv.sh <ns> shell <pvc> 'chown -R <uid>:<gid> .'`(Bun の公式イメージは 1000、distroless は 65532)
 		unhelper "$1" ;;
 	untar) # $1=pvc $2=snapshot $3=中のパス $4=先に消すファイル
 		folder "$1" "$2"
