@@ -281,7 +281,9 @@ jobs:
           echo "::error::Gateway を通らない(http=$H https=$S。期待は 301 / 200)"
           exit 1
 
-      - name: 受信の防火壁(外から 443 は通り、10250 は通らない)
+      # 受信の防火壁は 2026-10-31 から外してある(bootstrap/talos.md)。外から 10250 が通らないことは見ない。
+      # 戻したら「外から kubelet」の検査(期待は 000)も戻す(#646)
+      - name: 外と LAN から届く(443 と 10250)
         timeout-minutes: 3
         run: |
           set -euo pipefail
@@ -295,9 +297,6 @@ jobs:
           SW=$(code -k --resolve ac.doany.io:28443:127.0.0.1 https://ac.doany.io:28443/)
           echo "  外から Gateway: $SW"
           [ "$SW" = 200 ] || fail "外から 443 が通らない($SW)"
-          KW=$(code -k --max-time 5 https://127.0.0.1:30250/healthz)
-          echo "  外から kubelet: $KW"
-          [ "$KW" = 000 ] || fail "外から kubelet(10250)に届いた($KW)。防火壁が効いていない"
 
       - name: ディスクとネットワーク
         timeout-minutes: 5
