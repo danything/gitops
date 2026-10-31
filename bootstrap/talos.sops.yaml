@@ -16,8 +16,10 @@
 # dvb-pt3 が v1.15.0-alpha.1 からなので alpha に乗っている(Renovate は次の alpha / beta も出す)。
 # renovate: datasource=github-releases depName=siderolabs/talos
 # version: v1.15.0-alpha.2
-# 拡張(dvb-pt3、i915、intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ Image Factory の ID。i915 は Z440 の Arc A310(DG2)用。
-# schematic: e56c70a76ad63c2fc46cb50ed4556a0992bac334016efed6f0424b2336c42944
+# 拡張(dvb-pt3、i915、intel-ucode、mei)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ Image Factory の ID。i915 は Z440 の Arc A310(DG2)用。
+# mei は Arc の HuC を読むため(DG2 の HuC は GSC(MEI)経由で認証される。無いと `HuC: timed out waiting for MEI GSC` で、
+# QSV / VA-API の ICQ が `Selected ratecontrol mode is unsupported` で使えず、denpa は VA-API の CQP に落ちる)。
+# schematic: e96ee81b941c3beb26d46a447f1f455be01fbfc242ae02ff6d85510e8519e806
 #
 # Kubernetes。上げるのは upgrade-k8s で、マイナーを飛ばさない。tools/Dockerfile の kubectl と同じ depName。
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
