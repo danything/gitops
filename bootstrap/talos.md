@@ -65,6 +65,13 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 | `talos.sops.yaml` の先頭の Kubernetes の `# version:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <新しい版>` | 無し |
 | `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values(.sops).yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`storage.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <今の版>`(下の「inlineManifests を直したとき」) | 場合による |
 
+**受信の防火壁(`NetworkDefaultActionConfig`・`NetworkRuleConfig`)は 2026-10-31 から外してある。**
+#646 で入れたが、Pod からノード自身の IP の 443 番(Gateway。Pod は fj.doany.io の AAAA = ノードの公開 IPv6 で Forgejo に来る)が
+conntrack の invalid として捨てられ、TCP はつながるが応答が来なかった(Argo CD が Forgejo の非公開リポジトリを読めず、runner も落ちる)。
+`ingress: accept` にしても Talos は invalid を捨てる規則を残すので、文書ごと外した。`nf_conntrack_tcp_be_liberal` では直らない。
+Cilium の BPF のホストルーティングで往復の片方が netfilter を通らないためと見ている(未確認)。戻すときは #646 の 5 つの文書と
+`render.sh` の needle を戻し、Pod から `curl -6 https://fj.doany.io/api/v1/version` が通ることを確かめる。
+
 **ネットワークと受信の防火壁(`BondConfig`・`LinkConfig`・`NetworkRuleConfig` など)を変えたら `--mode=try` で当てる。**
 間違えると Talos の API ごと届かなくなるが、`try` なら時間が来れば元に戻る:
 

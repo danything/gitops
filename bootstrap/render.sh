@@ -238,7 +238,6 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
 	'kind: GatewayClass' io.cilium/gateway-controller \
 	'kind: RawVolumeConfig' 'kind: LVMVolumeGroupConfig' 'name: dm_thin_pool' \
-	'kind: NetworkDefaultActionConfig' 'name: public-tcp' 'name: private-tcp' \
 	'name: lvm-localpv' lvm-localpv-node lvm-localpv-controller 'storageCapacity: false' 'doany.io/lvm-thinpool: ready' \
 	'name: storage' 'name: local-path' 'provisioner: local.csi.openebs.io' 'volgroup: data' \
 	'kind: VolumeSnapshotClass' 'name: lvm-thinpool' \
