@@ -186,7 +186,7 @@ sh recovery/pv.sh - restore-all
 | --- | --- |
 | `/data/<pvc>` | `folder` |
 | `/<ns>-<app>.db`(SQLite) | `sqlite`。PVC は `<app>-db`、無ければ `<app>-data`(denpa)。ファイル名は `<app>.db`。**folder を先に**流すので、`denpa.db*` を除いて取った `/data/denpa-data` を置いてから DB を戻す順になる |
-| `/<ns>-postgres.sql` | `pgload`。`deploy/postgres` だけ止めずに残す。ユーザーと DB は `plan` の時点で deploy/postgres の env から決める(forgejo は `forgejo` / `forgejo`、rybbit は `rybbit` / `analytics`。ダンプは `--clean` 付き) |
+| `/<ns>-postgres.sql` | `pgload`。ダンプを置く間は `deploy/postgres` も止め(LVM の PV は 2 つの Pod から同時にマウントできない)、起こしてから流す。ユーザーと DB は `plan` の時点で deploy/postgres の env から決める(forgejo は `forgejo` / `forgejo`、rybbit は `rybbit` / `analytics`。ダンプは `--clean` 付き) |
 | `/netbird-backup.tar` | `untar`(`store.db*` `idp.db*` `events.db*` を消してから)。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
 | `/matrix-backup.tar` | Tuwunel 自身のバックアップ(`backups/`)と `media/` の tar。新しく作られた `db/` を消して展開し、**1 回だけ `--restore-backup` 付きで起こす**(引数は Argo CD を戻すと selfHeal が消す) |
 
