@@ -6,7 +6,7 @@
 ## いまここ
 
 **2026-10-31 に HP Z440 へ移し、Talos(OpenEBS LVM)で全部のアプリが動いている。** 残りは下の Phase 2.5 の空いているところ
-(AMT・受信の防火壁・VolSync)。
+(AMT・VolSync)。
 
 ## Phase 2.5 — HP Z440 へ移す(Talos のまま)
 
@@ -18,11 +18,13 @@ bond0 の MAC は設定で固定してあるのでルーターは触らない。
 - [x] Z440 用の schematic(`siderolabs/i915`)、NIC の別名(`LinkAliasConfig`。#649・#650)
 - [x] 移して確かめる(2026-10-31)。途中で直したもの: Pod から PV を 2 つ同時に付ける(`shared: "yes"`。#655)、
       xfs で作れない 128Mi の PVC(#653・denpa#1840)、pgload と復元の落とし穴(#651 ほか)
-- [ ] **AMT を設定する**(10.0.0.5。MEBx は Ctrl+P。手順は [docs/z440-migration.md](docs/z440-migration.md)「3. リモート管理」)。
+- [ ] **AMT を設定する**(MEBx は Ctrl+P。手順は [docs/z440-migration.md](docs/z440-migration.md)「3. リモート管理」)。
+      AMT は内蔵の I218-LM(`eno1`)でしか動かないので、`eno1` を 10.10 側(HUMAX)に挿し替え、361T の 2 ポートを bond0 に回して
+      **10.10.0.3** にする案(作業用 PC から NetBird なしで届く。`LinkAliasConfig` の MAC の入れ替えと `disable_ipv6` の名前を `eno1` に)。
       済んだら SOL の `console=` を schematic に足し、docs の「iLO(10.0.0.3)」を AMT に直す
-- [ ] **受信の防火壁を戻す**(#646 で入れ、#652 で外した)。Pod からノード自身の IPv6 の 443 番(fj.doany.io)が conntrack の invalid として
-      捨てられる。Cilium と両立する形を決める(経緯は [bootstrap/talos.md](bootstrap/talos.md))
-- [ ] Arc の HuC が `timed out waiting for MEI GSC` で読めていない。AV1 / H.265 のエンコードに効くかを確かめる
+- [x] **受信の防火壁を Cilium の Host Firewall で作る**(#658。Talos の防火壁は Pod からノードの IP の Gateway を捨てるので使わない。
+      経緯は [bootstrap/talos.md](bootstrap/talos.md))。外から 50000・10250・2379 が閉じ、Pod からの fj.doany.io が通るのを確かめた
+- [x] Arc の HuC を読む(#659。`siderolabs/mei`)。QSV の ICQ が AV1・H.264 で通るようになった(H.265 の ICQ は DG2 では通らず、VA-API に回る)
 - [ ] **ストレージとバックアップを入れ替える**(入れ直しのついでに。理由は [docs/decisions.md](docs/decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)
   - [x] ディスクの切り方: `u-local-path` をやめ、`RawVolumeConfig` + `LVMVolumeGroupConfig` で VG `data` にする。
         thin プールは Talos で作れないので `bootstrap/storage.yaml` の DaemonSet が作る(書いてあるだけ。効くのは Z440 で入れ直したとき)
