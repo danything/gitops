@@ -66,13 +66,18 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 | `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values(.sops).yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`storage.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <今の版>`(下の「inlineManifests を直したとき」) | 場合による |
 
 **ネットワークと受信の防火壁(`BondConfig`・`LinkConfig`・`NetworkRuleConfig` など)を変えたら `--mode=try` で当てる。**
-間違えると Talos の API ごと届かなくなるが、`try` なら時間内に `--mode=no-reboot` で当て直さないと元に戻る:
+間違えると Talos の API ごと届かなくなるが、`try` なら時間が来れば元に戻る:
 
 ```shell
 talosctl apply-config --mode=try --timeout 5m -f bootstrap/clusterconfig/controlplane.yaml
-# 5 分のうちに確かめる(talosctl get members・kubectl get nodes・外からの Web・DoT・NetBird)。良ければ確定させる
-talosctl apply-config --mode=no-reboot -f bootstrap/clusterconfig/controlplane.yaml
+# 5 分のうちに確かめる(talosctl get members・kubectl get nodes・外からの Web・DoT・NetBird)
 ```
+
+**確定させるときは、時間内に同じファイルを当て直さない。** 動いている設定と同じなので `Apply was skipped: no changes detected` で
+飛ばされ、**ディスクには残らないのに、元に戻す時計だけが止まる**(2026-10-31 に防火壁で踏んだ。再起動で消える状態になる)。
+元に戻るのを待ってから(`talosctl get nftableschains ingress` などで見る)`--mode=no-reboot` で当て直す。
+時計が止まってしまったら、動いている設定(`talosctl get mc v1alpha1 -o jsonpath='{.spec}'`)に害の無いドキュメントを 1 つ足して
+`--mode=no-reboot` で当て、足す前の設定をもう一度当てると、ディスクに残る。
 
 ### inlineManifests を直したとき
 
