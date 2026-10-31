@@ -13,11 +13,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: forgejo-repos
   namespace: forgejo
-  annotations:
-    # リポジトリ・パッケージ・Actions のログ・app.ini。ファイルとして取る。
-    # git のオブジェクトは足していくだけなので、動いたままコピーしても壊れにくい。
-    # DB は postgres.yaml の pg_dump で別に取る。
-    k8up.io/backup: "true"
+  # リポジトリ・パッケージ・Actions のログ・app.ini。VolSync がスナップショットから取る(../volsync/forgejo.yaml)
 spec:
   accessModes:
     - ReadWriteOnce

@@ -7,9 +7,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: netbird-routing-peer-data
   namespace: netbird
-  annotations:
-    # ピアの identity(秘密鍵)と設定だけ。消えると再登録が要るので取る。
-    k8up.io/backup: "true"
+  # ピアの identity(秘密鍵)と設定だけ。消えると再登録が要るので取る(../volsync/netbird.yaml)。
 spec:
   accessModes:
     - ReadWriteOnce

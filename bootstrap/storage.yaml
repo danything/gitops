@@ -20,9 +20,9 @@ parameters:
   # ext4 は lost+found を作り、PGDATA がボリュームの直下の Postgres(forgejo・rybbit)が initdb で落ちる
   csi.storage.k8s.io/fstype: xfs
   # **同じノードの 2 つの Pod から同時にマウントできるようにする。** 無いと 2 つ目が
-  # `verifyMount: device already mounted` で ContainerCreating のまま止まる。k8up の Backup の Pod はアプリを
-  # 動かしたまま同じ PVC を付けるので、これが無いと毎晩のバックアップが全部止まる(denpa の agent-config も
-  # denpa と tuner-agent の両方が付ける)。ノードは 1 台なので RWO の意味は変わらない。
+  # `verifyMount: device already mounted` で ContainerCreating のまま止まる。denpa の agent-config は
+  # denpa と tuner-agent の両方が付ける。VolSync の mover はスナップショットから作った別の PVC を付けるので当たらない
+  # (k8up の頃は Backup の Pod が同じ PVC を付けていた)。ノードは 1 台なので RWO の意味は変わらない。
   # StorageClass の parameters は変えられないので、変えたら SC を消して描き直す。今ある PV は LVMVolume の
   # spec.shared を直す(2026-10-31 の Z440 への移行で踏んだ)
   shared: "yes"

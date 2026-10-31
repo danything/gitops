@@ -20,11 +20,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: clickhouse-data
   namespace: rybbit
-  annotations:
-    # ファイルとして取る。MergeTree のパートは書き終わると変わらないディレクトリなので、
-    # 動いたままコピーしても壊れにくい(書きかけは tmp_ の下)。アクセス解析なので、
-    # 最悪でも直近の数時間が欠けるだけ。論理バックアップ(BACKUP 文)は S3 先が要るので使わない
-    k8up.io/backup: "true"
+  # VolSync がスナップショットから取る(../volsync/rybbit.yaml)。論理バックアップ(BACKUP 文)は S3 先が要るので使わない
 spec:
   accessModes:
     - ReadWriteOnce
