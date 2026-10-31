@@ -108,6 +108,6 @@ spec:
     copyMethod: Snapshot
     volumeSnapshotClassName: lvm
     # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
-    retain: {last: 1}
+    retain: {last: "1"}
     pruneIntervalDays: 7
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
