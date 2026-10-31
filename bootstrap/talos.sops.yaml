@@ -58,15 +58,15 @@ machine:
             - name: earth-pt3
             # PVC の thin プール(storage.yaml)。Talos のカーネルではモジュールで、OpenEBS のコンテナからは読めない
             - name: dm_thin_pool
-    # etcd スナップショットの日次取得(../deploy/k8up/etcd-snapshot.yaml)のため、Pod から Talos API を叩く。
-    # 役割は os:etcd:backup だけ、namespace も k8up に絞る(os:admin を Pod に置かずに済む唯一の仕組み)。
+    # etcd スナップショットの日次取得(../deploy/backup/etcd-snapshot.yaml)のため、Pod から Talos API を叩く。
+    # 役割は os:etcd:backup だけ、namespace も backup(../deploy/backup/etcd-snapshot.yaml)に絞る(os:admin を Pod に置かずに済む唯一の仕組み)。
     features:
         kubernetesTalosAPIAccess:
             enabled: true
             allowedRoles:
                 - os:etcd:backup
             allowedKubernetesNamespaces:
-                - k8up
+                - backup
     # fj.doany.io(Forgejo のコンテナレジストリ)の資格情報。ノード単位なので namespace ごとの imagePullSecrets が要らない。
     # username は Forgejo が見ない(トークンの持ち主で決まる)。password は SOPS で暗号化(冒頭)。取りに行く先は下の StaticHostConfig。
     registries:

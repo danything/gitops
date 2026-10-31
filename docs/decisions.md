@@ -37,6 +37,7 @@ OS の入れ替えは **iLO で画面まで見える DL360** で済ませた。Z
 
 **結論: restic(k8up)。** k8up の中身は素の restic なので、k8up が気に入らなければ CronJob + restic イメージに落とせるし、
 k8up の取ったスナップショットも手元の restic CLI で読める(Infisical はそうやって戻す)。
+**2026-11 から VolSync に替えた**(中身は同じ restic。PVC ごとにスナップショットから取る。下の「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)。
 
 リモートは Cloudflare R2 のバケット `doany-restic`(APAC、Standard)。API トークンは
 Object Read & Write をこのバケットだけに絞った Account API token。下り(egress)が無料なので復元で費用が跳ねない。
@@ -82,9 +83,9 @@ diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を�
 
 ## DB の整合性の取り方
 
-**scale down しない。** k8up の `k8up.io/backupcommand` で論理バックアップを取る
-(RDBMS は `pg_dump`、SQLite は `bun:sqlite` の `serialize()`、ファイルの PVC は注釈)。**どれが何で取れているかの一覧は
-[../deploy/k8up/README.md](../deploy/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
+**scale down しない。** 2026-11 からは VolSync が PVC のスナップショットから取る(crash-consistent。Postgres・SQLite の WAL・RocksDB は
+そこから自分で立ち直る。下の「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)。k8up の頃は `k8up.io/backupcommand` で論理バックアップ
+(RDBMS は `pg_dump`、SQLite は `bun:sqlite` の `serialize()`)を取っていた。取っている PVC の一覧は [../deploy/volsync/](../deploy/volsync/)。
 
 ## Talos の起動順序をどう組むか
 
@@ -206,7 +207,7 @@ Gateway API の session persistence は experimental チャネル限定、Cilium
 
 - リソース名に時刻や乱数を入れない(GitOps は同期のたびに別物として作り直す)
 - CRD は `templates/` ではなく `crds/` に置く(`templates/` だとアンインストールで CR が全部巻き添えになる)
-- 全ワークロードに `podAnnotations` と `resources` を出す(注釈は k8up・Infisical・ArgoCD が振る舞いを足す口)
+- 全ワークロードに `podAnnotations` と `resources` を出す(注釈は Infisical・ArgoCD が振る舞いを足す口。k8up の頃はバックアップも)
 - patch で中身を入れ替えない(chart の patch 更新で Dragonfly が Valkey に替わり、values のチューニングが黙って無効になった)
 - 入口(`Ingress` / `httpRoute`)を既定で作らない
 
@@ -259,13 +260,13 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 **有料でも取る。** R2 の無料枠(10 GB-month)に収めることを目的にすると録画を捨てることになる。
 容量が問題になるのは桁が変わったとき(数百 GB)。課金は期間中の日次ピークの平均で、操作の回数は桁違いに余っている。
 
-- 保持は k8up の Schedule で `keepDaily 7 / keepWeekly 4 / keepMonthly 6`(遡れるのは約半年)。etcd は日次で `keepDaily 7 / keepWeekly 4`
-  ([../deploy/k8up/etcd-snapshot.yaml](../deploy/k8up/etcd-snapshot.yaml))
-- 戻せるかは毎月 1 日に [../deploy/k8up/restore-check.yaml](../deploy/k8up/restore-check.yaml) が最新を取り出して確かめる
+- 保持は VolSync の ReplicationSource で日次 7・週次 4・月次 6(遡れるのは約半年。[../deploy/volsync/](../deploy/volsync/))。etcd は日次で日次 7・週次 4
+  ([../deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml))
+- 戻せるかは毎月 1 日に [../deploy/backup/restore-check.yaml](../deploy/backup/restore-check.yaml) が最新を取り出して確かめる
 
 | 対象 | 判断 |
 | --- | --- |
-| 録画 | **エンコード済み(`denpa-encoded`)だけ、1 世代**([../deploy/k8up/denpa-encoded-forget.yaml](../deploy/k8up/denpa-encoded-forget.yaml))。放送は取り直せないので容量より価値を優先する(本人)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける |
+| 録画 | **エンコード済み(`denpa-encoded`)だけ、1 世代**(ReplicationSource の `retain: {last: "1"}`。[../deploy/volsync/denpa.yaml](../deploy/volsync/denpa.yaml))。放送は取り直せないので容量より価値を優先する(本人)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける |
 | 生 TS の作業領域(`denpa-raw`) | **取らない。** エンコードが終われば消え、数時間で入れ替わる。14 GB まで育つ |
 | AdGuard のクエリログ | **保持を 7 日に。** 純粋な計測データで、復元時に無くても困らない |
 

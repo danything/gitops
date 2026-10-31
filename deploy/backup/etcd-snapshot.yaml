@@ -1,6 +1,6 @@
 # etcd のスナップショットを日次で restic(R2)へ。
 #
-# **戻すときの主経路ではない。** 主経路は「git から Argo CD で建て直して PV を k8up で戻す」
+# **戻すときの主経路ではない。** 主経路は「git から Argo CD で建て直して PV を VolSync で戻す」
 # (recovery/README.md)。こちらは git に無い状態
 # (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書など)まで含めて**一瞬で戻したいとき**の近道。
 # 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
@@ -8,14 +8,13 @@
 # Talos API への権限は `os:etcd:backup` だけ(bootstrap/talos.sops.yaml)。
 # 下の ServiceAccount を見て Talos が同名の Secret に talosconfig を書く。
 #
-# **通知は何も足さなくてよい。** notify は過去 8 日に出てきた (host, path) を
-# 「あるべきもの」として学ぶので、`etcd/work/etcd.snapshot` も最初の 1 本から見張られる。
+# 通知は notify.yaml がこの CronJob の最後の成功を見る。
 ---
 apiVersion: talos.dev/v1alpha1
 kind: ServiceAccount
 metadata:
   name: etcd-snapshot
-  namespace: k8up
+  namespace: backup
 spec:
   roles:
     - os:etcd:backup
@@ -24,10 +23,9 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: etcd-snapshot
-  namespace: k8up
+  namespace: backup
 spec:
-  # 13:30〜17:45 UTC は k8up の Schedule で埋まっているので、その手前(matrix が 13:30)。
-  # forget はリポジトリをロックするので、動かすときは schedules.yaml と突き合わせること。
+  # VolSync の時刻(19:00〜20:45 UTC)とは別のリポジトリなので重なってもよいが、ずらしておく
   schedule: "0 13 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
@@ -39,7 +37,7 @@ spec:
         spec:
           restartPolicy: Never
           # 2 つのコンテナを同じユーザーで動かす。talosctl のイメージは root で走り、スナップショットを
-          # 0600 で書くので、k8up のイメージ(65532)の restic が `permission denied` で読めない。
+          # 0600 で書くので、別のユーザーの restic が `permission denied` で読めない。
           securityContext:
             runAsUser: 65532
             runAsGroup: 65532
@@ -49,7 +47,7 @@ spec:
             # 版は bootstrap/talos.sops.yaml の先頭の Talos の版と揃える(クライアントとノードの版は離れすぎないこと)。
             - name: snapshot
               image: ghcr.io/siderolabs/talosctl:v1.15.0-alpha.2
-              # ノードは 1 台。Pod からノードの 50000 に直接届く(Talos はファイアウォールを張っていない)
+              # ノードは 1 台。Pod からノードの 50000 に直接届く(ノードの防火壁はクラスタの中を通す。../cluster/host-firewall.yaml)
               args: [-e, 10.0.0.2, -n, 10.0.0.2, etcd, snapshot, /work/etcd.snapshot]
               volumeMounts:
                 - {name: work, mountPath: /work}
@@ -60,35 +58,36 @@ spec:
                 limits: {memory: 256Mi}
           containers:
             - name: upload
-              # notify と同じ。k8up のイメージに restic が入っている。
-              image: ghcr.io/k8up-io/k8up:v2.16.1
+              # restic の公式のイメージ(Docker Hub の pull-through キャッシュ)
+              image: mirror.gcr.io/restic/restic:0.19.1
               workingDir: /work
               command:
                 - sh
                 - -ec
                 - |
-                  export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}"
-                  # 空のファイルを「取れた」にしない(deploy/k8up/README.md「空のスナップショット」)
+                  # k8up の頃はバケットの根の共有のリポジトリ(host etcd)だった。いまは etcd だけのリポジトリ
+                  export RESTIC_REPOSITORY="s3:${ENDPOINT}/${BUCKET}/etcd"
+                  # 空のファイルを「取れた」にしない(0 バイトのスナップショットは戻せない)
                   [ -s etcd.snapshot ] || { echo "etcd.snapshot が空" >&2; exit 1; }
-                  # --host は k8up の namespace と被らない名前に。k8up の prune は
-                  # --host=<namespace> で絞るのでこちらには届かない ── 保持は自分で回す。
-                  # 中身の解放は日曜の k8up の prune がまとめてやる(prune はホストを問わない)。
+                  # 初めての回はリポジトリを作る
+                  restic cat config >/dev/null 2>&1 || restic init
                   restic backup --host etcd --tag etcd etcd.snapshot
-                  restic forget --host etcd --tag etcd --keep-daily 7 --keep-weekly 4
+                  # 中身の解放(prune)も自分でする(このリポジトリを触るのはこれだけ)
+                  restic forget --host etcd --tag etcd --keep-daily 7 --keep-weekly 4 --prune
               env:
                 # HOME が / のままなので、既定の ~/.cache には 65532 で書けない
                 - name: RESTIC_CACHE_DIR
                   value: /work/.cache
                 - name: ENDPOINT
-                  valueFrom: {secretKeyRef: {name: k8up-global, key: endpoint}}
+                  valueFrom: {secretKeyRef: {name: backup, key: endpoint}}
                 - name: BUCKET
-                  valueFrom: {secretKeyRef: {name: k8up-global, key: bucket}}
+                  valueFrom: {secretKeyRef: {name: backup, key: bucket}}
                 - name: AWS_ACCESS_KEY_ID
-                  valueFrom: {secretKeyRef: {name: k8up-global, key: accessKeyId}}
+                  valueFrom: {secretKeyRef: {name: backup, key: accessKeyId}}
                 - name: AWS_SECRET_ACCESS_KEY
-                  valueFrom: {secretKeyRef: {name: k8up-global, key: secretAccessKey}}
+                  valueFrom: {secretKeyRef: {name: backup, key: secretAccessKey}}
                 - name: RESTIC_PASSWORD
-                  valueFrom: {secretKeyRef: {name: k8up-global, key: repoPassword}}
+                  valueFrom: {secretKeyRef: {name: backup, key: repoPassword}}
               volumeMounts:
                 - {name: work, mountPath: /work}
               resources:

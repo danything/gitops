@@ -101,11 +101,11 @@ talosctl bootstrap --recover-from=./etcd.snapshot     # etcd が上がるまで 
 ```
 
 **PV の中身は戻らない**(etcd は「PVC がこの PV に紐づいている」という事実しか持っていない)ので、
-このあと PV データを k8up で戻す。順序は etcd が先(PV オブジェクトが無いと戻す先が決まらない)。
+このあと PV データを VolSync で戻す。順序は etcd が先(PV オブジェクトが無いと戻す先が決まらない)。
 
 **主経路ではない。** 主経路は git から建て直すほう([recovery/README.md](../recovery/README.md)。スナップショットの鮮度に左右されない)。
 こちらは git に無い状態(Application の同期状態、発行済みの証明書など)まで一度に戻したいときの近道。
-日次で取っているのは [deploy/k8up/etcd-snapshot.yaml](../deploy/k8up/etcd-snapshot.yaml)(restic の `--host etcd`)。取り出しは:
+日次で取っているのは [deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml)(リポジトリ `<bucket>/etcd`。2026-11-01 より前はバケットの根の `--host etcd`)。取り出しは:
 
 ```shell
 restic snapshots --host etcd

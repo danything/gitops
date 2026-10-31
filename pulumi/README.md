@@ -22,7 +22,7 @@ Cloudflare・Entra ID・NetBird の設定を [Pulumi](https://www.pulumi.com/) �
 | --- | --- | --- |
 | バケット | APAC / Standard。**`protect` 付き** | `protect` を外すと、コードの間違い 1 つでバックアップが丸ごと消える |
 | lifecycle | マルチパートの残骸を 7 日で消す既定ルール 1 本だけ。**消す・移すルールは置かない** | 消すルールがあると restic の pack が消え、`restic check` まで誰も気づかない |
-| ロック | 無し | `prune` が消せず、k8up の Prune が毎週落ちる |
+| ロック | 無し | `prune` が消せず、restic の prune(VolSync・etcd のスナップショット)が落ちる |
 | r2.dev | 無効 | 置き場の一覧が外から見える(中身は暗号化されている) |
 
 Pulumi で表せないものは [report.ts](report.ts) が毎週見る。

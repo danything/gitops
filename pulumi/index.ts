@@ -42,7 +42,7 @@ new cloudflare.R2BucketLifecycle(name, {
   ],
 });
 
-// **ロックも置かない。** `prune` が消せなくなり、k8up の Prune が毎週失敗する
+// **ロックも置かない。** `prune` が消せなくなり、restic の prune(VolSync・etcd のスナップショット)が失敗する
 new cloudflare.R2BucketLock(name, { accountId, bucketName: bucket.name, rules: [] });
 
 // **公開しない。** restic の中身は暗号化されているが、置き場の一覧は見える

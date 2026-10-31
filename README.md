@@ -81,7 +81,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`forgejo/`](deploy/forgejo/) | Forgejo(`fj.doany.io`、git + Actions)+ PostgreSQL + Runner(dind)。GitHub Actions の課金を避けて CI をここで回すため。**使い始めの手順は [deploy/forgejo/README.md](deploy/forgejo/README.md)** |
 | [`netbird/`](deploy/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`3proxy/`](deploy/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
-| [`k8up/`](deploy/k8up/) | バックアップ(restic → Cloudflare R2)。PVC・DB のダンプ・etcd のスナップショット |
+| [`volsync/`](deploy/volsync/)・[`backup/`](deploy/backup/) | バックアップ(VolSync で PVC のスナップショットを restic → Cloudflare R2)と、その見張り・etcd のスナップショット |
 | [`infisical/`](deploy/infisical/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジと SMTP のパスワード |
 | [`cluster/`](deploy/cluster/) | metrics-server(Talos に無い。`kubectl top` と各 UI の使用量表示) |
 | [`smtp-relay/`](deploy/smtp-relay/) | メールの中継。アプリの SMTP を受けて Microsoft 365 へ Graph で送る(Exchange Online の SMTP AUTH の Basic 認証の廃止に備えて)。**送る側の設定は [deploy/smtp-relay/README.md](deploy/smtp-relay/README.md)** |

@@ -8,12 +8,12 @@
 | --- | --- |
 | `env.age` | バックアップ先の資格情報(R2 の鍵、restic のパスワード)。age のパスフレーズで暗号化 |
 | `sops-age.key.age` | `bootstrap/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
-| [pv.sh](pv.sh) | PV のデータを k8up の `Restore` で戻す道具(下の 8) |
+| [pv.sh](pv.sh) | PV のデータを VolSync の `ReplicationDestination` で戻す道具(下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
 **2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる(`pv.sh - plan-all` は 2026-10-20 に本番の restic と突き合わせて、全 namespace の判定が 8 の表どおりになるのを確かめた)。
 
-**手動のリハーサルは回さない。** 中身は月次の [restore-check](../deploy/k8up/restore-check.yaml)、machine config は
+**手動のリハーサルは回さない。** 中身は月次の [restore-check](../deploy/backup/restore-check.yaml)、machine config は
 [talos-boot](../.github/workflows/talos-boot.yml) が確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
 
 手で持つのは **age のパスフレーズ 1 つだけ**。GitHub へのログインは要らない
@@ -35,10 +35,10 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 | --- | --- |
 | ホストの設定 | **machine config**。`bootstrap/render.sh` が repo から描く(`bootstrap/talos-secrets.sops.yaml` が同じなら同じクラスタ CA) |
 | k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config が当てる |
-| Infisical の DB | **手元の restic で直接**(k8up の資格情報 `k8up-global` が Infisical から来るので、k8up では戻せない) |
-| ほかの PV データ | **k8up の `Restore`**([pv.sh](pv.sh)) |
+| Infisical の DB | **VolSync の `ReplicationDestination`、Secret は手元の restic.env から**(ほかの Secret が Infisical から来るので。[infisical.sh](infisical.sh)) |
+| ほかの PV データ | **VolSync の `ReplicationDestination`**([pv.sh](pv.sh)) |
 
-etcd のスナップショット(restic の `--host etcd`、[../deploy/k8up/etcd-snapshot.yaml](../deploy/k8up/etcd-snapshot.yaml))は
+etcd のスナップショット(リポジトリ `<bucket>/etcd`、[../deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml))は
 git に無い状態まで一度に戻したいときの近道で、主経路ではない([../docs/talos.md](../docs/talos.md)「etcd スナップショットからの復旧」)。
 
 ## 道具と経路
@@ -130,18 +130,13 @@ Infisical の Secret を待つアプリと、Forgejo から来る非公開アプ
 
 ```shell
 age -d -o ~/.config/restic.env recovery/env.age     # パスフレーズ。終わったら消す(10)
-set -a; . ~/.config/restic.env; set +a
-restic snapshots --host infisical --latest 1 --compact      # /infisical-postgresql.sql の ID
-sh recovery/infisical.sh db <ID>     # users が 0 なら Infisical を起こさずに止まる。流し直すときは先に drop-old
+sh recovery/infisical.sh db      # users が 0 なら止まる
 ```
 
-起動したばかりの Infisical の Postgres にダンプを流す(ロールと DB は chart が作ってある)。
-`public` は消さずに `old_public` に退ける(`DROP SCHEMA` は `max_locks_per_transaction` が足りず落ちる。[infisical.sh](infisical.sh))。
-Infisical が上がって中身が見えたら、退けたものを消す:
-
-```shell
-sh recovery/infisical.sh drop-old
-```
+Infisical の Postgres の PVC(`data-postgresql-0`)を、VolSync のリポジトリ(`<bucket>/volsync/infisical/data-postgresql-0`)の
+**このクラスタができる前の最新**のスナップショットで丸ごと置き換える([pv.sh](pv.sh) の `pvc` と同じ)。
+VolSync の Secret はほかの namespace では Infisical から来るが、ここだけは戻すのが Infisical そのものなので、`restic.env` から作る。
+古いものを選ぶときは `RESTORE_BEFORE=2026-10-30T00:00:00Z sh recovery/infisical.sh db`。
 
 ## 7. Infisical の Kubernetes auth の CA を差し替える
 
@@ -154,18 +149,18 @@ sh recovery/infisical.sh drop-old
 ```shell
 sh recovery/infisical.sh ca          # クラスタと Infisical の CA の頭を並べて見る
 sh recovery/infisical.sh ca apply    # 差し替えて、operator を蹴り直す(失敗が続くと間を空けるため)
-kubectl get infisicalsecret -A       # 全部 Ready になる。k8up/k8up-global もここで入り、k8up が動き出す
+kubectl get infisicalsecret -A       # 全部 Ready になる。backup/backup と各 namespace の volsync もここで入り、VolSync の Secret ができる
 ```
 
 `talos-secrets.sops.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
 
-## 8. PV データを戻す(k8up)
+## 8. PV データを戻す(VolSync)
 
 **1 本で流す。** Argo CD を止め、Forgejo を先に戻し、非公開アプリの Application と PVC が出てくるのを待ってから、
 残りの namespace を 1 つずつ「止める → 戻す → 起こす」:
 
 ```shell
-sh recovery/pv.sh - plan-all      # 読むだけ。namespace ごとに何をするかと、PVC に入るか(fit)を出す。先にこれを見る
+sh recovery/pv.sh - plan-all      # 読むだけ。namespace ごとに戻す PVC とスナップショット、PVC に入るか(fit)を出す。先にこれを見る
 sh recovery/pv.sh - restore-all
 ```
 
@@ -176,31 +171,23 @@ sh recovery/pv.sh - restore-all
    Argo CD が読むマニフェストも、それを読むトークン(Forgejo の DB)も全部 Forgejo にあるので、戻すまで 1 本も上がらない
 3. `argo-resume` して ApplicationSet のエラーが消え、**残りの namespace と PVC が全部出そろって全部の `plan` が通る**まで待ち(10 分。通らなければ forgejo だけ戻した状態で止まる)、
    **全部が PVC に入るか(`fit`)を見て**(入らなければ同じく止まる)、また `argo-pause`
-4. restic の host(forgejo・infisical・etcd を除く)を 1 つずつ `<ns> restore`
+4. `deploy/volsync/` の namespace(forgejo・infisical を除く)を 1 つずつ `<ns> restore`
 5. `argo-resume`
 
 1 つだけ戻すなら `sh recovery/pv.sh <ns> plan` で見てから `sh recovery/pv.sh <ns> restore`(Argo CD は先に `argo-pause`)。
-`restore` は namespace の最新のスナップショットを経路ごとに引き、**経路の形で操作を決める**:
 
-| 経路 | 操作 |
-| --- | --- |
-| `/data/<pvc>` | `folder` |
-| `/<ns>-<app>.db`(SQLite) | `sqlite`。PVC は `<app>-db`、無ければ `<app>-data`(denpa)。ファイル名は `<app>.db`。**folder を先に**流すので、`denpa.db*` を除いて取った `/data/denpa-data` を置いてから DB を戻す順になる |
-| `/<ns>-postgres.sql` | `pgload`。ダンプを置く間は `deploy/postgres` も止め(LVM の PV は 2 つの Pod から同時にマウントできない)、起こしてから流す。ユーザーと DB は `plan` の時点で deploy/postgres の env から決める(forgejo は `forgejo` / `forgejo`、rybbit は `rybbit` / `analytics`。ダンプは `--clean` 付き) |
-| `/netbird-backup.tar` | `untar`(`store.db*` `idp.db*` `events.db*` を消してから)。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
-| `/matrix-backup.tar` | Tuwunel 自身のバックアップ(`backups/`)と `media/` の tar。新しく作られた `db/` を消して展開し、**1 回だけ `--restore-backup` 付きで起こす**(戻し終えたら `pv.sh` が引数を外す。マニフェストに args が無いので Argo CD は消さない) |
-
-表に無い経路、namespace や PVC が無いものは `plan` の時点で止まる(黙って飛ばさない。「まだ Argo CD が作っていない」と「やめたアプリの残り」を区別できないので)。やめたアプリの残りは restic から消しておく([../deploy/k8up/README.md](../deploy/k8up/README.md)「やめたアプリの残り」)。新しい形の経路を足したら pv.sh の `plan` とこの表に足す。
-
-- **戻すのはこのクラスタができる前のスナップショットだけ**(kube-system の namespace ができた時刻より前。`RESTORE_BEFORE` で上書きできる)。
-  k8up の Schedule は 7 のあと動き出し、戻す前の空の PVC を取ったものが「いちばん新しい」になるため(2026-10-31 に matrix・rybbit で踏んだ)
-- **SQLite を戻して `WARNING: … の持ち主が root のまま` と出たら**、アプリが非 root なら書けないので `pv.sh <ns> shell <pvc> 'chown -R <uid>:<gid> .'` で直す
-- **`Succeeded` は「戻った」の意味ではない。** `pv.sh` は `Restored N files` と(SELinux 以外の)エラー数を出すので、それを見る。
-  SQLite は大きさを restic と突き合わせてから付け替える
-- `pv.sh` がやっていることと理由(root で走らせる・数字だけの ID を引用符で囲む・バイナリを標準入力で流さない)は [pv.sh](pv.sh) の冒頭
-- PVC が `Pending`(StorageClass は使う Pod が付くまで bind しない)でも、Restore の Pod が付けば bind する
-- **PVC の requests が本当の上限**(OpenEBS LVM。local-path の頃はディスクの残り全部が使えた)。`fit` が `restic stats` の大きさと
-  requests を比べ、9 割を超えるものがあれば `plan-all` は 1 で終わり、`restore-all` は上書きする前に止まる。PVC を大きくするか、restic から要らないものを消す
+- **PVC は丸ごと戻す。** `restore` は `deploy/volsync/<ns>.yaml` の ReplicationSource の PVC ごとに、ReplicationDestination(`copyMethod: Direct`)で
+  リポジトリ `<bucket>/volsync/<ns>/<pvc>` から書き戻す。スナップショットから取っているので、Postgres・SQLite・Tuwunel(RocksDB)も
+  ファイルのまま戻り、起きるときに自分で立ち直る(k8up の頃の pg_dump・SQLite・tar の戻し分けは要らない)。戻す前の中身は消す(`enableFileDeletion`)
+- **戻すのはこのクラスタができる前のスナップショットだけ**(kube-system の namespace ができた時刻より前。`restoreAsOf`。`RESTORE_BEFORE` で上書きできる)。
+  ReplicationSource は Argo CD が作ると時刻を待ちはじめ、戻す前の空の PVC を取ったものが「いちばん新しい」になりうるため(2026-10-31 に k8up で踏んだ)
+- 使う Secret(`volsync-<pvc>`)は deploy/volsync/ の InfisicalSecret が作る(7 が済んでいること)。無ければ `restore` は書く前に止まる
+- `deploy/volsync/` に無い namespace や PVC、スナップショットが無いものは `plan` の時点で止まる(黙って飛ばさない)。やめたアプリは deploy/volsync/ から消す
+- PVC が `Pending`(StorageClass は使う Pod が付くまで bind しない)でも、VolSync の mover が付けば bind する
+- **PVC の requests が本当の上限**(OpenEBS LVM)。`fit` が `restic stats` の大きさと requests を比べ、9 割を超えるものがあれば
+  `plan-all` は 1 で終わり、`restore-all` は上書きする前に止まる。PVC を大きくするか、restic から要らないものを消す
+- **k8up の頃のリポジトリ**(バケットの根。host が namespace)は、保持期間(2027-05 ごろ)が切れるまで残してある。そこから戻すときは
+  `restic -r <restic.env の RESTIC_REPOSITORY> snapshots --host <ns>` で探して `restic restore` で手で取り出す([../deploy/backup/README.md](../deploy/backup/README.md)「k8up の頃のリポジトリ」)
 
 ## 9. 確かめる
 
@@ -229,8 +216,8 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 - [ ] `talosctl get routes -o yaml | grep -B10 'protocol: ra'` に `dst: ""`(IPv6 の既定経路)が残っている
 - [ ] netbird で外から VPN に入れる(ブラウザでは確かめられない)、AdGuard(`dig @10.10.0.4 example.com`)
 - [ ] **PT3**: `talosctl ls /dev/dvb` に adapter0〜3 と各 `frontend0`、`talosctl ls /dev/bus/usb` に B-CAS リーダー、録画が動く
-- [ ] Renovate の CronJob が次の回で動く(`kubectl -n renovate get jobs`)、k8up の通知が翌日 OK ✅
-- [ ] etcd のスナップショットを 1 回手で取る(`kubectl -n k8up create job --from=cronjob/etcd-snapshot etcd-snapshot-first`)
+- [ ] Renovate の CronJob が次の回で動く(`kubectl -n renovate get jobs`)、バックアップの通知(deploy/backup/notify.yaml)が翌日 OK ✅
+- [ ] etcd のスナップショットを 1 回手で取る(`kubectl -n backup create job --from=cronjob/etcd-snapshot etcd-snapshot-first`)
 
 ## 10. 後始末
 

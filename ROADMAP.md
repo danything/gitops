@@ -5,14 +5,11 @@
 
 ## いまここ
 
-**2026-10-31 に HP Z440 へ移し、Talos(OpenEBS LVM)で全部のアプリが動いている。** 残りは AMT と、バックアップの VolSync への切り替え。
+**2026-10-31 に HP Z440 へ移し、Talos(OpenEBS LVM)で全部のアプリが動いている。** バックアップは 2026-11-01 に VolSync に替えた。残りは AMT。
 
 ## やること
 
-- [ ] **バックアップを VolSync に切り替える**(理由は [docs/decisions.md](docs/decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)
-  - [ ] VolSync(restic mover、copyMethod: Snapshot)を入れ、PVC ごとに ReplicationSource。R2 は PVC ごとに別の経路。k8up と並べて動かして確かめる(deploy/volsync/。2026-11-01 に入れた)
-  - [ ] 戻しは populator(PVC の `dataSourceRef`)。`recovery/pv.sh` と README の 8 を VolSync に合わせる
-  - [ ] k8up・`backupcommand`・notify・restore-check を VolSync に合わせて畳む。k8up のリポジトリは保持期間(月次 6 か月)が切れるまで残す
+- [ ] **k8up の頃のリポジトリを消す**(R2 の `doany-restic` の根。2027-05 を過ぎたら。月次の保持の 6 か月。[deploy/backup/README.md](deploy/backup/README.md))
 - [ ] **AMT を設定する**(下の「AMT」)。済んだら SOL の `console=` を schematic に足し、「iLO(10.0.0.3)」と書いてあるところを AMT に直す
   (deploy/netbird/routing-peer.yaml のコメント、docs/decisions.md、recovery/README.md(ISO の起動も AMT の IDE-R に)、docs/talos.md の対象の行、docs/router.md)
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
@@ -69,6 +66,8 @@ Z440 は Intel AMT 9.x(ME 9.1)を持つ。iLO の代わりに、OS が止まっ�
 
 ## 済んだこと(記録)
 
+- **バックアップを k8up から VolSync に替えた(2026-11-01)。** PVC ごとにスナップショットから restic で R2 へ([deploy/volsync/](deploy/volsync/))。
+  戻すのは `recovery/pv.sh`(ReplicationDestination で PVC を丸ごと)。見張りと etcd は [deploy/backup/](deploy/backup/)。k8up と pg_dump・tar のサイドカーはやめた
 - **HP Z440 へ移した(2026-10-31)。** DL360 の SSD を移して Talos を入れ直し、PV を restic から戻した。PV の置き場を OpenEBS LVM LocalPV にし
   (#649〜#656)、ノードの防火壁を Cilium の Host Firewall に(#658。経緯は [bootstrap/talos.md](bootstrap/talos.md))、Arc の HuC を読めるようにした(#659)
 - **Talos へ移した(2026-10-17)。** git から建て直し、PV を restic から戻した([recovery/README.md](recovery/README.md))

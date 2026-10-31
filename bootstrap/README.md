@@ -133,7 +133,7 @@ infisical の Postgres が要るので bootstrap 層に居る。選んだ理由�
 
 - **本体**(chart + Postgres/Redis)だけがここ(machine config)。`infisical-values.sops.yaml` の 2 つめのドキュメントの
   `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる(クラスタで一番失ってはいけない値)。
-  Postgres の PVC は既定の `local-path`(OpenEBS LVM)で、`pg_dump` を k8up が日次で取っている。
+  Postgres の PVC は既定の `local-path`(OpenEBS LVM)で、VolSync が日次でスナップショットから取っている([../deploy/volsync/infisical.yaml](../deploy/volsync/infisical.yaml))。
 - **公開経路・operator・push-bridge は [`deploy/infisical/`](../deploy/infisical/)**(ArgoCD 自身は operator に依存しないので、ここに置く理由がない)。
 - 認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
   Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を付けてある。
@@ -180,7 +180,7 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 初期化で一緒に作られる "Instance Admin Identity"(root 相当の Machine Identity)は
 セットアップ後に削除してある。必要なら UI の Organization Settings > Identities で作り直す。
 
-DB は手元の restic から直接戻す(k8up の資格情報が Infisical から来るので)。戻したら operator の
+DB の PVC は VolSync で戻すが、Secret は手元の restic.env から作る(ほかの VolSync の Secret が Infisical から来るので)。戻したら operator の
 Kubernetes auth の CA も差し替える。手順は [../recovery/README.md](../recovery/README.md) の 6・7。
 
 ### `InfisicalSecret` には sync-options を 2 つ付けること
@@ -196,7 +196,7 @@ ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` �
 
 **`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無く、`deploy/` の同期が丸ごと落ちる**
 (CRD を入れる `deploy/infisical/operator.yaml` が同じ同期の中にいる)。
-仕組みは k8up の `Schedule` と同じで、説明は [deploy/k8up/README.md](../deploy/k8up/README.md)「CRD がまだ無いクラスタで apps を止めないこと」。
+VolSync の `ReplicationSource` も同じ(CRD を入れる `deploy/volsync/application.yaml` が同じ同期の中にいる)。
 
 このリポジトリの `InfisicalSecret`(`deploy/argocd/oidc-secret.yaml`・`deploy/auth/secrets.yaml`・`deploy/infisical/smtp-secret.yaml` など)にも付けてある。
 
