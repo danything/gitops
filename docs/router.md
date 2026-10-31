@@ -43,11 +43,12 @@ DMZ の向け先を変えると、下の全部と AdGuard の split-horizon が�
 | 6443 TCP | Kubernetes の API(`ks.doany.io:6443`。recovery/README.md) | 要る(認証つき) |
 
 **ノード自身が受けるもの(Talos の API 50000・trustd 50001・etcd・kubelet 10250・Cilium の 4240 / 4244 / 9963 / 9964 など)は、
-ノードの受信の防火壁で外から止めている**(`bootstrap/talos.sops.yaml` の `NetworkDefaultActionConfig` と `NetworkRuleConfig`。
+ノードの受信の防火壁で外から止めている**(Cilium の Host Firewall。規則は `deploy/cluster/host-firewall.yaml`。
 2026-10-31 に足すまでは DMZ と IPv6 ホスト公開で外から全部届いていた)。既定は捨て、外から通すのは上の表のポートだけ
 (TCP 80・443・853・3129・6443・8443、UDP 8443・51820)、内側のアドレス(LAN と Pod・Service の 10/8・NetBird の 100.64/10・
 fc00::/7・fe80::/10)からは全部。効くのはノード宛てだけで、hostPort(53・853・8443・3129・51820)は Cilium が Pod へ転送するので
-通らない(なので 53 番は下の Cilium のポリシーで止めている)。表にポートを足すときは `public-tcp` / `public-udp` にも足す。
+通らない(なので 53 番は下の Cilium のポリシーで止めている)。表にポートを足すときは `deploy/cluster/host-firewall.yaml` にも足す。
+Talos の防火壁(`NetworkDefaultActionConfig`)は使わない(Pod からノードの IP の Gateway を捨てる。`bootstrap/talos.md`)。
 家の LAN の IPv6 の GUA はプライベートに入れていないので、LAN からノードの管理の口へは IPv4 で繋ぐ。
 
 ## 53 番は外に出さない

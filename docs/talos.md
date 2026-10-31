@@ -138,7 +138,7 @@ Talos の既定(Flannel + kube-proxy)を止めて **Cilium に替えてある**(
 CNI の交換は構築時にやる ── 稼働中の差し替えは全 Pod 再起動が前提)。Cilium の値は [bootstrap/cilium-values.yaml](../bootstrap/cilium-values.yaml)。
 LoadBalancer とクライアント IP も decisions.md「ルーティングの選定」。
 
-- `NetworkDefaultActionConfig: block` を使うなら、`NetworkRuleConfig` で要るポートを明示的に開ける
+- `NetworkDefaultActionConfig: block`(Talos の受信の防火壁)は Cilium の Gateway(hostNetwork)と噛み合わないので使わない。防火壁は Cilium の Host Firewall([../bootstrap/talos.md](../bootstrap/talos.md))
 
 ## 管理モデル(3 つのレイヤーを混同しない)
 
