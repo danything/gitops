@@ -65,6 +65,15 @@ needle は `render.sh` の末尾の 1 か所だけに置く。
 | `talos.sops.yaml` の先頭の Kubernetes の `# version:` | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <新しい版>` | 無し |
 | `talos.sops.yaml` の本文と、`bootstrap/` の残りの全部(`*-values(.sops).yaml`(2 つめのドキュメントの Secret も)・`apiserver-rbac.yaml`・`storage.yaml`) | `render.sh` → `apply-config` → `talosctl upgrade-k8s --to <今の版>`(下の「inlineManifests を直したとき」) | 場合による |
 
+**ネットワークと受信の防火壁(`BondConfig`・`LinkConfig`・`NetworkRuleConfig` など)を変えたら `--mode=try` で当てる。**
+間違えると Talos の API ごと届かなくなるが、`try` なら時間内に `--mode=no-reboot` で当て直さないと元に戻る:
+
+```shell
+talosctl apply-config --mode=try --timeout 5m -f bootstrap/clusterconfig/controlplane.yaml
+# 5 分のうちに確かめる(talosctl get members・kubectl get nodes・外からの Web・DoT・NetBird)。良ければ確定させる
+talosctl apply-config --mode=no-reboot -f bootstrap/clusterconfig/controlplane.yaml
+```
+
 ### inlineManifests を直したとき
 
 **Cilium・OpenEBS LVM(`storage.yaml` も)・`apiserver-rbac.yaml`・ArgoCD・infisical・

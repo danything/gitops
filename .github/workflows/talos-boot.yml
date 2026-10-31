@@ -27,6 +27,8 @@ concurrency:
 env:
   # 本番と同じアドレス。SLIRP の網をこれに合わせて、machine config の住所は書き換えない
   NODE: 10.0.0.2
+  # IPv6 の hostfwd は SLIRP の ipv6-host(240f:6d:842b:1::1。グローバルなので防火壁から見て「外」)から届く
+  NODE6: 240f:6d:842b:1::2
   TALOSCONFIG: /tmp/out/talosconfig
   KUBECONFIG: /tmp/kubeconfig
   # 3 枚の NIC の MAC。名前は maintenance mode で MAC から引く(VM の名前は QEMU の挿し方で変わる)
@@ -151,7 +153,7 @@ jobs:
             -device virtio-scsi-pci,id=scsi0 \
             -drive file=/tmp/vm/disk.raw,format=raw,if=none,id=d0,cache=unsafe,discard=unmap \
             -device scsi-hd,drive=d0,bus=scsi0.0 \
-            -netdev "user,id=up,net=10.0.0.0/24,host=10.0.0.1,dhcpstart=$NODE,ipv4=on,ipv6=on,ipv6-net=240f:6d:842b:1::/64,ipv6-host=240f:6d:842b:1::1,hostfwd=tcp:127.0.0.1:50000-$NODE:50000,hostfwd=tcp:127.0.0.1:6443-$NODE:6443,hostfwd=tcp:127.0.0.1:18080-$NODE:80,hostfwd=tcp:127.0.0.1:18443-$NODE:443" \
+            -netdev "user,id=up,net=10.0.0.0/24,host=10.0.0.1,dhcpstart=$NODE,ipv4=on,ipv6=on,ipv6-net=240f:6d:842b:1::/64,ipv6-host=240f:6d:842b:1::1,hostfwd=tcp:127.0.0.1:50000-$NODE:50000,hostfwd=tcp:127.0.0.1:6443-$NODE:6443,hostfwd=tcp:127.0.0.1:18080-$NODE:80,hostfwd=tcp:127.0.0.1:18443-$NODE:443,hostfwd=tcp:127.0.0.1:20250-$NODE:10250,hostfwd=tcp:[::1]:28443-[$NODE6]:443,hostfwd=tcp:[::1]:30250-[$NODE6]:10250" \
             -netdev hubport,id=hub-up,hubid=0,netdev=up \
             -netdev hubport,id=hub1,hubid=0 -device virtio-net-pci,netdev=hub1,mac=$MAC_ENO1 \
             -netdev hubport,id=hub2,hubid=0 -device virtio-net-pci,netdev=hub2,mac=$MAC_ENO2 \
@@ -261,6 +263,24 @@ jobs:
           echo "::error::Gateway を通らない(http=$H https=$S。期待は 301 / 200)"
           exit 1
 
+      - name: 受信の防火壁(外から 443 は通り、10250 は通らない)
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          code() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$@" || true; }
+          # IPv4 の hostfwd は SLIRP の 10.0.0.1(家の LAN と同じ。private-tcp に当たる)から来る。kubelet は認証無しなら 401
+          K4=$(code -k https://127.0.0.1:20250/healthz)
+          echo "  LAN から kubelet: $K4"
+          [ "$K4" = 401 ] || fail "LAN から kubelet(10250)に届かない($K4。期待は 401)"
+          # IPv6 の hostfwd は SLIRP の 240f:6d:842b:1::1(グローバル)から来る。外から来たのと同じ扱いになる
+          S6=$(code -k --resolve 'ac.doany.io:28443:[::1]' https://ac.doany.io:28443/)
+          echo "  外(IPv6)から Gateway: $S6"
+          [ "$S6" = 200 ] || fail "外(IPv6)から 443 が通らない($S6)"
+          K6=$(code -k --max-time 5 'https://[::1]:30250/healthz')
+          echo "  外(IPv6)から kubelet: $K6"
+          [ "$K6" = 000 ] || fail "外(IPv6)から kubelet(10250)に届いた($K6)。防火壁が効いていない"
+
       - name: ディスクとネットワーク
         timeout-minutes: 5
         run: |
@@ -277,6 +297,13 @@ jobs:
           GOT=$(talosctl get links bond0 -o json | jq -r .spec.hardwareAddr)
           [ "$GOT" = "$WANT" ] || fail "bond0 の MAC が $GOT(talos.sops.yaml は $WANT)"
           echo "  bond0 hardwareAddr: $GOT"
+
+          # 受信の防火壁(talos.sops.yaml の NetworkDefaultActionConfig)が既定で捨てる形で載っているか。
+          # 通す側は、ここまでの talosctl(50000)・kubectl(6443)・curl(80 / 443)が SLIRP の 10.0.0.1 から通ったことで見ている
+          talosctl get nftableschains -o yaml > /tmp/nft.yaml
+          P=$(yq -r 'select(.metadata.id == "ingress") | .spec.policy' /tmp/nft.yaml)
+          echo "  nftables の ingress の既定: $P"
+          [ "$(echo "$P" | tr 'A-Z' 'a-z')" = drop ] || { cat /tmp/nft.yaml; fail "ingress の chain が既定で捨てる形(drop)でない"; }
 
           # 以下は forwarding=1 のあとで見ないと意味が無い(talos.sops.yaml の accept_ra)
           F=$(talosctl read /proc/sys/net/ipv6/conf/bond0/forwarding)
