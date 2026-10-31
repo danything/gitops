@@ -16,8 +16,8 @@
 # dvb-pt3 が v1.15.0-alpha.1 からなので alpha に乗っている(Renovate は次の alpha / beta も出す)。
 # renovate: datasource=github-releases depName=siderolabs/talos
 # version: v1.15.0-alpha.2
-# 拡張(dvb-pt3、intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ Image Factory の ID。
-# schematic: 96371c8f956f7f5f9d09925bb49fe096c0cad05c5cf5bdb464790982c0b067ca
+# 拡張(dvb-pt3、i915、intel-ucode)とカーネル引数(intel_iommu=on / iommu=pt)を焼き込んだ Image Factory の ID。i915 は Z440 の Arc A310(DG2)用。
+# schematic: e56c70a76ad63c2fc46cb50ed4556a0992bac334016efed6f0424b2336c42944
 #
 # Kubernetes。上げるのは upgrade-k8s で、マイナーを飛ばさない。tools/Dockerfile の kubectl と同じ depName。
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
