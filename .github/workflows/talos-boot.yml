@@ -281,14 +281,24 @@ jobs:
           echo "::error::Gateway を通らない(http=$H https=$S。期待は 301 / 200)"
           exit 1
 
-      # 受信の防火壁は 2026-10-31 から外してある(bootstrap/talos.md)。外から 10250 が通らないことは見ない。
-      # 戻したら「外から kubelet」の検査(期待は 000)も戻す(#646)
-      - name: 外と LAN から届く(443 と 10250)
-        timeout-minutes: 3
+      # ノードの受信の防火壁は Cilium の Host Firewall(deploy/cluster/host-firewall.yaml)。ここで当てて、
+      # 外から 443 は通り 10250 は通らない・LAN からは通る・Pod からノードの IP の Gateway に届く、を見る。
+      # 後ろの段の talosctl(50000)・kubectl(6443)も LAN(SLIRP の 10.0.0.1)から通ることを見ている
+      - name: ノードの防火壁(Cilium の Host Firewall)
+        timeout-minutes: 6
         run: |
           set -euo pipefail
           fail() { echo "::error::$*"; exit 1; }
           code() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$@" || true; }
+          until kubectl apply -f deploy/cluster/host-firewall.yaml; do sleep 5; done
+          # 外からの kubelet が止まるまで待つ(ポリシーがホストに載るまで少しかかる)
+          for i in $(seq 24); do
+            KW=$(code -k --max-time 5 https://127.0.0.1:30250/healthz)
+            [ "$KW" = 000 ] && break
+            sleep 5
+          done
+          echo "  外から kubelet: $KW"
+          [ "$KW" = 000 ] || fail "外から kubelet(10250)に届いた($KW)。防火壁が効いていない"
           # IPv4 の hostfwd は SLIRP の 10.0.0.1(家の LAN と同じ。private-tcp に当たる)から来る。kubelet は認証無しなら 401
           K4=$(code -k https://127.0.0.1:20250/healthz)
           echo "  LAN から kubelet: $K4"
@@ -297,6 +307,38 @@ jobs:
           SW=$(code -k --resolve ac.doany.io:28443:127.0.0.1 https://ac.doany.io:28443/)
           echo "  外から Gateway: $SW"
           [ "$SW" = 200 ] || fail "外から 443 が通らない($SW)"
+
+      # **Pod からノード自身の IP の Gateway に届くか。** Pod は fj.doany.io の AAAA(ノードの公開 IPv6)で Forgejo に来る
+      # (deploy/forgejo/runner.yaml)。防火壁があると conntrack の invalid として捨てられ、TCP はつながるが応答が来なかった
+      # (2026-10-31 に Talos の防火壁で踏んだ。今は Cilium の Host Firewall なので起きないはず。deploy/cluster/host-firewall.yaml)
+      - name: Pod からノードの IP の Gateway に届く
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          cat > /tmp/curl.yaml <<YAML
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: gw-from-pod, namespace: default}
+          spec:
+            restartPolicy: Never
+            securityContext: {runAsNonRoot: true, runAsUser: 65532, seccompProfile: {type: RuntimeDefault}}
+            containers:
+              - name: c
+                image: mirror.gcr.io/curlimages/curl:8.17.0
+                securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+                command: [sh, -c]
+                args:
+                  - |
+                    for ip in $NODE '[240f:6d:842b:1::2]'; do
+                      echo "\$ip \$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 --connect-to ac.doany.io:443:\$ip:443 https://ac.doany.io/ || true)"
+                    done
+          YAML
+          kubectl apply -f /tmp/curl.yaml
+          kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/gw-from-pod --timeout=3m || true
+          OUT=$(kubectl logs gw-from-pod)
+          echo "$OUT" | sed 's/^/  /'
+          kubectl delete pod gw-from-pod --wait=false
+          [ "$(echo "$OUT" | grep -c ' 200$')" = 2 ] || { echo "::error::Pod からノードの IP の 443 に届かない(上の 000 の行)"; exit 1; }
 
       - name: ディスクとネットワーク
         timeout-minutes: 5

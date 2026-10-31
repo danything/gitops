@@ -1,0 +1,62 @@
+# ノード(ホスト)が受けるものの防火壁。Cilium の Host Firewall(bootstrap/cilium-values.yaml の hostFirewall)。
+# ルーターは DMZ と IPv6 ホスト公開で全部のポートをノードに流すので(docs/router.md)、外に出すものはここで決める。
+# Talos の防火壁(NetworkDefaultActionConfig)は使わない: conntrack の invalid を捨てる規則を必ず入れ、Envoy の帰りを
+# NOTRACK にする Cilium と噛み合わず、Pod からノード自身の IP の Gateway(fj.doany.io)が捨てられた(#652。bootstrap/talos.md)。
+# こちらは eBPF で判定するので起きない。
+#
+# **ホストを選ぶポリシーが 1 つでもあると、書いていない受信は全部止まる。** 外から通すのは docs/router.md の表のポート
+# (TCP 80・443・853・3129・6443・8443、UDP 8443・51820)だけ。クラスタの中と内側のアドレス(家の LAN・NetBird・
+# リンクローカル)からは全部。Talos の API(50000)・kubelet(10250)・etcd などは外から届かなくなる。表にポートを足すときはここにも足す。
+# hostPort(53・853・8443・3129・51820)は Cilium が Pod へ転送するので、ここではなく Pod のポリシーで決まる
+# (53 番は ../adguardhome/network-policy.yaml)。
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: host-firewall
+spec:
+  nodeSelector: {}
+  ingress:
+    - fromEntities:
+        - cluster
+    - fromCIDRSet:
+        - cidr: 10.0.0.0/8
+        - cidr: 100.64.0.0/10
+        - cidr: fc00::/7
+        - cidr: fe80::/10
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+            - port: "853"
+              protocol: TCP
+            - port: "3129"
+              protocol: TCP
+            - port: "6443"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+            - port: "8443"
+              protocol: UDP
+            - port: "51820"
+              protocol: UDP
+    # ping と、IPv6 で要る ICMPv6(届かない・大きすぎる・時間切れ・引数の誤り・近隣探索)
+    - fromEntities:
+        - world
+      icmps:
+        - fields:
+            - {family: IPv4, type: 8}
+            - {family: IPv4, type: 3}
+            - {family: IPv4, type: 11}
+            - {family: IPv6, type: 1}
+            - {family: IPv6, type: 2}
+            - {family: IPv6, type: 3}
+            - {family: IPv6, type: 4}
+            - {family: IPv6, type: 128}
+            - {family: IPv6, type: 133}
+            - {family: IPv6, type: 134}
+            - {family: IPv6, type: 135}
+            - {family: IPv6, type: 136}

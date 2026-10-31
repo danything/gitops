@@ -35,6 +35,11 @@ nodePort:
   enabled: true
   # 範囲は既定のまま。広げないこと: 範囲に入る hostPort を Cilium は張らない(853・8443・3129 が一斉に落ちた)。
 
+# ノード宛ての受信の防火壁(Host Firewall)。規則は ../deploy/cluster/host-firewall.yaml。
+# Talos の防火壁ではなくこちらで止める理由もそこに書いてある。
+hostFirewall:
+  enabled: true
+
 # Gateway API。CRD が古いと GatewayClass が無言で止まる。
 gatewayAPI:
   enabled: true
