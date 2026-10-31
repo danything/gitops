@@ -14,7 +14,7 @@ DL360 Gen9 で動いている `main` を HP Z440 に移す計画(ROADMAP の Pha
 | メモリ | DDR4 Registered 8GB。**2026-10-17 から 5 枚(40GB)**。1 枚は BIOS を上げるために Z440 へ移した | **6 枚 × 8GB = 48GB** にする。Z440 は Registered 専用、8 スロット、上限 128GB |
 | SSD | SATA の Radeon R7 447GB 1 本。Smart Array 経由(素通し)なので Linux からは `TRAN=sas`・`/dev/sda` に見える | 内蔵の SATA(AHCI)に直結。`ahci` は Talos のカーネルに入っている([talos.md](talos.md)) |
 | 起動 | UEFI、セキュアブート無効 | **UEFI、CSM 無効**(Arc の条件)、セキュアブート無効 |
-| GPU | 無し(画面は iLO の Matrox G200) | **Intel Arc A310 を常設。** Xeon E5 は内蔵 GPU が無く、**Z440 は GPU が無いと POST しない**(画面なしで起動する BIOS の設定は見つからない。兄弟機には隠しの「Headless Mode」があるらしいが Z440 では未確認)。denpa の AV1 のハードウェアエンコードにも使う。Talos では extension が要る(`siderolabs/i915`。**要確認**) |
+| GPU | 無し(画面は iLO の Matrox G200) | **Intel Arc A310 を常設。** Xeon E5 は内蔵 GPU が無く、**Z440 は GPU が無いと POST しない**(画面なしで起動する BIOS の設定は見つからない。兄弟機には隠しの「Headless Mode」があるらしいが Z440 では未確認)。denpa の AV1 のハードウェアエンコードにも使う。Talos では extension `siderolabs/i915` を schematic に入れてある(A310 は DG2 なので i915。`siderolabs/xe` とは同じ GPU を取り合うので両方は入れない) |
 | NIC | Broadcom BCM5719 × 4(`tg3`)。`eno1`+`eno2` → `bond0`(10.0.0.2、`240f:6d:842b:1::2`)、`eno4` → 10.10.0.4 | 内蔵の Intel I218-LM 1 ポート(`e1000e`)+ **HP 361T**(Intel I350-T2、`igb`)。どちらも Talos のカーネルに入っているはず(**要確認**。talos.md に書いてあるのは tg3・bonding・AHCI だけ) |
 | TV チューナー | PT3(PCIe、`earth_pt3`。extension `siderolabs/dvb-pt3`) | PCIe のスロットに差し替える |
 | USB | B-CAS 用の IC カードリーダー(GemPC Twin)、キーボードの受信機 | 差し替える |
@@ -22,13 +22,19 @@ DL360 Gen9 で動いている `main` を HP Z440 に移す計画(ROADMAP の Pha
 
 ## 1. 事前の準備(サーバは止めない)
 
-1. **Arc A310 を差す。** 外さない(無いと POST しない)。以下の BIOS の作業も画面が要る
+1. **Arc A310 を差す。** 外さない(無いと POST しない)。以下の BIOS の作業も画面が要る。
+   **ただし古い BIOS は Arc を初期化できずに止まる**(白い LED だけでビープ無し、ファンが強くなる)。02.62 にするまでは補助電源の要らない古いグラボで作業する
 2. **Z440 の BIOS を 02.62 に上げる**(HP の SoftPaq sp151054)。**v4 を載せる前に、仮の v3 の CPU と DL360 から移した RDIMM 1 枚で**やる
-   (古い BIOS は v4 を認識しない)。起動中に Esc → 「Flash System BIOS」で USB メモリから書く
-3. BIOS の設定: **起動は UEFI、CSM 無効**、セキュアブート無効、**After Power Loss = On**(停電のあと自動で上がる)、Wake on LAN。
+   (古い BIOS は v4 を認識しない)。起動中に Esc → 「Flash System BIOS」で USB メモリから書く(2026-10-31 に済み)
+3. **ME を 9.1.45.3000 に上げる**(SoftPaq sp90102。9.1.37 は AMT にパスワード無しで入れる CVE-2017-5689 がある)。2026-10-31 に済み。**02.62 は USB から起動できない**
+   (F9 の一覧が空。Esc の BIOS の更新だけは USB を読む)ので、UEFI シェルは **DVD(El Torito の UEFI イメージ)** から起動する。
+   `FwUpdLcl.efi` は v2 のシェルだと `Error 8714`(ファイルを開けない)になり、**EDK1 の v1 のシェル(`Shell_Full.efi`)から動かすと通る**。
+   `-generic` はこの版に無い。v2 のシェルで `connect -r` → `map -r` すると USB も見えるので、v1 のシェルと ME のファイルは USB に置いて、
+   `fs1:\EFI\shellv1.efi` → `cd ME` → `FwUpdLcl.efi -f 9.1.45.3000.bin` → 電源コードを抜いて入れ直す
+4. BIOS の設定: **起動は UEFI、CSM 無効**、セキュアブート無効、**After Power Loss = On**(停電のあと自動で上がる)、Wake on LAN。
    **CSM を切るまでは Arc で画面が出ないことがある**(Arc は UEFI の GOP 前提)。出なければ一時的に別の古いグラボで CSM を切る
-4. **361T を差す**(ロープロファイルの金具ならフルハイトに付け替える)。届いて 3 日のうちに動くことを確かめる(出品者の初期不良の対応が 3 日)
-5. **MAC アドレスを控える**: 内蔵の口と 361T のポート 1。BIOS の画面かラベル、何かの OS の `ip link`、ルーターの DHCP のリース一覧、
+5. **361T を差す**(ロープロファイルの金具ならフルハイトに付け替える)。届いて 3 日のうちに動くことを確かめる(出品者の初期不良の対応が 3 日)
+6. **MAC アドレスを控える**: 内蔵の口(I218-LM は `48:0f:cf:67:0d:4e`。ME の `MeInfo.efi` で読んだ)と 361T のポート 1。BIOS の画面かラベル、何かの OS の `ip link`、ルーターの DHCP のリース一覧、
    AMT の画面のどれでもよい。移したあとは `talosctl get links` で照合できる
 
 ## 2. NIC と bond0(Talos)
@@ -115,8 +121,8 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 2. Image Factory の schematic の `customization.extraKernelArgs` に `console=tty0` と `console=ttyS<番号>,115200n8` を足し、
    新しい schematic ID で `talosctl upgrade --image factory.talos.dev/installer/<schematic>:<版>`(再起動する)。
    カーネル引数は machine config に書けない(`bootstrap/talos.sops.yaml` の注、[talos.md](talos.md))。
-   schematic ID は `bootstrap/talos.sops.yaml` の先頭の `# schematic:` に書く(Renovate と render.sh はそこを読む)。**Arc の extension を足すのも同じ手順**なので一緒にやる
-   (`siderolabs/i915` で足りるか要確認。Arc B シリーズなどは `siderolabs/xe`。**両方は入れない** ── 同じ GPU を取り合う)
+   schematic ID は `bootstrap/talos.sops.yaml` の先頭の `# schematic:` に書く(Renovate と render.sh はそこを読む)。
+   Arc の `siderolabs/i915` は移行の前に入れてある(その schematic に `extraKernelArgs` を足す)
 
 ### つなぎ方
 
@@ -143,7 +149,7 @@ local-path が広げられないだけで、入れ直せば消える)。worklog 
    消す前に、どの端末が 1 日 10 GB も引いているかを見ておく(2026-10 末から。前は 1 日 0.3 GB ほど)
 2. **Z440 の MAC を `LinkAliasConfig` に足して main にマージ**(「2. NIC と bond0」)。talos-boot が通ること
 3. machine config を描く: `./bootstrap/render.sh bootstrap/clusterconfig`(`valid for metal mode` まで出ること)。
-   Talos の ISO を USB に書いておく([../recovery/README.md](../recovery/README.md) の 2)
+   Talos の ISO を **DVD に焼いておく**(02.62 は USB から起動できない。「1. 事前の準備」の 3)。URL は `https://factory.talos.dev/image/<schematic>/<版>/metal-amd64.iso`([../recovery/README.md](../recovery/README.md) の 2)
 4. 計画停止を知らせる(止まるもの: 全部の Web、DNS、NetBird、Matrix、録画)。録画の予約が入っていない時間にする
 5. **最後のバックアップ**。ここから先に書かれたものは戻らない:
 
@@ -163,7 +169,7 @@ LAN は「2. NIC と bond0」のとおりにつなぐ。最初の起動はモニ
 
 [../recovery/README.md](../recovery/README.md) の 2〜10 をそのまま流す。違うのは次のところ:
 
-- **2. ISO で起動する**: USB を挿して、起動中に **F9**(ブートメニュー)で USB を選ぶ。AMT の IDE-R で ISO をつないでもよい(「3. リモート管理」。
+- **2. ISO で起動する**: DVD を入れて、起動中に **F9**(ブートメニュー)で DVD を選ぶ。AMT の IDE-R で ISO をつないでもよい(「3. リモート管理」。
   UEFI のまま IDE-R から起動できるかは未確認)。maintenance mode の IP は Arc の画面に出る。
   `talosctl get links --insecure` で **Z440 の MAC が 2. で足したものと一致する**こと、`talosctl get disks --insecure` で `/dev/sda` が 447GB の SSD であること
 - **3. 当てる**: SSD は上書きされる(古いパーティションは消え、新しいパーティションは Talos が作るときに先頭を消す)。
