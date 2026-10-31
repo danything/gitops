@@ -1,0 +1,214 @@
+# バックアップの状態を日次で通知の部屋に 1 行流す。VolSync には通知が無く、ArgoCD の通知は Application しか見ない。
+# 見張りの中身は下の notify.js のコメント。秘密は Secret `backup` の `mattermostWebhook` だけ使う。
+#
+# 下の ServiceAccount `backup-reader` は restore-check.yaml も使う(ReplicationSource の一覧を同じ形で読む)。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-reader
+  namespace: backup
+---
+# 読むだけ。ReplicationSource は全 namespace に散っているので ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backup-reader
+rules:
+  - apiGroups: [volsync.backube]
+    resources: [replicationsources]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backup-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backup-reader
+subjects:
+  - kind: ServiceAccount
+    name: backup-reader
+    namespace: backup
+---
+# backup の namespace の CronJob(etcd-snapshot・restore-check)が最後まで走ったか。status しか読まない。
+# ほかの namespace の Job は見ないので Role にしておく
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-reader
+  namespace: backup
+rules:
+  - apiGroups: [batch]
+    resources: [cronjobs]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-reader
+  namespace: backup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: backup-reader
+subjects:
+  - kind: ServiceAccount
+    name: backup-reader
+    namespace: backup
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: notify
+  namespace: backup
+spec:
+  # VolSync(19:00〜20:45 UTC)の後。その日に足した ReplicationSource の初回が間に合わないと「一度も取れていない」と鳴る
+  schedule: "0 21 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: backup-reader
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: notify
+              # netbird のサイドカーと同じイメージ。kubectl も jq も要らない。
+              image: oven/bun:1.4.4-slim
+              command: [bun, /script/notify.js]
+              securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+              env:
+                - name: WEBHOOK
+                  valueFrom: {secretKeyRef: {name: backup, key: mattermostWebhook}}
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {memory: 128Mi}
+              volumeMounts:
+                - {name: script, mountPath: /script}
+          volumes:
+            - name: script
+              configMap:
+                name: notify
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notify
+  namespace: backup
+data:
+  notify.js: |
+    // **見るのは Kubernetes の状態。** restic の中身は数えない(リポジトリが PVC ごとに分かれていて、
+    // 全部を開くと鍵の束と時間が要る)。中身が戻せるかは月 1 回の restore-check が見る。
+    //
+    // 見張りは重ねてある(どれか 1 つでは穴が残る):
+    //   - ReplicationSource の lastSyncTime が 26 時間以内か。VolSync は成功したときしかこれを進めない
+    //   - latestMoverStatus.result が Successful か。最後の回だけ失敗して、前の成功が 26 時間以内に残っている日を拾う
+    //   - lastSyncTime が無い(一度も取れていない)。足したのに Secret や注釈が足りないと、ここで止まる
+    //   - etcd-snapshot の CronJob の最後の成功が 26 時間以内か(PVC ではないので ReplicationSource が無い)
+    //   - backup の namespace の CronJob が最後まで走ったか(restore-check は OOMKilled や期限切れでは投稿まで届かない)
+    // 残る穴: ReplicationSource を書き忘れた PVC は見えない(PVC を足すときは README.md の「足す」を見る)。
+    const WINDOW_H = 26;
+    const API = "https://kubernetes.default.svc";
+    const SA = "/var/run/secrets/kubernetes.io/serviceaccount";
+    const now = Date.now();
+    const hours = (t) => (now - Date.parse(t)) / 3600e3;
+
+    const TOKEN = (await Bun.file(`${SA}/token`).text()).trim();
+    const CA = await Bun.file(`${SA}/ca.crt`).text();
+    const list = async (path) => {
+      const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${TOKEN}` }, tls: { ca: CA } });
+      if (!r.ok) throw new Error(`${path}: ${r.status} ${(await r.text()).slice(0, 200)}`);
+      return (await r.json()).items ?? [];
+    };
+    // mover のログには restic のエラーが入る。リポジトリの場所(アカウント ID 入り)は通知に載せない
+    const scrub = (s) => s.replace(/(s3:)?https?:\/\/\S+/g, "<url>");
+
+    const lines = [];
+    let total = 0;
+    const paused = [];
+    try {
+      const sources = await list("/apis/volsync.backube/v1alpha1/replicationsources");
+      total = sources.length;
+      const never = [], stale = [], failed = [];
+      for (const o of sources) {
+        const key = `${o.metadata.namespace}/${o.metadata.name}`;
+        // 止めてあるもの(spec.paused)は鳴らさずに数だけ言う。寝かせている間ずっと鳴るため
+        if (o.spec?.paused) {
+          paused.push(key);
+          continue;
+        }
+        const s = o.status ?? {};
+        if (!s.lastSyncTime) never.push(key);
+        else if (hours(s.lastSyncTime) > WINDOW_H) stale.push({ key, h: hours(s.lastSyncTime) });
+        const m = s.latestMoverStatus;
+        if (m && m.result !== "Successful") {
+          const why = scrub((m.logs ?? "").trim().split("\n").at(-1) ?? "").slice(0, 120);
+          failed.push(`${key}: ${m.result ?? "?"}${why ? ` ${why}` : ""}`);
+        }
+      }
+      if (!sources.length) lines.push(`**ReplicationSource が 1 つも無い**`);
+      if (never.length) {
+        lines.push(`**一度も取れていない ReplicationSource**`);
+        for (const k of never) lines.push(`- ${k}`);
+      }
+      if (stale.length) {
+        lines.push(`**${stale.length} 件が ${WINDOW_H} 時間以上取れていない**`);
+        for (const s of stale.sort((a, b) => b.h - a.h).slice(0, 15)) lines.push(`- ${s.key} (${s.h.toFixed(0)} 時間前)`);
+        if (stale.length > 15) lines.push(`- ほか ${stale.length - 15} 件`);
+      }
+      if (failed.length) {
+        lines.push(`**最後の回が失敗した ReplicationSource**`);
+        for (const f of failed.slice(0, 10)) lines.push(`- ${f}`);
+      }
+
+      const cronjobs = await list("/apis/batch/v1/namespaces/backup/cronjobs");
+      const etcd = cronjobs.find((c) => c.metadata.name === "etcd-snapshot");
+      const etcdOk = etcd?.status?.lastSuccessfulTime && hours(etcd.status.lastSuccessfulTime) <= WINDOW_H;
+      if (!etcd) lines.push(`**CronJob etcd-snapshot が無い**`);
+      else if (!etcdOk) {
+        const t = etcd.status?.lastSuccessfulTime;
+        lines.push(`**etcd-snapshot が ${WINDOW_H} 時間以上成功していない** (最後の成功: ${t ? `${hours(t).toFixed(0)} 時間前` : "無し"})`);
+      }
+      // 最後に予定された回より最後に成功した回が古ければ拾う。走っている最中(自分も)は見ない。
+      // etcd-snapshot は上で言ったらここでは重ねない
+      const unfinished = cronjobs
+        .filter((c) => !(c.metadata.name === "etcd-snapshot" && !etcdOk))
+        .filter(({ status: s = {} }) =>
+          s.lastScheduleTime && !(s.active ?? []).length &&
+          !(s.lastSuccessfulTime && Date.parse(s.lastSuccessfulTime) >= Date.parse(s.lastScheduleTime)),
+        )
+        .map((c) => `${c.metadata.name} (${c.status.lastScheduleTime} の回)`);
+      if (unfinished.length) {
+        lines.push(`**最後の回が成功していない CronJob**`);
+        for (const u of unfinished) lines.push(`- ${u}`);
+      }
+    } catch (e) {
+      lines.push(`**途中で止まった**: ${scrub(e.message)}`);
+    }
+
+    const pausedNote = paused.length ? `。止めてある: ${paused.join(", ")}` : "";
+    const text = lines.length
+      ? `[backup] FAILED ❌\n${lines.join("\n")}`
+      : `[backup] OK ✅ (${total - paused.length} 本と etcd すべて ${WINDOW_H} 時間以内${pausedNote})`;
+
+    console.log(text);
+    const r = await fetch(process.env.WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!r.ok) {
+      console.error(`Matrix への投稿に失敗: ${r.status} ${await r.text()}`);
+      process.exit(1);
+    }
+    // FAILED でも exit 0。「投稿できた」がこの Job の成功。非ゼロにすると backoffLimit ぶん同じ警告を投稿し、
+    // CronJob が Degraded になって ArgoCD が deploy/ の同期を retry に入れて止まる。

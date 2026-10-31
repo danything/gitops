@@ -1,0 +1,6 @@
+# バックアップの見張りと etcd のスナップショット(PVC のバックアップそのものは ../volsync/)。
+# k8up の namespace の後を継いだ。PSA は既定(baseline)のままでよい(どれも root を使わない)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup

@@ -1,0 +1,301 @@
+# 最新のバックアップが本当に戻せるかを月に 1 回確かめる。
+#
+# notify.yaml は「VolSync が成功と言ったか」までしか見ない。**取れていることと戻せることは別** ──
+# 壊れた SQLite や読めないリポジトリでも ReplicationSource は Successful になりうる。
+# それを捕まえるには実際に取り出して開くしかない。建て直しそのものの手順は recovery/README.md。
+#
+# 見るもの(ReplicationSource ごとに、そのリポジトリ `<bucket>/volsync/<namespace>/<pvc>` の latest):
+#   - `restic restore` が通って、ファイルが 1 つ以上ある(1 つずつ emptyDir に取り出し、見たら消す)
+#   - SQLite(.db・.sqlite・.sqlite3。中身の頭が SQLite のものだけ): `PRAGMA integrity_check` が ok。
+#     スナップショットから取っているので -wal も隣に戻る。読み取り専用で開く
+#   - Postgres のデータ(PG_VERSION と global/ のあるところ): PG_VERSION と global/pg_control が読める。
+#     立ち上げはしない(crash-consistent なので、本当に戻すときは postgres が自分で WAL を流す)
+#   - denpa-encoded(録画、大きい)だけは取り出さず `restic check --read-data-subset=1%`
+#   - etcd(`<bucket>/etcd`、etcd-snapshot.yaml): 取り出して etcd.snapshot が bbolt の頭を持つ
+#
+# **リポジトリには書かない。** restic は全部 `--no-lock`(読むだけでもロックのファイルを書くため)。
+# その代わり VolSync の時刻(prune もその中で走る)とずらすこと(下の schedule)。
+#
+# 秘密は notify と同じ Secret `backup`。ReplicationSource の一覧も notify.yaml の `backup-reader` で読む。
+# 結果も notify と同じ webhook に 1 通。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restore-check
+  namespace: backup
+spec:
+  # 毎月 1 日 06:00 UTC。VolSync(19:00〜20:45 UTC)と etcd-snapshot(13:00 UTC)の外
+  schedule: "0 6 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      # 全部を R2 から取り出すので k8up の頃(ダンプだけ)より長い
+      activeDeadlineSeconds: 10800
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: backup-reader
+          # 取り出したファイルの持ち主は戻さない(root でない restic は chown を黙って飛ばす)。全部 65532 のものになる。
+          # PSA restricted でも通る形にしておく
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            seccompProfile: {type: RuntimeDefault}
+          initContainers:
+            # restic は公式のイメージから(etcd-snapshot と同じ版)。1 ファイルで、bun のイメージの上で動く。
+            # **CA の束も持ってくる。** bun の slim のイメージに頼らない。無いと restic は
+            # x509 のエラーを黙って retry し続け、何も言わずに止まって見える
+            - name: restic
+              image: mirror.gcr.io/restic/restic:0.19.1
+              command: [cp, /usr/bin/restic, /etc/ssl/certs/ca-certificates.crt, /tools/]
+              securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+              volumeMounts:
+                - {name: tools, mountPath: /tools}
+              resources:
+                requests: {cpu: 10m, memory: 16Mi}
+                limits: {memory: 128Mi}
+          containers:
+            - name: check
+              image: oven/bun:1.4.4-slim
+              command: [bun, /script/restore-check.js]
+              securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+              env:
+                # HOME 任せにしない。root 以外で HOME に書けないと `mkdir .../.cache/restic: permission denied`
+                # (etcd-snapshot.yaml と同じ)。emptyDir なので毎回まっさらから索引を読む
+                - name: RESTIC_CACHE_DIR
+                  value: /work/.cache
+                - name: SSL_CERT_FILE
+                  value: /tools/ca-certificates.crt
+                # VolSync の Secret と同じ(R2 は auto)
+                - name: AWS_DEFAULT_REGION
+                  value: auto
+                - name: ENDPOINT
+                  valueFrom: {secretKeyRef: {name: backup, key: endpoint}}
+                - name: BUCKET
+                  valueFrom: {secretKeyRef: {name: backup, key: bucket}}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: {secretKeyRef: {name: backup, key: accessKeyId}}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: {secretKeyRef: {name: backup, key: secretAccessKey}}
+                - name: RESTIC_PASSWORD
+                  valueFrom: {secretKeyRef: {name: backup, key: repoPassword}}
+                - name: WEBHOOK
+                  valueFrom: {secretKeyRef: {name: backup, key: mattermostWebhook}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                # restic restore は木の索引をメモリに持つ。forgejo-repos(小さいファイルが多い)が一番重い
+                limits: {memory: 2Gi}
+              volumeMounts:
+                - {name: script, mountPath: /script}
+                - {name: tools, mountPath: /tools}
+                - {name: work, mountPath: /work}
+          volumes:
+            - name: script
+              configMap:
+                name: restore-check
+            - name: tools
+              emptyDir: {sizeLimit: 128Mi}
+            # 取り出したファイル。1 つ見るたびに消すので、一番大きい PVC(forgejo-repos、20Gi)が入れば足りる
+            - name: work
+              emptyDir: {sizeLimit: 24Gi}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: restore-check
+  namespace: backup
+data:
+  restore-check.js: |
+    // ReplicationSource ごとに最新を取り出して開いてみる。結果を 1 通にまとめて投げる。
+    import { Database } from "bun:sqlite";
+    import { mkdirSync, rmSync, readdirSync, statSync, existsSync, readFileSync, openSync, readSync, closeSync } from "fs";
+
+    const W = "/work";
+    const T = `${W}/r`;
+    const API = "https://kubernetes.default.svc";
+    const SA = "/var/run/secrets/kubernetes.io/serviceaccount";
+    // 取り出さずに check だけするもの(録画。大きく、中身は ffmpeg の出力で開いて見るものが無い)
+    const CHECK_ONLY = new Set(["denpa/denpa-encoded"]);
+
+    // 失敗したら標準エラーの末尾ごと投げる(呼んだ側がそのまま理由に使う)。
+    // 1 つ 30 分で打ち切る。restic は R2 のエラーを黙って retry するので、待つと投稿まで届かない
+    const run = (cmd, env = process.env, what = cmd[0]) => {
+      const p = Bun.spawnSync(cmd, { stdout: "pipe", stderr: "pipe", env, timeout: 1800e3 });
+      // restic は失敗するとリポジトリの場所(アカウント ID 入り)を出す。通知に載せない
+      const err = p.stderr.toString().replaceAll(process.env.ENDPOINT, "<endpoint>");
+      if (p.exitCode !== 0) {
+        // --json のときは restic のエラーも JSON の 1 行(exit_error の message)で出る
+        const tail = err.trim().split("\n").slice(-2).map((l) => {
+          try {
+            return JSON.parse(l).message ?? l;
+          } catch {
+            return l;
+          }
+        });
+        throw new Error(`${what}: ${p.exitCode ?? "30 分で打ち切り"} ${tail.join(" / ").replace(/\s+/g, " ").slice(0, 200)}`);
+      }
+      return { out: p.stdout.toString(), err };
+    };
+    const restic = (repo, ...a) =>
+      run(["/tools/restic", "--no-lock", ...a], { ...process.env, RESTIC_REPOSITORY: `s3:${process.env.ENDPOINT}/${process.env.BUCKET}/${repo}` }, `restic ${a[0]}`);
+
+    // 頭の 16 バイトを読む。.db でも SQLite でないもの(AdGuard Home の bbolt など)を除くため
+    const head = (file, n = 16) => {
+      const fd = openSync(file, "r");
+      try {
+        const b = Buffer.alloc(n);
+        return b.subarray(0, readSync(fd, b, 0, n, 0));
+      } finally {
+        closeSync(fd);
+      }
+    };
+    const isSqlite = (file) => head(file).toString("latin1") === "SQLite format 3\0";
+
+    const sqlite = (file) => {
+      const db = new Database(file, { readonly: true });
+      try {
+        const ic = db.query("PRAGMA integrity_check").all().map((r) => Object.values(r)[0]);
+        if (ic.join() !== "ok") throw new Error(`integrity_check: ${ic.slice(0, 3).join("; ")}`);
+      } finally {
+        db.close();
+      }
+    };
+
+    // ファイルを数え、SQLite と Postgres のデータの場所を拾う。シンボリックリンクはたどらない
+    const walk = (dir, acc = { files: 0, bytes: 0, sqlite: [], pg: [] }) => {
+      const names = readdirSync(dir, { withFileTypes: true });
+      if (names.some((d) => d.name === "PG_VERSION" && d.isFile()) && existsSync(`${dir}/global`)) acc.pg.push(dir);
+      for (const d of names) {
+        const p = `${dir}/${d.name}`;
+        if (d.isDirectory()) walk(p, acc);
+        else if (d.isFile()) {
+          acc.files++;
+          acc.bytes += statSync(p).size;
+          if (/\.(db|sqlite3?)$/.test(d.name)) acc.sqlite.push(p);
+        }
+      }
+      return acc;
+    };
+
+    const size = (b) => (b < 2 ** 20 ? `${(b / 1024).toFixed(1)} KiB` : b < 2 ** 30 ? `${(b / 2 ** 20).toFixed(1)} MiB` : `${(b / 2 ** 30).toFixed(2)} GiB`);
+
+    // **Postgres のデータ。** 立ち上げずに、制御ファイルが揃っているかだけ見る
+    const postgres = (dir) => {
+      const v = readFileSync(`${dir}/PG_VERSION`, "utf8").trim();
+      if (!/^\d+$/.test(v)) throw new Error(`${dir.slice(T.length)}/PG_VERSION が変: ${v.slice(0, 20)}`);
+      // pg_control は 8 KiB 固定(PG_CONTROL_FILE_SIZE)
+      const n = statSync(`${dir}/global/pg_control`).size;
+      if (n !== 8192) throw new Error(`${dir.slice(T.length)}/global/pg_control が ${n} バイト`);
+      return `postgres ${v}`;
+    };
+
+    const latestOf = (repo) => {
+      const [s] = JSON.parse(restic(repo, "snapshots", "--json", "latest").out);
+      if (!s) throw new Error("スナップショットが無い");
+      return s;
+    };
+
+    const restore = (repo, s) => {
+      rmSync(T, { recursive: true, force: true });
+      restic(repo, "restore", s.short_id, "--target", T);
+      // 読み書きできない形で戻ったもの(0600 は自分のものになるので読める。0500 のディレクトリなどは消せない)を直す
+      run(["chmod", "-R", "u+rwX", T]);
+      return walk(T);
+    };
+
+    const checkPvc = (ns, pvc) => {
+      const repo = `volsync/${ns}/${pvc}`;
+      const s = latestOf(repo);
+      const day = s.time.slice(0, 10);
+      if (CHECK_ONLY.has(`${ns}/${pvc}`)) {
+        restic(repo, "check", "--read-data-subset=1%");
+        return `${day}: check 1% ok(取り出さない)`;
+      }
+      try {
+        const got = restore(repo, s);
+        if (!got.files) throw new Error("取り出したファイルが 0");
+        const out = [`${got.files} ファイル ${size(got.bytes)}`];
+        const dbs = got.sqlite.filter(isSqlite);
+        for (const f of dbs) {
+          try {
+            sqlite(f);
+          } catch (e) {
+            throw new Error(`${f.slice(T.length)}: ${e.message}`);
+          }
+        }
+        if (dbs.length) out.push(`SQLite ${dbs.length} 本 ok`);
+        // 名前に postgres が付く PVC はデータがあるはず。無ければ取り違えか空
+        if (/postgres/.test(pvc) && !got.pg.length) throw new Error("PG_VERSION が見つからない");
+        for (const d of got.pg) out.push(postgres(d));
+        return `${day}: ${out.join(", ")}`;
+      } finally {
+        rmSync(T, { recursive: true, force: true });
+      }
+    };
+
+    // etcd-snapshot.yaml のリポジトリ。中身は bbolt なので頭(16 バイト目からの magic 0xED0CDAED)を見る
+    const checkEtcd = () => {
+      const s = latestOf("etcd");
+      try {
+        restore("etcd", s);
+        const f = readdirSync(T, { recursive: true }).find((p) => String(p).endsWith("etcd.snapshot"));
+        if (!f) throw new Error("etcd.snapshot が無い");
+        const n = statSync(`${T}/${f}`).size;
+        if (head(`${T}/${f}`, 20).readUInt32LE(16) !== 0xed0cdaed) throw new Error("bbolt の頭ではない");
+        return `${s.time.slice(0, 10)}: etcd.snapshot ${size(n)}`;
+      } finally {
+        rmSync(T, { recursive: true, force: true });
+      }
+    };
+
+    const lines = [];
+    let bad = 0;
+    const one = (key, fn) => {
+      try {
+        lines.push(`- ✅ ${key} (${fn()})`);
+      } catch (e) {
+        bad++;
+        lines.push(`- ❌ ${key}: ${e.message}`);
+      }
+      console.log(lines.at(-1));
+      // 索引のキャッシュはリポジトリごとに溜まるので、1 つ見るたびに消す
+      rmSync(`${W}/.cache`, { recursive: true, force: true });
+    };
+    try {
+      mkdirSync(W, { recursive: true });
+      const TOKEN = (await Bun.file(`${SA}/token`).text()).trim();
+      const r = await fetch(`${API}/apis/volsync.backube/v1alpha1/replicationsources`, {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+        tls: { ca: await Bun.file(`${SA}/ca.crt`).text() },
+      });
+      if (!r.ok) throw new Error(`replicationsources: ${r.status} ${(await r.text()).slice(0, 200)}`);
+      // リポジトリの場所は ../volsync/ の InfisicalSecret と同じ組み方(PVC の名前で切る)
+      const pvcs = [...new Set(
+        ((await r.json()).items ?? [])
+          .filter((o) => o.spec?.sourcePVC && o.spec?.restic)
+          .map((o) => `${o.metadata.namespace}/${o.spec.sourcePVC}`),
+      )].sort();
+      if (!pvcs.length) (bad++, lines.push("- ❌ ReplicationSource が 1 つも無い"));
+      for (const key of pvcs) one(key, () => checkPvc(...key.split("/")));
+      one("etcd", checkEtcd);
+    } catch (e) {
+      bad++;
+      lines.push(`- ❌ 途中で止まった: ${e.message}`);
+    }
+
+    const text = `[backup] 復元チェック ${bad ? `FAILED ❌ (${bad} 件)` : `OK ✅ (${lines.length} 件すべて戻せる)`}\n${lines.join("\n")}`;
+    console.log(text);
+    const res = await fetch(process.env.WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      console.error(`投稿に失敗: ${res.status} ${await res.text()}`);
+      process.exit(1);
+    }
+    // FAILED でも exit 0(理由は notify.yaml の末尾)。非ゼロは投稿そのものに失敗したときだけ
