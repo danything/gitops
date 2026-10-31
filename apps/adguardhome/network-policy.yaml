@@ -1,0 +1,36 @@
+# 平文の DNS(53)は家の LAN・Pod・NetBird からだけ受ける。外からの 53 は DNS の増幅攻撃の踏み台にしか使われていなかった
+# (2026-10-31、送信元を偽装した `xxx.heimaoip.com` の TXT が 1 日 90 万件。docs/router.md「53 番は外に出さない」)。
+# 外から使う DoT(853)と DoH(Gateway 経由の 8081)は絞らない。
+# 拒否だけの規則は Pod を既定拒否にするので、全部を通す規則と組にする。拒否は許可より強い。
+# CIDR の規則はクラスタの中(Pod・ノード自身)には当たらないので、CoreDNS などはそのまま届く。
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: adguardhome
+  namespace: adguardhome
+spec:
+  endpointSelector:
+    matchLabels:
+      app: adguardhome
+  ingress:
+    - fromEntities:
+        - all
+  ingressDeny:
+    - fromCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            # NetBird
+            - 100.64.0.0/10
+        - cidr: ::/0
+          except:
+            - fc00::/7
+            - fe80::/10
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

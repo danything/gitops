@@ -35,7 +35,8 @@ DMZ の向け先を変えると、下の全部と AdGuard の split-horizon が�
 | ポート | 何 | 外から要るか |
 | --- | --- | --- |
 | 80 / 443 TCP | Gateway(全部の Web) | 要る |
-| 53 UDP・TCP / 853 TCP | AdGuard Home(DNS / DoT) | 開けている(下の「53 番は外にも開けている」) |
+| 53 UDP・TCP | AdGuard Home(平文の DNS) | 要らない。Pod の手前で止めている(下の「53 番は外に出さない」) |
+| 853 TCP | AdGuard Home(DoT) | 要る |
 | 8443 UDP・TCP | LiveKit(Matrix の通話。apps/matrix/README.md) | 要る |
 | 51820 UDP | NetBird の routing peer(WireGuard) | 要る |
 | 3129 TCP | 3proxy の TLS 口(apps/3proxy/) | 外から使うなら要る |
@@ -43,11 +44,12 @@ DMZ の向け先を変えると、下の全部と AdGuard の split-horizon が�
 
 Talos の API(50000)は LAN からしか届かない(recovery/README.md)。
 
-## 53 番は外にも開けている(意図して)
+## 53 番は外に出さない
 
-AdGuard Home は問い合わせ元を絞っておらず(apps/adguardhome/deployment.yaml の `CONFIG` の `allowed_clients: []`)、DMZ で 53 番も外に出ている。
-**意図してそうしている**。オープンリゾルバとして DNS の増幅攻撃の踏み台に使われうることは承知の上。
-閉じるときは、ルーターで 53 番の受信を止めるか、`allowed_clients` に家の LAN・Pod・NetBird の範囲だけを書く。
+DMZ では 53 番も外に届くが、AdGuard Home の Pod の手前で、プライベートのアドレス(家の LAN・NetBird)以外からの 53 番を
+Cilium のポリシーで捨てている(apps/adguardhome/network-policy.yaml)。外から使う DoT(853)と DoH は絞らない。
+以前は開けていたが、2026-10-31 に、送信元を偽装した増幅攻撃の踏み台として 1 日 90 万件使われていたので閉じた。
+AdGuard の `allowed_clients` で絞らないのは、DoT・DoH にも効いて外の端末が使えなくなるため。
 
 ## IPv6 はノードだけを公開する
 
