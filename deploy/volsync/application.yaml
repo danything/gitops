@@ -1,0 +1,44 @@
+# VolSync。PVC をスナップショットから restic で R2 に取る(k8up の後継。理由は docs/decisions.md
+# 「Z440 で、ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする」)。
+# 取る PVC と時刻は同じフォルダの <namespace>.yaml の ReplicationSource(denpa-raw だけは取らない)。
+#
+# - **リポジトリは PVC ごと**に `<bucket>/volsync/<namespace>/<pvc>`。Secret(`volsync-<pvc>`)は namespace ごとの InfisicalSecret
+#   `volsync` が、k8up と同じ `/k8up/k8up-global`(endpoint・bucket・鍵・repoPassword)からテンプレートで組む
+# - **スナップショットから取る**(copyMethod: Snapshot。VolumeSnapshotClass は bootstrap/storage.yaml の `lvm`)。
+#   止めずに取れて、Postgres・SQLite・RocksDB は crash-consistent なスナップショットから自分で立ち直る
+# - **mover は root**(PVC の中の持ち主がアプリごとに違う)。namespace に `volsync.backube/privileged-movers: "true"` が要る。
+#   Argo CD が作る namespace は bootstrap/argocd-repos.yaml の managedNamespaceMetadata、自分で Namespace を書いているところはそのファイル、
+#   bootstrap 層(infisical など)は bootstrap/render.sh が付ける。PVC を足したら、その namespace に注釈があるかを見る
+# - **時刻は 19:00〜20:45 UTC(04:00〜05:45 JST)に 5 分ずつ。** 保持は日次 7・週次 4・月次 6(録画だけ 1 世代)、prune は 7 日ごと
+#
+# k8up とは 2026-11 から並べて動かしている。切り替えの進み具合は ROADMAP.md「やること」。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: volsync
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: volsync-system
+  source:
+    repoURL: https://backube.github.io/helm-charts
+    chart: volsync
+    targetRevision: 0.17.0
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # CRD より先に同期しにいくと既定の 5 回で諦める。k8up と同じく 15s から倍々・上限 5 分・10 回
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -10,7 +10,7 @@
 ## やること
 
 - [ ] **バックアップを VolSync に切り替える**(理由は [docs/decisions.md](docs/decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)
-  - [ ] VolSync(restic mover、copyMethod: Snapshot)を入れ、PVC ごとに ReplicationSource。R2 は PVC ごとに別の経路。k8up と並べて動かして確かめる
+  - [ ] VolSync(restic mover、copyMethod: Snapshot)を入れ、PVC ごとに ReplicationSource。R2 は PVC ごとに別の経路。k8up と並べて動かして確かめる(deploy/volsync/。2026-11-01 に入れた)
   - [ ] 戻しは populator(PVC の `dataSourceRef`)。`recovery/pv.sh` と README の 8 を VolSync に合わせる
   - [ ] k8up・`backupcommand`・notify・restore-check を VolSync に合わせて畳む。k8up のリポジトリは保持期間(月次 6 か月)が切れるまで残す
 - [ ] **AMT を設定する**(下の「AMT」)。済んだら SOL の `console=` を schematic に足し、「iLO(10.0.0.3)」と書いてあるところを AMT に直す

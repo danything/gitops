@@ -4,6 +4,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: forgejo
+  annotations:
+    # VolSync の mover を root で動かす(PVC の中の持ち主がアプリごとに違うので。../volsync/application.yaml)
+    volsync.backube/privileged-movers: "true"
   labels:
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/audit: privileged
