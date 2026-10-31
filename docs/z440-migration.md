@@ -72,7 +72,7 @@ local-path との違いで気を付けること:
 
 - **PVC の requests が本当の上限になる。** local-path はディスクの残り全部が使えたので、`adguardhome-work`(5Gi)に 68 GB 入っていた。
   戻す前に `recovery/pv.sh - plan-all` が PVC に入るかを見る(`fit`。入らなければ止まる)
-- **thin なので合計はプールを超えてよい**(denpa は 1Ti と 300Gi)。代わりに**プールが溢れると全部の PVC の書き込みが止まる。**
+- **PVC の合計はプール(約 340Gi)に収める。** thin なので超えても作れるが、**プールが溢れると全部の PVC の書き込みが止まる。** 残りは denpa の encoded に回している(bootstrap/lvm-localpv-values.yaml)。
   `kubectl -n kube-system get pods -l app=lvm-thinpool` が 90% で NotReady になる(ログに 1 時間ごとの使用率)。
   denpa の残量の表示(statfs)は PVC の大きさで見るので、プールの空きより多く出る
 - **新しい PVC の直下は root の 0755**(local-path は 0777 だった)。root 以外で書くアプリは `fsGroup` が要る(worklog に足した。ほかは付いているか root)
@@ -135,11 +135,11 @@ AMT の SOL は、OS からは PCI のシリアルポート(「Intel … KT Cont
 ## 4. 移す直前(DL360 で)
 
 コマンドは全部 `tools/t.ps1 --admin` のシェルで打つ([../recovery/README.md](../recovery/README.md)「道具と経路」)。
-LVM への切り替えは main に入っていること(入れたあと DL360 の Argo CD は `adguardhome-work` を 30Gi に広げられずに同期のエラーを出すが、
+LVM への切り替えは main に入っていること(入れたあと DL360 の Argo CD は `adguardhome-work` を 10Gi に広げられず、denpa などの縮めた PVC も縮められずに同期のエラーを出すが、
 local-path が広げられないだけで、入れ直せば消える)。worklog の `fsGroup`(fj.doany.io の doa/worklog-cloud#179)も入っていること。
 
 1. **AdGuard のクエリログを消す**(Web の「設定 → 一般設定 → クエリログを消去」)。`querylog.json` が 68 GB あり、
-   最後のバックアップに乗ると、戻すときに `adguardhome-work`(30Gi)に入らず `plan-all` が止まる。
+   最後のバックアップに乗ると、戻すときに `adguardhome-work`(10Gi)に入らず `plan-all` が止まる。
    消す前に、どの端末が 1 日 10 GB も引いているかを見ておく(2026-10 末から。前は 1 日 0.3 GB ほど)
 2. **Z440 の MAC を `LinkAliasConfig` に足して main にマージ**(「2. NIC と bond0」)。talos-boot が通ること
 3. machine config を描く: `./bootstrap/render.sh bootstrap/clusterconfig`(`valid for metal mode` まで出ること)。

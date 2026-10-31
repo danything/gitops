@@ -28,5 +28,7 @@ spec:
   storageClassName: local-path
   resources:
     requests:
-      # クエリログ(deployment.yaml の querylog.interval)の 2 本ぶん。LVM なのでこれが本当の上限になる
-      storage: 30Gi
+      # クエリログ(deployment.yaml の querylog.interval)の 2 本ぶん。LVM なのでこれが本当の上限になる。
+      # 1 日 10 GB は外からの 53 番の増幅攻撃のぶんで、network-policy.yaml で閉じてからはふだんの量に戻った。
+      # 合計を thin プールに収めるため小さめにしている(bootstrap/lvm-localpv-values.yaml)
+      storage: 10Gi

@@ -311,8 +311,10 @@ StorageClass を変えた PVC を作り直すだけで中身が埋まるので�
   `dm-snapshot` は組み込み。起動時の VG の有効化は Talos がする(`thin_check` が無いのは lvm2 が飛ばす)。Talos は知らない LV を消さない
 - **StorageClass の名前は `local-path` のまま**(既定)。各リポジトリの PVC は書き換えない。`thinProvision: "yes"`(スナップショットから戻せるのは thin だけ)、
   xfs(ext4 は `lost+found` を作り、PGDATA がボリュームの直下の Postgres の initdb が落ちる)
-- **`storageCapacity: false`。** thin なので PVC の大きさの合計はプールを超えてよい(denpa は 1Ti と 300Gi)。true だと kube-scheduler が
+- **`storageCapacity: false`。** thin なので PVC の大きさの合計がプールを超えても作れる(ただし合計はプールに収める。下の項目)。true だと kube-scheduler が
   プールの空きより大きい PVC を Pending にする
+- **PVC の合計はプールに収める。** 超えて実際に埋まると、PVC の中の残量の見張り(denpa の `disk.ts` など)が鳴る前にプールが埋まり、
+  全部の PVC の書き込みが止まる。使用量に比べて大きすぎた PVC(Forgejo・Matrix・Rybbit・AdGuard)を縮め、残りを録画(denpa の encoded)に回した
 - **snapshot-controller と VolumeSnapshot の CRD は chart の同梱を使わず**、external-snapshotter のタグの URL で入れる(版は `talos.sops.yaml` の先頭)。
   クラスタに 1 つのもので、VolSync も使う
 - **talos-boot が確かめていること**: VG と thin プール(VG の 9 割)、PVC が xfs で bind、VolumeSnapshot が readyToUse、
