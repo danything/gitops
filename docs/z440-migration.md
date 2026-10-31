@@ -43,7 +43,7 @@ Z440 では NIC の名前が DL360 と変わる(`eno1`〜`eno4` にはならな�
 `LinkAliasConfig` で別名を付け、`BondConfig` と `LinkConfig` はその別名を指す。
 
 - 別名は `eno1` のような**システムの名前に見えるものにしない**(Talos が弾く)。例: `lan0` = 内蔵の Intel → `bond0` → 10.0 側(BL1500HM)、
-  `jcom0` = 361T のポート 1 → 10.10 側(HUMAX)。361T の 2 ポート目は空けておく(`bond0` に足して冗長にもできる)
+  `lan1` = 361T の `ens3f0`(`d4:f5:ef:6d:db:88`)→ `bond0` の 2 本目、`jcom0` = 361T の `ens3f1`(`d4:f5:ef:6d:db:89`)→ 10.10 側(HUMAX)。MAC は 2026-10-31 に maintenance mode で見た
 - 選ぶのは **`mac(link.permanent_addr)`**。bond のメンバーになると今の MAC は bond の MAC に変わるので、元の MAC で見る
 - **`bond0` は残す**(メンバーは `lan0` の 1 本)。MAC は `hardwareAddr: e6:2c:1b:1a:a0:39` で固定してあるので、
   **DL360 でも Z440 でも変わらない**。ルーターの IPv6 公開のエントリ([router.md](router.md))は直さなくてよい
