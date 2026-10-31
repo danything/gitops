@@ -77,7 +77,7 @@
     ],
     "packageRules": [
         {
-            "description": "bun.lock は pulumi install で作る(SDK が file:sdks/netbird で、Renovate 自身の bun install は落ちる)。bun.lock も package file なので matchFileNames に入れる。skipArtifactsUpdate は枝の全部の更新が指定しているときだけ効くので専用の枝にする。許可は apps/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS。",
+            "description": "bun.lock は pulumi install で作る(SDK が file:sdks/netbird で、Renovate 自身の bun install は落ちる)。bun.lock も package file なので matchFileNames に入れる。skipArtifactsUpdate は枝の全部の更新が指定しているときだけ効くので専用の枝にする。許可は deploy/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS。",
             "matchFileNames": [
                 "pulumi/package.json",
                 "pulumi/bun.lock",
@@ -110,10 +110,10 @@
             "groupSlug": "adguardhome",
             "postUpgradeTasks": {
                 "commands": [
-                    "bash apps/adguardhome/renovate-post-upgrade.sh"
+                    "bash deploy/adguardhome/renovate-post-upgrade.sh"
                 ],
                 "fileFilters": [
-                    "apps/adguardhome/deployment.yaml"
+                    "deploy/adguardhome/deployment.yaml"
                 ],
                 "executionMode": "branch"
             }

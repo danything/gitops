@@ -1,4 +1,4 @@
-// Cloudflare の通知を Matrix の部屋 server に流す(hookshot。apps/matrix/hookshot.yaml)。
+// Cloudflare の通知を Matrix の部屋 server に流す(hookshot。deploy/matrix/hookshot.yaml)。
 // 受け口の URL は ID を含むので secrets(値は Infisical /matrix/matrix の hook-cloudflare から作る)。
 
 import * as cloudflare from "@pulumi/cloudflare";

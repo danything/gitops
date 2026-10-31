@@ -8,8 +8,8 @@ on:
     # YAML のアンカーは読むが、マージキー `<<:` は読まない
     paths: &paths
       - bootstrap/**
-      - apps/argocd/httproute.yaml
-      - apps/gateway/**
+      - deploy/argocd/httproute.yaml
+      - deploy/gateway/**
       - .github/workflows/talos-boot.yml
   push:
     branches: [main]
@@ -266,7 +266,7 @@ jobs:
             selfSigned: {}
           YAML
           until kubectl apply -f /tmp/issuer.yaml 2>/dev/null; do sleep 5; done
-          until kubectl apply -f apps/gateway/gateway.yaml -f apps/gateway/redirect-https.yaml -f apps/argocd/httproute.yaml; do sleep 5; done
+          until kubectl apply -f deploy/gateway/gateway.yaml -f deploy/gateway/redirect-https.yaml -f deploy/argocd/httproute.yaml; do sleep 5; done
           kubectl -n kube-system wait --for=condition=Ready certificate --all --timeout=3m
           kubectl -n kube-system wait --for=condition=Programmed gateway/doany --timeout=3m
           # http は https への 301、https は argocd-server まで

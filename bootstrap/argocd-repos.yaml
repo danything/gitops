@@ -1,5 +1,5 @@
 # bootstrap/ で ArgoCD が当てるのはこのファイルだけ(machine config の `apps` が拾う。場所と名前は argocd-values.sops.yaml の
-# extraObjects に焼いてあるので、動かすと machine config を当て直すことになる)。平文のマニフェストは apps/ にある。
+# extraObjects に焼いてあるので、動かすと machine config を当て直すことになる)。平文のマニフェストは deploy/ にある。
 # Forgejo 側は別の ApplicationSet(下の `repos-forgejo`)に分ける。generator が 1 つでも失敗すると
 # Application を 1 本も作らないので、まっさらなクラスタ(Forgejo も forgejo-repo-creds もまだ無い)で
 # 同居させると自力で抜けられない。2 つの template は同じ形を保つこと。

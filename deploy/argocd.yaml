@@ -2,7 +2,7 @@
 name: gitops
 namespace: ''
 
-sourcePath: apps
+sourcePath: deploy
 recurse: true
 
 autoSync: true

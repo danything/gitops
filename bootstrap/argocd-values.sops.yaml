@@ -13,7 +13,7 @@ redis:
     image:
         repository: mirror.gcr.io/library/redis
         tag: 8.10.3-alpine
-# Dex を使わず Entra ID に直接 OIDC(../apps/auth/deployment.yaml と同じアプリ登録)
+# Dex を使わず Entra ID に直接 OIDC(../deploy/auth/deployment.yaml と同じアプリ登録)
 dex:
     enabled: false
 configs:

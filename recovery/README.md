@@ -13,7 +13,7 @@
 
 **2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる(`pv.sh - plan-all` は 2026-10-20 に本番の restic と突き合わせて、全 namespace の判定が 8 の表どおりになるのを確かめた)。
 
-**手動のリハーサルは回さない。** 中身は月次の [restore-check](../apps/k8up/restore-check.yaml)、machine config は
+**手動のリハーサルは回さない。** 中身は月次の [restore-check](../deploy/k8up/restore-check.yaml)、machine config は
 [talos-boot](../.github/workflows/talos-boot.yml) が確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
 
 手で持つのは **age のパスフレーズ 1 つだけ**。GitHub へのログインは要らない
@@ -38,7 +38,7 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 | Infisical の DB | **手元の restic で直接**(k8up の資格情報 `k8up-global` が Infisical から来るので、k8up では戻せない) |
 | ほかの PV データ | **k8up の `Restore`**([pv.sh](pv.sh)) |
 
-etcd のスナップショット(restic の `--host etcd`、[../apps/k8up/etcd-snapshot.yaml](../apps/k8up/etcd-snapshot.yaml))は
+etcd のスナップショット(restic の `--host etcd`、[../deploy/k8up/etcd-snapshot.yaml](../deploy/k8up/etcd-snapshot.yaml))は
 git に無い状態まで一度に戻したいときの近道で、主経路ではない([../docs/talos.md](../docs/talos.md)「etcd スナップショットからの復旧」)。
 
 ## 道具と経路
@@ -115,7 +115,7 @@ kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting 
 
 ## 5. Gateway・auth などが入るのを見る(ArgoCD)
 
-手ですることは無い。ArgoCD の `gitops` の Application([../bootstrap/argocd-repos.yaml](../bootstrap/argocd-repos.yaml) の ApplicationSet が作る)が `apps/` の
+手ですることは無い。ArgoCD の `gitops` の Application([../bootstrap/argocd-repos.yaml](../bootstrap/argocd-repos.yaml) の ApplicationSet が作る)が `deploy/` の
 `ClusterIssuer`・Gateway・auth・`InfisicalSecret` を当てる。
 
 ```shell
@@ -123,7 +123,7 @@ kubectl -n argocd get application gitops       # InfisicalSecret の CRD が来�
 kubectl get certificate -A                      # Gateway に証明書が付く
 ```
 
-Argo CD はこの間に `apps/` の残りと各リポジトリの `deploy/` も同期しはじめる。**中身はまだ空**なので、
+Argo CD はこの間に `deploy/` の残りと各リポジトリの `deploy/` も同期しはじめる。**中身はまだ空**なので、
 Infisical の Secret を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。
 
 ## 6. Infisical の DB を戻す
@@ -190,7 +190,7 @@ sh recovery/pv.sh - restore-all
 | `/netbird-backup.tar` | `untar`(`store.db*` `idp.db*` `events.db*` を消してから)。戻すまで netbird-server は `no other identity providers configured` で CrashLoop する |
 | `/matrix-backup.tar` | Tuwunel 自身のバックアップ(`backups/`)と `media/` の tar。新しく作られた `db/` を消して展開し、**1 回だけ `--restore-backup` 付きで起こす**(引数は Argo CD を戻すと selfHeal が消す) |
 
-表に無い経路、namespace や PVC が無いものは `plan` の時点で止まる(黙って飛ばさない。「まだ Argo CD が作っていない」と「やめたアプリの残り」を区別できないので)。やめたアプリの残りは restic から消しておく([../apps/k8up/README.md](../apps/k8up/README.md)「やめたアプリの残り」)。新しい形の経路を足したら pv.sh の `plan` とこの表に足す。
+表に無い経路、namespace や PVC が無いものは `plan` の時点で止まる(黙って飛ばさない。「まだ Argo CD が作っていない」と「やめたアプリの残り」を区別できないので)。やめたアプリの残りは restic から消しておく([../deploy/k8up/README.md](../deploy/k8up/README.md)「やめたアプリの残り」)。新しい形の経路を足したら pv.sh の `plan` とこの表に足す。
 
 - **`Succeeded` は「戻った」の意味ではない。** `pv.sh` は `Restored N files` と(SELinux 以外の)エラー数を出すので、それを見る。
   SQLite は大きさを restic と突き合わせてから付け替える

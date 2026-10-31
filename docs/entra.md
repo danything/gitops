@@ -29,8 +29,8 @@
 | Argo CD・Kubernetes(Headlamp)・Hubble | 見るだけ | Argo CD は `policy.default: role:readonly`、Kubernetes は `entra:viewer`、Hubble は前段でロールを見ない |
 | AdGuard Home・`*.s.doany.io` | 入れない | 前段(oauth2-proxy)やアプリが `admin` のロールを求める |
 
-Matrix の ID はメールの @ の前から作るので、前半が同じ人が 2 人居ると 2 人目は入れない(apps/matrix/README.md)。
-Forgejo の members から外したいときは [../apps/forgejo/README.md](../apps/forgejo/README.md)「誰が何をできるか」。
+Matrix の ID はメールの @ の前から作るので、前半が同じ人が 2 人居ると 2 人目は入れない(deploy/matrix/README.md)。
+Forgejo の members から外したいときは [../deploy/forgejo/README.md](../deploy/forgejo/README.md)「誰が何をできるか」。
 
 ## oauth2-proxy のセッションは Cookie だけ(redis なし)
 
@@ -46,4 +46,4 @@ kubectl logs -n auth deploy/auth --since=10m | grep AuthSuccess
 ```
 
 **`OIDC_GROUPS_CLAIM` を generic な `oidc` プロバイダで使うと `groups` スコープを勝手に要求し、Entra に AADSTS650053 で断られる**
-(`apps/auth/deployment.yaml` のコメント)。いまは `entra-id` プロバイダで `OAUTH2_PROXY_SCOPE` も明示している。
+(`deploy/auth/deployment.yaml` のコメント)。いまは `entra-id` プロバイダで `OAUTH2_PROXY_SCOPE` も明示している。

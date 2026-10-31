@@ -8,9 +8,9 @@ Pulumi で作ると値を Infisical に書く鍵が CI に要る。その鍵は 
 
 | トークン | 種類 | 権限 | 置き場所 | 使うもの |
 | --- | --- | --- | --- | --- |
-| `external-dns (doany.io DNS write)` | アカウント | `doany.io` の Zone Read + DNS Write | Infisical `/external-dns/external-dns` の `cloudflare-api-token` | apps/external-dns |
+| `external-dns (doany.io DNS write)` | アカウント | `doany.io` の Zone Read + DNS Write | Infisical `/external-dns/external-dns` の `cloudflare-api-token` | deploy/external-dns |
 | `doany-restic` | アカウント | R2 バケット `doany-restic` だけの Object Read & Write | Infisical `/k8up/k8up-global`、`recovery/env.age` | k8up、復元(手元の restic) |
-| cloudflare-ddns | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | Infisical `/cloudflare-ddns/cloudflare-ddns-secrets` の `CLOUDFLARE_API_TOKEN` | apps/cloudflare-ddns |
+| cloudflare-ddns | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | Infisical `/cloudflare-ddns/cloudflare-ddns-secrets` の `CLOUDFLARE_API_TOKEN` | deploy/cloudflare-ddns |
 | cert-manager | ユーザー(アカウントの一覧に無い) | 画面で確かめる(DNS Write が要る) | SOPS の `bootstrap/cert-manager-values.sops.yaml`(2 つめのドキュメント) | cert-manager(DNS-01) |
 | `todoroku-pulumi (state)` | アカウント | R2 バケット `todoroku-pulumi` だけの Object Read & Write | Forgejo `doa/todoroku` の secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`(ID と値の SHA-256) | todoroku の `infra/`(Pulumi の state) |
 | `gitops pulumi apply` / `preview` | アカウント | pulumi/README.md「鍵と state」 | GitHub の secrets | gitops の Pulumi |
