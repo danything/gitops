@@ -135,7 +135,8 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 	helm repo add --force-update "$_n" "$_repo" >/dev/null
 	{
 		if [ "$_ns" != kube-system ]; then
-			printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n---\n' "$_ns"
+			# 注釈は VolSync の mover を root で動かすため(../deploy/volsync/application.yaml)。bootstrap 層の namespace はここで作る
+			printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n  annotations:\n    volsync.backube/privileged-movers: "true"\n---\n' "$_ns"
 		fi
 		helm template "$_n" "$_n/$_chart" \
 			--version "$(bver "$_n")" -n "$_ns" -f "$_v" "$@" --kube-version "$K8S" \

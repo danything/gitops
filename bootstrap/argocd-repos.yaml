@@ -56,6 +56,11 @@ spec:
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
+        # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。
+        # リポジトリが Namespace を自分で書いているときはそちらが勝つので、そちらにも書く
+        managedNamespaceMetadata:
+          annotations:
+            volsync.backube/privileged-movers: "true"
         # CRD より先に同期したものは既定の 5 回で諦めて止まる(refresh=hard でも戻らない)。約 33 分まで粘る
         retry:
           limit: 10
@@ -129,6 +134,11 @@ spec:
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
+        # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。
+        # リポジトリが Namespace を自分で書いているときはそちらが勝つので、そちらにも書く
+        managedNamespaceMetadata:
+          annotations:
+            volsync.backube/privileged-movers: "true"
         retry:
           limit: 10
           backoff:
