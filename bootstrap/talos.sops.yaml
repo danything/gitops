@@ -632,6 +632,7 @@ sops:
 # Pod と Service(10.42 / 10.43・fd42 / fd43。10.0.0.0/8 と fc00::/7 に入る)。talosctl(作業用 PC から 10.10.0.4:50000)・
 # etcd・kubelet・Cilium(4240・4244・8472・9963・9964)・Pod からの Talos API(k8up)とノードの DNS(169.254.116.108:53)はここ。
 # 家の LAN の IPv6 の GUA(RA のプレフィックス。変わりうる)は入れていないので、LAN からは IPv4 で繋ぐ。
+# 172.16/12・192.168/16 は使っていないので入れない(使うものだけ。足すなら上の送信元を増やしたとき)。
 apiVersion: v1alpha1
 kind: NetworkRuleConfig
 name: private-tcp
@@ -641,8 +642,6 @@ portSelector:
     protocol: tcp
 ingress:
     - subnet: 10.0.0.0/8
-    - subnet: 172.16.0.0/12
-    - subnet: 192.168.0.0/16
     - subnet: 100.64.0.0/10
     - subnet: fc00::/7
     - subnet: fe80::/10
@@ -673,8 +672,6 @@ portSelector:
     protocol: udp
 ingress:
     - subnet: 10.0.0.0/8
-    - subnet: 172.16.0.0/12
-    - subnet: 192.168.0.0/16
     - subnet: 100.64.0.0/10
     - subnet: fc00::/7
     - subnet: fe80::/10
