@@ -361,7 +361,17 @@ rm -f $2 $2-wal $2-shm $2-journal; mv $f $2; chown \$o $2; chmod \$m $2; ls -ln 
 		$K -n "$NS" exec "h-$1" -- sh -euc "cd /pvc; rm -f $4; tar -xvf $f | tr '\n' ' '; echo; rm -f $f; ls -ln"
 		unhelper "$1" ;;
 	pgload) # $1=pvc $2=snapshot $3=中のパス $4=deploy $5=user $6=db
+		# **ダンプを置く間は Postgres も止める。** OpenEBS LVM の PV は 2 つの Pod から同時にマウントできず、
+		# Restore の Pod が `verifyMount: device already mounted` で ContainerCreating のまま止まる
+		# (local-path の頃は通っていた。2026-10-31 の Z440 への移行で踏んだ)
+		$K -n "$NS" scale "deploy/$4" --replicas=0 >/dev/null
+		for _ in $(seq 1 40); do
+			$K -n "$NS" get pod --no-headers 2>/dev/null | grep -v Completed | grep -q "^$4-" || break
+			sleep 3
+		done
 		folder "$1" "$2"
+		$K -n "$NS" scale "deploy/$4" --replicas=1 >/dev/null
+		$K -n "$NS" rollout status "deploy/$4" --timeout=5m >/dev/null
 		f=${3#/}
 		# PVC は deploy/{forgejo,rybbit}/postgres.yaml で /var/lib/postgresql/data に付いている。
 		# psql が落ちたらダンプは消さずに残す(流し直せるように)
