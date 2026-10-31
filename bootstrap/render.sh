@@ -156,6 +156,12 @@ inline storage < bootstrap/storage.yaml > "$WORK/inline-storage.yaml"
 # CI と人の RBAC。締め出されても直せるよう ArgoCD に載せない(ArgoCD は bootstrap/ を argocd-repos.yaml しか見ない)。
 inline apiserver-rbac < bootstrap/apiserver-rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
+# 受信の防火壁が Pod からノードの IP の Gateway を捨てないようにする(gateway-notrack.yaml の冒頭)。防火壁と同じ層に置く
+inline gateway-notrack < bootstrap/gateway-notrack.yaml > "$WORK/inline-gateway-notrack.yaml"
+
+# 受信の防火壁が Pod からノードの IP の Gateway を捨てないようにする(gateway-notrack.yaml の冒頭)。防火壁と同じ層に置く
+inline gateway-notrack < bootstrap/gateway-notrack.yaml > "$WORK/inline-gateway-notrack.yaml"
+
 chart argocd argocd
 # infisical は chart がパスワードを平文 env に焼くので ArgoCD に置けない(../docs/decisions.md)。
 chart infisical infisical
@@ -245,7 +251,7 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	"external-snapshotter/$SNAP/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml" \
 	"external-snapshotter/$SNAP/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml" \
 	hubble-generate-certs \
-	'name: apiserver-rbac' 'name: cilium-drift' \
+	'name: apiserver-rbac' 'name: cilium-drift' 'name: gateway-notrack' \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'name: argocd' argocd-server 'name: argocd-application-crd' manifests/crds/applicationset-crd.yaml \
 	'kind: Namespace\nmetadata:\n  name: argocd' \

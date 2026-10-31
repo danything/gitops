@@ -77,6 +77,14 @@
     ],
     "packageRules": [
         {
+            "description": "bootstrap/gateway-notrack.yaml は Cilium の agent のイメージ(iptables 入り)を使う。chart と同じ版に揃えて一緒に上げる。",
+            "matchPackageNames": [
+                "cilium",
+                "quay.io/cilium/cilium"
+            ],
+            "groupName": "cilium"
+        },
+        {
             "description": "bun.lock は pulumi install で作る(SDK が file:sdks/netbird で、Renovate 自身の bun install は落ちる)。bun.lock も package file なので matchFileNames に入れる。skipArtifactsUpdate は枝の全部の更新が指定しているときだけ効くので専用の枝にする。許可は deploy/renovate/renovate.yaml の RENOVATE_ALLOWED_COMMANDS。",
             "matchFileNames": [
                 "pulumi/package.json",

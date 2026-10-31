@@ -1,0 +1,64 @@
+# Pod からノード自身の IP の 80・443 番(Gateway。hostNetwork の Cilium の Envoy)への行きのパケットを conntrack から外す。
+# render.sh が inline に載せる(受信の防火壁と同じ machine config の層。CI の talos-boot が「Pod からノードの IP の Gateway に届く」で見る)。
+#
+# **無いと、受信の防火壁(talos.sops.yaml の NetworkDefaultActionConfig)が Pod からの Gateway を捨てる。**
+# Envoy の待ち受けには Cilium の印(0xa00 / 0xb00)が付き、Cilium は raw の OUTPUT で cilium_host・lxc+ へ出る
+# その印のパケット(= Envoy から Pod への帰り)を NOTRACK にする。conntrack には行きの SYN だけが残り、Pod の次の ACK と
+# データが invalid になって、Talos の `ct state invalid drop` で捨てられる(TCP はつながるが応答が来ない)。
+# Pod は fj.doany.io の AAAA(ノードの公開 IPv6)で Forgejo に来る(../deploy/forgejo/runner.yaml)ので、Argo CD も runner も止まる。
+# 行きも NOTRACK にすれば往復とも追跡しない形で揃い、防火壁の private-tcp(10.0.0.0/8・fc00::/7)の accept に当たる。
+# 外からの 443 は物理 NIC から帰るので Cilium の NOTRACK に当たらず、ここも触らない。
+# ClusterIP の Service 経由は BPF で済むので netfilter を通らない(2026-10-31 の Z440 への移行で踏んだ。../bootstrap/talos.md)
+#
+# iptables は Cilium と同じもの(nft か legacy)を使う。Cilium の規則がある方を見て決める
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gateway-notrack
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: gateway-notrack
+  template:
+    metadata:
+      labels:
+        app: gateway-notrack
+    spec:
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      containers:
+        # iptables と ip6tables が入っていて、版を Cilium と揃えられるので Cilium の agent のイメージを使う
+        - name: notrack
+          image: quay.io/cilium/cilium:v1.20.4
+          command: [sh, -euc]
+          args:
+            - |
+              pick() {
+                for v in nft legacy; do
+                  if "iptables-$v-save" -t raw 2>/dev/null | grep -q CILIUM; then echo "$v"; return; fi
+                done
+              }
+              # Cilium が規則を入れるまで待つ
+              until V=$(pick) && [ -n "$V" ]; do echo "Cilium の raw の規則を待つ"; sleep 5; done
+              echo "iptables-$V を使う"
+              rule() { # $1=iptables か ip6tables $2=Pod の網
+                c=$1-$V
+                spec="-s $2 -p tcp -m multiport --dports 80,443 -m addrtype --dst-type LOCAL -j CT --notrack"
+                # shellcheck disable=SC2086
+                $c -t raw -C PREROUTING $spec 2>/dev/null || { $c -t raw -I PREROUTING $spec; echo "足した: $c $spec"; }
+              }
+              # Cilium が chain を作り直しても消えないよう、1 分ごとに確かめて足し直す
+              while :; do
+                rule iptables 10.42.0.0/16
+                rule ip6tables fd42::/64
+                sleep 60
+              done
+          securityContext:
+            capabilities:
+              add: [NET_ADMIN, NET_RAW]
+              drop: [ALL]
+          resources:
+            requests: {cpu: 1m, memory: 16Mi}
