@@ -15,7 +15,8 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 128Mi
+      # 中身は数 KB だが、StorageClass が xfs で、xfs は 300MB より小さいとフォーマットできない
+      storage: 512Mi
 ---
 # 鍵は Infisical の /netbird/netbird-routing-peer に `setup-key` で置く。
 # ダッシュボードの Generate Setup Key で出るもの。
