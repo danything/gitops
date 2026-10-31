@@ -201,7 +201,7 @@ sops:
 ---
 # NIC は名前ではなく元の MAC(permanent_addr。bond に入っても変わらない)で選ぶ。名前は箱ごとに違う
 # (DL360 は eno1〜4、Z440 は内蔵の I218-LM と 361T)ので、両方の MAC を || で並べて同じ config で上がるようにする
-# (../docs/z440-migration.md「2. NIC と bond0」)。1 台の上でちょうど 1 つに当たること。
+# (../ROADMAP.md「ノード main(HP Z440)」)。1 台の上でちょうど 1 つに当たること。
 # 10.0 側(bond0 の 1 本目): DL360 の eno1 / Z440 の内蔵の口(I218-LM、eno1)
 apiVersion: v1alpha1
 kind: LinkAliasConfig

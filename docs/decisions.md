@@ -15,7 +15,7 @@
 ## Z440 へは Talos のまま移す
 
 OS の入れ替えは **iLO で画面まで見える DL360** で済ませた。Z440 の遠隔管理は AMT 9.x(電源と SOL だけ)なので、
-箱の違いは schematic と NIC の名前に閉じ込める([z440-migration.md](z440-migration.md))。
+箱の違いは schematic と NIC の名前に閉じ込める([../ROADMAP.md](../ROADMAP.md)「ノード main(HP Z440)」)。
 
 ## bond0 の MAC を固定する
 
