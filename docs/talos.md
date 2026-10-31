@@ -130,7 +130,7 @@ VM では確かめられないもの: PT3(実機のカードが要る)、bond �
 - infisical の起動直後の `CreateContainerConfigError: failed to sync secret cache` は optional な Secret の同期待ちで、放っておくと直る
 - 所要: `apply-config` → apid 復帰 75 秒 → ノード Ready 200 秒 → bootstrap 層が全部 Running まで 120 秒
 
-Z440 に移すときに変わるもの(NIC の名前・ディスク・AMT・GPU)は [z440-migration.md](z440-migration.md)。
+Z440 に移すときに変わるもの(NIC の名前・ディスク・AMT・GPU)は [../ROADMAP.md](../ROADMAP.md)「ノード main(HP Z440)」。
 
 ## ネットワークまわりの前提
 
