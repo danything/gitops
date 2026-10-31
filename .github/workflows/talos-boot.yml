@@ -315,13 +315,7 @@ jobs:
           [ "$GOT" = "$WANT" ] || fail "bond0 の MAC が $GOT(talos.sops.yaml は $WANT)"
           echo "  bond0 hardwareAddr: $GOT"
 
-          # 受信の防火壁(talos.sops.yaml の NetworkDefaultActionConfig)が既定で捨てる形で載っているか。
-          # 通す側は、ここまでの talosctl(50000)・kubectl(6443)・curl(80 / 443)が SLIRP の 10.0.0.1 から通ったことで見ている
-          talosctl get nftableschains -o yaml > /tmp/nft.yaml
-          P=$(yq -r 'select(.metadata.id == "ingress") | .spec.policy' /tmp/nft.yaml)
-          echo "  nftables の ingress の既定: $P"
-          [ "$(echo "$P" | tr 'A-Z' 'a-z')" = drop ] || { cat /tmp/nft.yaml; fail "ingress の chain が既定で捨てる形(drop)でない"; }
-
+          # 受信の防火壁は 2026-10-31 から外してある(bootstrap/talos.md)。戻したら、ingress の chain の既定が drop かの検査も戻す(#646)
           # 以下は forwarding=1 のあとで見ないと意味が無い(talos.sops.yaml の accept_ra)
           F=$(talosctl read /proc/sys/net/ipv6/conf/bond0/forwarding)
           [ "$F" = 1 ] || fail "bond0 の forwarding が $F。前提が成り立っていない"
