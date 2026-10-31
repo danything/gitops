@@ -84,7 +84,7 @@ diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を�
 
 **scale down しない。** k8up の `k8up.io/backupcommand` で論理バックアップを取る
 (RDBMS は `pg_dump`、SQLite は `bun:sqlite` の `serialize()`、ファイルの PVC は注釈)。**どれが何で取れているかの一覧は
-[../apps/k8up/README.md](../apps/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
+[../deploy/k8up/README.md](../deploy/k8up/README.md)** ── ここには写さない(二重に持つと片方が腐る)。
 
 ## Talos の起動順序をどう組むか
 
@@ -99,13 +99,13 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
 | **machine config** | **`bootstrap/` の全部**(`argocd-repos.yaml` を除く)。inline が 9 つ(cilium / lvm-localpv / `storage.yaml` / `apiserver-rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、URL で 10 個(CRD が gateway-api / argocd ×3 / cert-manager / VolumeSnapshot ×3、snapshot-controller ×2) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
-| **ArgoCD** | `apps/`。`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、本体が machine config に居る部品の平文のマニフェストもここ(2026-10 までは `bootstrap/` に混ぜて Application `bootstrap` が当てていた)。**infisical の本体は来ない**(下の「infisical だけは ArgoCD に移せない」) | — |
+| **ArgoCD** | `deploy/`。`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、本体が machine config に居る部品の平文のマニフェストもここ(2026-10 までは `bootstrap/` に混ぜて Application `bootstrap` が当てていた)。**infisical の本体は来ない**(下の「infisical だけは ArgoCD に移せない」) | — |
 
 - **CRD だけ URL で渡すのは大きさの都合。** 埋めると machine config が 341 KB → 4 MB を超える。
   `KubeExternalManifestConfig` は Talos がそのために用意している入口([bootstrap/render.sh](../bootstrap/render.sh))
 - **平文の残りは ArgoCD。** 鶏と卵にならない ──
   ArgoCD が動くのに要るもの(本体・repo の資格情報・入口の `apps`)は全部 machine config にあり、この層に頼っていない。
-  この層が要る CRD も machine config が入れる(`InfisicalSecret` の CRD だけ `apps/` から来るので、最初の何回かは retry)。
+  この層が要る CRD も machine config が入れる(`InfisicalSecret` の CRD だけ `deploy/` から来るので、最初の何回かは retry)。
 - **SOPS の Secret を machine config に入れる。** 復号鍵はクラスタにも CI にも渡さないので、ArgoCD からは当てられない。
   machine config の入力(`bootstrap/talos-secrets.sops.yaml`)もクラスタ CA の秘密鍵を含む SOPS なので信頼水準は変わらず、起動時点で存在する
 - **Helm を実行する場所はクラスタの外(手元の生成時)だけ。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
@@ -128,7 +128,7 @@ bootstrap のあとに `helm install` する案は、再構築のたびに「CNI
 - 代わりに **描くたびに変わる値を潰した**(Hubble の証明書・infisical の `postgres-password`・`updatedAt`)。
   同じ入力なら生成物はバイト単位で同じなので、`apply-config --dry-run` の差分がそのまま「何が変わるか」になる
 
-**起動に要らないものは ArgoCD に置く**(metrics-server は `apps/cluster/metrics-server.yaml`。版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
+**起動に要らないものは ArgoCD に置く**(metrics-server は `deploy/cluster/metrics-server.yaml`。版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
 全 namespace の Certificate が道連れ)。
 
 ## ルーティングの選定
@@ -239,7 +239,7 @@ extension は `earth_pt3` を blacklist して配るので、`bootstrap/talos.so
 共有プリセット `5ym/repo-config` で、**パッチとマイナーは 1 つの PR にまとめて自動マージ、メジャーと Helm chart は人が見る**
 (chart はパッチ更新でも中身が入れ替わることがある)。
 PostgreSQL は 17 の線に固定(メジャーでデータディレクトリの互換が切れ、dump / restore が要る)、argo-cd と infisical-standalone の chart は自動マージしない。
-理由はそれぞれ [../renovate.json](../renovate.json) の `description`。Renovate 自体は [apps/renovate/](../apps/renovate/) の CronJob で動く。
+理由はそれぞれ [../renovate.json](../renovate.json) の `description`。Renovate 自体は [deploy/renovate/](../deploy/renovate/) の CronJob で動く。
 
 ## PVC を守る仕掛けをやめた
 
@@ -260,12 +260,12 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 容量が問題になるのは桁が変わったとき(数百 GB)。課金は期間中の日次ピークの平均で、操作の回数は桁違いに余っている。
 
 - 保持は k8up の Schedule で `keepDaily 7 / keepWeekly 4 / keepMonthly 6`(遡れるのは約半年)。etcd は日次で `keepDaily 7 / keepWeekly 4`
-  ([../apps/k8up/etcd-snapshot.yaml](../apps/k8up/etcd-snapshot.yaml))
-- 戻せるかは毎月 1 日に [../apps/k8up/restore-check.yaml](../apps/k8up/restore-check.yaml) が最新を取り出して確かめる
+  ([../deploy/k8up/etcd-snapshot.yaml](../deploy/k8up/etcd-snapshot.yaml))
+- 戻せるかは毎月 1 日に [../deploy/k8up/restore-check.yaml](../deploy/k8up/restore-check.yaml) が最新を取り出して確かめる
 
 | 対象 | 判断 |
 | --- | --- |
-| 録画 | **エンコード済み(`denpa-encoded`)だけ、1 世代**([../apps/k8up/denpa-encoded-forget.yaml](../apps/k8up/denpa-encoded-forget.yaml))。放送は取り直せないので容量より価値を優先する(本人)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける |
+| 録画 | **エンコード済み(`denpa-encoded`)だけ、1 世代**([../deploy/k8up/denpa-encoded-forget.yaml](../deploy/k8up/denpa-encoded-forget.yaml))。放送は取り直せないので容量より価値を優先する(本人)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける |
 | 生 TS の作業領域(`denpa-raw`) | **取らない。** エンコードが終われば消え、数時間で入れ替わる。14 GB まで育つ |
 | AdGuard のクエリログ | **保持を 7 日に。** 純粋な計測データで、復元時に無くても困らない |
 
@@ -333,7 +333,7 @@ local-path から変わったこと: **PVC の requests が本当の上限にな
 **NetBird は routing peer が独立した概念で、1 台構成でも問題が起きない**(Headscale は管理サーバーとサブネットルータの同居を避けよと書いている)。
 
 **公式 Helm chart は使わない**(更新が止まっている。[netbirdio/helms#39](https://github.com/netbirdio/helms/issues/39))。
-v0.65.0 から management/signal/relay が 1 つの combined コンテナなので、素の Deployment で足りる(`apps/netbird/`)。
+v0.65.0 から management/signal/relay が 1 つの combined コンテナなので、素の Deployment で足りる(`deploy/netbird/`)。
 
 - **gRPC と HTTP が同じホスト名・同じポートに混在する。** gRPC のサービスを GRPCRoute に、`/api` `/oauth2` `/relay` `/ws-proxy` を
   HTTPRoute に、残りをダッシュボードに振った。GRPCRoute なら Cilium が backend を h2c 扱いするので Gateway の設定を触らない
@@ -345,19 +345,19 @@ v0.65.0 から management/signal/relay が 1 つの combined コンテナなの�
 ## 公開経路(HTTPRoute)をどこに置くか
 
 **それぞれが公開しているものと同じ場所**に置く
-(このリポジトリの `apps/<name>/httproute.yaml`、各アプリのリポジトリの `deploy/httproute.yaml`。argocd・auth・gateway の経路も `apps/` の下)。
+(このリポジトリの `deploy/<name>/httproute.yaml`、各アプリのリポジトリの `deploy/httproute.yaml`。argocd・auth・gateway の経路も `deploy/` の下)。
 
 これらは全部 ArgoCD が当てる。ArgoCD が壊れても当たっている経路は消えず、
 直すのは Headlamp か `tools/t.ps1 --admin` の kubectl で足りる。
 外部露出の一覧は `kubectl get httproute,grpcroute -A` が正確で、git を読むより早い(一覧の一枚は作らない)。
 
 **落とさずに動かす**: ArgoCD は「git から消えた + 自分が追跡している」ものを prune する。別リポジトリへは移送先を**先に**マージして
-tracking-id が書き換わってから元を消す。同じリポジトリの中で Application をまたぐときは、元の Application の自動同期を先に止めてから移す(2026-10 に `bootstrap` から `apps/` へ移したときのやり方)。
+tracking-id が書き換わってから元を消す。同じリポジトリの中で Application をまたぐときは、元の Application の自動同期を先に止めてから移す(2026-10 に `bootstrap` から `deploy/` へ移したときのやり方)。
 
 ## DNS:直接つなぐアプリと Cloudflare を通すアプリを分ける
 
 **Cloudflare を通すのが基本。遅延・通信量・Cloudflare が通さないものだけ直接つなぐ**(2026-10-22、本人)。
-やり方と直接つなぐものの一覧は [apps/external-dns/README.md](../apps/external-dns/README.md)。
+やり方と直接つなぐものの一覧は [deploy/external-dns/README.md](../deploy/external-dns/README.md)。
 
 それまでは逆(社内用は直接、SaaS のように外へ出すものだけ Cloudflare)で、通すものに個別に注釈を付けていた。
 直接つなぐ理由のあるもの(UDP・853 / 6443・100MB を超える上り・2 段の名前・遅延)を洗い出すと、それ以外は社内用でも
@@ -379,7 +379,7 @@ SMTP AUTH の Basic 認証は 2026-12 末に既定で無効になる。移る先
   Infisical はそもそも SMTP のユーザー名とパスワードしか話せない
 - **コネクタ(IP で許す)は家の IP が固定でないので筋が悪い**
 - したがって **Graph の `sendMail`**。アプリごとに Graph を話させず、普通の SMTP を受けて Graph に渡す中継
-  ([smtp-oauth-relay](https://github.com/JustinIven/smtp-oauth-relay)、`apps/smtp-relay/`)を 1 つ置き、3 つのアプリは向け先だけ替えた
+  ([smtp-oauth-relay](https://github.com/JustinIven/smtp-oauth-relay)、`deploy/smtp-relay/`)を 1 つ置き、3 つのアプリは向け先だけ替えた
 - **Graph の `Mail.Send` をテナント全体には付けない。** 誰としてでも送れてしまうので、Exchange の RBAC for Applications で
   送れるメールボックスを `info@doany.io` だけに絞った。初回は組織が dehydrated で `Enable-OrganizationCustomization`(取り消せない)が要り、
   実体化まで数時間かかった

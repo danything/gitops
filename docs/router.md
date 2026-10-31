@@ -11,7 +11,7 @@
 | 機種 | au ひかりのホームゲートウェイ **BL1500HM**(KDDI) |
 | 管理画面 | `http://10.0.0.1/`(クイック設定Web。ログインが要る) |
 | 回線 | au ひかり(接続はホームゲートウェイが持つ。IPv6 はネイティブで RA が来る) |
-| 外向きの IPv4 | 固定ではない。cloudflare-ddns が `doany.io` と `nb.origin.doany.io` を追従させる(apps/cloudflare-ddns/) |
+| 外向きの IPv4 | 固定ではない。cloudflare-ddns が `doany.io` と `nb.origin.doany.io` を追従させる(deploy/cloudflare-ddns/) |
 | IPv6 | プレフィックス `240f:6d:842b:1::/64`(RA で配られる。**変わりうる**ので、どこにも固定で書かない) |
 | IPv6 の受信 | 「IPv6ホスト公開」の既定は**「遮断」**で、**ノードだけをエントリで公開**(MAC `e6:2c:1b:1a:a0:39`、IPv6 すべて、ポート any。下の「IPv6 はノードだけを公開する」)。IPv6 パケットフィルターは有効で、WAN 側の規則は 0 件 |
 
@@ -37,9 +37,9 @@ DMZ の向け先を変えると、下の全部と AdGuard の split-horizon が�
 | 80 / 443 TCP | Gateway(全部の Web) | 要る |
 | 53 UDP・TCP | AdGuard Home(平文の DNS) | 要らない。Pod の手前で止めている(下の「53 番は外に出さない」) |
 | 853 TCP | AdGuard Home(DoT) | 要る |
-| 8443 UDP・TCP | LiveKit(Matrix の通話。apps/matrix/README.md) | 要る |
+| 8443 UDP・TCP | LiveKit(Matrix の通話。deploy/matrix/README.md) | 要る |
 | 51820 UDP | NetBird の routing peer(WireGuard) | 要る |
-| 3129 TCP | 3proxy の TLS 口(apps/3proxy/) | 外から使うなら要る |
+| 3129 TCP | 3proxy の TLS 口(deploy/3proxy/) | 外から使うなら要る |
 | 6443 TCP | Kubernetes の API(`ks.doany.io:6443`。recovery/README.md) | 要る(認証つき) |
 
 **ノード自身が受けるもの(Talos の API 50000・trustd 50001・etcd・kubelet 10250・Cilium の 4240 / 4244 / 9963 / 9964 など)は、
@@ -53,7 +53,7 @@ fc00::/7・fe80::/10)からは全部。効くのはノード宛てだけで、ho
 ## 53 番は外に出さない
 
 DMZ では 53 番も外に届くが、AdGuard Home の Pod の手前で、プライベートのアドレス(家の LAN・NetBird)以外からの 53 番を
-Cilium のポリシーで捨てている(apps/adguardhome/network-policy.yaml)。外から使う DoT(853)と DoH は絞らない。
+Cilium のポリシーで捨てている(deploy/adguardhome/network-policy.yaml)。外から使う DoT(853)と DoH は絞らない。
 以前は開けていたが、2026-10-31 に、送信元を偽装した増幅攻撃の踏み台として 1 日 90 万件使われていたので閉じた。
 AdGuard の `allowed_clients` で絞らないのは、DoT・DoH にも効いて外の端末が使えなくなるため。
 
@@ -75,7 +75,7 @@ AdGuard の `allowed_clients` で絞らないのは、DoT・DoH にも効いて�
 ## ヘアピン NAT(NAT ループバック)
 
 **有効にしておくこと。** 家の中の端末も、LiveKit や NetBird が STUN で調べた外の IP に向けて送る。
-無効だと家の中からだけ通話がつながらない(apps/matrix/README.md「ルーターの転送」)。
+無効だと家の中からだけ通話がつながらない(deploy/matrix/README.md「ルーターの転送」)。
 Web も、AdGuard を使う端末(端末側で指定したもの・NetBird の端末)は split-horizon で `10.0.0.2` を引くのでヘアピンに頼らないが、ルーターの DNS のままの端末は外の IP を引くので、**Web もヘアピン頼み**。
 
 ## 作り直す・機種を替えるとき

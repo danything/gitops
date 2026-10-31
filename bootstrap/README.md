@@ -7,7 +7,7 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 | | 何を | いつ |
 | --- | --- | --- |
 | **machine config**(このディレクトリ) | Talos の設定、Helm で入れるもの(cilium・cert-manager・argocd・infisical・lvm-localpv)、`apiserver-rbac.yaml`、`storage.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([talos.md](talos.md)「上げ方 / 当て直し方」) |
-| **ArgoCD**(`apps/`) | 平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など)。2026-10 まではここにあって、Application `bootstrap` が当てていた | main へのマージ(prune / selfHeal 付き) |
+| **ArgoCD**(`deploy/`) | 平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など)。2026-10 まではここにあって、Application `bootstrap` が当てていた | main へのマージ(prune / selfHeal 付き) |
 
 ## ファイル
 
@@ -39,16 +39,16 @@ MAC も暗号化した値だけを見る。なので**平文の部分(コメン�
 ## ArgoCD が当てるもの
 
 **ここで ArgoCD が当てるのは [argocd-repos.yaml](argocd-repos.yaml) だけ。** machine config に載っている
-`apps` の Application(`argocd-values.sops.yaml` の `extraObjects`)が拾い、そこから ApplicationSet が `apps/` を当てる。
+`apps` の Application(`argocd-values.sops.yaml` の `extraObjects`)が拾い、そこから ApplicationSet が `deploy/` を当てる。
 場所(`path: bootstrap` と `include: argocd-repos.yaml`)が machine config に焼いてあるので、名前を変えると machine config を当て直すことになる。
 そのときは **main にマージしてから当てる**。マージから当てるまでの間、`apps` は古い path が無くて ComparisonError で止まるだけ
 (何も消さない)。逆に先に当てると、新しい include が main の何にも当たらず空の描き出しになる(自動同期は空にする
 prune を `allowEmpty` 無しでは拒むが、頼らない)。
 
-ArgoCD の平文のマニフェストは `apps/` にある:
-[apps/gateway/](../apps/gateway/)(Gateway と http → https)、[apps/auth/](../apps/auth/)(SSO の oauth2-proxy)、
-[apps/cert-manager/](../apps/cert-manager/)(`ClusterIssuer`)、[apps/argocd/](../apps/argocd/)(HTTPRoute と OIDC の `InfisicalSecret`)、
-[apps/infisical/smtp-secret.yaml](../apps/infisical/smtp-secret.yaml)。
+ArgoCD の平文のマニフェストは `deploy/` にある:
+[deploy/gateway/](../deploy/gateway/)(Gateway と http → https)、[deploy/auth/](../deploy/auth/)(SSO の oauth2-proxy)、
+[deploy/cert-manager/](../deploy/cert-manager/)(`ClusterIssuer`)、[deploy/argocd/](../deploy/argocd/)(HTTPRoute と OIDC の `InfisicalSecret`)、
+[deploy/infisical/smtp-secret.yaml](../deploy/infisical/smtp-secret.yaml)。
 `ClusterIssuer` や Gateway は本体(cert-manager・cilium)が machine config に居ても、書き換えるのは平文のマニフェストなので
 ArgoCD に任せる。
 
@@ -134,10 +134,10 @@ infisical の Postgres が要るので bootstrap 層に居る。選んだ理由�
 - **本体**(chart + Postgres/Redis)だけがここ(machine config)。`infisical-values.sops.yaml` の 2 つめのドキュメントの
   `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる(クラスタで一番失ってはいけない値)。
   Postgres の PVC は既定の `local-path`(OpenEBS LVM)で、`pg_dump` を k8up が日次で取っている。
-- **公開経路・operator・push-bridge は [`apps/infisical/`](../apps/infisical/)**(ArgoCD 自身は operator に依存しないので、ここに置く理由がない)。
+- **公開経路・operator・push-bridge は [`deploy/infisical/`](../deploy/infisical/)**(ArgoCD 自身は operator に依存しないので、ここに置く理由がない)。
 - 認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
   Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を付けてある。
-  `apps/infisical/operator-rbac.yaml`)。長命の資格情報はどこにも無い(`identityId` は秘密ではない)。
+  `deploy/infisical/operator-rbac.yaml`)。長命の資格情報はどこにも無い(`identityId` は秘密ではない)。
 
 ### API サーバの入口(GitHub Actions と人)
 
@@ -165,7 +165,7 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 | Machine Identity | `infisical-operator`(Kubernetes auth、許可 SA は `infisical/infisical-auth`、project の viewer) |
 | 管理者 | 個人アカウント。資格情報はリポジトリに置かない。復旧手順は下の「Infisical の管理者アカウント」 |
 | 共有値 | `/shared/entra`(Entra 共用アプリの client-id / client-secret / issuer / role / tenant-id)と `/shared/smtp`(info@doany.io)。各アプリのフォルダは `${prod.shared.entra.client-secret}` のような参照で、ローテーションは shared 側の 1 回で済む(operator が展開する) |
-| SMTP | info@doany.io から、クラスタの中の中継 [apps/smtp-relay](../apps/smtp-relay/README.md) 経由(Graph の sendMail)。パスワード(中継のアプリのクライアントシークレット)だけ Infisical の `/infisical/infisical-smtp` に置き、[apps/infisical/smtp-secret.yaml](../apps/infisical/smtp-secret.yaml) が Secret にする |
+| SMTP | info@doany.io から、クラスタの中の中継 [deploy/smtp-relay](../deploy/smtp-relay/README.md) 経由(Graph の sendMail)。パスワード(中継のアプリのクライアントシークレット)だけ Infisical の `/infisical/infisical-smtp` に置き、[deploy/infisical/smtp-secret.yaml](../deploy/infisical/smtp-secret.yaml) が Secret にする |
 
 ### Infisical の管理者アカウント
 
@@ -194,11 +194,11 @@ ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` �
 見なして sync のたびに prune する。
 `Prune=false` も一緒にコピーさせて、prune の対象から外す。
 
-**`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無く、`apps/` の同期が丸ごと落ちる**
-(CRD を入れる `apps/infisical/operator.yaml` が同じ同期の中にいる)。
-仕組みは k8up の `Schedule` と同じで、説明は [apps/k8up/README.md](../apps/k8up/README.md)「CRD がまだ無いクラスタで apps を止めないこと」。
+**`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無く、`deploy/` の同期が丸ごと落ちる**
+(CRD を入れる `deploy/infisical/operator.yaml` が同じ同期の中にいる)。
+仕組みは k8up の `Schedule` と同じで、説明は [deploy/k8up/README.md](../deploy/k8up/README.md)「CRD がまだ無いクラスタで apps を止めないこと」。
 
-このリポジトリの `InfisicalSecret`(`apps/argocd/oidc-secret.yaml`・`apps/auth/secrets.yaml`・`apps/infisical/smtp-secret.yaml` など)にも付けてある。
+このリポジトリの `InfisicalSecret`(`deploy/argocd/oidc-secret.yaml`・`deploy/auth/secrets.yaml`・`deploy/infisical/smtp-secret.yaml` など)にも付けてある。
 
 ### アプリ側の書き方
 

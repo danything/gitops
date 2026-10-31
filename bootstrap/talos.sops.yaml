@@ -56,7 +56,7 @@ machine:
             - name: earth-pt3
             # PVC の thin プール(storage.yaml)。Talos のカーネルではモジュールで、OpenEBS のコンテナからは読めない
             - name: dm_thin_pool
-    # etcd スナップショットの日次取得(../apps/k8up/etcd-snapshot.yaml)のため、Pod から Talos API を叩く。
+    # etcd スナップショットの日次取得(../deploy/k8up/etcd-snapshot.yaml)のため、Pod から Talos API を叩く。
     # 役割は os:etcd:backup だけ、namespace も k8up に絞る(os:admin を Pod に置かずに済む唯一の仕組み)。
     features:
         kubernetesTalosAPIAccess:
@@ -541,7 +541,7 @@ sops:
 # ルーターは DMZ と IPv6 ホスト公開で全部のポートをノードに流すので(../docs/router.md)、外に出すものはここで決める。
 # 既定は捨て、下の NetworkRuleConfig に当たるものだけ通す。lo・確立済みの戻り・ICMP / ICMPv6(5 個/秒まで)・
 # Pod と Service の網どうしは Talos が自分で通す。効くのはホスト宛て(input)だけで、hostPort は Cilium が Pod へ
-# 転送するのでここを通らない(Pod の手前は Cilium のポリシー。53 番は ../apps/adguardhome/network-policy.yaml)。
+# 転送するのでここを通らない(Pod の手前は Cilium のポリシー。53 番は ../deploy/adguardhome/network-policy.yaml)。
 # 間違えると Talos の API ごと締め出されるので、当てるときは apply-config --mode=try(talos.md「上げ方 / 当て直し方」)。
 apiVersion: v1alpha1
 kind: NetworkDefaultActionConfig

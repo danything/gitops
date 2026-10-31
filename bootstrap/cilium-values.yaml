@@ -48,7 +48,7 @@ gatewayAPI:
   # 全リスナーが HTTP/2 になるが、WebSocket はブラウザが HTTP/1.1 に落ちるので動く。
   enableAlpn: true
 
-# UI 自身は認証を持たない。前段の oauth2-proxy(../apps/auth/hubble-proxy.yaml)で守る。UI の Service を直接 HTTPRoute に繋がない。
+# UI 自身は認証を持たない。前段の oauth2-proxy(../deploy/auth/hubble-proxy.yaml)で守る。UI の Service を直接 HTTPRoute に繋がない。
 hubble:
   relay:
     enabled: true

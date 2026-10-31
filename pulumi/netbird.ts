@@ -11,7 +11,7 @@ const opts = (importId: string) => ({ provider, import: importId });
 const ALL = "daf7c8f13kb0009ahae0";
 const USERS = "daf7f7n13kb0009ahclg";
 const ROUTING_PEERS = "daf7f7n13kb0009ahcng";
-// クラスタの routing peer (apps/netbird/routing-peer.yaml)。自宅 LAN の入口で exit ノード
+// クラスタの routing peer (deploy/netbird/routing-peer.yaml)。自宅 LAN の入口で exit ノード
 const PEER_MAIN = "daf7pp713kb0009ahhjg";
 
 // --- DNS --------------------------------------------------------------------------------------------

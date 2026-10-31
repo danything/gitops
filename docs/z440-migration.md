@@ -201,8 +201,8 @@ LAN は「2. NIC と bond0」のとおりにつなぐ。最初の起動はモニ
 ## 終わったら
 
 - [router.md](router.md)・この文書の構成表を Z440 に直す
-- 「iLO(10.0.0.3)」と書いてあるところを AMT(10.0.0.5)に直す: apps/netbird/routing-peer.yaml のコメント、ROADMAP.md、
+- 「iLO(10.0.0.3)」と書いてあるところを AMT(10.0.0.5)に直す: deploy/netbird/routing-peer.yaml のコメント、ROADMAP.md、
   docs/decisions.md、recovery/README.md(建て直しの入口。ISO の起動と Secure Boot の手順も AMT の IDE-R に)、docs/talos.md の対象の行
 - **10.10 側を外す**(小さいサーバをルーターにしたあと): `bootstrap/talos.sops.yaml` の 10.10 側の `LinkConfig`・別名・
-  `disable_ipv6` の sysctl を消し、AdGuard の 10.10.0.4 の待ち受け(apps/adguardhome/service-dns.yaml)を外し、
+  `disable_ipv6` の sysctl を消し、AdGuard の 10.10.0.4 の待ち受け(deploy/adguardhome/service-dns.yaml)を外し、
   10.10 側の機器の DNS を 10.0.0.2 にする。NetBird の 10.10.0.0/24 の経路は、BL1500HM の静的ルーティングで届くのでそのままでよい

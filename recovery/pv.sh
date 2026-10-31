@@ -72,7 +72,7 @@ start() {
 }
 
 # **root で走らせる。** 既定の nonroot(65532)だと PVC に mkdir できず、それでも `Succeeded` になる
-# (Schedule の backup と同じ理由。apps/k8up/schedules.yaml)。数字だけのスナップショット ID は
+# (Schedule の backup と同じ理由。deploy/k8up/schedules.yaml)。数字だけのスナップショット ID は
 # YAML で数として読まれるので必ず引用符で囲む(`95404672` で踏んだ)。
 # `xattr.LRemove … security.selinux: permission denied` は害が無い(Talos は SELinux)ので数えない。
 folder() { # $1=pvc $2=snapshot
@@ -126,7 +126,7 @@ unhelper() { $K -n "$NS" delete pod "h-$1" --wait=false >/dev/null; }
 # infisical は recovery/infisical.sh、etcd は docs/talos.md で戻すので、ここでは扱わない。
 #
 # **namespace や PVC が無いのは飛ばさずに止める。** 「まだ Argo CD が作っていない」と「やめたアプリの残り」を
-# 区別できないので。やめたアプリの残りは restic から消す(../apps/k8up/README.md「やめたアプリの残り」)。
+# 区別できないので。やめたアプリの残りは restic から消す(../deploy/k8up/README.md「やめたアプリの残り」)。
 
 latest() { # $1=host → 「ID 経路」を経路ごとに 1 行(いちばん新しいもの)
 	restic snapshots --host "$1" --latest 1 --json \
@@ -321,7 +321,7 @@ case $OP in
 		nss=$($K get schedule -A -o jsonpath='{range .items[?(@.spec.backup)]}{.metadata.namespace}{"\n"}{end}')
 		[ -n "$nss" ] || { echo "backup のある Schedule が 1 つも無い(kubectl get schedule -A で見る)" >&2; exit 1; }
 		for ns in $nss; do
-			# Schedule と同じ形(tags は prune の歯止め、root は 0600 のファイルを読むため。apps/k8up/schedules.yaml)
+			# Schedule と同じ形(tags は prune の歯止め、root は 0600 のファイルを読むため。deploy/k8up/schedules.yaml)
 			$K create -f - >/dev/null <<B
 apiVersion: k8up.io/v1
 kind: Backup
@@ -363,7 +363,7 @@ rm -f $2 $2-wal $2-shm $2-journal; mv $f $2; chown \$o $2; chmod \$m $2; ls -ln 
 	pgload) # $1=pvc $2=snapshot $3=中のパス $4=deploy $5=user $6=db
 		folder "$1" "$2"
 		f=${3#/}
-		# PVC は apps/{forgejo,rybbit}/postgres.yaml で /var/lib/postgresql/data に付いている。
+		# PVC は deploy/{forgejo,rybbit}/postgres.yaml で /var/lib/postgresql/data に付いている。
 		# psql が落ちたらダンプは消さずに残す(流し直せるように)
 		$K -n "$NS" exec "deploy/$4" -- sh -euc "rc=0; psql -q -U $5 -d $6 -f /var/lib/postgresql/data/$f > /tmp/load.log 2>&1 || rc=\$?
 echo errors: \$(grep -c ERROR /tmp/load.log || true); grep ERROR /tmp/load.log | sort | uniq -c | head -5
