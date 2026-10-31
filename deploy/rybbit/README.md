@@ -10,12 +10,12 @@
 | --- | --- |
 | [rybbit.yaml](rybbit.yaml) | backend(Fastify、`/api`)と client(Next.js)。`ghcr.io/rybbit-io/rybbit-{backend,client}:vX.Y.Z` を 2 つ同じタグで |
 | [clickhouse.yaml](clickhouse.yaml) | イベントの倉庫。上流の設定 4 本を ConfigMap に、メモリの上限だけこの箱向けに下げた(limit 3 Gi、1 クエリ 2 GB) |
-| [postgres.yaml](postgres.yaml) | ユーザー・サイト・設定。forgejo と同じ 17 系、`pg_dump` を k8up に |
+| [postgres.yaml](postgres.yaml) | ユーザー・サイト・設定。forgejo と同じ 17 系 |
 | [redis.yaml](redis.yaml) | セッション追跡のカウンタ。PVC は持たない |
 | [rybbit-secrets.yaml](rybbit-secrets.yaml) | Infisical `/rybbit/rybbit` の 4 キー → Secret `rybbit` |
 | [httproute.yaml](httproute.yaml) | `rt.doany.io`。`/api` は backend、ほかは client。上流の Caddyfile にある `/.well-known/oauth-*`(MCP 向け)は使わないので置かない |
 
-バックアップは [../k8up/schedules.yaml](../k8up/schedules.yaml) の `rybbit`(ClickHouse の PVC をファイルとして、PostgreSQL は `pg_dump`)。
+バックアップは [../volsync/rybbit.yaml](../volsync/rybbit.yaml)(VolSync。ClickHouse と PostgreSQL の PVC をスナップショットから)。
 
 ## 使い始め
 

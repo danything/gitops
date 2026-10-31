@@ -57,12 +57,9 @@ postgresql:
         postgresPassword: ENC[AES256_GCM,data:UShd+eP5OksJW8Iy4COXWdAWsUd8fVsb+MiPlRwL8oU=,iv:wmHmVSU5HWsS0D8ykTHgWUiQ6ydP8QHzy8y3RomI+R4=,tag:njAsN+kX7/HiQCt5XZbrdg==,type:str]
     primary:
         persistence:
-            # chart を消しても PVC は残る。後ろ盾は k8up の日次 pg_dump
+            # chart を消しても PVC は残る。後ろ盾は VolSync の日次スナップショット(deploy/volsync/infisical.yaml)
             storageClass: local-path
             size: 5Gi
-        podAnnotations:
-            k8up.io/backupcommand: /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" /opt/bitnami/postgresql/bin/pg_dump -U infisical -d infisicalDB --clean --if-exists'
-            k8up.io/file-extension: .sql
 redis:
     enabled: true
     auth:

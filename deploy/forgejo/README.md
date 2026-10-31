@@ -5,13 +5,13 @@
 | ファイル | 中身 |
 | --- | --- |
 | [forgejo.yaml](forgejo.yaml) | Forgejo 本体(最新を追う)。chart は使わない(理由はファイルの先頭) |
-| [postgres.yaml](postgres.yaml) | DB。k8up が `pg_dump` を取る |
+| [postgres.yaml](postgres.yaml) | DB |
 | [runner.yaml](runner.yaml) | Runner(v13)+ docker(dind)。`runs-on: ubuntu-latest` をそのまま拾う |
 | [httproute.yaml](httproute.yaml) | 公開経路。SSH は出さない(clone / push は HTTPS + トークン) |
 | [forgejo-secrets.yaml](forgejo-secrets.yaml) | Infisical から Secret 3 つ |
 | [argocd-creds.yaml](argocd-creds.yaml) | ArgoCD が Forgejo のリポジトリを読むための資格情報 |
 
-バックアップは [../k8up/schedules.yaml](../k8up/schedules.yaml)(毎日 14:45 UTC)。
+バックアップは [../volsync/forgejo.yaml](../volsync/forgejo.yaml)(VolSync。PVC 2 本をスナップショットから、毎日 19:35・19:40 UTC)。
 
 ## 使い始め
 
@@ -42,7 +42,7 @@
 **方針: プライベートは GitHub に置かない。** GitHub Actions の課金はプライベートにだけ掛かるので、
 公開リポジトリ(gitops・blog など)は GitHub のままでよい。
 
-**Forgejo が唯一の置き場になる。** バックアップは k8up(R2)の 1 日 1 回だけなので、手元の clone も捨てないこと。
+**Forgejo が唯一の置き場になる。** バックアップは VolSync(R2)の 1 日 1 回だけなので、手元の clone も捨てないこと。
 
 ArgoCD が読むトークンは Infisical `/argocd/forgejo-repo-creds`([argocd-creds.yaml](argocd-creds.yaml))。
 **スコープは repository・organization・issue の読み取り。** issue が無いと ApplicationSet が

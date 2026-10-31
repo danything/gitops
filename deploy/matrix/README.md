@@ -56,7 +56,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |
-| `server` | k8up の通知 | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
+| `server` | バックアップの通知([../backup/notify.yaml](../backup/notify.yaml)) | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
 | 〃 | Infisical(秘密の変更) | Infisical のプロジェクトの webhook(Project Settings → Webhooks。環境 prod、パス `/`) |
 | 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先([../../pulumi/notifications.ts](../../pulumi/notifications.ts)) |
 | `argocd` | Argo CD | `bootstrap/argocd-values.sops.yaml`(SOPS)の `service.webhook.mattermost` |
@@ -129,12 +129,8 @@ Infisical `/matrix/matrix` の `livekit-secret`。API キーの名前は `matrix
 
 ## バックアップ
 
-k8up(毎日 13:30 UTC)。**Tuwunel の DB は動いたまま写すと壊れうる**ので、ファイルとしては取らない。
+VolSync([../volsync/matrix.yaml](../volsync/matrix.yaml)、毎日 20:00 UTC)。`tuwunel-data` を PVC ごと
+スナップショットから取る。RocksDB は crash-consistent なスナップショットから自分で立ち直るので、
+Tuwunel にバックアップを作らせることはもうしない(k8up の頃の `backups/` は PVC に残っていても使わない)。
 
-1. k8up が backup サイドカーの `k8up.io/backupcommand` を流す
-2. サイドカーが Tuwunel に SIGUSR2 を送る。Tuwunel は `admin_signal_execute` で `server backup-database` を流し、
-   整合の取れたバックアップを `backups/` に作る(2 世代)
-3. できたら `backups/` と `media/`(アップロードされたファイル)を tar で k8up に渡す
-
-戻すとき:tar を PVC に展開し、Tuwunel を 1 回だけ `tuwunel --restore-backup` で起動する
-(Tuwunel の docs/backups.md「Restoring a managed backup」)。
+戻すときは PVC ごと戻して、そのまま Tuwunel を起動する。

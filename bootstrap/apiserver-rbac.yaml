@@ -78,8 +78,8 @@ rules:
       - cert-manager.io
       - acme.cert-manager.io
       - cilium.io
-      - k8up.io
       - secrets.infisical.com
+      - volsync.backube
     resources: ["*"]
     verbs: ["get", "list", "watch"]
 ---

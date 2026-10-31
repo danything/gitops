@@ -23,14 +23,10 @@ data:
     address = ["0.0.0.0", "::"]
     port = 8008
 
-    # PVC の中を 3 つに分ける。k8up が取るのは backups/ と media/ だけ(db/ は動いたまま写すと壊れうる)
+    # PVC の中を分ける。VolSync が PVC ごとスナップショットから取る(RocksDB は crash-consistent で立ち直る)。
+    # k8up の頃の backups/(Tuwunel に作らせたバックアップ)は残っていても使わない
     database_path = "/var/lib/tuwunel/db"
-    database_backup_path = "/var/lib/tuwunel/backups"
-    database_backups_to_keep = 2
     media_storage_providers = ["media"]
-
-    # SIGUSR2 を受けたらバックアップを作る。送るのは下の backup サイドカー(k8up のバックアップのとき)
-    admin_signal_execute = ["server backup-database"]
 
     allow_federation = false
     allow_registration = false
@@ -97,10 +93,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: tuwunel-data
   namespace: matrix
-  annotations:
-    # ファイルとしては取らない。下の backup サイドカーの backupcommand が、Tuwunel に作らせた
-    # 整合の取れたバックアップと media/ を tar で渡す
-    k8up.io/backup: "false"
+  # VolSync がスナップショットから取る(../volsync/matrix.yaml)
 spec:
   accessModes:
     - ReadWriteOnce
@@ -126,20 +119,10 @@ spec:
     metadata:
       labels:
         app: tuwunel
-      annotations:
-        # 一番新しいバックアップの番号(backups/meta/<番号>)が増えるまで待ってから渡す。
-        # 保持は 2 世代なので、数を数えても増えたことは分からない。20 分で諦めて失敗にする
-        # (k8up の通知が拾う)。スクリプトに ' を入れないこと(k8up が注釈をシェル風に分けるため)
-        k8up.io/backupcommand: >-
-          sh -euc 'd=/var/lib/tuwunel/backups/meta; last() { ls $d 2>/dev/null | sort -n | tail -1; }; b=$(last); pkill -USR2 -x tuwunel; i=0; while [ "$(last)" = "$b" ] && [ $i -lt 1200 ]; do sleep 2; i=$((i+2)); done; [ "$(last)" != "$b" ] || { echo "backup timed out" >&2; exit 1; }; sleep 3; tar -C /var/lib/tuwunel -cf - backups media'
-        k8up.io/backupcommand-container: backup
-        k8up.io/file-extension: .tar
     spec:
       # Service の自動の環境変数(TUWUNEL_PORT=tcp://… など)を入れない。Service の名前が tuwunel なので、
       # Tuwunel が自分の設定(TUWUNEL_*)として読んで起動に失敗する
       enableServiceLinks: false
-      # バックアップのサイドカーが Tuwunel のプロセスにシグナルを送るため
-      shareProcessNamespace: true
       # 移行(初回起動や版上げ)の途中で殺さない(docs/deploying/kubernetes.md)
       terminationGracePeriodSeconds: 300
       securityContext:
@@ -193,23 +176,6 @@ spec:
               readOnly: true
             - name: secrets
               mountPath: /run/secrets/matrix
-              readOnly: true
-        # k8up のバックアップのときにだけ働く(上の backupcommand)。ふだんは寝ているだけ。
-        # Tuwunel のイメージにはシェルが無いので別に置く
-        - name: backup
-          image: busybox:1.38
-          command: [sh, -c, "trap 'exit 0' TERM; sleep infinity & wait"]
-          securityContext:
-            runAsUser: 0
-          resources:
-            requests:
-              cpu: 1m
-              memory: 8Mi
-            limits:
-              memory: 64Mi
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/tuwunel
               readOnly: true
       volumes:
         - name: data

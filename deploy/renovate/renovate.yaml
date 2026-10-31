@@ -9,7 +9,7 @@
 #
 # **Pod はいつも成功で終える。** Renovate が非ゼロで終わっても、トークンが作れなくても exit 0。
 # Job が失敗すると CronJob が Degraded になり、ArgoCD が gitops の同期を retry に入れて
-# deploy/ の更新が止まる(deploy/k8up/notify.yaml の末尾)。
+# deploy/ の更新が止まる(deploy/backup/notify.yaml の末尾)。
 # 失敗はログに残す: `kubectl -n renovate logs job/<名前> --all-pods`。Job はいつも成功なので、ログを見られるよう成功の Job を 3 回分残す。
 apiVersion: v1
 kind: ConfigMap

@@ -1,12 +1,9 @@
-# 2 本とも k8up に取らせる(書き換わっても部分的に古いだけで壊れない類い)。注釈が無い PVC は
-# 取られないので、`k8up.io/backup: "true"` が「取る」という宣言そのもの(deploy/k8up/README.md)。
+# 2 本とも VolSync がスナップショットから取る(../volsync/adguardhome.yaml)。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: adguardhome-conf
   namespace: adguardhome
-  annotations:
-    k8up.io/backup: "true"
 spec:
   accessModes:
     - ReadWriteOnce
@@ -20,8 +17,6 @@ kind: PersistentVolumeClaim
 metadata:
   name: adguardhome-work
   namespace: adguardhome
-  annotations:
-    k8up.io/backup: "true"
 spec:
   accessModes:
     - ReadWriteOnce

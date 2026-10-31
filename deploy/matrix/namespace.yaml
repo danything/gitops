@@ -1,5 +1,4 @@
 # PSA は privileged。理由: LiveKit が hostPort 8443(UDP・TCP。通話の音声と映像)を持ち、baseline に通らない。
-# ほかに baseline を破るのは、バックアップのサイドカーが root で動くことだけ(Tuwunel にシグナルを送るため。tuwunel.yaml)。
 # 一覧と背景は docs/talos.md「PSA のラベル」。
 apiVersion: v1
 kind: Namespace
