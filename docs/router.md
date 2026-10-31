@@ -42,7 +42,13 @@ DMZ の向け先を変えると、下の全部と AdGuard の split-horizon が�
 | 3129 TCP | 3proxy の TLS 口(apps/3proxy/) | 外から使うなら要る |
 | 6443 TCP | Kubernetes の API(`ks.doany.io:6443`。recovery/README.md) | 要る(認証つき) |
 
-Talos の API(50000)は LAN からしか届かない(recovery/README.md)。
+**ノード自身が受けるもの(Talos の API 50000・trustd 50001・etcd・kubelet 10250・Cilium の 4240 / 4244 / 9963 / 9964 など)は、
+ノードの受信の防火壁で外から止めている**(`bootstrap/talos.sops.yaml` の `NetworkDefaultActionConfig` と `NetworkRuleConfig`。
+2026-10-31 に足すまでは DMZ と IPv6 ホスト公開で外から全部届いていた)。既定は捨て、外から通すのは上の表のポートだけ
+(TCP 80・443・853・3129・6443・8443、UDP 8443・51820)、内側のアドレス(LAN と Pod・Service の 10/8・NetBird の 100.64/10・
+fc00::/7・fe80::/10)からは全部。効くのはノード宛てだけで、hostPort(53・853・8443・3129・51820)は Cilium が Pod へ転送するので
+通らない(なので 53 番は下の Cilium のポリシーで止めている)。表にポートを足すときは `public-tcp` / `public-udp` にも足す。
+家の LAN の IPv6 の GUA はプライベートに入れていないので、LAN からノードの管理の口へは IPv4 で繋ぐ。
 
 ## 53 番は外に出さない
 
@@ -60,7 +66,7 @@ AdGuard の `allowed_clients` で絞らないのは、DoT・DoH にも効いて�
   再起動で変わってエントリが外れる。NIC を替えても Z440 に移しても、この値は変わらない
 - **公開する AAAA は静的な `::2`。** cloudflare-ddns の `local.iface.stable:bond0` は一時アドレス以外から選ぶので、SLAAC のアドレスがあると
   そちらを書いてしまう。`bond0` は `autoconf=0`(bootstrap/talos.sops.yaml)で SLAAC を付けない
-- 公開の中身は DMZ と同じ(IPv6 すべて・ポート any)。ノードで受けているものは IPv6 でも全部外に出る
+- 公開の中身は DMZ と同じ(IPv6 すべて・ポート any)。ノードで受けているものは IPv6 でも外に出る(ノードの管理の口は IPv4 と同じくノードの防火壁が止める。上の「外からの転送」)
 - `fj` / `nb` / `m` / `ks` / `lk` などの AAAA はノード(`240f:6d:842b:1::2`)を指すので、**このエントリを消すと IPv6 の利用者から直接つなぐアプリが見えなくなる**
 - 確かめ方: 別の回線の IPv6 から名前で開く(アドレス直打ちは SNI が無く Gateway が切る)。J:COM 側の PC から
   `curl -6 -so /dev/null -w "%{http_code} %{remote_ip}\n" https://fj.doany.io/` で `200 240f:6d:842b:1::2`

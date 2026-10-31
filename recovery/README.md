@@ -50,7 +50,8 @@ talosconfig も管理者の kubeconfig も `bootstrap/talos-secrets.sops.yaml` �
 
 - **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno4)にしか届かない**(10.0.0.2 は届かない)。t.ps1 の行き先はそこに固定してある
 - iLO(10.0.0.3)の Remote Console(HTML5)で、ブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す
-- **GitHub Actions では代わりにならない。** Talos の API(50000)は LAN からしか届かず、CI の OIDC の信頼も
+- **GitHub Actions では代わりにならない。** Talos の API(50000)は machine config の受信の防火壁でプライベートのアドレスからしか通さず
+  ([../docs/router.md](../docs/router.md)「外からの転送」。maintenance mode では防火壁が無い)、CI の OIDC の信頼も
   machine config を当てて初めてできる
 
 ## 1. 鍵を開いて machine config を描く
