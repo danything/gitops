@@ -49,7 +49,8 @@ talosconfig も管理者の kubeconfig も `bootstrap/talos-secrets.sops.yaml` �
 ([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。GitHub の操作(5)だけ手元の `gh`。
 
 - **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno1)にしか届かない**(10.0.0.2 は届かない。届かないときは Wi-Fi で 10.0 側につなぐ)。t.ps1 の行き先はそこに固定してある
-- AMT(10.10.0.3)で電源と SOL(Talos のカーネルのコンソール。maintenance mode の IP も出る)が使える。**画面(KVM)は無い**ので、
+- AMT(10.10.0.3)で電源と SOL(Talos のカーネルのコンソール)が使える。SOL に出るのは `console=ttyS0` の入った schematic で
+  起動したときだけで、ISO の maintenance mode は出ない(ISO も同じ schematic で作れば出る)。**画面(KVM)は無い**ので、
   BIOS とブートメニューは Arc にモニタとキーボードをつなぐ([../ROADMAP.md](../ROADMAP.md)「AMT」)
 - **GitHub Actions では代わりにならない。** Talos の API(50000)はノードの受信の防火壁(Cilium の Host Firewall)でプライベートのアドレスからしか通さず
   ([../docs/router.md](../docs/router.md)「外からの転送」。maintenance mode では防火壁が無い)、CI の OIDC の信頼も
@@ -229,7 +230,7 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 
 | | |
 | --- | --- |
-| ノードが上がらない | AMT の SOL(カーネルのコンソール)。ダッシュボード(版と健全性)は Arc につないだモニタ |
+| ノードが上がらない | AMT の SOL(インストール済みのノードのカーネルのコンソール)。ダッシュボード(版と健全性)は Arc につないだモニタ |
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | `kubectl -n kube-system logs ds/lvm-thinpool -c pool`(VG `data` が無い = `talosctl get volumestatus` の `r-lvm`)、ノードに `doany.io/lvm-thinpool=ready` が付いて `lvm-localpv-node` が動いているか、`kubectl -n kube-system logs ds/lvm-localpv-node -c openebs-lvm-plugin` |
 | 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |

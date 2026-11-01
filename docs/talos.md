@@ -21,10 +21,14 @@ customization:
   extraKernelArgs:
     - intel_iommu=on      # 元は PT3 を KubeVirt に渡すため。dvb-pt3 が入ったいまは要らないが、パススルーの道として残す
     - iommu=pt
+    - console=tty0        # AMT の SOL(ttyS0)。後に書いたほうが /dev/console になる
+    - console=ttyS0,115200n8
   systemExtensions:
     officialExtensions:
       - siderolabs/dvb-pt3
+      - siderolabs/i915         # Arc A310
       - siderolabs/intel-ucode
+      - siderolabs/mei          # Arc の HuC(bootstrap/talos.sops.yaml の先頭のコメント)
 ```
 
 ```shell
