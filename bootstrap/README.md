@@ -110,7 +110,7 @@ kubectl -n kube-system get gateway doany
 ## PVC の置き場
 
 **OpenEBS LVM LocalPV**(thin)。PVC ごとに VG `data` の thin プールから LV を切り、xfs で渡す。
-infisical の Postgres が要るので bootstrap 層に居る。選んだ理由と組んだ形は [../docs/decisions.md](../docs/decisions.md)「Z440 で、ストレージを OpenEBS LVM LocalPV に…」。
+infisical の Postgres が要るので bootstrap 層に居る。選んだ理由と組んだ形は [../docs/decisions.md](../docs/decisions.md)「ストレージを OpenEBS LVM LocalPV に…」。
 
 | 何を | 誰が |
 | --- | --- |
