@@ -28,9 +28,8 @@ VolSync の Secret(namespace ごとの InfisicalSecret `volsync` が作る `vols
 - **やめる**: `../volsync/` から消す。リポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残るので、要らなければ消す
   (`rclone purge` か R2 の画面。リポジトリが PVC ごとなので、ほかを巻き込まない)
 
-## k8up の頃のリポジトリ
+## バケットの中
 
-**バケットの根**(`s3:<endpoint>/<bucket>`)に k8up のリポジトリが残っている(host が namespace、2026-11-01 まで)。
-もう誰も prune しないので増えも減りもしない。**2027-05(月次の保持の 6 か月)を過ぎたら消す**(ROADMAP.md)。
-それまでに古いものを取り出すときは、`recovery/env.age` の資格情報で `restic snapshots --host <namespace>` → `restic restore`
-(k8up の頃の取り方・戻し方は git の履歴の `deploy/k8up/README.md` と `recovery/pv.sh`)。
+`<bucket>/volsync/<namespace>/<pvc>`(PVC ごと)と `<bucket>/etcd` だけ。
+k8up の頃のリポジトリ(バケットの根。host が namespace)は 2026-11-01 に消した(VolSync からの全件の取り出し確認が通ったあと)。
+それより前のものは戻せない。
