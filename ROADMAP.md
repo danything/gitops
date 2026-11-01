@@ -32,49 +32,39 @@
   v2 のシェルで `connect -r` → `map -r` すると USB も見えるので、v1 のシェルを USB に置いて起動する。`-generic` は無い。終わったら電源コードを抜いて入れ直す。
   9.1.37 以前は AMT にパスワード無しで入れる(CVE-2017-5689)
 - 入れ直しのあとに直したもの: 存在しない NIC の sysctl は `KernelParamSpecController` を止める、xfs は 300MB 未満を作れない、
-  OpenEBS LVM は `shared: "yes"` が無いと 2 つ目の Pod がマウントできない(k8up の Backup が止まる)、Talos の防火壁は Pod からの Gateway を捨てる(Cilium の Host Firewall にした)
+  OpenEBS LVM は `shared: "yes"` が無いと 2 つ目の Pod がマウントできない(バックアップの Pod が止まる)、Talos の防火壁は Pod からの Gateway を捨てる(Cilium の Host Firewall にした)
 
 ## AMT
 
-Z440 は Intel AMT 9.x(ME 9.1)を持つ。iLO の代わりに、OS が止まっていても**電源の操作・シリアルコンソール(SOL)・ISO をつなぐ(IDE-R)**が使える。
-**画面(KVM)は使えない**(CPU 内蔵の GPU が前提)。SOL で見えるのは Talos のカーネルのコンソールで、ログインは無い。
+Z440 は Intel AMT 9.x(ME 9.1)を持つ。OS が止まっていても**電源の操作・シリアルコンソール(SOL)・ISO をつなぐ(IDE-R)**が使える。
+**画面(KVM)は使えない**(CPU 内蔵の GPU が前提)ので、BIOS とブートメニューは Arc につないだモニタで見る。
 
-**AMT は内蔵の I218-LM(`eno1`)にしか乗らない。** そのため 2026-11-01 に `eno1` を 10.10 側(HUMAX、`jcom0`)に回し、361T の 2 本を bond0 にした(#667)。
-AMT は 10.10.0.3 に置く(HUMAX の DHCP の範囲や予約と重ならないことは確かめた)。作業用 PC から直接届く。
+- **場所**: AMT は内蔵の I218-LM(`eno1`)にしか乗らないので、`eno1` を 10.10 側(`jcom0`)に回して 10.10.0.3 に置いた(#667)。作業用 PC から直接届く
+- **設定(MEBx。起動中に Ctrl+P)**: IPv4 は固定で 10.10.0.3/24・ゲートウェイ 10.10.0.1、IPv6 は無効、SOL と IDE-R は有効、Network Access は Activate、
+  User Consent はなし、電源は「ON in S0, ME Wake in S3, S4-5」。パスワードは Infisical
+- **守り**: パスワード 1 つで電源もコンソールも握れるので**家の外に出さない**(DMZ と IPv6 の公開は 10.0.0.2 と bond0 の MAC だけなので当たらない)。
+  口は 16992・16993(管理)と 16994・16995(SOL・IDE-R)。ノード自身からは自分の AMT に届かない
+- **つなぎ方**: Windows は Intel の [Device Management Toolkit の Console](https://github.com/device-management-toolkit/console)(`console_windows_x64.exe`。常駐させない)。
+  だめなら [MeshCentral](https://github.com/Ylianst/MeshCentral) を一時的に。Linux は `amtterm`(SOL)と `amttool`(電源)
+- **SOL**: ポートは `ttyS0`(ME の KT、PCI 00:16.3)。schematic の `extraKernelArgs` に `console=tty0 console=ttyS0,115200n8`(後に書いた ttyS0 が `/dev/console`)。
+  出るのはこの schematic で起動したときだけで、ISO の maintenance mode は出ない
 
-**別名を別の NIC に付け替えると、古い NIC の住所が残る。** `AddressSpec` の名前(`jcom0/10.10.0.4/24`)が変わらないので、Talos は新しい口(eno1)に
-住所を足すが、古い口(ens3f1。bond に入った)の住所と接続経路を消さない。古い経路が先に当たり、10.10 への返事が bond の口から出て、10.10 から一切届かなくなった。
-hostNetwork・`NET_ADMIN` の使い捨ての Pod で `ip addr del 10.10.0.4/24 dev ens3f1` をして直した(住所を消すと、それに付いた接続経路も一緒に消える。古い住所はメモリの上にしか無いので、再起動しても直る)。
-また付け替えるときは、10.0 側の口(Wi-Fi で BL1500HM につなぐ)を先に用意しておく(`talosctl -e 10.0.0.2 -n 10.0.0.2`、kubectl は server を `https://10.0.0.2:6443` に)。
-
-**初期設定**(Z440 の画面で 1 回だけ。Arc にモニタとキーボードをつなぐ)
-
-1. 起動中に **Ctrl+P** で MEBx に入る。最初のパスワードは `admin` で、すぐ変えさせられる(大文字・小文字・数字・記号を含む 8 文字以上)。新しいパスワードは Infisical に置く
-2. ネットワーク: IPv4 は固定(10.10.0.3/24、ゲートウェイ 10.10.0.1)。FQDN(例 `amt-main`)も聞かれる。**IPv6 は無効**
-3. リダイレクト: SOL と IDE-R を有効にする
-4. **「Activate Network Access」を実行する**(しないとネットワークから入れない)
-5. User Consent は「なし」。電源が切れていても AMT を動かす(「ON in S0, ME Wake in S3, S4-5」)
-
-**守り**: パスワード 1 つで電源もコンソールも握れるので**家の外に出さない**(DMZ と IPv6 の公開は 10.0.0.2 と bond0 の MAC だけなので当たらないが、AMT の IPv6 は切る)。
-使う口は 16992・16993(管理)と 16994・16995(SOL・IDE-R)。ノード自身からは自分の AMT に届かない。
-
-**つなぎ方**: Windows は Intel の [Device Management Toolkit の Console](https://github.com/device-management-toolkit/console)(`console_windows_x64.exe` を落として実行。常駐させない)。
-2026-11-01 に作業用 PC からつながった。だめなら [MeshCentral](https://github.com/Ylianst/MeshCentral) を手元で一時的に動かす。Linux は `amtterm`(SOL)と `amttool`(電源)。
-
-**シリアルコンソール(Talos)**: SOL のポートは `ttyS0`(ME の KT、PCI 00:16.3)。schematic の `extraKernelArgs` に `console=tty0` と
-`console=ttyS0,115200n8` を入れてある(後に書いた ttyS0 が `/dev/console` になる。ダッシュボードは tty2 で、モニタに出る)。
+**別名(`LinkAliasConfig`)を別の NIC に付け替えると、古い NIC の住所と接続経路が残る。** `AddressSpec` の名前(`jcom0/10.10.0.4/24`)が同じなので
+Talos が消さない。#667 では古い経路が先に当たり、10.10 から一切届かなくなった。hostNetwork・`NET_ADMIN` の使い捨ての Pod で
+`ip addr del 10.10.0.4/24 dev ens3f1` をして直した(再起動でも直る)。付け替える前に 10.0 側から入れるようにしておく
+(Wi-Fi で BL1500HM につなぎ、`talosctl -e 10.0.0.2 -n 10.0.0.2`、kubectl は server を `https://10.0.0.2:6443` に)。
 
 ## 済んだこと(記録)
 
 - **AMT を使えるようにした(2026-11-01)。** 10.10.0.3 で電源と SOL(`ttyS0`)。`eno1` を 10.10 側に回し(#667)、MEBx を設定して、
-  schematic に `console=` を足した。iLO の記述を直した
+  schematic に `console=` を足した(#670)。iLO の記述を直した
 - **バックアップを k8up から VolSync に替えた(2026-11-01)。** PVC ごとにスナップショットから restic で R2 へ([deploy/volsync/](deploy/volsync/))。
   戻すのは `recovery/pv.sh`(ReplicationDestination で PVC を丸ごと)。見張りと etcd は [deploy/backup/](deploy/backup/)。k8up と pg_dump・tar のサイドカーはやめた。
   k8up の頃のリポジトリ(R2 のバケットの根)と Matrix の PVC の `backups/` も同じ日に消した(VolSync からの全件の取り出し確認が通ったあと)
 - **HP Z440 へ移した(2026-10-31)。** DL360 の SSD を移して Talos を入れ直し、PV を restic から戻した。PV の置き場を OpenEBS LVM LocalPV にし
   (#649〜#656)、ノードの防火壁を Cilium の Host Firewall に(#658。経緯は [bootstrap/talos.md](bootstrap/talos.md))、Arc の HuC を読めるようにした(#659)
 - **Talos へ移した(2026-10-17)。** git から建て直し、PV を restic から戻した([recovery/README.md](recovery/README.md))
-- **バックアップと復元の確認を自動に。** restic + k8up で日次、etcd も日次、月次の取り出し確認、machine config は PR ごとに QEMU で起動([deploy/k8up/README.md](deploy/k8up/README.md))
+- **バックアップと復元の確認を自動に。** PVC と etcd を日次、月次の取り出し確認、machine config は PR ごとに QEMU で起動([deploy/backup/README.md](deploy/backup/README.md)。初めは k8up、2026-11-01 から VolSync)
 - **PT3 の付け直し(pt3-rebind)を外した(2026-10-29)。** 並び順を守る PR([siderolabs/talos#14652](https://github.com/siderolabs/talos/pull/14652))は
   「カーネルが必要な時に読み込む形にすべき」(smira)として閉じられ、その実装 [siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724) が
   v1.15.0-alpha.2 に入った。#607 で `kernel.modules` を `earth-pt3` だけにし、alpha.2(Kubernetes 1.37.2)に上げて、
