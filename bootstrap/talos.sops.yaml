@@ -45,9 +45,9 @@ machine:
         fs.inotify.max_user_instances: "8192"
         fs.inotify.max_user_watches: "1048576"
         # IPv6 は bond0 に一本化する(10.10 側の RA に既定経路を奪われると非対称になる)。
-        # sysctl はカーネルの名前で書くので、別名(jcom0)は使えない。Z440 の 361T の ens3f1。**無い名前の行を残さない**
+        # sysctl はカーネルの名前で書くので、別名(jcom0)は使えない。Z440 の内蔵の口(eno1。AMT を 10.10 に出すため)。**無い名前の行を残さない**
         # (KernelParamSpecController がそこで失敗し続け、後から足した sysctl が当たらない。DL360 の eno4 で踏んだ)
-        net.ipv6.conf.ens3f1.disable_ipv6: "1"
+        net.ipv6.conf.eno1.disable_ipv6: "1"
     network:
         # PV の nodeAffinity(OpenEBS の openebs.io/nodename)が main を指している
         hostname: main
@@ -202,12 +202,12 @@ sops:
 # NIC は名前ではなく元の MAC(permanent_addr。bond に入っても変わらない)で選ぶ。名前は箱ごとに違う
 # (DL360 は eno1〜4、Z440 は内蔵の I218-LM と 361T)ので、両方の MAC を || で並べて同じ config で上がるようにする
 # (../ROADMAP.md「ノード main(HP Z440)」)。1 台の上でちょうど 1 つに当たること。
-# 10.0 側(bond0 の 1 本目): DL360 の eno1 / Z440 の内蔵の口(I218-LM、eno1)
+# 10.0 側(bond0 の 1 本目): DL360 の eno1 / Z440 の 361T の ens3f0
 apiVersion: v1alpha1
 kind: LinkAliasConfig
 name: lan0
 selector:
-    match: mac(link.permanent_addr) == "30:e1:71:60:fe:a8" || mac(link.permanent_addr) == "48:0f:cf:67:0d:4e"
+    match: mac(link.permanent_addr) == "30:e1:71:60:fe:a8" || mac(link.permanent_addr) == "d4:f5:ef:6d:db:88"
 sops:
     age:
         - enc: |
@@ -225,12 +225,12 @@ sops:
     mac_only_encrypted: true
     version: 3.13.3
 ---
-# 10.0 側(bond0 の 2 本目): DL360 の eno2 / Z440 の 361T の ens3f0
+# 10.0 側(bond0 の 2 本目): DL360 の eno2 / Z440 の 361T の ens3f1
 apiVersion: v1alpha1
 kind: LinkAliasConfig
 name: lan1
 selector:
-    match: mac(link.permanent_addr) == "30:e1:71:60:fe:a9" || mac(link.permanent_addr) == "d4:f5:ef:6d:db:88"
+    match: mac(link.permanent_addr) == "30:e1:71:60:fe:a9" || mac(link.permanent_addr) == "d4:f5:ef:6d:db:89"
 sops:
     age:
         - enc: |
@@ -248,12 +248,12 @@ sops:
     mac_only_encrypted: true
     version: 3.13.3
 ---
-# 10.10 側: DL360 の eno4 / Z440 の 361T の ens3f1
+# 10.10 側: DL360 の eno4 / Z440 の内蔵の口(I218-LM、eno1)。AMT はこの口にしか乗らないので 10.10 側にする(../ROADMAP.md「AMT」)
 apiVersion: v1alpha1
 kind: LinkAliasConfig
 name: jcom0
 selector:
-    match: mac(link.permanent_addr) == "30:e1:71:60:fe:ab" || mac(link.permanent_addr) == "d4:f5:ef:6d:db:89"
+    match: mac(link.permanent_addr) == "30:e1:71:60:fe:ab" || mac(link.permanent_addr) == "48:0f:cf:67:0d:4e"
 sops:
     age:
         - enc: |
