@@ -12,11 +12,6 @@
 (中身は Z440 で OpenEBS LVM に替えた。名前は各リポジトリの PVC が名指ししている)、Infisical のデータと `ENCRYPTION_KEY`、ArgoCD + ApplicationSet + 各 repo の `deploy/argocd.yaml`、
 **復元手順は公開で秘密を含まない**という性質。
 
-## Z440 へは Talos のまま移す
-
-OS の入れ替えは **iLO で画面まで見える DL360** で済ませた。Z440 の遠隔管理は AMT 9.x(電源と SOL だけ)なので、
-箱の違いは schematic と NIC の名前に閉じ込める([../ROADMAP.md](../ROADMAP.md)「ノード main(HP Z440)」)。
-
 ## bond0 の MAC を固定する
 
 ルーターの IPv6 ホスト公開が **bond0 の MAC で指している**ので、`BondConfig` の `hardwareAddr` で固定した
@@ -27,17 +22,9 @@ OS の入れ替えは **iLO で画面まで見える DL360** で済ませた。Z
 判断基準は、(1) in-cluster で動かせること、(2) **手元からも同じリポジトリを同じコマンドで読める**こと、
 (3) 復元の依存物が「バイナリ 1 つ + 秘密 1 組」で済むこと、の 3 つ。
 
-| 候補 | 判定 |
-| --- | --- |
-| **restic** | ◎ **k8up**(restic の operator)か restic イメージの CronJob。手動復元も `restic restore` 1 本 |
-| kopia | ○ 単体性能は上だが、Velero の node-agent は Velero 固有のレイアウトで、kopia CLI からの手動復元が素直でない |
-| Velero | △ git からの再構築と役割が被り、復元に Velero 自体の導入が要る |
-| tar + rclone crypt / borg / duplicacy | × in-cluster に持っていけない、整合性 `check` が無い、ライセンス |
-| Longhorn 等のストレージ層バックアップ | × 単一ノードには過剰 |
-
-**結論: restic(k8up)。** k8up の中身は素の restic なので、k8up が気に入らなければ CronJob + restic イメージに落とせるし、
-k8up の取ったスナップショットも手元の restic CLI で読める(Infisical はそうやって戻す)。
-**2026-11 から VolSync に替えた**(中身は同じ restic。PVC ごとにスナップショットから取る。下の「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)。
+**結論: restic。** 手動でも `restic restore` 1 本で戻せ、手元の restic CLI で同じリポジトリを読める(Infisical はそうやって戻す)。
+kopia は Velero 経由だと独自のレイアウトになり、Velero は git からの再構築と役割が被り、borg などは in-cluster に持っていけない。
+取るのは VolSync(PVC ごとにスナップショットから。下の「ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする」。2026-11 までは k8up)。
 
 リモートは Cloudflare R2 のバケット `doany-restic`(APAC、Standard)。API トークンは
 Object Read & Write をこのバケットだけに絞った Account API token。下り(egress)が無料なので復元で費用が跳ねない。
@@ -83,9 +70,8 @@ diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を�
 
 ## DB の整合性の取り方
 
-**scale down しない。** 2026-11 からは VolSync が PVC のスナップショットから取る(crash-consistent。Postgres・SQLite の WAL・RocksDB は
-そこから自分で立ち直る。下の「Z440 で、ストレージを OpenEBS LVM LocalPV に…」)。k8up の頃は `k8up.io/backupcommand` で論理バックアップ
-(RDBMS は `pg_dump`、SQLite は `bun:sqlite` の `serialize()`)を取っていた。取っている PVC の一覧は [../deploy/volsync/](../deploy/volsync/)。
+**scale down せず、ダンプも取らない。** VolSync が PVC のスナップショットから取る(crash-consistent。Postgres・SQLite の WAL・RocksDB は
+そこから自分で立ち直る)。取っている PVC の一覧は [../deploy/volsync/](../deploy/volsync/)。
 
 ## Talos の起動順序をどう組むか
 
@@ -207,7 +193,7 @@ Gateway API の session persistence は experimental チャネル限定、Cilium
 
 - リソース名に時刻や乱数を入れない(GitOps は同期のたびに別物として作り直す)
 - CRD は `templates/` ではなく `crds/` に置く(`templates/` だとアンインストールで CR が全部巻き添えになる)
-- 全ワークロードに `podAnnotations` と `resources` を出す(注釈は Infisical・ArgoCD が振る舞いを足す口。k8up の頃はバックアップも)
+- 全ワークロードに `podAnnotations` と `resources` を出す(注釈は Infisical・ArgoCD が振る舞いを足す口)
 - patch で中身を入れ替えない(chart の patch 更新で Dragonfly が Valkey に替わり、values のチューニングが黙って無効になった)
 - 入口(`Ingress` / `httpRoute`)を既定で作らない
 
@@ -229,7 +215,6 @@ denpa の tuner-agent は Earthsoft PT3(`earth_pt3`)の `/dev/dvb` と B-CAS リ
 v1.15.0-alpha.1 からしか無いので、**正式版を待つより PT3 を先に取り、本番を alpha に乗せている**。
 extension は `earth_pt3` を blacklist して配るので、`bootstrap/talos.sops.yaml` の `machine.kernel.modules` で読ませる。
 復調とチューナーのモジュールは、v1.15.0-alpha.2 から Talos がカーネルの要求(`request_module`)で読む([siderolabs/talos#14724](https://github.com/siderolabs/talos/pull/14724))。
-それまでは 3 つも並べて書き、起動後に PT3 を付け直す DaemonSet(pt3-rebind)で順番の問題を避けていた。
 
 **駄目だったときの保険: KubeVirt の VM にパススルー。** PT3(05:00.0)は IOMMU グループ 36 に単独、B-CAS は USB(GemPC Twin 08e6:3437)。
 `intel_iommu=on` は schematic に残してあるが、vfio は `bootstrap/talos.sops.yaml` から外した(PT3 をホストのドライバと取り合う)ので、戻るなら足し直す。
@@ -270,10 +255,9 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 | 生 TS の作業領域(`denpa-raw`) | **取らない。** エンコードが終われば消え、数時間で入れ替わる。14 GB まで育つ |
 | AdGuard のクエリログ | **保持を 7 日に。** 純粋な計測データで、復元時に無くても困らない |
 
-## Z440 で、ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする(2026-10-20 に決めた)
+## ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする(2026-10-20 に決め、10-31〜11-01 に移した)
 
-**いまの弱点は戻す側。** local-path はスナップショットを取れないので、DB は k8up の `backupcommand` で論理ダンプを取り、
-戻し方が経路ごとに 7 通りに分かれた(`recovery/pv.sh` の `restore-all` で 1 コマンドにはまとめた)。
+**弱点は戻す側だった。** local-path はスナップショットを取れないので、DB は論理ダンプを取り、戻し方が経路ごとに 7 通りに分かれていた。
 スナップショットを取れるストレージにすると、次の 2 つが一度に手に入る:
 
 - **ダンプが原則いらない。** スナップショットは crash-consistent で、Postgres・SQLite(WAL)・Tuwunel(RocksDB)はそこから自分で立ち直る。
@@ -292,16 +276,14 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 | **VolSync**(Snapshot + populator) | ◎ データだけを PVC 単位で宣言的に取る。リソースは git と ArgoCD が戻すので役割が分かれる |
 | Velero | ○ 取る前後のフックがあり、利用者も多い。ただしリソースのバックアップが git と重複し、戻すのは命令型で、リソースまで戻すと ArgoCD とぶつかる |
 
-**移るのは Z440 への移設のとき。** いまの DL360 のディスクは local-path の `u-local-path` が残りを全部取っていて(`grow: true`)、
-LVM 用のパーティションを切る余地が無い。Talos のボリュームは未割り当ての領域にしか作れないので、切り直すには入れ直しになる。
-Talos は `RawVolumeConfig` と `LVMVolumeGroupConfig` でボリュームグループを machine config だけで作れる(シェルも特権 Pod も要らない。
-LVM の設定は v1.14 のドキュメントにあり、siderolabs/talos#12309 が 2026-06 に閉じられて入った)。
+Talos は `RawVolumeConfig` と `LVMVolumeGroupConfig` でボリュームグループを machine config だけで作れる(シェルも特権 Pod も要らない)。
+ボリュームは未割り当ての領域にしか作れないので、入れ直す Z440 への移設に合わせて移った。
 
 **台数を増やすとき**は Longhorn を足し、止まって困るアプリから順に移す。VolSync の populator があれば、
 StorageClass を変えた PVC を作り直すだけで中身が埋まるので、ストレージの乗り換えも同じ手で済む。
 入口(Gateway・AdGuard・LiveKit)と API の宛先は 1 台の IP に固定されているので、そのときは VIP(Cilium の L2 Announcements、Talos の共有 VIP)も要る。
 
-### 組んだ形(2026-10-31。効くのは Z440 で入れ直したとき)
+### 組んだ形
 
 - **VG は Talos、thin プールは DaemonSet。** `RawVolumeConfig` `lvm`(EPHEMERAL の残り全部)を `LVMVolumeGroupConfig` で VG `data` にする。
   Talos の `LVMLogicalVolumeConfig` は linear と raid だけで thin を作れない。OpenEBS は thin プールが無いと**最初の PVC と同じ大きさ**で作り、
@@ -324,13 +306,12 @@ StorageClass を変えた PVC を作り直すだけで中身が埋まるので�
 local-path から変わったこと: **PVC の requests が本当の上限になった**(local-path はディスクの残り全部が使えた。
 `recovery/pv.sh` の `fit` が戻す前に見る)、**新しい PVC の直下が root の 0755**(local-path は 0777。root 以外で書くアプリは `fsGroup` が要る)。
 
-確かめていないこと: VolSync の restic mover と R2 の組み合わせ、**thin プールが溢れたときの挙動と見張り**
-(データとメタデータのどちらが溢れても書き込みが止まる。いまは `lvm-thinpool` が 90% で NotReady になるだけで、通知は無い。
-スナップショットを定期的に取るようになったら、余裕と通知が要る)。
+確かめていないこと: **thin プールが溢れたときの挙動と見張り**(データとメタデータのどちらが溢れても書き込みが止まる。
+いまは `lvm-thinpool` が 90% で NotReady になるだけで、通知は無い。VolSync は毎日スナップショットを取るので、余裕と通知が要る)。
 
 ## VPN を wg-easy から NetBird にした
 
-要るのは **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・iLO に入る**の 3 つ(DL360 の頃。Z440 の AMT は 10.10 側なので NetBird は通らない)。
+要るのは **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・家の LAN(10.0)の機器に入る**の 3 つ(Z440 の AMT は 10.10 側なので NetBird は通らない)。
 **NetBird は routing peer が独立した概念で、1 台構成でも問題が起きない**(Headscale は管理サーバーとサブネットルータの同居を避けよと書いている)。
 
 **公式 Helm chart は使わない**(更新が止まっている。[netbirdio/helms#39](https://github.com/netbirdio/helms/issues/39))。

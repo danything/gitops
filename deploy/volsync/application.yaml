@@ -1,5 +1,5 @@
 # VolSync。PVC をスナップショットから restic で R2 に取る(k8up の後継。理由は docs/decisions.md
-# 「Z440 で、ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする」)。
+# 「ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする」)。
 # 取る PVC と時刻は同じフォルダの <namespace>.yaml の ReplicationSource(denpa-raw だけは取らない)。
 #
 # - **リポジトリは PVC ごと**に `<bucket>/volsync/<namespace>/<pvc>`。Secret(`volsync-<pvc>`)は namespace ごとの InfisicalSecret
