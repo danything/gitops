@@ -9,6 +9,9 @@
 set -eu
 cd "$(dirname -- "$0")/.."
 out=$(mktemp -d /dev/shm/clusterconfig.XXXXXX)
-trap 'rm -rf "$out"' EXIT INT TERM
+# render.sh の作業場所(復号した入力を置く)も tmpfs に
+export TMPDIR=/dev/shm
+trap 'rm -rf "$out"' EXIT
+trap 'exit 130' INT TERM
 ./bootstrap/render.sh "$out"
 talosctl apply-config "$@" -f "$out/controlplane.yaml"

@@ -14,7 +14,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 
 **Git Bash からは [t](t) を使う**(`tools/t kubectl get pods -A` のように t.ps1 と同じ引数)。Git Bash から pwsh を直に呼ぶと、
 `/` で始まる引数が Windows のパスに書き換えられ(`/proc/cmdline` → `C:/Program Files/Git/proc/cmdline`)、
-閉じない標準入力で終わらなくなる。`t` はパスの書き換えを止め、端末でなければ標準入力を渡さない。渡すときは `tools/t --stdin … < x`。
+閉じない標準入力で終わらなくなる。`t` はパスの書き換えを止め、端末でなければ標準入力を渡さない。渡すときは `tools/t --stdin … < x`(`--admin` と並べる順は問わない)。
 
 | 入っているもの | 用途 |
 | --- | --- |
