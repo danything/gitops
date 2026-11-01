@@ -23,7 +23,7 @@
 | CPU・メモリ | Xeon E5-2696 v4(22 コア)、DDR4 Registered 8GB × 6 = 48GB(Registered 専用・8 スロット。挿す順はサービスガイドの 66 ページ: CPU に近い 7・8 番を空ける) |
 | ディスク | SATA の Radeon R7 447GB(`/dev/sda`)。EPHEMERAL 64GiB と、残りを VG `data`(thin プール `data_thinpool` は VG の 90%)。[docs/decisions.md](docs/decisions.md) の「組んだ形」 |
 | GPU | **Intel Arc A310 を常設**(Xeon E5 は内蔵 GPU が無く、**Z440 は GPU が無いと POST しない**)。extension は `siderolabs/i915` と、HuC を読む `siderolabs/mei`(`xe` とは両方入れない)。QSV の ICQ は AV1・H.264 で通り、H.265 は VA-API に回る |
-| NIC | 内蔵の I218-LM(`eno1`、`48:0f:cf:67:0d:4e`)と HP 361T(`ens3f0` `d4:f5:ef:6d:db:88`・`ens3f1` `d4:f5:ef:6d:db:89`)。名前ではなく元の MAC で `LinkAliasConfig` の別名(`lan0` `lan1` → `bond0`、`jcom0` → 10.10)を付け、DL360 の MAC と `\|\|` で並べてある。`bond0` の MAC は `e6:2c:1b:1a:a0:39` で固定 |
+| NIC | 内蔵の I218-LM(`eno1`、`48:0f:cf:67:0d:4e`)と HP 361T(`ens3f0` `d4:f5:ef:6d:db:88`・`ens3f1` `d4:f5:ef:6d:db:89`)。名前ではなく元の MAC で `LinkAliasConfig` の別名(361T の 2 本が `lan0` `lan1` → `bond0`、`eno1` が `jcom0` → 10.10。AMT を 10.10 に出すため)を付け、DL360 の MAC と `\|\|` で並べてある。`bond0` の MAC は `e6:2c:1b:1a:a0:39` で固定 |
 | ほか | PT3(`siderolabs/dvb-pt3`)、B-CAS のカードリーダー(GemPC Twin)。起動は UEFI・CSM 無効・セキュアブート無効、After Power Loss = On |
 
 **ファームで踏んだこと**(2026-10-31。BIOS 02.62、ME 9.1.45.3000)
