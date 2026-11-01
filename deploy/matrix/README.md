@@ -131,6 +131,6 @@ Infisical `/matrix/matrix` の `livekit-secret`。API キーの名前は `matrix
 
 VolSync([../volsync/matrix.yaml](../volsync/matrix.yaml)、毎日 20:00 UTC)。`tuwunel-data` を PVC ごと
 スナップショットから取る。RocksDB は crash-consistent なスナップショットから自分で立ち直るので、
-Tuwunel にバックアップを作らせることはもうしない(k8up の頃の `backups/` は PVC に残っていても使わない)。
+Tuwunel にバックアップを作らせることはもうしない(k8up の頃の `backups/` は 2026-11-01 に PVC から消した)。
 
 戻すときは PVC ごと戻して、そのまま Tuwunel を起動する。

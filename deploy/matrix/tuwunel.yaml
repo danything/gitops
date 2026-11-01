@@ -24,7 +24,6 @@ data:
     port = 8008
 
     # PVC の中を分ける。VolSync が PVC ごとスナップショットから取る(RocksDB は crash-consistent で立ち直る)。
-    # k8up の頃の backups/(Tuwunel に作らせたバックアップ)は残っていても使わない
     database_path = "/var/lib/tuwunel/db"
     media_storage_providers = ["media"]
 

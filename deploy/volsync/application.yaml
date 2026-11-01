@@ -10,8 +10,6 @@
 #   Argo CD が作る namespace は bootstrap/argocd-repos.yaml の managedNamespaceMetadata、自分で Namespace を書いているところはそのファイル、
 #   bootstrap 層(infisical など)は bootstrap/render.sh が付ける。PVC を足したら、その namespace に注釈があるかを見る
 # - **時刻は 19:00〜20:45 UTC(04:00〜05:45 JST)に 5 分ずつ。** 保持は日次 7・週次 4・月次 6(録画だけ 1 世代)、prune は 7 日ごと
-#
-# k8up とは 2026-11 から並べて動かしている。切り替えの進み具合は ROADMAP.md「やること」。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

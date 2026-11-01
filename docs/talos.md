@@ -105,7 +105,7 @@ talosctl bootstrap --recover-from=./etcd.snapshot     # etcd が上がるまで 
 
 **主経路ではない。** 主経路は git から建て直すほう([recovery/README.md](../recovery/README.md)。スナップショットの鮮度に左右されない)。
 こちらは git に無い状態(Application の同期状態、発行済みの証明書など)まで一度に戻したいときの近道。
-日次で取っているのは [deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml)(リポジトリ `<bucket>/etcd`。2026-11-01 より前はバケットの根の `--host etcd`)。取り出しは:
+日次で取っているのは [deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml)(リポジトリ `<bucket>/etcd`)。取り出しは:
 
 ```shell
 restic snapshots --host etcd

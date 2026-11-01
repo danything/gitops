@@ -186,8 +186,7 @@ sh recovery/pv.sh - restore-all
 - PVC が `Pending`(StorageClass は使う Pod が付くまで bind しない)でも、VolSync の mover が付けば bind する
 - **PVC の requests が本当の上限**(OpenEBS LVM)。`fit` が `restic stats` の大きさと requests を比べ、9 割を超えるものがあれば
   `plan-all` は 1 で終わり、`restore-all` は上書きする前に止まる。PVC を大きくするか、restic から要らないものを消す
-- **k8up の頃のリポジトリ**(バケットの根。host が namespace)は、保持期間(2027-05 ごろ)が切れるまで残してある。そこから戻すときは
-  `restic -r <restic.env の RESTIC_REPOSITORY> snapshots --host <ns>` で探して `restic restore` で手で取り出す([../deploy/backup/README.md](../deploy/backup/README.md)「k8up の頃のリポジトリ」)
+- **k8up の頃のリポジトリ**(バケットの根)は 2026-11-01 に消した。2026-11-01 より前のものは戻せない
 
 ## 9. 確かめる
 

@@ -9,7 +9,6 @@
 
 ## やること
 
-- [ ] **k8up の頃のリポジトリを消す**(R2 の `doany-restic` の根。2027-05 を過ぎたら。月次の保持の 6 か月。[deploy/backup/README.md](deploy/backup/README.md))
 - [ ] **AMT を設定する**(下の「AMT」)。済んだら SOL の `console=` を schematic に足し、「iLO(10.0.0.3)」と書いてあるところを AMT に直す
   (deploy/netbird/routing-peer.yaml のコメント、docs/decisions.md、recovery/README.md(ISO の起動も AMT の IDE-R に)、docs/talos.md の対象の行、docs/router.md)
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
@@ -67,7 +66,8 @@ Z440 は Intel AMT 9.x(ME 9.1)を持つ。iLO の代わりに、OS が止まっ�
 ## 済んだこと(記録)
 
 - **バックアップを k8up から VolSync に替えた(2026-11-01)。** PVC ごとにスナップショットから restic で R2 へ([deploy/volsync/](deploy/volsync/))。
-  戻すのは `recovery/pv.sh`(ReplicationDestination で PVC を丸ごと)。見張りと etcd は [deploy/backup/](deploy/backup/)。k8up と pg_dump・tar のサイドカーはやめた
+  戻すのは `recovery/pv.sh`(ReplicationDestination で PVC を丸ごと)。見張りと etcd は [deploy/backup/](deploy/backup/)。k8up と pg_dump・tar のサイドカーはやめた。
+  k8up の頃のリポジトリ(R2 のバケットの根)と Matrix の PVC の `backups/` も同じ日に消した(VolSync からの全件の取り出し確認が通ったあと)
 - **HP Z440 へ移した(2026-10-31)。** DL360 の SSD を移して Talos を入れ直し、PV を restic から戻した。PV の置き場を OpenEBS LVM LocalPV にし
   (#649〜#656)、ノードの防火壁を Cilium の Host Firewall に(#658。経緯は [bootstrap/talos.md](bootstrap/talos.md))、Arc の HuC を読めるようにした(#659)
 - **Talos へ移した(2026-10-17)。** git から建て直し、PV を restic から戻した([recovery/README.md](recovery/README.md))
