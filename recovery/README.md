@@ -48,8 +48,9 @@ age 鍵と restic の資格情報はそこに残る。ノードにシェルは�
 talosconfig も管理者の kubeconfig も `bootstrap/talos-secrets.sops.yaml` の CA からその場で作る(ファイルでは持たない)
 ([../tools/README.md](../tools/README.md)「クラスタの資格情報」)。GitHub の操作(5)だけ手元の `gh`。
 
-- **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno4)にしか届かない**(10.0.0.2 は届かない)。t.ps1 の行き先はそこに固定してある
-- iLO(10.0.0.3)の Remote Console(HTML5)で、ブートメニューも maintenance mode の IP も見える。USB だけ物理で挿す
+- **作業用 PC(J:COM 側の LAN)からは 10.10.0.4(eno1)にしか届かない**(10.0.0.2 は届かない。届かないときは Wi-Fi で 10.0 側につなぐ)。t.ps1 の行き先はそこに固定してある
+- AMT(10.10.0.3)で電源と SOL(Talos のカーネルのコンソール。maintenance mode の IP も出る)が使える。**画面(KVM)は無い**ので、
+  BIOS とブートメニューは Arc にモニタとキーボードをつなぐ([../ROADMAP.md](../ROADMAP.md)「AMT」)
 - **GitHub Actions では代わりにならない。** Talos の API(50000)はノードの受信の防火壁(Cilium の Host Firewall)でプライベートのアドレスからしか通さず
   ([../docs/router.md](../docs/router.md)「外からの転送」。maintenance mode では防火壁が無い)、CI の OIDC の信頼も
   machine config を当てて初めてできる
@@ -77,7 +78,7 @@ curl -LO https://factory.talos.dev/image/96371c8f956f7f5f9d09925bb49fe096c0cad05
 
 - ISO の schematic は気にしなくてよい。ディスクに書かれるのは machine config の `--install-image`
 - **Secure Boot が Disabled**(RBSU は POST 中に F9 → Server Security → Secure Boot Settings)。Boot Mode は UEFI のまま
-- POST 中に **F11** で USB を選ぶ(iLO の Virtual Media なら Image File CD-ROM/DVD に ISO の URL を貼り、Reset して F11)
+- POST 中に **F11** で USB を選ぶ(Z440 は USB から UEFI で起動できず、DVD に焼く。AMT の IDE-R で ISO をつなぐのは未確認)
 - コンソールに maintenance mode の IP が出る。インタフェースが `eno1` / `eno2` / `eno4`、インストール先が `/dev/sda`(447 GB)であること
   (違ったら `bootstrap/talos.sops.yaml` を直して 1 に戻る。**`diskSelector` の先は書いたら消える**):
 
@@ -228,7 +229,7 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 
 | | |
 | --- | --- |
-| ノードが上がらない | iLO のコンソール。ダッシュボードに版と健全性が出る |
+| ノードが上がらない | AMT の SOL(カーネルのコンソール)。ダッシュボード(版と健全性)は Arc につないだモニタ |
 | Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | `kubectl -n kube-system logs ds/lvm-thinpool -c pool`(VG `data` が無い = `talosctl get volumestatus` の `r-lvm`)、ノードに `doany.io/lvm-thinpool=ready` が付いて `lvm-localpv-node` が動いているか、`kubectl -n kube-system logs ds/lvm-localpv-node -c openebs-lvm-plugin` |
 | 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |

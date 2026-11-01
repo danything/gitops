@@ -2,7 +2,7 @@
 
 **`main` が落ちたときの入口。** JCOM 側の PC(10.10.0.2、手元の Windows)で [mado](https://github.com/danything/mado)
 (OIDC でログインしてブラウザから RDP する、自作の小さなゲートウェイ。.NET の Windows サービスとタスクトレイ)を動かし、`https://md.doany.io` から
-この PC の画面に入る。入ったら、この PC から iLO(10.0.0.3)や Z440 の AMT(10.0.0.5)を開いて `main` を直す。
+この PC の画面に入る。入ったら、この PC から Z440 の AMT(10.10.0.3。電源と SOL)を開いて `main` を直す。
 NetBird は管理サーバーも routing peer も `main` の上なので、`main` が落ちると使えない。
 
 | | |

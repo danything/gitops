@@ -330,7 +330,7 @@ local-path から変わったこと: **PVC の requests が本当の上限にな
 
 ## VPN を wg-easy から NetBird にした
 
-要るのは **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・iLO に入る**の 3 つ。
+要るのは **プライバシー(全部を自宅経由にする)・DNS(AdGuard)・iLO に入る**の 3 つ(DL360 の頃。Z440 の AMT は 10.10 側なので NetBird は通らない)。
 **NetBird は routing peer が独立した概念で、1 台構成でも問題が起きない**(Headscale は管理サーバーとサブネットルータの同居を避けよと書いている)。
 
 **公式 Helm chart は使わない**(更新が止まっている。[netbirdio/helms#39](https://github.com/netbirdio/helms/issues/39))。

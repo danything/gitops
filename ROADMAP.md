@@ -5,12 +5,10 @@
 
 ## いまここ
 
-**2026-10-31 に HP Z440 へ移し、Talos(OpenEBS LVM)で全部のアプリが動いている。** バックアップは 2026-11-01 に VolSync に替えた。残りは AMT。
+**2026-10-31 に HP Z440 へ移し、Talos(OpenEBS LVM)で全部のアプリが動いている。** バックアップは 2026-11-01 に VolSync に替えた。遠隔管理は AMT(10.10.0.3)。
 
 ## やること
 
-- [ ] **AMT を設定する**(下の「AMT」の「初期設定」。NIC の付け替えは済んだ)。済んだら SOL の `console=` を schematic に足し、「iLO(10.0.0.3)」と書いてあるところを AMT に直す
-  (deploy/netbird/routing-peer.yaml のコメント、docs/decisions.md、recovery/README.md(ISO の起動も AMT の IDE-R に)、docs/talos.md の対象の行、docs/router.md)
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
 - [ ] (いつか)小さいサーバ(Talos)に 10.0 と 10.10 のあいだのルーターと NetBird の入口を任せる。ノードが止まっていても外から AMT に届くようになる。
   そのとき 10.10 側を外すなら、`bootstrap/talos.sops.yaml` の 10.10 側の `LinkConfig`・別名・`disable_ipv6`、AdGuard の 10.10.0.4 の待ち受け
@@ -61,13 +59,15 @@ hostNetwork・`NET_ADMIN` の使い捨ての Pod で `ip addr del 10.10.0.4/24 d
 使う口は 16992・16993(管理)と 16994・16995(SOL・IDE-R)。ノード自身からは自分の AMT に届かない。
 
 **つなぎ方**: Windows は Intel の [Device Management Toolkit の Console](https://github.com/device-management-toolkit/console)(`console_windows_x64.exe` を落として実行。常駐させない)。
-アルファ版で AMT 9 につながるかは未確認。だめなら [MeshCentral](https://github.com/Ylianst/MeshCentral) を手元で一時的に動かす。Linux は `amtterm`(SOL)と `amttool`(電源)。
+2026-11-01 に作業用 PC からつながった。だめなら [MeshCentral](https://github.com/Ylianst/MeshCentral) を手元で一時的に動かす。Linux は `amtterm`(SOL)と `amttool`(電源)。
 
-**シリアルコンソール(Talos)**: `talosctl dmesg | grep ttyS` で番号を見て(`ttyS4` など)、schematic の `extraKernelArgs` に
-`console=tty0` と `console=ttyS<番号>,115200n8` を足し、`bootstrap/talos.sops.yaml` の `# schematic:` を直して `talosctl upgrade`(再起動する)。
+**シリアルコンソール(Talos)**: SOL のポートは `ttyS0`(ME の KT、PCI 00:16.3)。schematic の `extraKernelArgs` に `console=tty0` と
+`console=ttyS0,115200n8` を入れてある(後に書いた ttyS0 が `/dev/console` になる。ダッシュボードは tty2 で、モニタに出る)。
 
 ## 済んだこと(記録)
 
+- **AMT を使えるようにした(2026-11-01)。** 10.10.0.3 で電源と SOL(`ttyS0`)。`eno1` を 10.10 側に回し(#667)、MEBx を設定して、
+  schematic に `console=` を足した。iLO の記述を直した
 - **バックアップを k8up から VolSync に替えた(2026-11-01)。** PVC ごとにスナップショットから restic で R2 へ([deploy/volsync/](deploy/volsync/))。
   戻すのは `recovery/pv.sh`(ReplicationDestination で PVC を丸ごと)。見張りと etcd は [deploy/backup/](deploy/backup/)。k8up と pg_dump・tar のサイドカーはやめた。
   k8up の頃のリポジトリ(R2 のバケットの根)と Matrix の PVC の `backups/` も同じ日に消した(VolSync からの全件の取り出し確認が通ったあと)

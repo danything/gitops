@@ -1,7 +1,7 @@
 # Talos Linux — イメージと machine config の作法
 
-対象: HP ProLiant DL360 Gen9(UEFI、iLO は 10.0.0.3、Xeon E5-2696 v4、RDIMM は 6 枚中 5 枚で 40 GB、NIC は BCM5719 ×4)。
-ディスクは **SATA の SSD(Radeon R7、447 GB)を Smart Array(hpsa)越しに**見ている。Linux からは `/dev/sda`(`TRAN=sas` と出るが SAS ではない)。
+対象: HP Z440(2026-10-31 から。箱の中身は [../ROADMAP.md](../ROADMAP.md)「ノード main(HP Z440)」、遠隔管理は AMT の 10.10.0.3)。
+ディスクは **SATA の SSD(Radeon R7、447 GB)**で、Linux からは `/dev/sda`。それより前は DL360 Gen9(iLO は 10.0.0.3。SSD は Smart Array 越し)。
 版は [bootstrap/talos.sops.yaml](../bootstrap/talos.sops.yaml) の先頭のコメント(`# version:`)が正。
 入れ方は [recovery/README.md](../recovery/README.md)、組み立てと当て直しは [bootstrap/talos.md](../bootstrap/talos.md)。
 
