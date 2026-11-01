@@ -9,7 +9,7 @@
 
 ## やること
 
-- [ ] **AMT を設定する**(下の「AMT」)。済んだら SOL の `console=` を schematic に足し、「iLO(10.0.0.3)」と書いてあるところを AMT に直す
+- [ ] **AMT を設定する**(下の「AMT」の「初期設定」。NIC の付け替えは済んだ)。済んだら SOL の `console=` を schematic に足し、「iLO(10.0.0.3)」と書いてあるところを AMT に直す
   (deploy/netbird/routing-peer.yaml のコメント、docs/decisions.md、recovery/README.md(ISO の起動も AMT の IDE-R に)、docs/talos.md の対象の行、docs/router.md)
 - [ ] **Talos 1.15.0 の正式版が出たら乗り換える**(Renovate の PR)
 - [ ] (いつか)小さいサーバ(Talos)に 10.0 と 10.10 のあいだのルーターと NetBird の入口を任せる。ノードが止まっていても外から AMT に届くようになる。
@@ -41,22 +41,18 @@
 Z440 は Intel AMT 9.x(ME 9.1)を持つ。iLO の代わりに、OS が止まっていても**電源の操作・シリアルコンソール(SOL)・ISO をつなぐ(IDE-R)**が使える。
 **画面(KVM)は使えない**(CPU 内蔵の GPU が前提)。SOL で見えるのは Talos のカーネルのコンソールで、ログインは無い。
 
-**AMT は内蔵の I218-LM(`eno1`)にしか乗らない。** いまの `eno1` は 10.0 側(bond0)なので AMT も 10.0.0.x になる(作業用 PC からは NetBird が要る)。
-**`eno1` を 10.10 側(HUMAX)に挿し替え、361T の 2 ポートを bond0 に回せば 10.10.0.3 にでき、作業用 PC から直接届く。**
-そのときは `LinkAliasConfig` の Z440 の MAC を入れ替え(`lan0` `lan1` ← 361T、`jcom0` ← `eno1`)、`disable_ipv6` の sysctl の名前を `eno1` にし、
-`--mode=try` で当てる。10.10.0.3 が HUMAX の DHCP の範囲や予約と重ならないかを先に見る。
-**入れ替えは PR #667(マージせずに置いてある)。** main に入れると、ほかの件の apply-config でも NIC が入れ替わり、ケーブルが元のままだと
-10.10 から届かなくなるので、ケーブルを入れ替える日にマージする。手順は次のとおり。
+**AMT は内蔵の I218-LM(`eno1`)にしか乗らない。** そのため 2026-11-01 に `eno1` を 10.10 側(HUMAX、`jcom0`)に回し、361T の 2 本を bond0 にした(#667)。
+AMT は 10.10.0.3 に置く(HUMAX の DHCP の範囲や予約と重ならないことは確かめた)。作業用 PC から直接届く。
 
-1. #667 をマージして render し、`apply-config --mode=try --timeout 10m` を打つ(`jcom0` が `eno1` に移り、作業用 PC から届かなくなる)
-2. Z440 の背面で 2 本を入れ替える: 内蔵の口(BL1500HM 行き)↔ 361T の 2 番(HUMAX 行き)
-3. 10.10.0.4 に届くか、bond0 の 2 本が上がっているか、外から `*.doany.io` に届くかを見て、10 分以内に `--mode=no-reboot` で当て直して確定する。
-   確定しないと設定だけ戻るので、そのときはケーブルも戻す
+**別名を別の NIC に付け替えると、古い NIC の住所が残る。** `AddressSpec` の名前(`jcom0/10.10.0.4/24`)が変わらないので、Talos は新しい口(eno1)に
+住所を足すが、古い口(ens3f1。bond に入った)の住所と接続経路を消さない。古い経路が先に当たり、10.10 への返事が bond の口から出て、10.10 から一切届かなくなった。
+hostNetwork・`NET_ADMIN` の使い捨ての Pod で `ip addr del 10.10.0.4/24 dev ens3f1` をして直した(再起動でも消える)。
+また付け替えるときは、10.0 側の口(Wi-Fi で BL1500HM につなぐ)を先に用意しておく(`talosctl -e 10.0.0.2 -n 10.0.0.2`、kubectl は server を `https://10.0.0.2:6443` に)。
 
 **初期設定**(Z440 の画面で 1 回だけ。Arc にモニタとキーボードをつなぐ)
 
 1. 起動中に **Ctrl+P** で MEBx に入る。最初のパスワードは `admin` で、すぐ変えさせられる(大文字・小文字・数字・記号を含む 8 文字以上)。新しいパスワードは Infisical に置く
-2. ネットワーク: IPv4 は固定(10.10.0.3、または 10.0 側なら 10.0.0.5。BL1500HM の DHCP は 10.0.0.10 から)。FQDN(例 `amt-main`)も聞かれる。**IPv6 は無効**
+2. ネットワーク: IPv4 は固定(10.10.0.3/24、ゲートウェイ 10.10.0.1)。FQDN(例 `amt-main`)も聞かれる。**IPv6 は無効**
 3. リダイレクト: SOL と IDE-R を有効にする
 4. **「Activate Network Access」を実行する**(しないとネットワークから入れない)
 5. User Consent は「なし」。電源が切れていても AMT を動かす(「ON in S0, ME Wake in S3, S4-5」)
