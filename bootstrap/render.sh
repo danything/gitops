@@ -1,5 +1,5 @@
 #!/bin/sh
-# machine config を作る: ./bootstrap/render.sh bootstrap/clusterconfig
+# machine config を作る: ./bootstrap/render.sh <出力先>。ふだんは bootstrap/apply.sh が /dev/shm に描いて当てる
 # chart の値と版は bootstrap/<name>-values(.sops).yaml、Talos などの版は talos.sops.yaml の先頭のコメントが正本。ここに写さない(../docs/decisions.md)。
 # SOPS は自分で復号する。CI は鍵が無いので SECRETS などの env にダミーを渡す。
 # 出力は秘密を含み、出力先は丸ごと作り直す。当て方は talos.md。

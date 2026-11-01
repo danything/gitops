@@ -52,7 +52,7 @@ Z440 は Intel AMT 9.x(ME 9.1)を持つ。OS が止まっていても**電源の
 **別名(`LinkAliasConfig`)を別の NIC に付け替えると、古い NIC の住所と接続経路が残る。** `AddressSpec` の名前(`jcom0/10.10.0.4/24`)が同じなので
 Talos が消さない。#667 では古い経路が先に当たり、10.10 から一切届かなくなった。hostNetwork・`NET_ADMIN` の使い捨ての Pod で
 `ip addr del 10.10.0.4/24 dev ens3f1` をして直した(再起動でも直る)。付け替える前に 10.0 側から入れるようにしておく
-(Wi-Fi で BL1500HM につなぎ、`talosctl -e 10.0.0.2 -n 10.0.0.2`、kubectl は server を `https://10.0.0.2:6443` に)。
+(Wi-Fi で BL1500HM につなぐ。`tools/t` は 10.10.0.4 に届かなければ 10.0.0.2 に繋ぐ)。
 
 ## 済んだこと(記録)
 

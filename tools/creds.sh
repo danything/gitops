@@ -75,8 +75,29 @@ mint() {
 	[ $rc = 0 ] || { rm -f "$3".*; die "証明書を作れなかった(bootstrap/talos-secrets.sops.yaml を age の鍵で開けるか)"; }
 }
 
-# 作業用 PC の LAN 側のノードの口(10.0.0.2 は手元から届かず、NetBird はクラスタが落ちると使えない)
-ep=10.10.0.4
+# ノードの口。作業用 PC は 10.10 側なので 10.10.0.4 を先に試し、届かなければ 10.0.0.2(Wi-Fi などで 10.0 側につないだとき。
+# 2026-11-01 に NIC を付け替えて 10.10 から届かなくなったときはこれで入った)。GITOPS_EP で決め打ちできる。
+# 届くかは TCP がつながるかだけで見る(curl の 7 は拒否、28 は時間切れ。TLS の失敗はつながった扱い)
+reach() {
+	set +e
+	curl -sk -m 2 -o /dev/null "https://$1:$2/" 2>/dev/null
+	r=$?
+	set -e
+	[ $r != 7 ] && [ $r != 28 ]
+}
+if [ "$tool" = talosctl ]; then port=50000; else port=6443; fi
+ep=${GITOPS_EP:-}
+if [ -z "$ep" ]; then
+	if reach 10.10.0.4 $port; then
+		ep=10.10.0.4
+	elif reach 10.0.0.2 $port; then
+		ep=10.0.0.2
+		echo "$tool: 10.10.0.4 に届かないので 10.0.0.2 に繋ぐ" >&2
+	else
+		ep=10.10.0.4
+		echo "$tool: 10.10.0.4 にも 10.0.0.2 にも届かない(ノードが止まっているか、網が違う)" >&2
+	fi
+fi
 
 # talosconfig を作って置き場所を返す($1 = admin / readonly)
 talosconfig() {

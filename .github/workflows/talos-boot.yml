@@ -1,6 +1,6 @@
 # bootstrap/render.sh の machine config を runner の QEMU(KVM)で起動し、クラスタが立つところまで見る。
 # 秘密はゼロ(使い捨てとダミー)。外に副作用を出さない: ArgoCD の extraObjects と通知先、
-# 本物の ClusterIssuer(自己署名に差し替え)、infisical の SMTP を抜く。手順の元は docs/talos.md。
+# 本物の ClusterIssuer(自己署名に差し替え)、infisical の SMTP を抜く。手順の元は bootstrap/talos.md。
 name: talos boot
 
 on:

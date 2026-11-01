@@ -1,6 +1,5 @@
+# 描いた machine config(秘密を平文で含む)は bootstrap/apply.sh がコンテナの /dev/shm に置いて消す。手で描いたときの置き場だけ入らないようにしておく
 bootstrap/clusterconfig/
-# 2026-10 までの出力先(talos/ を bootstrap/ にまとめる前)。手元に残っていても入らないように
-/talos/
 # **平文のまま置かないこと。** bootstrap/talos-secrets.sops.yaml と talos.sops.yaml は SOPS 済みのものをコミットする
 # (bootstrap/talos.md)。書きかけの平文はこの名前に逃がす。
 bootstrap/talos-secrets.plain.yaml

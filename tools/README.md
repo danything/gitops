@@ -12,6 +12,10 @@ tools/t.ps1 --admin kubectl apply -f x.yaml  # 書くときだけ管理者(下�
 tools/t.ps1        # 引数なしならシェルに入る
 ```
 
+**Git Bash からは [t](t) を使う**(`tools/t kubectl get pods -A` のように t.ps1 と同じ引数)。Git Bash から pwsh を直に呼ぶと、
+`/` で始まる引数が Windows のパスに書き換えられ(`/proc/cmdline` → `C:/Program Files/Git/proc/cmdline`)、
+閉じない標準入力で終わらなくなる。`t` はパスの書き換えを止め、端末でなければ標準入力を渡さない。渡すときは `tools/t --stdin … < x`(`--admin` と並べる順は問わない)。
+
 | 入っているもの | 用途 |
 | --- | --- |
 | cf | Cloudflare(R2 など) |
@@ -63,9 +67,9 @@ tools/t.ps1        # 引数なしならシェルに入る
 - **talosconfig は保存しない**([../docs/decisions.md](../docs/decisions.md)「手で持つもの」)。`secrets.yaml` から毎回作る
 - **管理者の kubeconfig も保存しない。** 毎回その場で作るので、作り直しも期限切れも無い。
   `talosctl kubeconfig` は 1 年もつ証明書を呼ぶたびに出す(取り消せない)ので使わない
-- 行き先はどれも `10.10.0.4`(ノードの、作業用 PC の LAN 側の口。`creds.sh` の `ep`)。`bootstrap/render.sh` の `10.0.0.2` は
-  クラスタの LAN で手元から届かず、NetBird はクラスタの上で動くので落ちたときに使えない。API は外に開かない。
-  外からは mado で作業用 PC に入って打つ。`10.10.0.4` は Talos の証明書の SAN に入っている。`KUBECONFIG` / `TALOSCONFIG` や `--kubeconfig` / `--talosconfig` /
+- 行き先は `10.10.0.4`(ノードの、作業用 PC の LAN 側の口)。**届かなければ `10.0.0.2` に繋ぐ**(Wi-Fi などで 10.0 側につないだとき。`creds.sh` の `ep`。`GITOPS_EP` で決め打ちできる)。`10.0.0.2` は
+  ふだん手元から届かず、NetBird はクラスタの上で動くので落ちたときに使えない。API は外に開かない。
+  外からは mado で作業用 PC に入って打つ。どちらも Talos の証明書の SAN に入っている。`KUBECONFIG` / `TALOSCONFIG` や `--kubeconfig` / `--talosconfig` /
   `--server` を自分で渡したときは何もしない。繋がないもの(`kubectl kustomize`、`helm template`、`talosctl gen`、`--client` など)も同じ
 
 平文の `kubeconfig` / `talosconfig` という名前のファイルは `.gitignore` 済み(手で書き出したものを誤って入れないように)。
