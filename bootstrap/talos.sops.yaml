@@ -5,12 +5,12 @@
 # パスワードを変えるときは `sops edit bootstrap/talos.sops.yaml`。render.sh が `sops -d` してから渡す。
 # 各ドキュメントの末尾の `sops:` は SOPS のメタデータ(触らない)。
 #
-# 型付きドキュメントと v1alpha1 で書く場所が決まっている(../docs/talos.md「machine config の作法」)。
+# 型付きドキュメントと v1alpha1 で書く場所が決まっている(talos.md「machine config の書き方(v1.14 以降)」)。
 # ドキュメントは上から順に当たる(KubeNodeConfig の delete → 書き戻し は順番に意味がある)。
 #
 # Talos・Kubernetes・Gateway API の版と schematic。chart の <name>-values.yaml と同じく、`# renovate:` の次の
 # `# version:` の行を Renovate が上げ、render.sh が読む(値にすると machine config に混ざるのでコメント)。
-# 適用は手で(ノード 1 台なので upgrade は全停止)。手順は talos.md「上げ方 / 当て直し方」。
+# 適用は手で(ノード 1 台なので upgrade は全停止)。手順は talos.md「当て方」。
 #
 # Talos。Factory のレジストリはタグ一覧を返さないので github-releases で追う。tools/Dockerfile の talosctl と同じ depName。
 # dvb-pt3 が v1.15.0-alpha.1 からなので alpha に乗っている(Renovate は次の alpha / beta も出す)。

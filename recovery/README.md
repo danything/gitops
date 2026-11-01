@@ -39,7 +39,7 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 | ほかの PV データ | **VolSync の `ReplicationDestination`**([pv.sh](pv.sh)) |
 
 etcd のスナップショット(リポジトリ `<bucket>/etcd`、[../deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml))は
-git に無い状態まで一度に戻したいときの近道で、主経路ではない([../docs/talos.md](../docs/talos.md)「etcd スナップショットからの復旧」)。
+git に無い状態まで一度に戻したいときの近道で、主経路ではない([../bootstrap/talos.md](../bootstrap/talos.md)「etcd スナップショットから戻す(近道)」)。
 
 ## 道具と経路
 
@@ -60,12 +60,12 @@ talosconfig も管理者の kubeconfig も `bootstrap/talos-secrets.sops.yaml` �
 
 ```shell
 mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age   # パスフレーズ
-./bootstrap/render.sh bootstrap/clusterconfig       # `valid for metal mode` まで出ること
+./bootstrap/render.sh /dev/shm/c && rm -rf /dev/shm/c   # 描けるかだけ見る。`valid for metal mode` まで出ること
 ```
 
 - **`bootstrap/talos-secrets.sops.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver-ca.crt`・
   Infisical の Kubernetes auth(7)が合わなくなる
-- **`render.sh` は出力先を丸ごと消して作り直す。** `bootstrap/clusterconfig/` に kubeconfig などを置いていたら消える
+- **描いたものは手元に置かない**(秘密が平文で入る)。当てるときは 3 の `apply.sh` がその場で描いて消す
 - 版は [../bootstrap/talos.sops.yaml](../bootstrap/talos.sops.yaml) の先頭のコメント。**上げるなら建て直しの日ではない日に**
 
 ## 2. ISO で起動する
@@ -92,7 +92,7 @@ talosctl get disks --insecure -n $IP -e $IP
 ## 3. 当てる(インストールは無人で進む)
 
 ```shell
-talosctl apply-config --insecure -n $IP -e $IP -f bootstrap/clusterconfig/controlplane.yaml
+./bootstrap/apply.sh --insecure -n $IP -e $IP     # 描いて当てる(描いたものは /dev/shm に置いて消す)
 ```
 
 `UnattendedInstallConfig` があるので、ディスクに書いて自分で再起動する。**ここで SSD が上書きされる。**
@@ -231,9 +231,9 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | | |
 | --- | --- |
 | ノードが上がらない | AMT の SOL(インストール済みのノードのカーネルのコンソール)。ダッシュボード(版と健全性)は Arc につないだモニタ |
-| Pod が Pending | **PSA のラベル**([../docs/talos.md](../docs/talos.md)「PSA のラベル」)か、control-plane の taint |
+| Pod が Pending | **PSA のラベル**([../bootstrap/talos.md](../bootstrap/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | `kubectl -n kube-system logs ds/lvm-thinpool -c pool`(VG `data` が無い = `talosctl get volumestatus` の `r-lvm`)、ノードに `doany.io/lvm-thinpool=ready` が付いて `lvm-localpv-node` が動いているか、`kubectl -n kube-system logs ds/lvm-localpv-node -c openebs-lvm-plugin` |
 | 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
 | cilium-drift が TLS で落ちる | `talos-secrets.sops.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `talos-secrets.sops.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
-| inlineManifest を直したのに効かない | `render.sh` → `apply-config` → **`upgrade-k8s`**([../bootstrap/talos.md](../bootstrap/talos.md)「上げ方 / 当て直し方」) |
+| inlineManifest を直したのに効かない | `apply.sh` → **`upgrade-k8s`**([../bootstrap/talos.md](../bootstrap/talos.md)「当て方」) |

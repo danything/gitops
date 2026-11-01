@@ -119,7 +119,7 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 `bootstrap/cilium-values.yaml` の先頭の `# version:` を見ていて、machine config は毎回そこから描き直されるだけ。
 
 **`helm upgrade` は使わない。** 更新経路は「`cilium-values.yaml` を直す → 描き直す → `upgrade-k8s`」。古い machine config のまま
-`upgrade-k8s` を流すと走っている Cilium が巻き戻る([../bootstrap/talos.md](../bootstrap/talos.md)「上げ方 / 当て直し方」)。
+`upgrade-k8s` を流すと走っている Cilium が巻き戻る([../bootstrap/talos.md](../bootstrap/talos.md)「当て方」)。
 流し忘れは [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が週次で live と突き合わせる。
 bootstrap のあとに `helm install` する案は、再構築のたびに「CNI が無いので何も動かない」状態での手作業が増えるので採らない。
 

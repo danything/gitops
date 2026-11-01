@@ -6,7 +6,7 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 
 | | 何を | いつ |
 | --- | --- | --- |
-| **machine config**(このディレクトリ) | Talos の設定、Helm で入れるもの(cilium・cert-manager・argocd・infisical・lvm-localpv)、`apiserver-rbac.yaml`、`storage.yaml`、SOPS 済みの Secret 2 つ | `render.sh` → `apply-config` → `upgrade-k8s`([talos.md](talos.md)「上げ方 / 当て直し方」) |
+| **machine config**(このディレクトリ) | Talos の設定、Helm で入れるもの(cilium・cert-manager・argocd・infisical・lvm-localpv)、`apiserver-rbac.yaml`、`storage.yaml`、SOPS 済みの Secret 2 つ | `apply.sh` → `upgrade-k8s`([talos.md](talos.md)「当て方」) |
 | **ArgoCD**(`deploy/`) | 平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など)。2026-10 まではここにあって、Application `bootstrap` が当てていた | main へのマージ(prune / selfHeal 付き) |
 
 ## ファイル
@@ -16,7 +16,7 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 | ファイル | 中身 |
 | --- | --- |
 | [render.sh](render.sh) | machine config を組む。下のファイルを全部読む |
-| [talos.md](talos.md) | Talos の組み立てと当て直し方 |
+| [talos.md](talos.md) | Talos の組み立て・書き方・当て方 |
 | [talos.sops.yaml](talos.sops.yaml) | 手で書く machine config(`password` の値だけ SOPS)。先頭のコメントに Talos・Kubernetes・Gateway API の版と schematic |
 | [talos-secrets.sops.yaml](talos-secrets.sops.yaml) | クラスタの CA 一式(丸ごと SOPS) |
 | [cilium-values.yaml](cilium-values.yaml) | chart の値と版(下の「Helm で入れるもの」) |
@@ -77,15 +77,15 @@ Namespace は chart が描かないので、`render.sh` が kube-system 以外�
 
 **cilium だけは [cilium-drift.yml](../.github/workflows/cilium-drift.yml) が見ている**(下の「cilium」)。**残りは見ていない。**
 直したら流す(流し忘れたことは誰も教えてくれない)。描くたびに変わる値は潰してあるので、
-`apply-config --dry-run` に出る差分は全部本物([talos.md](talos.md)「inlineManifests を直したとき」)。
+`apply-config --dry-run` に出る差分は全部本物([talos.md](talos.md)「machine config と inlineManifests」)。
 
 ## cilium
 
 **クラスタの土台。** CNI・kube-proxy の代替・Gateway API を全部これが担う。
 決定の経緯は [../docs/decisions.md](../docs/decisions.md)「ルーティングの選定」。
 
-[cilium-values.yaml](cilium-values.yaml) を直したら **`render.sh` → `apply-config` → `upgrade-k8s`**
-([talos.md](talos.md)「上げ方 / 当て直し方」)。`helm upgrade` は使わない。値はここが正本で、machine config は
+[cilium-values.yaml](cilium-values.yaml) を直したら **`apply.sh` → `upgrade-k8s`**
+([talos.md](talos.md)「当て方」)。`helm upgrade` は使わない。値はここが正本で、machine config は
 `render.sh` がここから描く派生物(二度書かない。decisions.md「machine config と Cilium の chart をどう連動させるか」)。
 **どの設定が何のために要るかは [cilium-values.yaml](cilium-values.yaml) のコメントにある**(ここには写さない)。
 

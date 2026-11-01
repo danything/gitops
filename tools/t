@@ -1,0 +1,16 @@
+#!/bin/sh
+# Git Bash から tools/t.ps1 を呼ぶ入口(tools/README.md)。PowerShell からは t.ps1 を直接呼ぶ。
+#   tools/t kubectl get pods -A
+#   tools/t --admin talosctl read /proc/cmdline
+#   tools/t --stdin kubectl apply -f - < x.yaml   # 標準入力を渡すときだけ --stdin
+# Git Bash から pwsh を呼ぶと 2 つ詰まる:
+# - `/` で始まる引数が Windows のパスに書き換えられる(/proc/cmdline → C:/Program Files/Git/proc/cmdline)。MSYS_NO_PATHCONV で止める
+# - 標準入力が閉じないパイプだと、t.ps1 がそれを渡し続けて終わらない。端末でなければ /dev/null にする(t.ps1 は NUL を空のパイプに置き換える)
+export MSYS_NO_PATHCONV=1
+t=$(dirname -- "$0")/t.ps1
+if [ "${1:-}" = --stdin ]; then
+	shift
+	exec pwsh -NoProfile -File "$t" "$@"
+fi
+if [ -t 0 ]; then exec pwsh -NoProfile -File "$t" "$@"; fi
+exec pwsh -NoProfile -File "$t" "$@" </dev/null

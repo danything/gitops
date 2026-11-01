@@ -3,7 +3,7 @@
 # **戻すときの主経路ではない。** 主経路は「git から Argo CD で建て直して PV を VolSync で戻す」
 # (recovery/README.md)。こちらは git に無い状態
 # (Argo CD が作った Application の同期状態、cert-manager の発行済み証明書など)まで含めて**一瞬で戻したいとき**の近道。
-# 戻し方は docs/talos.md「etcd スナップショットからの復旧」の `bootstrap --recover-from`。
+# 戻し方は bootstrap/talos.md「etcd スナップショットから戻す(近道)」。
 #
 # Talos API への権限は `os:etcd:backup` だけ(bootstrap/talos.sops.yaml)。
 # 下の ServiceAccount を見て Talos が同名の Secret に talosconfig を書く。

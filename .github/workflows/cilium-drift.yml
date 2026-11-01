@@ -49,7 +49,7 @@ jobs:
           # --kube-version が無いと helm の既定版で描かれて偽の差分が出る
           KV=$(k version -o json | jq -r .serverVersion.gitVersion)
           echo "kube-version=$KV"
-          export HOWTO="bootstrap/talos.md「inlineManifests を直したとき」の render.sh → apply-config → upgrade-k8s を流すこと"
+          export HOWTO="bootstrap/talos.md「machine config と inlineManifests」の apply.sh → upgrade-k8s を流すこと"
 
           # chart の版は render.sh の bver と同じく先頭の `# version:`
           V=$(sed -n '/^# version: /{s/^# version: *//p;q;}' bootstrap/cilium-values.yaml)
