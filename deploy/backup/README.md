@@ -14,7 +14,7 @@ PVC のバックアップは VolSync([../volsync/application.yaml](../volsync/ap
 
 ## 秘密
 
-**Secret `backup` の正本は Infisical の `/k8up/k8up-global`**([secret.yaml](secret.yaml)。フォルダの名前は k8up の頃のまま)。
+**Secret `backup` の正本は Infisical の `/backup/backup`**([secret.yaml](secret.yaml))。
 キーは `endpoint` / `bucket` / `accessKeyId` / `secretAccessKey` / `repoPassword` / `mattermostWebhook` の 6 つ。
 VolSync の Secret(namespace ごとの InfisicalSecret `volsync` が作る `volsync-<pvc>`)も同じフォルダから組む。
 値は `recovery/env.age` にもある(Infisical を戻すときは Infisical が無いので、こちらを使う。recovery/README.md の 6)。
