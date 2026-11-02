@@ -114,7 +114,7 @@ data:
     //   - latestMoverStatus.result が Successful か。最後の回だけ失敗して、前の成功が 26 時間以内に残っている日を拾う
     //   - lastSyncTime が無い(一度も取れていない)。足したのに Secret や注釈が足りないと、ここで止まる
     //   - spec.trigger.manual が残っていないか。残ると schedule が効かず、手で取った回を最後に止まる
-    //     (Argo CD は ServerSideApply で、自分が書いていない manual を消さない。recovery/pv.sh backup-all の後に 1 日止まった)
+    //     (Argo CD は ServerSideApply で、自分が書いていない manual を消さない。recovery/backup-all.sh の前の形の後に 1 日止まった)
     //   - etcd-snapshot の CronJob の最後の成功が 26 時間以内か(PVC ではないので ReplicationSource が無い)
     //   - backup の namespace の CronJob が最後まで走ったか(restore-check は OOMKilled や期限切れでは投稿まで届かない)
     // 残る穴: ReplicationSource を書き忘れた PVC は見えない(PVC を足すときは README.md の「足す」を見る)。

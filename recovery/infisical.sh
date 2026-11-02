@@ -4,7 +4,7 @@
 #   tools/t.ps1 --admin sh recovery/infisical.sh db              DB の PVC を VolSync のスナップショットから戻して Infisical を起こす
 #   tools/t.ps1 --admin sh recovery/infisical.sh ca [apply]      Kubernetes auth の CA を見る / 新しいクラスタのものにする
 #
-# **Infisical だけは pv.sh の restore で戻せない。** VolSync の Secret が Infisical から来るので、Secret を
+# **Infisical だけは populator で戻せない。** VolSync の Secret が Infisical から来るので、Secret を
 # 手元の ~/.config/restic.env(README の 6)から作って戻す。
 set -eu
 K=kubectl
@@ -14,8 +14,9 @@ pg() { $K -n infisical exec postgresql-0 -- sh -c "$PSQL $*"; }
 
 case ${1:-} in
 	db)
-		# **PVC(data-postgresql-0)を丸ごと戻す**(VolSync のスナップショット。pv.sh の pvc と同じ)。
-		# ReplicationDestination の Secret は、ほかの namespace と違って InfisicalSecret から作れない(戻すのが Infisical そのもの)ので、
+		# **PVC(data-postgresql-0)を丸ごと戻す**(VolSync のスナップショット)。ほかの PVC は populator で作るときに埋まるが、
+		# ここは bootstrap の chart の StatefulSet が作る PVC で dataSourceRef を書けないので、ReplicationDestination(Direct)で上から書く。
+		# Secret は、ほかの namespace と違って InfisicalSecret から作れない(戻すのが Infisical そのもの)ので、
 		# 手元の restic.env から作る。あとで deploy/infisical/volsync.yaml の InfisicalSecret が同じ名前で上書きする(中身は同じ)
 		set -a; . "$HOME/.config/restic.env"; set +a
 		repo=${RESTIC_REPOSITORY%/}/volsync/infisical/data-postgresql-0
@@ -23,13 +24,42 @@ case ${1:-} in
 			--from-literal=RESTIC_REPOSITORY="$repo" --from-literal=RESTIC_PASSWORD="$RESTIC_PASSWORD" \
 			--from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
 			--from-literal=AWS_DEFAULT_REGION=auto --dry-run=client -o yaml | $K apply -f - >/dev/null
-		sh "$(dirname "$0")/pv.sh" infisical stop
-		sh "$(dirname "$0")/pv.sh" infisical pvc data-postgresql-0
-		sh "$(dirname "$0")/pv.sh" infisical start
+		# 書いている最中に Postgres が起きないよう止める(ほかは Postgres を待つだけなので止めなくてよい)
+		$K -n infisical scale sts/postgresql --replicas=0 >/dev/null
+		$K -n infisical wait --for=delete pod/postgresql-0 --timeout=120s >/dev/null 2>&1 || true
+		# **このクラスタができる前の最新**を戻す。ReplicationSource は Argo CD が作るとすぐ時刻を待ちはじめ、戻す前の空の PVC を
+		# 取ったものが「いちばん新しい」になりうる。境目は kube-system の namespace ができた時刻(RESTORE_BEFORE で上書きできる)
+		before=${RESTORE_BEFORE:-$($K get ns kube-system -o jsonpath='{.metadata.creationTimestamp}')}
+		t=restore-$(date -u +%Y%m%d%H%M%S)
+		$K -n infisical delete replicationdestination restore-db --ignore-not-found >/dev/null
+		$K create -f - >/dev/null <<R
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationDestination
+metadata: {name: restore-db, namespace: infisical}
+spec:
+  trigger: {manual: $t}
+  restic:
+    repository: volsync-data-postgresql-0
+    destinationPVC: data-postgresql-0
+    copyMethod: Direct
+    restoreAsOf: "$before"
+    enableFileDeletion: true
+    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+R
+		for _ in $(seq 1 180); do
+			[ "$($K -n infisical get replicationdestination restore-db -o jsonpath='{.status.lastManualSync}')" = "$t" ] && break
+			sleep 10
+		done
+		res=$($K -n infisical get replicationdestination restore-db -o jsonpath='{.status.latestMoverStatus.result}')
+		$K -n infisical get replicationdestination restore-db -o jsonpath='{.status.latestMoverStatus.logs}' | tail -5
+		[ "$res" = Successful ] || { echo "戻せなかった(kubectl -n infisical describe replicationdestination restore-db)" >&2; exit 1; }
+		$K -n infisical delete replicationdestination restore-db --wait=false >/dev/null
+		$K -n infisical scale sts/postgresql --replicas=1 >/dev/null
 		$K -n infisical rollout status sts/postgresql --timeout=300s
 		users=$(pg "-Atc 'select count(*) from public.users'" 2>/dev/null || echo 0)
 		echo "users: $users / projects: $(pg "-Atc 'select count(*) from public.projects'" 2>/dev/null || echo 0)"
 		[ "${users:-0}" -gt 0 ] || { echo "users が 0。戻したスナップショットを見直す(RESTORE_BEFORE)" >&2; exit 1; }
+		$K -n infisical rollout restart deploy/infisical >/dev/null
 		$K -n infisical rollout status deploy/infisical --timeout=300s ;;
 	ca)
 		# operator の Machine Identity は Kubernetes auth で、Infisical が TokenReview を呼ぶときに
