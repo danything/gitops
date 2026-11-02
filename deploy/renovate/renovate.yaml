@@ -37,7 +37,7 @@ data:
       export RENOVATE_GIT_AUTHOR='Renovate Bot <renovate@fj.doany.io>'
       # Forgejo のユーザー renovate のトークン(チーム bots = 全リポジトリに書き込み)
       if [ -z "${FORGEJO_TOKEN:-}" ]; then
-        echo "renovate-secrets に forgejo-token が無い。Infisical に入れるまで何もしない(README.md)" >&2
+        echo "renovate-secrets に forgejo-token が無い。secrets.sops.yaml に入れるまで何もしない(README.md)" >&2
         exit 0
       fi
       RENOVATE_TOKEN=$FORGEJO_TOKEN
@@ -61,7 +61,7 @@ data:
       # github.com のトークンは Forgejo のときだけ使う(GitHub ではトークンそのものが github.com のもの)
       unset RENOVATE_GITHUB_COM_TOKEN
       if [ -z "${APP_PRIVATE_KEY:-}" ]; then
-        echo "renovate-secrets に github-app-private-key が無い。Infisical に入れるまで何もしない(README.md)" >&2
+        echo "renovate-secrets に github-app-private-key が無い。secrets.sops.yaml に入れるまで何もしない(README.md)" >&2
         exit 0
       fi
       if ! RENOVATE_TOKEN=$(node /scripts/github-app-token.mjs); then

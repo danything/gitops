@@ -13,7 +13,7 @@
 #   dataSourceRef は作るときしか書けないので、Argo CD は今ある PVC の dataSourceRef の差分を見ない(bootstrap/argocd-repos.yaml)
 # - **mover は root**(PVC の中の持ち主がアプリごとに違う)。namespace に `volsync.backube/privileged-movers: "true"` が要る。
 #   Argo CD が作る namespace は bootstrap/argocd-repos.yaml の managedNamespaceMetadata、自分で Namespace を書いているところはそのファイル、
-#   bootstrap 層(infisical など)は bootstrap/render.sh が付ける。PVC を足したら、その namespace に注釈があるかを見る
+#   bootstrap 層の namespace は bootstrap/render.sh が付ける。PVC を足したら、その namespace に注釈があるかを見る
 # - **時刻は全部 19:00 UTC(04:00 JST)。** VolSync は並べて流し、22 本で 5 分ほどで終わる(2026-11-02 に全部を同時に取って確かめた)。
 #   保持は日次 7・週次 4・月次 6(録画だけ 1 世代)、prune は VolSync の既定の 7 日ごと
 apiVersion: argoproj.io/v1alpha1

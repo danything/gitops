@@ -1,5 +1,5 @@
 # ノード main の machine config のうち、手で書く部分の全部。render.sh が `gen config --config-patch` に渡す。
-# chart から描く部分(Cilium・ArgoCD・infisical・cert-manager・OpenEBS LVM)は render.sh が足す。版は下のコメント。
+# chart から描く部分(Cilium・ArgoCD・cert-manager・OpenEBS LVM)は render.sh が足す。版は下のコメント。
 #
 # **SOPS で password の値だけ暗号化してある**(../.sops.yaml)。平文の部分はそのまま直してよい。
 # パスワードを変えるときは `sops edit bootstrap/talos.sops.yaml`。render.sh が `sops -d` してから渡す。

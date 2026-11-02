@@ -29,14 +29,13 @@ configs:
             name: Microsoft Entra ID
             issuer: https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0
             clientID: b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e
-            # Secret argocd-oidc, built by oidc-secret.yaml from Infisical.
+            # Secret argocd-oidc, built by sops-secrets-operator from deploy/argocd/secrets.sops.yaml.
             clientSecret: $argocd-oidc:client-secret
             requestedScopes:
               - openid
               - profile
               - email
-        # Secret は管理対象から外す。Infisical operator の Secret は CR の tracking-id がコピーされ、
-        # 外さないと sync で prune される。
+        # Secret は管理対象から外す。Secret は sops-secrets-operator(など)が作り、Argo CD は持たない。
         resource.exclusions: |
             - apiGroups: [""]
               kinds: ["Secret"]
@@ -136,7 +135,7 @@ sops:
             kPmcW7H+UUKySYI3pNEsDUbFfsRpcdL/is9Mhpc6BsZuq4wqkIYs0Q==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|CF_DNS_API_TOKEN)$
     lastmodified: "2026-10-30T15:08:34Z"
     mac: ENC[AES256_GCM,data:IUTmLKy52nMOMJcPFmc823XbNmgCBvDHeoeDPpIYJwliohLnUwtZ+imdxp7/h7OocaP/Q19cxs+S+4q//1h4rV9qA7YZo33mWU8CUoRVfdsJWy0YZ3lhiJEJR4xtbsCXfWHKWeXQYV87TO79+kcYZ8WBbn25yeDhebBh+N9mx0k=,iv:flt6viuRm96UTSBa62rnIDlMAL6kHyLjI5766RoTDXg=,tag:D/A3SFgZ3vztLIwK1i003w==,type:str]
     mac_only_encrypted: true

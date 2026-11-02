@@ -19,7 +19,7 @@ creation_rules:
   # 秘密を含む chart の値(と、2 つめのドキュメントの Secret)。秘密のキーだけ。キーを足したらここにも足す
   # (当たらないキーは平文のままコミットされる)。
   - path_regex: ^bootstrap/[^/]+-values\.sops\.yaml$
-    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|CF_DNS_API_TOKEN)$
     mac_only_encrypted: true
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
   # クラスタの中で SopsSecret を復号する age の鍵(sops-secrets-operator が使う)。machine config に載せる

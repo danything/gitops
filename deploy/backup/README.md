@@ -10,7 +10,7 @@ PVC のバックアップは VolSync([../volsync/application.yaml](../volsync/ap
 | [notify.yaml](notify.yaml) | 全部の ReplicationSource と etcd-snapshot が 26 時間以内に成功したかを、日次で通知の部屋に 1 行 | 21:00 |
 | [restore-check.yaml](restore-check.yaml) | 毎月 1 日、全部の PVC の最新を実際に取り出して開けるかを確かめる | 06:00(1 日) |
 
-戻し方は [../../recovery/README.md](../../recovery/README.md) の 6(Infisical)と 8(ほかの PVC。populator で PVC を作ると埋まる)。
+戻し方は [../../recovery/README.md](../../recovery/README.md) の 6(populator で PVC を作ると埋まる)。
 
 ## 秘密
 

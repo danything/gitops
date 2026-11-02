@@ -41,7 +41,7 @@ Z440 は Intel AMT 9.x(ME 9.1)を持つ。OS が止まっていても**電源の
 
 - **場所**: AMT は内蔵の I218-LM(`eno1`)にしか乗らないので、`eno1` を 10.10 側(`jcom0`)に回して 10.10.0.3 に置いた(#667)。作業用 PC から直接届く
 - **設定(MEBx。起動中に Ctrl+P)**: IPv4 は固定で 10.10.0.3/24・ゲートウェイ 10.10.0.1、IPv6 は無効、SOL と IDE-R は有効、Network Access は Activate、
-  User Consent はなし、電源は「ON in S0, ME Wake in S3, S4-5」。パスワードは Infisical
+  User Consent はなし、電源は「ON in S0, ME Wake in S3, S4-5」。パスワードは Infisical に置いていた(2026-11-02 にやめた)
 - **守り**: パスワード 1 つで電源もコンソールも握れるので**家の外に出さない**(DMZ と IPv6 の公開は 10.0.0.2 と bond0 の MAC だけなので当たらない)。
   口は 16992・16993(管理)と 16994・16995(SOL・IDE-R)。ノード自身からは自分の AMT に届かない
 - **つなぎ方**: Windows は Intel の [Device Management Toolkit の Console](https://github.com/device-management-toolkit/console)(`console_windows_x64.exe`。常駐させない)。

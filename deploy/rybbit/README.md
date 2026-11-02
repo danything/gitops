@@ -12,14 +12,14 @@
 | [clickhouse.yaml](clickhouse.yaml) | イベントの倉庫。上流の設定 4 本を ConfigMap に、メモリの上限だけこの箱向けに下げた(limit 3 Gi、1 クエリ 2 GB) |
 | [postgres.yaml](postgres.yaml) | ユーザー・サイト・設定。forgejo と同じ 17 系 |
 | [redis.yaml](redis.yaml) | セッション追跡のカウンタ。PVC は持たない |
-| [rybbit-secrets.yaml](rybbit-secrets.yaml) | Infisical `/rybbit/rybbit` の 4 キー → Secret `rybbit` |
+| [secrets.sops.yaml](secrets.sops.yaml) | 秘密(SOPS)。Secret `rybbit` の 4 キーと VolSync の分 |
 | [httproute.yaml](httproute.yaml) | `rt.doany.io`。`/api` は backend、ほかは client。上流の Caddyfile にある `/.well-known/oauth-*`(MCP 向け)は使わないので置かない |
 
 バックアップは [volsync.yaml](volsync.yaml)(VolSync。ClickHouse と PostgreSQL の PVC をスナップショットから)。
 
 ## 使い始め
 
-1. Infisical(il.doany.io)に フォルダ `/rybbit/rybbit` を作り、`clickhouse-password` / `postgres-password` /
+1. [secrets.sops.yaml](secrets.sops.yaml) の Secret `rybbit` に `clickhouse-password` / `postgres-password` /
    `redis-password` / `better-auth-secret` を英数字のランダム(32 文字くらい)で入れる。
    入れるまで Pod は `CreateContainerConfigError` で待つ(壊れてはいない)
 2. <https://rt.doany.io> を開き、最初のアカウントを作る(これが管理者)

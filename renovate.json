@@ -160,10 +160,9 @@
             ]
         },
         {
-            "description": "argo-cd と infisical の chart と、その値で上書きしているイメージは自動マージしない(壊れると直す道具ごと止まる)。当てるのは render.sh → apply-config → upgrade-k8s。",
+            "description": "argo-cd の chart と、その値で上書きしているイメージは自動マージしない(壊れると直す道具ごと止まる)。当てるのは render.sh → apply-config → upgrade-k8s。",
             "matchFileNames": [
-                "bootstrap/argocd-values.sops.yaml",
-                "bootstrap/infisical-values.sops.yaml"
+                "bootstrap/argocd-values.sops.yaml"
             ],
             "groupName": "bootstrap charts",
             "groupSlug": "bootstrap-charts",

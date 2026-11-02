@@ -17,8 +17,6 @@ ARG TALOSCTL_VERSION=v1.15.0-alpha.2
 ARG HELM_VERSION=v4.3.1
 # renovate: datasource=github-releases depName=getsops/sops
 ARG SOPS_VERSION=v3.13.3
-# renovate: datasource=github-releases depName=Infisical/cli
-ARG INFISICAL_VERSION=v0.44.11
 # renovate: datasource=github-releases depName=restic/restic
 ARG RESTIC_VERSION=v0.19.1
 # renovate: datasource=github-releases depName=pulumi/pulumi
@@ -45,8 +43,6 @@ RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     ok "https://get.helm.sh/helm-${HELM_VERSION}-linux-$a.tar.gz.sha256sum" "helm-${HELM_VERSION}-linux-$a.tar.gz"; \
     get "$gh/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.$a"; \
     ok "$gh/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.checksums.txt" "sops-${SOPS_VERSION}.linux.$a"; \
-    get "$gh/Infisical/cli/releases/download/${INFISICAL_VERSION}/cli_${INFISICAL_VERSION#v}_linux_$a.tar.gz"; \
-    ok "$gh/Infisical/cli/releases/download/${INFISICAL_VERSION}/checksums.txt" "cli_${INFISICAL_VERSION#v}_linux_$a.tar.gz"; \
     get "$gh/restic/restic/releases/download/${RESTIC_VERSION}/restic_${RESTIC_VERSION#v}_linux_$a.bz2"; \
     ok "$gh/restic/restic/releases/download/${RESTIC_VERSION}/SHA256SUMS" "restic_${RESTIC_VERSION#v}_linux_$a.bz2"; \
     get "$gh/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION}-linux-$p.tar.gz"; \
@@ -57,7 +53,6 @@ RUN a=$TARGETARCH; p=$a; [ "$a" = amd64 ] && p=x64; \
     install -m 755 "talosctl-linux-$a" /usr/local/libexec/gitops/talosctl; \
     tar -xzf "helm-${HELM_VERSION}-linux-$a.tar.gz" --strip-components=1 -C /usr/local/libexec/gitops "linux-$a/helm"; \
     install -m 755 "sops-${SOPS_VERSION}.linux.$a" /usr/local/bin/sops; \
-    tar -xzf "cli_${INFISICAL_VERSION#v}_linux_$a.tar.gz" -C /usr/local/bin infisical; \
     bunzip2 -c "restic_${RESTIC_VERSION#v}_linux_$a.bz2" > /usr/local/bin/restic; \
     # Pulumi は本体と bun・Node.js の言語ホストだけ(bun が無いと pulumi install で SDK を作れない)
     tar -xzf "pulumi-${PULUMI_VERSION}-linux-$p.tar.gz" --strip-components=1 -C /usr/local/bin pulumi/pulumi pulumi/pulumi-language-bun pulumi/pulumi-language-nodejs; \

@@ -1,6 +1,6 @@
 # bootstrap/render.sh の machine config を runner の QEMU(KVM)で起動し、クラスタが立つところまで見る。
 # 秘密はゼロ(使い捨てとダミー)。外に副作用を出さない: ArgoCD の extraObjects と通知先、
-# 本物の ClusterIssuer(自己署名に差し替え)、infisical の SMTP を抜く。手順の元は bootstrap/talos.md。
+# 本物の ClusterIssuer(自己署名に差し替え)を抜く。手順の元は bootstrap/talos.md。
 name: talos boot
 
 on:
@@ -113,32 +113,17 @@ jobs:
           yq -I4 'del(.sops) | del(.notifications.notifiers) | del(.githubAppRepoCreds.stringData.githubAppPrivateKey)
             | .extraObjects = []' \
             bootstrap/argocd-values.sops.yaml > /tmp/argocd-values.yaml
-          # infisical: 1 つめ(chart の値)はパスワードをダミーにして SMTP の env を抜く。2 つめ(Secret)は作り直す
-          # (ENCRYPTION_KEY は 16 バイトの hex でないと infisical が起動しない)。render.sh は `---` で分ける
-          {
-            yq -I4 'select(document_index == 0) | del(.sops)
-              | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"
-              | .infisical.extraEnv |= map(select(.name | test("^SMTP_") | not))' \
-              bootstrap/infisical-values.sops.yaml
-            echo ---
-            yq -I4 "select(document_index == 1) | del(.sops)
-              | del(.stringData.CLIENT_ID_GITHUB_LOGIN) | del(.stringData.CLIENT_SECRET_GITHUB_LOGIN)
-              | .stringData.ENCRYPTION_KEY = \"$(openssl rand -hex 16)\"
-              | .stringData.AUTH_SECRET = \"$(openssl rand -base64 32)\"
-              | .stringData.TELEMETRY_ENABLED = \"false\"" \
-              bootstrap/infisical-values.sops.yaml
-          } > /tmp/infisical-values.yaml
           # cert-manager: 2 つめ(DNS-01 の Secret)のトークンをダミーに
           yq -I4 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
             bootstrap/cert-manager-values.sops.yaml > /tmp/cert-manager-values.yaml
           # sops-age: クラスタの age の鍵はダミー(operator は CI では復号しない。Secret の形だけ見る)
           yq -I4 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "AGE-SECRET-KEY-CI-DUMMY"' \
             bootstrap/sops-age.sops.yaml > /tmp/sops-age.yaml
-          for f in /tmp/controlplane.yaml /tmp/argocd-values.yaml /tmp/infisical-values.yaml /tmp/cert-manager-values.yaml /tmp/sops-age.yaml; do
+          for f in /tmp/controlplane.yaml /tmp/argocd-values.yaml /tmp/cert-manager-values.yaml /tmp/sops-age.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done
           SECRETS=/tmp/secrets.yaml CONTROLPLANE=/tmp/controlplane.yaml \
-            ARGOCD_VALUES=/tmp/argocd-values.yaml INFISICAL_VALUES=/tmp/infisical-values.yaml \
+            ARGOCD_VALUES=/tmp/argocd-values.yaml \
             CERT_MANAGER_VALUES=/tmp/cert-manager-values.yaml SOPS_AGE=/tmp/sops-age.yaml \
             ./bootstrap/render.sh /tmp/out
           talosctl config endpoint 127.0.0.1
@@ -240,9 +225,6 @@ jobs:
           ro argocd deploy/argocd-server
           ro argocd deploy/argocd-repo-server
           ro argocd sts/argocd-application-controller
-          # postgres の PVC は既定の StorageClass(OpenEBS LVM の thin)なので、ここで PV の経路も見ている
-          ro infisical deploy/infisical
-          kubectl -n infisical wait --for=jsonpath='{.status.phase}'=Bound pvc --all --timeout=1m
           # 上の一覧に無い Pod の取りこぼし止め
           for i in $(seq 24); do
             BAD=$(kubectl get pods -A --no-headers --field-selector=status.phase!=Running,status.phase!=Succeeded)
@@ -464,10 +446,9 @@ jobs:
             until kubectl wait --for=condition=Ready "pod/$p" --timeout=10s >/dev/null 2>&1; do sleep 5; done
             [ "$(kubectl exec "$p" -- cat /data/marker)" = hello ] || fail "再起動のあと $p の中身が無い"
           done
-          kubectl -n infisical rollout status statefulset/postgresql --timeout=5m
           kubectl -n kube-system rollout status ds/lvm-thinpool --timeout=3m
           kubectl -n kube-system logs ds/lvm-thinpool -c pool
-          echo "  再起動のあとも t-src・t-dst・infisical の Postgres が上がった"
+          echo "  再起動のあとも t-src・t-dst が上がった"
 
       - name: 失敗したときの様子
         if: failure()

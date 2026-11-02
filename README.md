@@ -18,32 +18,35 @@
 | | |
 | --- | --- |
 | `deploy/` | Argo CD が再帰的に同期するアプリのマニフェスト。**`_` で始まるディレクトリは同期しない** (動かしていないものの置き場。下の「動かしていないもの」) |
-| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層。**ここにあるものは全部 machine config に載る**([render.sh](bootstrap/render.sh) が描く)。Talos の設定([talos.sops.yaml](bootstrap/talos.sops.yaml))、Helm で入れるもの(Cilium・Argo CD 本体・Infisical・cert-manager)、RBAC。PR ごとに [talos-boot](.github/workflows/talos-boot.yml) が VM で起動して確かめる |
+| [`bootstrap/`](bootstrap/) | クラスタそのものを組む層。**ここにあるものは全部 machine config に載る**([render.sh](bootstrap/render.sh) が描く)。Talos の設定([talos.sops.yaml](bootstrap/talos.sops.yaml))、Helm で入れるもの(Cilium・Argo CD 本体・cert-manager・OpenEBS LVM)、RBAC。PR ごとに [talos-boot](.github/workflows/talos-boot.yml) が VM で起動して確かめる |
 | [`pulumi/`](pulumi/) | Cloudflare(R2・DNS・ゾーンの設定・通知)・Entra(リダイレクト URI・CI の信頼の設定)・NetBird の設定を Pulumi で持つ。**PR で差分がコメントされ、main に入ると当たる** |
 | [`mado/`](mado/) | **`main` が落ちたときの入口**。JCOM 側の PC(10.10.0.2)で [mado](https://github.com/danything/mado)(OIDC でログインしてブラウザから RDP する exe)を動かす(`md.doany.io`。クラスタの外) |
 | [`recovery/`](recovery/) | **まっさらから建て直す入口**(手順・PV を戻す道具・暗号化した鍵)。git と restic だけで戻す |
-| [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・infisical・kubectl・talosctl など)はコンテナで動かす**。`tools/t.ps1 <コマンド>`(Windows の WSL コンテナ。wslc-compose)。手元にコマンドは入れない |
+| [`tools/`](tools/) + `compose.yaml` | **手元の運用のコマンド(cf・sops・kubectl・talosctl など)はコンテナで動かす**。`tools/t.ps1 <コマンド>`(Windows の WSL コンテナ。wslc-compose)。手元にコマンドは入れない |
 | [`docs/`](docs/) | [決定の記録](docs/decisions.md)、[Entra ID の認可](docs/entra.md)、[家のルーター](docs/router.md)、[Cloudflare の API トークン](docs/cloudflare-tokens.md) |
 | [`ROADMAP.md`](ROADMAP.md) | やることと進捗(なぜそうしたかは `docs/decisions.md`) |
 | `deploy/argocd.yaml` | このリポジトリ自身の Application 定義(他のリポジトリと同じ場所) |
-| [`.sops.yaml`](.sops.yaml) | `bootstrap/*.sops.yaml` を SOPS(age)で暗号化する規則 |
+| [`.sops.yaml`](.sops.yaml) | `*.sops.yaml` を SOPS(age)で暗号化する規則 |
 
 ## 秘密の扱い
 
-**アプリの秘密は Infisical**(https://il.doany.io、このクラスタでセルフホスト)にあり、平文も暗号文も git には入らない。
-各アプリの `*-secrets.yaml` は `InfisicalSecret` で、フォルダは `/<namespace>/<Secret 名>`、シークレット名が
-そのまま Secret のキーになる。値を変えるのは Infisical の UI だけでよく、`secrets.infisical.com/auto-reload: "true"`
-の注釈がある Deployment は Pod ごと入れ替わる。詳しくは [`bootstrap/README.md`](bootstrap/README.md)。
+**秘密は全部 SOPS + age で暗号化して git に置く。** 平文は git に入らない。
 
-**Infisical より下の層だけは Infisical から取れない**ので、`bootstrap/*.sops.yaml`(クラスタの CA、Infisical 自身の鍵、
-Argo CD が git を読む GitHub App 鍵、cert-manager の Cloudflare トークン、fj.doany.io の資格情報など)は **SOPS + age** で暗号化してある。
-鍵は [`recovery/sops-age.key.age`](recovery/)(バックアップの `env.age` と同じパスフレーズ)。
-当てるのは machine config(`bootstrap/render.sh` が復号して載せる)。書き方は [`bootstrap/README.md`](bootstrap/README.md)。
+- **アプリの秘密**は各アプリの `deploy/secrets.sops.yaml`(このリポジトリでは `deploy/<アプリ>/secrets.sops.yaml`)の `SopsSecret`。
+  クラスタの中の [sops-secrets-operator](deploy/sops-secrets-operator/) が復号して `Secret` にし、
+  `reloader.stakater.com/auto: "true"` の注釈がある workload は [Reloader](deploy/reloader/) が入れ替える。
+  クラスタの鍵(`bootstrap/sops-age.sops.yaml`)と管理者の鍵の両方で暗号化する([`.sops.yaml`](.sops.yaml))。
+- **クラスタを組む層の秘密**(`bootstrap/*.sops.yaml`。クラスタの CA、Argo CD が git を読む GitHub App 鍵、
+  cert-manager の Cloudflare トークン、fj.doany.io の資格情報、クラスタの age の鍵)は machine config に載る(`bootstrap/render.sh` が復号して載せる)。
+  書き方は [`bootstrap/README.md`](bootstrap/README.md)。
+
+管理者の鍵は [`recovery/sops-age.key.age`](recovery/)(バックアップの `env.age` と同じパスフレーズ)。
+2026-11-02 まではアプリの秘密をセルフホストの Infisical に置いていた(やめた理由は [docs/decisions.md](docs/decisions.md)「秘密は SOPS で git に置く」)。
 
 ```shell
 # 鍵はリポジトリの .home/(git に入らない)に置く。コマンドは tools/t.ps1 で動かす(tools/README.md)
 tools/t.ps1 sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
-tools/t.ps1 sops -d bootstrap/infisical-values.sops.yaml      # 中を見る(画面に出すと平文になるので注意)
+tools/t.ps1 sops edit deploy/matrix/secrets.sops.yaml      # 直して push する(画面に出すと平文になるので -d で見るときは注意)
 ```
 
 ## ホスト名の付け方
@@ -53,7 +56,7 @@ tools/t.ps1 sops -d bootstrap/infisical-values.sops.yaml      # 中を見る(画
 | アプリ名 | 規則 | 結果 |
 | --- | --- | --- |
 | 2 語以上 | **それぞれの頭文字** | NetBird(Net + Bird)→ `nb`、Argo CD → `ac`、AdGuard Home → `ah` |
-| 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、infisical → `il`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
+| 1 語 | **頭文字と最後の子音** | denpa → `dp`、hubble → `hl`、tamasagashi → `ts`、yosegaki → `yk`、proxy → `px` |
 
 **1 文字で足りていたものはそのまま。** 先に取ったもの勝ちで、`a`(auth)・`d`(AdGuard)・
 `h`(headlamp)・`l`(lgtm)・`w`(worklog)・`x`(xool)・`y`(yuzuriha)・`m`(matrix)・`e`(element)は 1 文字で置いてある。
@@ -82,7 +85,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`netbird/`](deploy/netbird/) | NetBird (VPN。combined コンテナ + 内蔵 IdP) |
 | [`3proxy/`](deploy/3proxy/) | 3proxy (国内IP経由の HTTPS フォワードプロキシ) |
 | [`volsync/`](deploy/volsync/)・[`backup/`](deploy/backup/) | バックアップ(VolSync で PVC のスナップショットを restic → Cloudflare R2)と、その見張り・etcd のスナップショット |
-| [`infisical/`](deploy/infisical/) | 秘密の配布。本体は `bootstrap/` にあり、ここには公開経路と operator と即時反映のブリッジと SMTP のパスワード |
+| [`sops-secrets-operator/`](deploy/sops-secrets-operator/)・[`reloader/`](deploy/reloader/) | 秘密の配布(git の `SopsSecret` を復号して Secret に)と、Secret が変わったときの Pod の入れ替え |
 | [`cluster/`](deploy/cluster/) | metrics-server(Talos に無い。`kubectl top` と各 UI の使用量表示) |
 | [`smtp-relay/`](deploy/smtp-relay/) | メールの中継。アプリの SMTP を受けて Microsoft 365 へ Graph で送る(Exchange Online の SMTP AUTH の Basic 認証の廃止に備えて)。**送る側の設定は [deploy/smtp-relay/README.md](deploy/smtp-relay/README.md)** |
 | [`renovate/`](deploy/renovate/) | Renovate(GitHub の danything・5ym と Forgejo の doa の全リポジトリの依存を上げる PR)。CronJob で 15 分おき。**秘密の入れ方は [deploy/renovate/README.md](deploy/renovate/README.md)** |

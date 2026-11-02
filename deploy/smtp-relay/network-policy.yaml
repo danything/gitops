@@ -12,8 +12,6 @@ spec:
   ingress:
     - fromEndpoints:
         - matchLabels:
-            k8s:io.kubernetes.pod.namespace: infisical
-        - matchLabels:
             k8s:io.kubernetes.pod.namespace: blog
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: todoroku

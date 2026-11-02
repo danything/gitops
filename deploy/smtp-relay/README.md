@@ -7,13 +7,13 @@
 
 Exchange Online の SMTP AUTH の Basic 認証(ユーザー名とパスワード)は、2026-12 末に既定で無効、2027 年後半に廃止日が発表される。
 `info@doany.io` は **Exchange Online Kiosk** で、Kiosk は SMTP の OAuth にも対応していないとされるので、
-SMTP AUTH をやめて **Graph の `sendMail`** で送る。Infisical のように OAuth を話せないアプリもあるので、アプリごとに直さず中継を 1 つ置く。
+SMTP AUTH をやめて **Graph の `sendMail`** で送る。OAuth を話せないアプリもある(当時の Infisical など)ので、アプリごとに直さず中継を 1 つ置く。
 
 ## 仕組み
 
 - 中継は**秘密を持たない**。アプリが SMTP AUTH で渡す
   - ユーザー名: `22ac977d-b140-4dc8-8150-90d645d3475b@<クライアント ID>`(テナント ID @ Entra のアプリのクライアント ID)
-  - パスワード: そのアプリのクライアントシークレット(Infisical)
+  - パスワード: そのアプリのクライアントシークレット(送る側の SopsSecret)
   
   で中継がトークンを取り、**差出人(From)のメールボックス**から `sendMail` する
 - Entra のアプリ「smtp-relay」は Graph の `Mail.Send` をテナント全体には持たない。**Exchange の RBAC for Applications で、
@@ -26,12 +26,12 @@ SMTP AUTH をやめて **Graph の `sendMail`** で送る。Infisical のよう�
 | | 値 |
 | --- | --- |
 | ホスト・ポート | `smtp-relay.smtp-relay.svc` / `587` |
-| TLS | なし(STARTTLS もしない。Infisical は `SMTP_REQUIRE_TLS=false`、todoroku は `SMTP_STARTTLS=false`) |
+| TLS | なし(STARTTLS もしない。todoroku は `SMTP_STARTTLS=false`) |
 | ユーザー名 | `22ac977d-b140-4dc8-8150-90d645d3475b@fd45a316-97cc-4480-8da8-487109403520` |
-| パスワード | Infisical の `/infisical/infisical-smtp` の `SMTP_PASSWORD`(Infisical と todoroku が使う)、`/yosegaki/yosegaki-secrets` の `smtp-password` |
+| パスワード | 送る側のリポジトリの `deploy/secrets.sops.yaml`(todoroku は `todoroku-smtp` の `SMTP_PASSWORD`、yosegaki は `yosegaki-secrets` の `smtp-password`) |
 | 差出人 | `info@doany.io`(ほかのアドレスは Exchange が拒む) |
 
-使っているのは Infisical(`bootstrap/infisical-values.sops.yaml`)、yosegaki(blog のリポジトリ)、todoroku(Forgejo の doa/todoroku)。
+使っているのは yosegaki(blog のリポジトリ)と todoroku(Forgejo の doa/todoroku)。Infisical も使っていた(2026-11-02 にやめた)。
 **送る側を足すときは network-policy.yaml にその namespace を足す。**
 
 ## Entra のアプリと Exchange の絞り込み(1 回だけ。済み)
@@ -51,7 +51,7 @@ SMTP AUTH をやめて **Graph の `sendMail`** で送る。Infisical のよう�
    Test-ServicePrincipalAuthorization -Identity fd45a316-97cc-4480-8da8-487109403520 -Resource info@doany.io   # InScope が True
    ```
 
-3. **クライアントシークレットは Entra の画面で作り**(期限 24 か月)、値を Infisical の上の 2 か所に入れる。あとから取り出せない。
+3. **クライアントシークレットは Entra の画面で作り**(期限 24 か月)、値を上の 2 か所(送る側の secrets.sops.yaml)に入れる。あとから取り出せない。
    期限は `pulumi.yml` の expiry が他のアプリ登録と一緒に知らせる。作り直したら 2 か所を書き換え、送る側を rollout restart する
 
 ## 確かめ方

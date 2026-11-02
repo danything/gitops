@@ -5,7 +5,7 @@
 // 代わりに Exchange の RBAC for Applications で、送れるメールボックスを info@doany.io だけに絞る(deploy/smtp-relay/README.md)。
 // それは Exchange の PowerShell でしかできないので Pulumi の外。
 //
-// クライアントシークレットも持たない(手元から state を読めず、Infisical に渡す道が無い)。画面で作って Infisical に入れる。
+// クライアントシークレットも持たない(手元から state を読めず、送る側に渡す道が無い)。画面で作って送る側の SOPS のファイルに入れる。
 // 期限は pulumi.yml の expiry が知らせる。
 
 import * as azuread from "@pulumi/azuread";

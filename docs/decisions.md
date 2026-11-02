@@ -9,7 +9,7 @@
 (手順は [../recovery/README.md](../recovery/README.md))。**ツール選定は PV データの部分にしか効かない。**
 
 変えないと決めてあるもの: restic のリポジトリ形式・パスフレーズ・バケット、StorageClass の名前 `local-path`
-(中身は Z440 で OpenEBS LVM に替えた。名前は各リポジトリの PVC が名指ししている)、Infisical のデータと `ENCRYPTION_KEY`、ArgoCD + ApplicationSet + 各 repo の `deploy/argocd.yaml`、
+(中身は Z440 で OpenEBS LVM に替えた。名前は各リポジトリの PVC が名指ししている)、ArgoCD + ApplicationSet + 各 repo の `deploy/argocd.yaml`、
 **復元手順は公開で秘密を含まない**という性質。
 
 ## bond0 の MAC を固定する
@@ -22,7 +22,7 @@
 判断基準は、(1) in-cluster で動かせること、(2) **手元からも同じリポジトリを同じコマンドで読める**こと、
 (3) 復元の依存物が「バイナリ 1 つ + 秘密 1 組」で済むこと、の 3 つ。
 
-**結論: restic。** 手動でも `restic restore` 1 本で戻せ、手元の restic CLI で同じリポジトリを読める(Infisical はそうやって戻す)。
+**結論: restic。** 手動でも `restic restore` 1 本で戻せ、手元の restic CLI で同じリポジトリを読める。
 kopia は Velero 経由だと独自のレイアウトになり、Velero は git からの再構築と役割が被り、borg などは in-cluster に持っていけない。
 取るのは VolSync(PVC ごとにスナップショットから。下の「ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする」。2026-11 までは k8up)。
 
@@ -57,7 +57,7 @@ diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を�
 
 | | 何を置くか | 理由 |
 | --- | --- | --- |
-| **パスワードマネージャ**(正本) | パスフレーズ + **何を開ける鍵かと復元手順の URL** | 携帯から取れる。**クラスタの Entra とは独立した認証**であること(Infisical は循環するので不可) |
+| **パスワードマネージャ**(正本) | パスフレーズ + **何を開ける鍵かと復元手順の URL** | 携帯から取れる。**クラスタの Entra とは独立した認証**であること(クラスタの中のものは循環するので不可) |
 | **紙、2 か所**(1 つは家の外) | 同上 + `recovery/*.age` を base64 で印刷(19 行) | 火事・盗難・端末紛失、GitHub が読めない場合に耐える |
 | **記憶** | パスフレーズ | 出先で全部が閉じている状況を消す。ただし単独では信用しない |
 
@@ -76,23 +76,24 @@ diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を�
 ## Talos の起動順序をどう組むか
 
 Talos には helm-controller が無く、inlineManifests は Helm を実行できないので、手元の `render.sh` が `helm template` して載せる。
-**ArgoCD は Infisical 無しで起動する。** `$argocd-oidc:client-secret` のような参照は Secret が無いと警告して文字列のまま返す
+**ArgoCD はアプリの秘密無しで起動する。** `$argocd-oidc:client-secret` のような参照は Secret が無いと警告して文字列のまま返す
 (`util/settings/settings.go`)ので、SSO が効かないだけで同期は動く。順序は
-**Cilium → ArgoCD → ArgoCD が Infisical を入れる → operator が Secret を作る → SSO が効く**。
+**Cilium → ArgoCD → ArgoCD が sops-secrets-operator を入れる → operator が SopsSecret から Secret を作る → SSO が効く**
+(operator の age の鍵は machine config が入れる。下の「秘密は SOPS で git に置く」)。
 その窓の間は `admin.enabled: false` なので UI に誰も入れない(要るなら一時的に戻す。`kubectl` で見る)。
 
 ### 層の分け方
 
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
-| **machine config** | **`bootstrap/` の全部**(`argocd-repos.yaml` を除く)。inline が 10(cilium / lvm-localpv / `storage.yaml` / `apiserver-rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 3 つ)、URL で 10 個(CRD が gateway-api / argocd ×3 / cert-manager / VolumeSnapshot ×3、snapshot-controller ×2) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
-| **ArgoCD** | `deploy/`。`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、本体が machine config に居る部品の平文のマニフェストもここ(2026-10 までは `bootstrap/` に混ぜて Application `bootstrap` が当てていた)。**infisical の本体は来ない**(下の「infisical だけは ArgoCD に移せない」) | — |
+| **machine config** | **`bootstrap/` の全部**(`argocd-repos.yaml` を除く)。inline が 8(cilium / lvm-localpv / `storage.yaml` / `apiserver-rbac.yaml` / argocd / cert-manager / SOPS の Secret 2 つ)、URL で 10 個(CRD が gateway-api / argocd ×3 / cert-manager / VolumeSnapshot ×3、snapshot-controller ×2) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
+| **ArgoCD** | `deploy/`。`ClusterIssuer`・Gateway・auth・`SopsSecret` など、本体が machine config に居る部品の平文(と SOPS 済み)のマニフェストもここ(2026-10 までは `bootstrap/` に混ぜて Application `bootstrap` が当てていた) | — |
 
 - **CRD だけ URL で渡すのは大きさの都合。** 埋めると machine config が 341 KB → 4 MB を超える。
   `KubeExternalManifestConfig` は Talos がそのために用意している入口([bootstrap/render.sh](../bootstrap/render.sh))
 - **平文の残りは ArgoCD。** 鶏と卵にならない ──
   ArgoCD が動くのに要るもの(本体・repo の資格情報・入口の `apps`)は全部 machine config にあり、この層に頼っていない。
-  この層が要る CRD も machine config が入れる(`InfisicalSecret` の CRD だけ `deploy/` から来るので、最初の何回かは retry)。
+  この層が要る CRD も machine config が入れる(`SopsSecret` の CRD だけ `deploy/` から来るので、最初の何回かは retry)。
 - **SOPS の Secret を machine config に入れる。** 復号鍵はクラスタにも CI にも渡さないので、ArgoCD からは当てられない。
   machine config の入力(`bootstrap/talos-secrets.sops.yaml`)もクラスタ CA の秘密鍵を含む SOPS なので信頼水準は変わらず、起動時点で存在する
 - **Helm を実行する場所はクラスタの外(手元の生成時)だけ。** Cilium は CNI なので inlineManifests 以外に置きようがなく、
@@ -110,9 +111,9 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 bootstrap のあとに `helm install` する案は、再構築のたびに「CNI が無いので何も動かない」状態での手作業が増えるので採らない。
 
 **描いた結果はコミットしない。** 描き出しを git に置いて Renovate に描き直させる案は採らない:
-- **infisical の描き出しは秘密を含む**(下の「infisical だけは ArgoCD に移せない」)。ここだけは手元で描くしかなく、描く道具は結局残る
+- **描き出しは秘密を含む**(クラスタの CA と SOPS の Secret 2 つ)。ここだけは手元で描くしかなく、描く道具は結局残る
 - 描き出しは machine config で 980 行・310 KB(1 行が長い)。版を上げるたびにその差分が積もる
-- 代わりに **描くたびに変わる値を潰した**(Hubble の証明書・infisical の `postgres-password`・`updatedAt`)。
+- 代わりに **描くたびに変わる値を潰した**(Hubble の証明書)。
   同じ入力なら生成物はバイト単位で同じなので、`apply-config --dry-run` の差分がそのまま「何が変わるか」になる
 
 **起動に要らないものは ArgoCD に置く**(metrics-server は `deploy/cluster/metrics-server.yaml`。版上げが `upgrade-k8s` 無しで済む)。cert-manager は移さない ── CRD を machine config から外すと Talos の prune が CRD を消しうる(消えれば
@@ -193,20 +194,21 @@ Gateway API の session persistence は experimental チャネル限定、Cilium
 
 - リソース名に時刻や乱数を入れない(GitOps は同期のたびに別物として作り直す)
 - CRD は `templates/` ではなく `crds/` に置く(`templates/` だとアンインストールで CR が全部巻き添えになる)
-- 全ワークロードに `podAnnotations` と `resources` を出す(注釈は Infisical・ArgoCD が振る舞いを足す口)
+- 全ワークロードに `podAnnotations` と `resources` を出す(注釈は Reloader・ArgoCD が振る舞いを足す口)
 - patch で中身を入れ替えない(chart の patch 更新で Dragonfly が Valkey に替わり、values のチューニングが黙って無効になった)
 - 入口(`Ingress` / `httpRoute`)を既定で作らない
 
 **別のリリース名で入れ直すと別物として作り直しになる**(名前を切り詰める chart がある)。入れ方を替えるときは `helm template` と live を先に突き合わせる。
 
-### infisical だけは ArgoCD に移せない
+## 秘密は SOPS で git に置く(2026-11-02 に Infisical から替えた)
 
-**理由は鶏卵ではなく chart の作り。** `infisical-standalone` 1.10.0 は `DB_CONNECTION_URI` と `REDIS_URL` を
-`.Values.*.auth.password` から **Deployment の平文 env に焼き込む**(`templates/_helpers.tpl`)ので、平文の Application に値を書けない。
-`postgresql.useExistingPostgresSecret` は同梱の Postgres と併用すると URI が 2 回描かれて平文が勝ち、Redis には逃げ道が無い。
-`*.auth.existingSecret` は subchart にしか効かず、本体は既定値で URI を組んで繋がらなくなる(`helm template` で確認)。
-**なので `bootstrap/` に残し、machine config の `inlineManifests` に載せる。** `render.sh` が SOPS 済みの値を復号して `helm template` に渡すので、
-平文は machine config の中にしか出ない。
+**アプリの秘密は各 `deploy/<アプリ>/secrets.sops.yaml`(`SopsSecret`)に暗号化して置き、クラスタの中の
+[sops-secrets-operator](../deploy/sops-secrets-operator/) が復号して `Secret` にする。** Pod の入れ替えは [Reloader](../deploy/reloader/)。
+暗号化はクラスタの鍵と管理者の鍵の 2 つ([../.sops.yaml](../.sops.yaml))。クラスタの鍵は `bootstrap/sops-age.sops.yaml` で machine config が入れる。
+
+それまではセルフホストの Infisical(chart は machine config、operator は `deploy/infisical/`)が持っていた。やめた理由:
+秘密の置き場がクラスタの中にあるので、建て直しでは Infisical の DB と `ENCRYPTION_KEY`・Kubernetes auth の CA を先に手で戻す必要があり、
+戻るまで他の全部の Secret(VolSync のものも)が来なかった。SOPS なら秘密は git にあり、復元で秘密のために何もしなくてよい。
 
 ## PT3 チューナー
 
@@ -224,7 +226,7 @@ extension は `earth_pt3` を blacklist して配るので、`bootstrap/talos.so
 
 共有プリセット `5ym/repo-config` で、**パッチとマイナーは 1 つの PR にまとめて自動マージ、メジャーと Helm chart は人が見る**
 (chart はパッチ更新でも中身が入れ替わることがある)。
-PostgreSQL は 17 の線に固定(メジャーでデータディレクトリの互換が切れ、dump / restore が要る)、argo-cd と infisical-standalone の chart は自動マージしない。
+PostgreSQL は 17 の線に固定(メジャーでデータディレクトリの互換が切れ、dump / restore が要る)、argo-cd の chart は自動マージしない。
 理由はそれぞれ [../renovate.json](../renovate.json) の `description`。Renovate 自体は [deploy/renovate/](../deploy/renovate/) の CronJob で動く。
 
 ## PVC を守る仕掛けをやめた
@@ -301,7 +303,7 @@ StorageClass を変えた PVC を作り直すだけで中身が埋まるので�
 - **snapshot-controller と VolumeSnapshot の CRD は chart の同梱を使わず**、external-snapshotter のタグの URL で入れる(版は `talos.sops.yaml` の先頭)。
   クラスタに 1 つのもので、VolSync も使う
 - **talos-boot が確かめていること**: VG と thin プール(VG の 9 割)、PVC が xfs で bind、VolumeSnapshot が readyToUse、
-  スナップショットから作った PVC に中身が戻る、再起動のあとも PV と infisical の Postgres が戻る
+  スナップショットから作った PVC に中身が戻る、再起動のあとも PV が戻る
 
 local-path から変わったこと: **PVC の requests が本当の上限になった**(local-path はディスクの残り全部が使えた。
 中身が PVC より大きいと populator は埋められない)、**新しい PVC の直下が root の 0755**(local-path は 0777。root 以外で書くアプリは `fsGroup` が要る)。
@@ -358,7 +360,7 @@ ExternalDNS は HTTPRoute の注釈だけで決まり、自分が作ったレコ
 SMTP AUTH の Basic 認証は 2026-12 末に既定で無効になる。移る先の候補は OAuth(XOAUTH2)・Graph の `sendMail`・IP で許すコネクタ。
 
 - **XOAUTH2 は使えない。** `info@doany.io` は Exchange Online Kiosk で、Kiosk は SMTP の OAuth に対応していないとされる。
-  Infisical はそもそも SMTP のユーザー名とパスワードしか話せない
+  Infisical(2026-11-02 にやめた)はそもそも SMTP のユーザー名とパスワードしか話せなかった
 - **コネクタ(IP で許す)は家の IP が固定でないので筋が悪い**
 - したがって **Graph の `sendMail`**。アプリごとに Graph を話させず、普通の SMTP を受けて Graph に渡す中継
   ([smtp-oauth-relay](https://github.com/JustinIven/smtp-oauth-relay)、`deploy/smtp-relay/`)を 1 つ置き、3 つのアプリは向け先だけ替えた

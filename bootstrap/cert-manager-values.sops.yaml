@@ -22,7 +22,7 @@ sops:
             IyM3TTxcSYEkM35DpB/oe7wnfrOyeDuxh5PLzedVyywkmYZQblInSQ==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|CF_DNS_API_TOKEN)$
     lastmodified: "2026-10-30T15:08:34Z"
     mac: ENC[AES256_GCM,data:lwkLBKlc/fbnJvJYCNC+gxvoJrR58uYugPX/0E5rX6X5NtLwjl2d89xi06nhhrpcIpunpWESWA6d/2myhrIOJTo9NUGxgbJbQXsZHbnRvV07c7oR2a29W9R3rtKKeJTl9IGc5GSoyo4sJ4PygoaHYzQmRgN8K5GVAI7BNJswmd4=,iv:SOqIQsANQ/8+/0jG4njrGzSDRivPyRQUAGwuUxQUpVM=,tag:e0fbD5/Gk4Rhyj2hwBvllQ==,type:str]
     mac_only_encrypted: true
@@ -47,7 +47,7 @@ sops:
             IyM3TTxcSYEkM35DpB/oe7wnfrOyeDuxh5PLzedVyywkmYZQblInSQ==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
-    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
+    encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|CF_DNS_API_TOKEN)$
     lastmodified: "2026-10-30T15:08:34Z"
     mac: ENC[AES256_GCM,data:lwkLBKlc/fbnJvJYCNC+gxvoJrR58uYugPX/0E5rX6X5NtLwjl2d89xi06nhhrpcIpunpWESWA6d/2myhrIOJTo9NUGxgbJbQXsZHbnRvV07c7oR2a29W9R3rtKKeJTl9IGc5GSoyo4sJ4PygoaHYzQmRgN8K5GVAI7BNJswmd4=,iv:SOqIQsANQ/8+/0jG4njrGzSDRivPyRQUAGwuUxQUpVM=,tag:e0fbD5/Gk4Rhyj2hwBvllQ==,type:str]
     mac_only_encrypted: true

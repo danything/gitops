@@ -6,7 +6,7 @@
 #   - Runner 側: 下の start.sh が同じ秘密から uuid / token を出す。uuid は秘密の先頭 16 文字のバイト列を
 #     そのまま UUID にしたもの、token は秘密そのもの(Forgejo の models/actions/forgejo.go の RegisterRunner、
 #     runner の create-runner-file.go の uuidFromSecret と同じ。create-runner-file は v13 で非推奨)
-# 秘密は Infisical の /forgejo/forgejo-runner に runner-secret で入れる(forgejo-secrets.yaml)。
+# 秘密は secrets.sops.yaml の forgejo-runner に runner-secret で入れる。
 # 入るまで runner コンテナは「待っている」とログに出して止まっている(落ちない)。
 #
 # 設定ファイルは起動のたびに作る。Pod は状態を持たない(.runner ファイルも PVC も要らない)。
@@ -43,7 +43,7 @@ data:
     #!/bin/sh
     set -eu
     while [ -z "${RUNNER_SECRET:-}" ]; do
-      echo "Infisical の /forgejo/forgejo-runner に runner-secret が入るのを待っている"
+      echo "Secret forgejo-runner に runner-secret が入るのを待っている"
       sleep 60
     done
     # 末尾の改行は Forgejo 側($(cat))と同じく落とす。形が違うと Forgejo 側の登録も失敗する。

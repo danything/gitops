@@ -3,11 +3,10 @@ services:
   tools:
     build: tools
     image: gitops-tools:latest
-    # wslc は host ネットワークに対応していない。ブラウザのログインは t.ps1 が中継する
+    # wslc は host ネットワークに対応していない(ブラウザから戻ってくる方式のログインは使えない)
     working_dir: /repo
     environment:
       # ログインと鍵はリポジトリの .home/(.gitignore 済み)
       - HOME=/repo/.home
-      - INFISICAL_PROFILE
     volumes:
       - .:/repo

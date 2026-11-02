@@ -56,7 +56,7 @@ data:
           - service: "*"
             level: admin
     # 通知のルームごとの webhook。
-    # stateKey は推測されない乱数で、Infisical /matrix/matrix の hook-<部屋>(公開のリポジトリなので git に置かない)。
+    # stateKey は推測されない乱数で、secrets.sops.yaml の matrix の hook-<部屋>(公開のリポジトリなので平文では置かない)。
     # 下の render が HOOK_ で始まる変数(stateKey)を差し替える。
     #
     # 投稿は全部 m.notice(bot の発言)。スマホに通知するかと音は、Element の「bot のメッセージ」の設定と
@@ -134,28 +134,6 @@ data:
         state:
           name: contact
           transformationFunction: *slack
-      # 部屋 server: Infisical の秘密の変更(プロジェクトの webhook。種類は general)
-      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
-        stateKey: ${HOOK_INFISICAL}
-        roomId: "!ieWtDZbr64u72aU4QqKfmZlmHSVvh8HEgR2zF9zhtxw"
-        state:
-          name: infisical
-          transformationFunction: |
-            // Infisical の webhook(種類は general)。どの環境・フォルダの秘密が、誰によって変わったかを 1 行に
-            const p = data.project ?? {};
-            const what = {
-              "secrets.modified": "🔑 秘密が変わった",
-              "secrets.rotation-failed": "🚨 秘密のローテーションに失敗",
-              "secrets.change-request.modified": "📝 変更の申請が動いた",
-              "secrets.access-request.modified": "📝 アクセスの申請が動いた",
-              "honey-token.triggered": "🚨 ハニートークンが使われた",
-            }[data.event] ?? `Infisical: ${data.event ?? "?"}`;
-            const where = [p.environment, p.secretPath].filter(Boolean).join(" ");
-            const who = [p.changedByActorType, p.changedBy].filter(Boolean).join(" ");
-            const by = who ? `(${who})` : "";
-            result = data.event
-              ? { version: "v2", plain: `${what}: \`${where}\`${by}`, msgtype: "m.notice" }
-              : { version: "v2", empty: true };
       # 部屋 server: Cloudflare の通知(証明書・DDoS・オリジン不達など。pulumi/notifications.ts)。本文は text に来る
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_CLOUDFLARE}
@@ -235,8 +213,6 @@ spec:
               valueFrom: {secretKeyRef: {name: matrix, key: hookshot-hs-token}}
             - name: PASSKEY_B64
               valueFrom: {secretKeyRef: {name: matrix, key: hookshot-passkey-b64}}
-            - name: HOOK_INFISICAL
-              valueFrom: {secretKeyRef: {name: matrix, key: hook-infisical}}
             - name: HOOK_CLOUDFLARE
               valueFrom: {secretKeyRef: {name: matrix, key: hook-cloudflare}}
             - name: HOOK_SERVER
