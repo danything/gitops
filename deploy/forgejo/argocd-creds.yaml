@@ -13,8 +13,6 @@ kind: InfisicalSecret
 metadata:
   name: forgejo-repo-creds
   namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -28,11 +26,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /argocd/forgejo-repo-creds
-        recursive: false
   managedKubeSecretReferences:
     - secretName: forgejo-repo-creds
       secretNamespace: argocd
-      creationPolicy: Orphan
       template:
         # includeAllSecrets が無いと template がフォルダの中身を捨てて空の Secret になる(argocd/oidc-secret.yaml と同じ)
         includeAllSecrets: true

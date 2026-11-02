@@ -5,8 +5,6 @@ kind: InfisicalSecret
 metadata:
   name: volsync
   namespace: rybbit
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -20,11 +18,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /backup/backup
-        recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-clickhouse-data
       secretNamespace: rybbit
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/rybbit/clickhouse-data"
@@ -34,7 +30,6 @@ spec:
           AWS_DEFAULT_REGION: auto
     - secretName: volsync-postgres-data
       secretNamespace: rybbit
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/rybbit/postgres-data"
@@ -48,8 +43,6 @@ kind: ReplicationSource
 metadata:
   name: clickhouse-data
   namespace: rybbit
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: clickhouse-data
   trigger:
@@ -65,8 +58,6 @@ kind: ReplicationSource
 metadata:
   name: postgres-data
   namespace: rybbit
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: postgres-data
   trigger:
@@ -84,8 +75,6 @@ kind: ReplicationDestination
 metadata:
   name: clickhouse-data-dst
   namespace: rybbit
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
@@ -107,8 +96,6 @@ kind: ReplicationDestination
 metadata:
   name: postgres-data-dst
   namespace: rybbit
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once

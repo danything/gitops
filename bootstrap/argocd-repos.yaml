@@ -63,6 +63,9 @@ spec:
           - CreateNamespace=true
           # PVC の dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない(ignoreDifferences)
           - RespectIgnoreDifferences=true
+          # CRD を入れるもの(Infisical の operator・VolSync)と同じ同期の中に CR があるので、まっさらなクラスタで
+          # CRD がまだ無くても dry-run で落ちないようにする。リソースごとの注釈は要らない
+          - SkipDryRunOnMissingResource=true
         # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。
         # リポジトリが Namespace を自分で書いているときはそちらが勝つので、そちらにも書く
         managedNamespaceMetadata:
@@ -148,6 +151,9 @@ spec:
           - CreateNamespace=true
           # PVC の dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない(ignoreDifferences)
           - RespectIgnoreDifferences=true
+          # CRD を入れるもの(Infisical の operator・VolSync)と同じ同期の中に CR があるので、まっさらなクラスタで
+          # CRD がまだ無くても dry-run で落ちないようにする。リソースごとの注釈は要らない
+          - SkipDryRunOnMissingResource=true
         # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。
         # リポジトリが Namespace を自分で書いているときはそちらが勝つので、そちらにも書く
         managedNamespaceMetadata:

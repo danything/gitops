@@ -5,8 +5,6 @@ kind: InfisicalSecret
 metadata:
   name: volsync
   namespace: infisical
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -20,11 +18,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /backup/backup
-        recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-data-postgresql-0
       secretNamespace: infisical
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/infisical/data-postgresql-0"
@@ -38,8 +34,6 @@ kind: ReplicationSource
 metadata:
   name: data-postgresql-0
   namespace: infisical
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: data-postgresql-0
   trigger:

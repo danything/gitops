@@ -5,8 +5,6 @@ kind: InfisicalSecret
 metadata:
   name: volsync
   namespace: netbird
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -20,11 +18,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /backup/backup
-        recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-netbird-data
       secretNamespace: netbird
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/netbird/netbird-data"
@@ -34,7 +30,6 @@ spec:
           AWS_DEFAULT_REGION: auto
     - secretName: volsync-netbird-routing-peer-data
       secretNamespace: netbird
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/netbird/netbird-routing-peer-data"
@@ -48,8 +43,6 @@ kind: ReplicationSource
 metadata:
   name: netbird-data
   namespace: netbird
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: netbird-data
   trigger:
@@ -65,8 +58,6 @@ kind: ReplicationSource
 metadata:
   name: netbird-routing-peer-data
   namespace: netbird
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: netbird-routing-peer-data
   trigger:
@@ -84,8 +75,6 @@ kind: ReplicationDestination
 metadata:
   name: netbird-data-dst
   namespace: netbird
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
@@ -107,8 +96,6 @@ kind: ReplicationDestination
 metadata:
   name: netbird-routing-peer-data-dst
   namespace: netbird
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once

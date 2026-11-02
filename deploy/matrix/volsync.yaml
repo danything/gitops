@@ -5,8 +5,6 @@ kind: InfisicalSecret
 metadata:
   name: volsync
   namespace: matrix
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -20,11 +18,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /backup/backup
-        recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-tuwunel-data
       secretNamespace: matrix
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/matrix/tuwunel-data"
@@ -38,8 +34,6 @@ kind: ReplicationSource
 metadata:
   name: tuwunel-data
   namespace: matrix
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: tuwunel-data
   trigger:
@@ -57,8 +51,6 @@ kind: ReplicationDestination
 metadata:
   name: tuwunel-data-dst
   namespace: matrix
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
