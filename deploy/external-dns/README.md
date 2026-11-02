@@ -58,5 +58,5 @@ ExternalDNS は**自分が作ったレコードにしか触れない**。作っ�
 ## 鍵
 
 Cloudflare の Account API token「external-dns (doany.io DNS write)」。権限は **`doany.io` のゾーンだけの Zone Read + DNS Write**。
-Infisical `/external-dns/external-dns` の `cloudflare-api-token`。
+[secrets.sops.yaml](secrets.sops.yaml) の `external-dns` の `cloudflare-api-token`。
 

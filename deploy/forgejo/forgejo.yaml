@@ -97,7 +97,7 @@ data:
       gitea forgejo-cli actions register --secret "$(cat "$s")" --name forgejo-runner --keep-labels >/dev/null ||
         echo "Runner の登録に失敗した。Forgejo はこのまま上げる"
     else
-      echo "Infisical の /forgejo/forgejo-runner に runner-secret が無いので Runner の登録は飛ばす"
+      echo "Secret forgejo-runner に runner-secret が無いので Runner の登録は飛ばす"
     fi
   start.sh: |
     #!/bin/sh
@@ -206,8 +206,7 @@ spec:
             name: forgejo-setup
         - name: tmp
           emptyDir: {}
-        # Infisical の operator はボリュームの Secret も見るので、変わると Pod が入れ替わって登録し直す。
-        # 環境変数にしないのは、operator が init の env を見ないため
+        # Reloader はボリュームの Secret も見るので、変わると Pod が入れ替わって登録し直す。
         - name: runner-secret
           secret:
             secretName: forgejo-runner

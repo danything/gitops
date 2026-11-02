@@ -5,8 +5,7 @@
 
 ```powershell
 tools/t.ps1 cf r2 buckets list
-tools/t.ps1 sops -d bootstrap/infisical-values.sops.yaml
-$env:INFISICAL_PROFILE = 'info@doany.io--doa'; tools/t.ps1 infisical secrets --env prod --path /matrix/matrix
+tools/t.ps1 sops edit deploy/matrix/secrets.sops.yaml
 tools/t.ps1 kubectl get pods -A           # クラスタは読み取り用で繋ぐ
 tools/t.ps1 --admin kubectl apply -f x.yaml  # 書くときだけ管理者(下の「クラスタの資格情報」)
 tools/t.ps1        # 引数なしならシェルに入る
@@ -19,8 +18,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 | 入っているもの | 用途 |
 | --- | --- |
 | cf | Cloudflare(R2 など) |
-| sops / age | `bootstrap/` の暗号化したファイル |
-| infisical | 秘密の読み書き |
+| sops / age | 暗号化したファイル(`*.sops.yaml`。秘密の読み書き) |
 | kubectl / talosctl / helm | クラスタ(資格情報は下の「クラスタの資格情報」) |
 | restic | R2 のバックアップの中身を見る・戻す |
 | pulumi / bun | `pulumi/`(ふだんは CI が流す) |
@@ -32,8 +30,8 @@ tools/t.ps1        # 引数なしならシェルに入る
 
 - [../compose.yaml](../compose.yaml) の `tools` を `wslc-compose run` で動かす(`winget` で入る wslc-compose)。リポジトリは `/repo` に置く
 - **ログインと鍵はリポジトリの `.home/` に置く**(コンテナの中の `HOME`。`.gitignore` 済み)。手元のホームは汚さない。
-  cf のログイン(`.config/cloudflare`)、sops の age 鍵(`.config/sops/age/keys.txt`)、infisical のログイン
-  (`.infisical` と `infisical-keyring`)、pulumi(`.pulumi`)がここに入る。
+  cf のログイン(`.config/cloudflare`)、sops の age 鍵(`.config/sops/age/keys.txt`)、
+  pulumi(`.pulumi`)がここに入る。
   クラスタの資格情報はここにも置かない(下の「クラスタの資格情報」)。
   `.home/` は本人だけが読める ACL にする
 - **`git clean -fdx` で消える**(無視しているファイルも消すため)。age 鍵は `recovery/sops-age.key.age` から戻せる
@@ -77,8 +75,7 @@ tools/t.ps1        # 引数なしならシェルに入る
 ## wslc の制限
 
 - **wslc は host ネットワークに対応していない。** ブラウザのログインは手元の `localhost:<ポート>` に結果を送ってくるので、
-  `infisical login` のときだけ t.ps1 が同じポートで待ち受けて、`wslc exec` の curl でコンテナの中の CLI に渡す。
-  `cf auth login` には対応していない
+  その方式のログイン(`cf auth login` など)はコンテナの中では使えない
 - uid は指定しない(Windows のファイルに持ち主の uid は無い)
 - **標準入力が NUL のところ(Claude Code のツールなど)では、`wslc-compose run` がつなぐ標準入力が無効なハンドルになる。**
   1 秒ほど以上かかるコマンドの出力が落ちて `ERROR_INVALID_HANDLE` で終わるので、`t.ps1` はそのときだけ空のパイプを渡す。
@@ -88,10 +85,10 @@ tools/t.ps1        # 引数なしならシェルに入る
 
 ## 入れるものの確かめ方
 
-**全部、公式が出しているチェックサムと照らし合わせてから入れる**。sops は age 鍵を、infisical は秘密を扱うので、
+**全部、公式が出しているチェックサムと照らし合わせてから入れる**。sops は age 鍵と秘密を扱うので、
 取得元やミラーで差し替えられても気づけるようにする。一致しなければ組み立てごと止まる。
 
-- kubectl・talosctl・helm・sops・infisical・restic・pulumi: 各リリースのチェックサムのファイル
+- kubectl・talosctl・helm・sops・restic・pulumi: 各リリースのチェックサムのファイル
 - age: チェックサムのファイルを出していない(sigsum の証明だけ)ので、Go のモジュールとして `go install` し、
   Go の公開のチェックサムの台帳(sum.golang.org)で確かめる
 - cf: npm の integrity

@@ -6,8 +6,8 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 
 | | 何を | いつ |
 | --- | --- | --- |
-| **machine config**(このディレクトリ) | Talos の設定、Helm で入れるもの(cilium・cert-manager・argocd・infisical・lvm-localpv)、`apiserver-rbac.yaml`、`storage.yaml`、SOPS 済みの Secret 2 つ | `apply.sh` → `upgrade-k8s`([talos.md](talos.md)「当て方」) |
-| **ArgoCD**(`deploy/`) | 平文のマニフェスト(`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など)。2026-10 まではここにあって、Application `bootstrap` が当てていた | main へのマージ(prune / selfHeal 付き) |
+| **machine config**(このディレクトリ) | Talos の設定、Helm で入れるもの(cilium・cert-manager・argocd・lvm-localpv)、`apiserver-rbac.yaml`、`storage.yaml`、SOPS 済みの Secret 2 つ | `apply.sh` → `upgrade-k8s`([talos.md](talos.md)「当て方」) |
+| **ArgoCD**(`deploy/`) | 平文のマニフェスト(`ClusterIssuer`・Gateway・auth など)と SOPS 済みの `SopsSecret`。2026-10 まではここにあって、Application `bootstrap` が当てていた | main へのマージ(prune / selfHeal 付き) |
 
 ## ファイル
 
@@ -21,7 +21,6 @@ ArgoCD はここを見ない(例外は [argocd-repos.yaml](argocd-repos.yaml) �
 | [talos-secrets.sops.yaml](talos-secrets.sops.yaml) | クラスタの CA 一式(丸ごと SOPS) |
 | [cilium-values.yaml](cilium-values.yaml) | chart の値と版(下の「Helm で入れるもの」) |
 | [argocd-values.sops.yaml](argocd-values.sops.yaml) | chart の値と版。通知先の URL と GitHub App の鍵だけ SOPS |
-| [infisical-values.sops.yaml](infisical-values.sops.yaml) | chart の値と版(DB と Redis のパスワードだけ SOPS)。2 つめのドキュメントが infisical の起動に要る Secret(`ENCRYPTION_KEY` など) |
 | [cert-manager-values.sops.yaml](cert-manager-values.sops.yaml) | chart の値と版。2 つめのドキュメントが DNS-01 の Cloudflare のトークンの Secret(トークンだけ SOPS) |
 | [apiserver-rbac.yaml](apiserver-rbac.yaml) / [apiserver-ca.crt](apiserver-ca.crt) | API サーバの入口の RBAC と CA(下の「API サーバの入口」) |
 | [lvm-localpv-values.yaml](lvm-localpv-values.yaml) | chart の値と版(OpenEBS LVM LocalPV。PVC の置き場。下の「PVC の置き場」) |
@@ -47,8 +46,7 @@ prune を `allowEmpty` 無しでは拒むが、頼らない)。
 
 ArgoCD の平文のマニフェストは `deploy/` にある:
 [deploy/gateway/](../deploy/gateway/)(Gateway と http → https)、[deploy/auth/](../deploy/auth/)(SSO の oauth2-proxy)、
-[deploy/cert-manager/](../deploy/cert-manager/)(`ClusterIssuer`)、[deploy/argocd/](../deploy/argocd/)(HTTPRoute と OIDC の `InfisicalSecret`)、
-[deploy/infisical/smtp-secret.yaml](../deploy/infisical/smtp-secret.yaml)。
+[deploy/cert-manager/](../deploy/cert-manager/)(`ClusterIssuer`)、[deploy/argocd/](../deploy/argocd/)(HTTPRoute と OIDC の `SopsSecret`)。
 `ClusterIssuer` や Gateway は本体(cert-manager・cilium)が machine config に居ても、書き換えるのは平文のマニフェストなので
 ArgoCD に任せる。
 
@@ -66,11 +64,11 @@ ArgoCD に任せる。
 `# renovate:` の行から `render.sh` が chart(`depName`)と repo(`registryUrl`)を、次の `# version:` の行から版を読む。
 版をコメントにしているのは、値として書くと chart に渡ってしまうから。Renovate も同じ 2 行を見て上げる(`renovate.json` の customManagers)。
 Talos・Kubernetes・Gateway API の版も同じ形で、[talos.sops.yaml](talos.sops.yaml) の先頭のコメントにある。
-秘密を含む argocd・infisical・cert-manager は `<name>-values.sops.yaml` で、秘密の値だけ暗号化してある(上の SOPS の段落)。
+秘密を含む argocd・cert-manager は `<name>-values.sops.yaml` で、秘密の値だけ暗号化してある(上の SOPS の段落)。
 `render.sh` が復号してから helm に渡す。**2 つめのドキュメントがあれば、それは chart とは別に machine config に載せる Secret**
-(infisical の `infisical-secrets`、cert-manager の Cloudflare のトークン。ArgoCD は復号できないのでここに置く)で、
+(cert-manager の Cloudflare のトークン。ArgoCD は復号できないのでここに置く)で、
 `render.sh` が `---` で分けて別の inlineManifest にする。
-argocd・infisical の版は自動マージしない(`renovate.json` の `bootstrap charts`)。lvm-localpv も(`openebs lvm`。`storage.yaml` の lvm-driver のイメージと同じ PR)。
+argocd の版は自動マージしない(`renovate.json` の `bootstrap charts`)。lvm-localpv も(`openebs lvm`。`storage.yaml` の lvm-driver のイメージと同じ PR)。
 Namespace は chart が描かないので、`render.sh` が kube-system 以外のものに付ける。
 
 ## git と live がずれていないか
@@ -110,7 +108,7 @@ kubectl -n kube-system get gateway doany
 ## PVC の置き場
 
 **OpenEBS LVM LocalPV**(thin)。PVC ごとに VG `data` の thin プールから LV を切り、xfs で渡す。
-infisical の Postgres が要るので bootstrap 層に居る。選んだ理由と組んだ形は [../docs/decisions.md](../docs/decisions.md)「ストレージを OpenEBS LVM LocalPV に…」。
+各アプリの PVC が載る土台なので bootstrap 層に居る。選んだ理由と組んだ形は [../docs/decisions.md](../docs/decisions.md)「ストレージを OpenEBS LVM LocalPV に…」。
 
 | 何を | 誰が |
 | --- | --- |
@@ -128,16 +126,14 @@ infisical の Postgres が要るので bootstrap 層に居る。選んだ理由�
 
 ## Secret
 
-平文の Secret はアプリのリポジトリにはコミットしない。値は **Infisical**(https://il.doany.io、このクラスタでセルフホスト)が持ち、
-**Infisical 純正 operator** が各リポジトリの `InfisicalSecret` を見て Infisical から値を取り、普通の `Secret` を作る。
+平文の Secret はどのリポジトリにもコミットしない。**値は SOPS で暗号化して git に置き**(各リポジトリの `deploy/` の
+`SopsSecret`)、クラスタの中の [sops-secrets-operator](../deploy/sops-secrets-operator/) が復号して普通の `Secret` を作る
+(理由は [../docs/decisions.md](../docs/decisions.md)「秘密は SOPS で git に置く」。2026-11-02 までは Infisical)。
 
-- **本体**(chart + Postgres/Redis)だけがここ(machine config)。`infisical-values.sops.yaml` の 2 つめのドキュメントの
-  `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる(クラスタで一番失ってはいけない値)。
-  Postgres の PVC は既定の `local-path`(OpenEBS LVM)で、VolSync が日次でスナップショットから取っている([../deploy/infisical/volsync.yaml](../deploy/infisical/volsync.yaml))。
-- **公開経路・operator・push-bridge は [`deploy/infisical/`](../deploy/infisical/)**(ArgoCD 自身は operator に依存しないので、ここに置く理由がない)。
-- 認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
-  Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を付けてある。
-  `deploy/infisical/operator-rbac.yaml`)。長命の資格情報はどこにも無い(`identityId` は秘密ではない)。
+- **operator が復号に使うクラスタの age の鍵だけがここ**([sops-age.sops.yaml](sops-age.sops.yaml)。machine config が
+  `sops-secrets-operator` の namespace ごと入れる)。Argo CD も CI もこの鍵を持たない。
+- `SopsSecret` はクラスタの鍵と管理者の鍵の両方で暗号化する([../.sops.yaml](../.sops.yaml) の `deploy/` の規則)ので、手元で `sops edit` できる。
+- Secret が変わったときの Pod の入れ替えは [Reloader](../deploy/reloader/)(workload に `reloader.stakater.com/auto: "true"`)。
 
 ### API サーバの入口(GitHub Actions と人)
 
@@ -155,74 +151,17 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 **ArgoCD には当てさせない**(ArgoCD も CI も要らずに効く層なので、締め出されたときに直せる)。
 変えたら `render.sh` → `apply-config`(RBAC は inlineManifest なので `upgrade-k8s` まで)。
 
-### Infisical の中の構成
-
-| | |
-| --- | --- |
-| Project | `doa`（slug `doa`）、環境は `prod` だけ |
-| フォルダ | `/<namespace>/<Secret 名>`(例: `/denpa/denpa-oidc`、`/worklog/ghcr-pull`) |
-| シークレット名 | 作られる `Secret` の **キー名そのまま**(`client-id`、`.dockerconfigjson` など) |
-| Machine Identity | `infisical-operator`(Kubernetes auth、許可 SA は `infisical/infisical-auth`、project の viewer) |
-| 管理者 | 個人アカウント。資格情報はリポジトリに置かない。復旧手順は下の「Infisical の管理者アカウント」 |
-| 共有値 | `/shared/entra`(Entra 共用アプリの client-id / client-secret / issuer / role / tenant-id)と `/shared/smtp`(info@doany.io)。各アプリのフォルダは `${prod.shared.entra.client-secret}` のような参照で、ローテーションは shared 側の 1 回で済む(operator が展開する) |
-| SMTP | info@doany.io から、クラスタの中の中継 [deploy/smtp-relay](../deploy/smtp-relay/README.md) 経由(Graph の sendMail)。パスワード(中継のアプリのクライアントシークレット)だけ Infisical の `/infisical/infisical-smtp` に置き、[deploy/infisical/smtp-secret.yaml](../deploy/infisical/smtp-secret.yaml) が Secret にする |
-
-### Infisical の管理者アカウント
-
-初期化(`POST /api/v1/admin/bootstrap`)で作った `admin@doany.io` は現存しない
-(2026-09-02 にログインを試して "Failed to find user")。いまの管理者は個人アカウントで、
-資格情報はこのリポジトリに置かない。
-
-ロックアウトしたときの復旧は、SMTP(info@doany.io 経由)が生きていればログイン画面の
-パスワードリセット。それも届かない場合は `infisical` ns の PostgreSQL に入って
-`users` テーブルから管理者を特定し、Infisical のドキュメントにある手順でリセットする。
-
-初期化で一緒に作られる "Instance Admin Identity"(root 相当の Machine Identity)は
-セットアップ後に削除してある。必要なら UI の Organization Settings > Identities で作り直す。
-
-DB の PVC は VolSync で戻すが、Secret は手元の restic.env から作る(ほかの VolSync の Secret が Infisical から来るので)。戻したら operator の
-Kubernetes auth の CA も差し替える。手順は [../recovery/README.md](../recovery/README.md) の 6・7。
-
-### `InfisicalSecret` に sync-options の注釈は要らない
-
-- **prune されない。** operator は CR の annotation(Argo CD の tracking-id も)を作った `Secret` にコピーするが、
-  Argo CD は `Secret` を丸ごと管理の対象から外している(`argocd-values.sops.yaml` の `resource.exclusions`)ので見ない
-- **CRD が無くても止まらない。** まっさらなクラスタでは CRD(Infisical の operator・VolSync)がまだ無く、同じ同期の中の CR の
-  dry-run で同期が丸ごと落ちる。これは ApplicationSet(`argocd-repos.yaml`)の syncOptions の `SkipDryRunOnMissingResource=true` で
-  全部のアプリに効かせてある。ApplicationSet の外の Application(chart を入れるものなど)で CR を書くときだけ、そちらに付ける
-
 ### アプリ側の書き方
 
-各リポジトリの `deploy/` に `InfisicalSecret` を置く。フォルダ内のシークレットを全部そのままキーにするので、
-Infisical にキーを足せば InfisicalSecret は触らずに済む(push-bridge が数秒で同期、保険のポーリングは既定5分)。
+各リポジトリの `deploy/secrets.sops.yaml` に namespace ごと 1 つの `SopsSecret` を置き、`secretTemplates` に Secret を並べる
+(例: [../deploy/matrix/secrets.sops.yaml](../deploy/matrix/secrets.sops.yaml))。暗号化するのは `data`・`stringData` の値だけ
+(先頭のコメントと名前は平文のまま読める)。各リポジトリの `.sops.yaml` もこのリポジトリの `deploy/` の規則と同じ鍵 2 つにする。
 
-```yaml
-apiVersion: secrets.infisical.com/v1alpha1
-kind: InfisicalSecret
-metadata:
-  name: denpa-oidc
-  namespace: denpa
-spec:
-  hostAPI: http://infisical.infisical.svc:8080/api
-  authentication:
-    kubernetesAuth:
-      identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
-      autoCreateServiceAccountToken: true
-      serviceAccountRef:
-        name: infisical-auth
-        namespace: infisical
-      secretsScope:
-        projectSlug: doa
-        envSlug: prod
-        secretsPath: /denpa/denpa-oidc
-  managedKubeSecretReferences:
-    - secretName: denpa-oidc
-      secretNamespace: denpa
+```shell
+tools/t.ps1 sops edit deploy/<アプリ>/secrets.sops.yaml   # 直して push すると、Argo CD が当てた時点で Secret が変わる
 ```
 
-`kubernetes.io/dockerconfigjson` のような型が要るときは `managedKubeSecretReferences` に
-`secretType` を足す。ラベル等は `template`(`includeAllSecrets: true` を忘れずに — 無いと中身を捨てる)。
-
-値を変えるときは Infisical の UI(または CLI)で書き換えるだけ。Git には何も入らない。
-`secrets.infisical.com/auto-reload: "true"` の注釈がある Deployment は自動で入れ替わる。
-注釈が無いもの(Helm チャート系)だけ `kubectl rollout restart` する。
+**sync-options の注釈は要らない。** まっさらなクラスタでは `SopsSecret` の CRD がまだ無く、同じ同期の中の CR の
+dry-run で同期が丸ごと落ちる。これは ApplicationSet(`argocd-repos.yaml`)の syncOptions の `SkipDryRunOnMissingResource=true` で
+全部のアプリに効かせてある。ApplicationSet の外の Application(chart を入れるものなど)で CR を書くときだけ、そちらに付ける。
+作られた `Secret` は Argo CD が丸ごと管理の対象から外している(`argocd-values.sops.yaml` の `resource.exclusions`)ので prune されない。

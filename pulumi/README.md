@@ -73,7 +73,7 @@ state は R2 の別バケット **`doany-pulumi`**(APAC)にあり、パスフレ
 
 [notifications.ts](notifications.ts)。証明書・DDoS・オリジン不達・不正利用の報告・Security Insights を、Matrix の
 部屋 `server`(スペース「通知」。hookshot の受け口 `cloudflare`)に流す。送り先の URL は hookshot の ID を含むので Actions secrets の
-`CLOUDFLARE_NOTIFY_WEBHOOK_URL`(Infisical `/matrix/matrix` の `hook-cloudflare` から作る)。
+`CLOUDFLARE_NOTIFY_WEBHOOK_URL`(`deploy/matrix/secrets.sops.yaml` の `hook-cloudflare` から作る)。
 
 ## Entra
 

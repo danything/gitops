@@ -50,24 +50,23 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 - **暗号化していない。** hookshot は暗号化したルームに書けない。暗号化を後から入れると戻せないので、入れないこと
   (Element は非公開のルームを既定で暗号化するので、作るときに切る)
 - webhook は [hookshot.yaml](hookshot.yaml) の `connections`。URL は `https://m.doany.io/webhook/<ID>` で、ID は
-  Infisical `/matrix/matrix` の `hook-<部屋>`(公開のリポジトリなので git に置かない)
+  [secrets.sops.yaml](secrets.sops.yaml) の `matrix` の `hook-<部屋>`(公開のリポジトリなので平文では置かない)
 - **投稿は全部 m.notice(bot の発言)**。通知と音は Element の設定で決める:
   グループの会話は「音あり」、bot のメッセージは「オン」(音無しで通知)、要らない部屋は部屋ごとに「メンションのみ」。
 
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |
-| `server` | バックアップの通知([../backup/notify.yaml](../backup/notify.yaml)) | Infisical `/backup/backup` の `mattermostWebhook`(名前は据え置き) |
-| 〃 | Infisical(秘密の変更) | Infisical のプロジェクトの webhook(Project Settings → Webhooks。環境 prod、パス `/`) |
+| `server` | バックアップの通知([../backup/notify.yaml](../backup/notify.yaml)) | [../backup/secrets.sops.yaml](../backup/secrets.sops.yaml) の `mattermostWebhook`(名前は据え置き) |
 | 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先([../../pulumi/notifications.ts](../../pulumi/notifications.ts)) |
 | `argocd` | Argo CD | `bootstrap/argocd-values.sops.yaml`(SOPS)の `service.webhook.mattermost` |
-| `ashi` | ashi | Infisical `/ashi/ashi-secrets` の `notify-webhook-url` |
-| `todoroku` | todoroku | Infisical `/todoroku/todoroku-secrets` の `mattermost-webhook-url` |
-| `worklog` | worklog | Infisical `/worklog/worklog-secrets` の `mattermost-webhook-url` |
+| `ashi` | ashi | ashi のリポジトリの `deploy/secrets.sops.yaml`(`ashi-secrets` の `notify-webhook-url`) |
+| `todoroku` | todoroku | todoroku のリポジトリの `deploy/secrets.sops.yaml`(`todoroku-secrets` の `mattermost-webhook-url`) |
+| `worklog` | worklog | worklog のリポジトリの `deploy/secrets.sops.yaml`(`worklog-secrets` の `mattermost-webhook-url`) |
 | `denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
 | `forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
-| `contact` | doany.io のお問い合わせフォーム(danything/corp) | Infisical `/corp/corp-secrets` の `contact-webhook-url` |
+| `contact` | doany.io のお問い合わせフォーム(danything/corp) | corp のリポジトリの `deploy/secrets.sops.yaml`(`corp-secrets` の `contact-webhook-url`) |
 
-足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → Infisical に `hook-<部屋>` を足す →
+足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → secrets.sops.yaml に `hook-<部屋>` を足す(`sops edit`) →
 `connections` と render の env に足す。
 
 ## GitHub 連携(hookshot)
@@ -118,7 +117,7 @@ NAT ループバック(ヘアピン)が要る。家の中だけつながらな�
 
 ### 秘密
 
-Infisical `/matrix/matrix` の `livekit-secret`。API キーの名前は `matrix`(秘密ではない)。
+[secrets.sops.yaml](secrets.sops.yaml) の `matrix` の `livekit-secret`。API キーの名前は `matrix`(秘密ではない)。
 
 ### やっていないこと
 

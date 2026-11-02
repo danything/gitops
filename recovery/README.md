@@ -7,11 +7,13 @@
 | | |
 | --- | --- |
 | `env.age` | バックアップ先の資格情報(R2 の鍵、restic のパスワード)。age のパスフレーズで暗号化 |
-| `sops-age.key.age` | `bootstrap/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
-| [backup-all.sh](backup-all.sh) | 入れ直す前に全部の PVC を今すぐ取る道具(戻すのは populator。下の 8) |
-| [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
+| `sops-age.key.age` | `bootstrap/` の SOPS ファイルを復号する age 秘密鍵(管理者の鍵。`deploy/` の SopsSecret も開ける)。**同じパスフレーズ**で暗号化 |
+| [backup-all.sh](backup-all.sh) | 入れ直す前に全部の PVC を今すぐ取る道具(戻すのは populator。下の 6) |
 
-**populator で戻す形(8)は、この形ではまだ入れ直して流していない。** 次の建て直しで最初に確かめる(VolSync の populator が OpenEBS LVM のスナップショットから PVC を作れることは、machine config の PR ごとの QEMU の起動テストで見ている)。
+**秘密のために復元ですることは無い。** アプリの秘密は git の SOPS(各 `deploy/` の `secrets.sops.yaml`)にあり、
+クラスタの中で復号する鍵は machine config([../bootstrap/sops-age.sops.yaml](../bootstrap/sops-age.sops.yaml))が入れる。
+
+**populator で戻す形(6)は、この形ではまだ入れ直して流していない。** 次の建て直しで最初に確かめる(VolSync の populator が OpenEBS LVM のスナップショットから PVC を作れることは、machine config の PR ごとの QEMU の起動テストで見ている)。
 
 **手動のリハーサルは回さない。** 中身は月次の [restore-check](../deploy/backup/restore-check.yaml)、machine config は
 [talos-boot](../.github/workflows/talos-boot.yml) が確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
@@ -27,7 +29,8 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 
 `env.age` の中身は `KEY=値` の env ファイル(`RESTIC_REPOSITORY=s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>`・
 `RESTIC_PASSWORD`・`AWS_ACCESS_KEY_ID`・`AWS_SECRET_ACCESS_KEY`・`AWS_DEFAULT_REGION=auto`・`MATTERMOST_WEBHOOK`)。
-値を入れ替えたら作り直してコミットする(`age -p -o recovery/env.age <env ファイル>`。同じ値は Infisical の `/backup/backup` にもある)。
+値を入れ替えたら作り直してコミットする(`age -p -o recovery/env.age <env ファイル>`。同じ値は [../deploy/backup/secrets.sops.yaml](../deploy/backup/secrets.sops.yaml) にもある)。
+復元の手順そのものには要らない(PVC は VolSync が SopsSecret の資格情報で戻す)。手元の restic で R2 を直接読むときに使う。
 
 ## 何で戻すか
 
@@ -35,8 +38,8 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 | --- | --- |
 | ホストの設定 | **machine config**。`bootstrap/render.sh` が repo から描く(`bootstrap/talos-secrets.sops.yaml` が同じなら同じクラスタ CA) |
 | k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config が当てる |
-| Infisical の DB | **VolSync の `ReplicationDestination`、Secret は手元の restic.env から**(ほかの Secret が Infisical から来るので。[infisical.sh](infisical.sh)) |
-| ほかの PV データ | **VolSync の populator**(PVC の `dataSourceRef` → 各アプリの `<pvc>-dst`。Argo CD が PVC を作ると埋まる) |
+| 秘密 | **git の SOPS**(`SopsSecret`)。クラスタの鍵は machine config が入れ、sops-secrets-operator(Argo CD が入れる)が Secret にする |
+| PV データ | **VolSync の populator**(PVC の `dataSourceRef` → 各アプリの `<pvc>-dst`。Argo CD が PVC を作ると埋まる) |
 
 etcd のスナップショット(リポジトリ `<bucket>/etcd`、[../deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml))は
 git に無い状態まで一度に戻したいときの近道で、主経路ではない([../bootstrap/talos.md](../bootstrap/talos.md)「etcd スナップショットから戻す(近道)」)。
@@ -63,8 +66,7 @@ mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/so
 ./bootstrap/render.sh /dev/shm/c && rm -rf /dev/shm/c   # 描けるかだけ見る。`valid for metal mode` まで出ること
 ```
 
-- **`bootstrap/talos-secrets.sops.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver-ca.crt`・
-  Infisical の Kubernetes auth(7)が合わなくなる
+- **`bootstrap/talos-secrets.sops.yaml` を作り直さない。** 作り直すと別のクラスタ CA になり、`bootstrap/apiserver-ca.crt` が合わなくなる
 - **描いたものは手元に置かない**(秘密が平文で入る)。当てるときは 3 の `apply.sh` がその場で描いて消す
 - 版は [../bootstrap/talos.sops.yaml](../bootstrap/talos.sops.yaml) の先頭のコメント。**上げるなら建て直しの日ではない日に**
 
@@ -108,7 +110,7 @@ talosctl get volumestatus    # EPHEMERAL は 64GiB 上限。違ったら入れ�
 ```shell
 talosctl bootstrap         # 単一ノードなので 1 回だけ
 kubectl get nodes          # Ready / control-plane / talos.sops.yaml の先頭の kubernetes の版
-kubectl get pods -A        # cilium・coredns・lvm-thinpool・lvm-localpv・snapshot-controller・argocd・cert-manager・infisical が Running
+kubectl get pods -A        # cilium・coredns・lvm-thinpool・lvm-localpv・snapshot-controller・argocd・cert-manager が Running
 kubectl -n kube-system logs ds/lvm-thinpool -c pool   # 最後に data_thinpool(VG の 90%)が出る。出なければ PVC が 1 つも bind しない
 kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting for controller` のまま)
 ```
@@ -118,55 +120,28 @@ kubectl get gatewayclass   # cilium が Accepted(無いと Gateway が `Waiting 
 ## 5. Gateway・auth などが入るのを見る(ArgoCD)
 
 手ですることは無い。ArgoCD の `gitops` の Application([../bootstrap/argocd-repos.yaml](../bootstrap/argocd-repos.yaml) の ApplicationSet が作る)が `deploy/` の
-`ClusterIssuer`・Gateway・auth・`InfisicalSecret` を当てる。
+`ClusterIssuer`・Gateway・auth・sops-secrets-operator と各 namespace の `SopsSecret` を当てる。
 
 ```shell
-kubectl -n argocd get application gitops       # InfisicalSecret の CRD が来るまでは何度か落ちて retry で戻る
+kubectl -n argocd get application gitops       # SopsSecret の CRD が来るまでは何度か落ちて retry で戻る
+kubectl get sopssecrets -A                      # STATUS が全部 Healthy(Secret ができた)
 kubectl get certificate -A                      # Gateway に証明書が付く
 ```
 
-Argo CD はこの間に `deploy/` の残りと各リポジトリの `deploy/` も同期しはじめる。**中身はまだ空**なので、
-Infisical の Secret を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。
+Argo CD はこの間に `deploy/` の残りと各リポジトリの `deploy/` も同期しはじめる。**PVC の中身は 6 で埋まる**まで、
+PVC を待つアプリと、Forgejo から来る非公開アプリ(`repos-forgejo` が `ErrorOccurred`)は上がらない。想定どおり。
 
-## 6. Infisical の DB を戻す
-
-```shell
-age -d -o ~/.config/restic.env recovery/env.age     # パスフレーズ。終わったら消す(10)
-sh recovery/infisical.sh db      # users が 0 なら止まる
-```
-
-Infisical の Postgres の PVC(`data-postgresql-0`)を、VolSync のリポジトリ(`<bucket>/volsync/infisical/data-postgresql-0`)の
-**このクラスタができる前の最新**のスナップショットで丸ごと置き換える(ReplicationDestination を Direct で。ここだけ populator を使えない)。
-VolSync の Secret はほかの namespace では Infisical から来るが、ここだけは戻すのが Infisical そのものなので、`restic.env` から作る。
-古いものを選ぶときは `RESTORE_BEFORE=2026-10-30T00:00:00Z sh recovery/infisical.sh db`。
-
-## 7. Infisical の Kubernetes auth の CA を差し替える
-
-**DB を戻すと、operator の Machine Identity(`f2bc3416…`、許可 SA `infisical/infisical-auth`)の CA も
-古いクラスタのものに戻る。** InfisicalSecret が全部 `SSL certificate verification failed … self-signed certificate` で止まる。
-
-管理者でログインしておく。ブラウザのログインは t.ps1 が中継するので、シェルの中ではなく手元で
-`tools/t.ps1 infisical login --domain https://il.doany.io/api`(トークンは `.home/` に残る)。
-
-```shell
-sh recovery/infisical.sh ca          # クラスタと Infisical の CA の頭を並べて見る
-sh recovery/infisical.sh ca apply    # 差し替えて、operator を蹴り直す(失敗が続くと間を空けるため)
-kubectl get infisicalsecret -A       # 全部 Ready になる。backup/backup と各 namespace の volsync もここで入り、VolSync の Secret ができる
-```
-
-`talos-secrets.sops.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
-
-## 8. PV データを戻す(VolSync の populator。待つだけ)
+## 6. PV データを戻す(VolSync の populator。待つだけ)
 
 **何も打たない。** 各アプリの PVC は `dataSourceRef` で ReplicationDestination(各アプリの `volsync.yaml` の `<pvc>-dst`)を指している。
 Argo CD が PVC を作ると、VolSync(volume populator)が R2 の `<bucket>/volsync/<ns>/<pvc>` の最新を一時的なボリュームに戻し、
 そのスナップショットから PVC を作ってから渡す。PVC は埋まるまで `Pending` で、アプリの Pod は空の PVC では起きない。
 
-- **順番は勝手にそろう。** RD が使う Secret(`volsync-<pvc>`)は Infisical から来るので、6・7 が済むまで RD は失敗してやり直す(PVC は `Pending` のまま)。
+- **順番は勝手にそろう。** RD が使う Secret(`volsync-<pvc>`)は SopsSecret から来るので、sops-secrets-operator が作るまで RD は失敗してやり直す(PVC は `Pending` のまま)。
   Forgejo の PVC は gitops にあるので先に埋まり、非公開アプリ(マニフェストもイメージも Forgejo)はそのあとに出てきて埋まる
 - **空の PVC を取ることはない。** ReplicationSource は PVC が埋まるまでスナップショットを取れないので、戻す前の空の中身が「いちばん新しい」にならない
 - **Postgres・SQLite・Tuwunel(RocksDB)もファイルのまま戻る。** スナップショットから取っているので crash-consistent で、起きるときに自分で立ち直る
-- **infisical の PVC だけは別**(6 で `recovery/infisical.sh` が戻す。Infisical が無いと Secret が無いので)。denpa-raw は取っていないので空で作る
+- denpa-raw は取っていないので空で作る
 - **バックアップがまだ無い PVC**(足したばかりのアプリ)は、リポジトリが空なので空のまま作る
 - 見るところ: `kubectl get pvc -A`(`Pending` が残っていないか)と `kubectl get replicationdestination -A`(`<pvc>-dst` の `latestMoverStatus`)
 
@@ -189,7 +164,7 @@ kubectl -n argocd scale sts/argocd-application-controller --replicas=1   # PVC �
 - **PVC の requests が本当の上限**(OpenEBS LVM)。中身が PVC より大きくなっていると埋められない。PVC を大きくしてから作り直す
 - **k8up の頃のリポジトリ**(バケットの根)は 2026-11-01 に消した。2026-11-01 より前のものは戻せない
 
-## 9. 確かめる
+## 7. 確かめる
 
 公開している名前を全部叩く(作業用 PC のコンテナから。ノードの上からは 80/443 に届かない)。
 
@@ -207,7 +182,7 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 | **401** | `dp` ── **これが正しい。** 公開側から来た通信を denpa が弾いている。200 なら X-Forwarded-For が壊れていて住所判定が効いていない |
 | ERR | `dp.l.doany.io` ── 宅内専用の名前。AdGuard を引く端末からしか通らない |
 
-- [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy、`kubectl get infisicalsecret -A` が全部 Ready
+- [ ] `kubectl -n argocd get applications` が全部 Synced / Healthy、`kubectl get sopssecrets -A` が全部 Healthy
 - [ ] `talosctl get links bond0` の MAC が **`e6:2c:1b:1a:a0:39`**(ルーターの IPv6 ホスト公開がこの MAC を指す。[../docs/router.md](../docs/router.md))
 - [ ] **別の回線の IPv6 だけで 443 に届く。** J:COM 側の PC から `curl -6 -so /dev/null -w "%{http_code} %{remote_ip}\n" https://fj.doany.io/` で
       `200 240f:6d:842b:1::2`(アドレス直打ちは SNI が無く Gateway が切るので駄目)
@@ -219,10 +194,10 @@ kubectl get httproute,grpcroute -A -o jsonpath='{range .items[*]}{range .spec.ho
 - [ ] Renovate の CronJob が次の回で動く(`kubectl -n renovate get jobs`)、バックアップの通知(deploy/backup/notify.yaml)が翌日 OK ✅
 - [ ] etcd のスナップショットを 1 回手で取る(`kubectl -n backup create job --from=cronjob/etcd-snapshot etcd-snapshot-first`)
 
-## 10. 後始末
+## 8. 後始末
 
 ```shell
-rm -f ~/.config/restic.env ~/infisical-load.log
+rm -f ~/.config/restic.env   # env.age を開いて手元の restic を使ったとき
 ```
 
 ## 詰まったときに見るところ
@@ -232,7 +207,7 @@ rm -f ~/.config/restic.env ~/infisical-load.log
 | ノードが上がらない | AMT の SOL(インストール済みのノードのカーネルのコンソール)。ダッシュボード(版と健全性)は Arc につないだモニタ |
 | Pod が Pending | **PSA のラベル**([../bootstrap/talos.md](../bootstrap/talos.md)「PSA のラベル」)か、control-plane の taint |
 | PVC が Bound しない | `kubectl -n kube-system logs ds/lvm-thinpool -c pool`(VG `data` が無い = `talosctl get volumestatus` の `r-lvm`)、ノードに `doany.io/lvm-thinpool=ready` が付いて `lvm-localpv-node` が動いているか、`kubectl -n kube-system logs ds/lvm-localpv-node -c openebs-lvm-plugin` |
-| 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(8) |
+| 非公開イメージが引けない | `bootstrap/talos.sops.yaml` の fj.doany.io の `password` が machine config に入っているか、Forgejo が戻っているか(6) |
 | cilium-drift が TLS で落ちる | `talos-secrets.sops.yaml` を作り直した。`bootstrap/apiserver-ca.crt` を新しい `talos-secrets.sops.yaml` の Kubernetes の CA(`certs.k8s.crt` を base64 で戻したもの)にする |
 | Application が `OutOfSync / Missing` のまま | `retry`(約 33 分)で自力で戻る。30 分以上動かなければ `kubectl -n argocd patch application <名前> --type=merge -p '{"operation":{"sync":{"revision":"HEAD"},"initiatedBy":{"username":"me"}}}'`。**chart のものは `HEAD` ではなく `spec.source.targetRevision` の値** |
 | inlineManifest を直したのに効かない | `apply.sh` → **`upgrade-k8s`**([../bootstrap/talos.md](../bootstrap/talos.md)「当て方」) |

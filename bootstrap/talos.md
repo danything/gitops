@@ -23,7 +23,7 @@ SSH もシェルも無く gRPC API だけなので、**障害時は「直さず�
 ## 組み立て
 
 **組み立ては [render.sh](render.sh) が全部やる。** 手で書くのは [talos.sops.yaml](talos.sops.yaml) の 1 本だけで、ほかから描いてくる部分
-(Cilium・cert-manager・argocd・infisical・lvm-localpv は `<name>-values(.sops).yaml` から、StorageClass と thin プールは [storage.yaml](storage.yaml) から)と
+(Cilium・cert-manager・argocd・lvm-localpv は `<name>-values(.sops).yaml` から、StorageClass と thin プールは [storage.yaml](storage.yaml) から)と
 1 か所で組む。**値をどこにも二度書かない**のが目的。CI([talos-boot](../.github/workflows/talos-boot.yml))も同じ `render.sh` を使う。
 
 **描いたものは秘密を平文で含むので、手元に置かない。** [apply.sh](apply.sh) がコンテナの `/dev/shm` に描いて当て、終わったら消す。
@@ -32,7 +32,7 @@ SSH もシェルも無く gRPC API だけなので、**障害時は「直さず�
 
 **Talos の秘密は 2 か所、どちらも SOPS でコミット済み。** [talos-secrets.sops.yaml](talos-secrets.sops.yaml) はクラスタの CA 一式で丸ごと、
 [talos.sops.yaml](talos.sops.yaml) は `password` の値(下の fj.doany.io)**だけ**。**`talos-secrets.sops.yaml` を作り直すと別のクラスタになる**
-(`apiserver-ca.crt` と Infisical の Kubernetes auth の CA も替わる)ので触らない。まっさらから組むときだけ
+(`apiserver-ca.crt` も替わる)ので触らない。まっさらから組むときだけ
 `talosctl gen secrets -o bootstrap/talos-secrets.sops.yaml && sops -e -i bootstrap/talos-secrets.sops.yaml`。
 
 **CI は PR ごとに使い捨ての秘密で `render.sh` を通し、QEMU で起動する**(talos-boot。`ENC[…]` は `ci-dummy` に置き換える)。
@@ -73,7 +73,7 @@ VM で確かめられないのは PT3 と bond の復旧方向。所要は apply
 
 ### machine config と inlineManifests
 
-**Cilium・OpenEBS LVM・`apiserver-rbac.yaml`・ArgoCD・infisical・cert-manager と SOPS 済みの Secret 2 つは machine config の中にいる**ので、
+**Cilium・OpenEBS LVM・`apiserver-rbac.yaml`・ArgoCD・cert-manager と SOPS 済みの Secret 2 つは machine config の中にいる**ので、
 直しただけでは何も起きない。`apply-config` は起動時にしか inlineManifests を読まず、**`upgrade-k8s`(同じ版でも)が SSA とインベントリで更新も削除もする**:
 
 ```shell

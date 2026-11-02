@@ -18,7 +18,7 @@ spec:
     targetRevision: 0.1.0
     helm:
       valuesObject:
-        # API token は Infisical operator が作る Secret から(cloudflare-ddns-secrets.yaml)。
+        # API token は sops-secrets-operator が作る Secret から(secrets.sops.yaml)。
         # キーは CLOUDFLARE_API_TOKEN。
         cloudflare:
           existingSecret: cloudflare-ddns-secrets

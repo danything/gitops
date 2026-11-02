@@ -54,13 +54,12 @@ bver() { sed -n '/^# version: /{s/^# version: *//p;q;}' "$(vfile "$1")"; }
 CILIUM=$(bver cilium)
 CERTMGR=$(bver cert-manager)
 ARGOCD=$(bver argocd)
-INFISICAL=$(bver infisical)
 LVM=$(bver lvm-localpv)
-for v in "$TALOS" "$SCHEMATIC" "$K8S" "$GWAPI" "$SNAP" "$CILIUM" "$CERTMGR" "$ARGOCD" "$INFISICAL" "$LVM"; do
+for v in "$TALOS" "$SCHEMATIC" "$K8S" "$GWAPI" "$SNAP" "$CILIUM" "$CERTMGR" "$ARGOCD" "$LVM"; do
 	[ -n "$v" ] || { echo "ERROR: talos.sops.yaml / <name>-values(.sops).yaml の # version: から版を読めなかった" >&2; exit 1; }
 done
 echo "talos=$TALOS k8s=$K8S gateway-api=$GWAPI external-snapshotter=$SNAP"
-echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD infisical-standalone=$INFISICAL lvm-localpv=$LVM"
+echo "cilium=$CILIUM cert-manager=$CERTMGR argo-cd=$ARGOCD lvm-localpv=$LVM"
 
 inline() { # $1=name  stdin=manifest
 	printf 'apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\nname: %s\nmanifest: |-\n' "$1"
@@ -116,12 +115,10 @@ decrypt() { # $1=name  $2=env の上書き
 		'NR == 1 && $0 == "---" {next} !d && $0 == "---" {d=1; next} {print > (d ? s : v)}' "$WORK/$1-all.yaml"
 }
 decrypt argocd "${ARGOCD_VALUES:-}"
-decrypt infisical "${INFISICAL_VALUES:-}"
 decrypt cert-manager "${CERT_MANAGER_VALUES:-}"
 
 # chart と repo は <name>-values(.sops).yaml の `# renovate:` の行から読む。
 # kube-system 以外は Namespace を先頭に付ける(chart は描かず、最初は誰も作らない)。
-# `updatedAt` は infisical の chart が付ける時刻(values で消せない)。残すと当て直すたびに再起動する。
 chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 	_n=$1 _ns=$2
 	shift 2
@@ -140,7 +137,6 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 		fi
 		helm template "$_n" "$_n/$_chart" \
 			--version "$(bver "$_n")" -n "$_ns" -f "$_v" "$@" --kube-version "$K8S" \
-			| sed '/^ *updatedAt: "/d' \
 			| add_namespace "$_ns"
 	} | inline "$_n" > "$WORK/inline-$_n.yaml"
 	echo "  $_n -> $(wc -c < "$WORK/inline-$_n.yaml") バイト"
@@ -149,7 +145,7 @@ chart() { # $1=name  $2=namespace  残り=helm template に足す引数
 # `--api-versions` が無いと helm template は GatewayClass を黙って描かず、公開経路が全部死ぬ。
 chart cilium kube-system --api-versions gateway.networking.k8s.io/v1/GatewayClass
 
-# PVC の置き場。infisical の Postgres が要るので bootstrap 層に置く。chart(CSI ドライバ)と、
+# PVC の置き場。chart(CSI ドライバ)と、
 # chart が描かないもの(StorageClass・VolumeSnapshotClass・thin プール)は storage.yaml。
 chart lvm-localpv kube-system
 inline storage < bootstrap/storage.yaml > "$WORK/inline-storage.yaml"
@@ -158,8 +154,6 @@ inline storage < bootstrap/storage.yaml > "$WORK/inline-storage.yaml"
 inline apiserver-rbac < bootstrap/apiserver-rbac.yaml > "$WORK/inline-apiserver-rbac.yaml"
 
 chart argocd argocd
-# infisical は chart がパスワードを平文 env に焼くので ArgoCD に置けない(../docs/decisions.md)。
-chart infisical infisical
 
 # CRD は URL で渡す(理由は argocd-values.sops.yaml の `crds`)。版は chart の appVersion から取る。
 ARGOCD_APP=$(helm show chart argocd/argo-cd --version "$ARGOCD" 2>/dev/null \
@@ -178,9 +172,8 @@ done
 
 chart cert-manager cert-manager
 
-# ArgoCD が復号できない Secret(infisical の起動用と DNS-01 用)。<name>-values.sops.yaml の 2 つめのドキュメント
+# ArgoCD が復号できない Secret(DNS-01 用)。cert-manager-values.sops.yaml の 2 つめのドキュメント
 # (上の decrypt が分けたもの。無ければ `<` が失敗して止まる)。
-inline infisical-secrets < "$WORK/infisical-secret.yaml" > "$WORK/inline-infisical-secrets.yaml"
 inline cloudflare-secret < "$WORK/cert-manager-secret.yaml" > "$WORK/inline-cloudflare-secret.yaml"
 
 # クラスタの中で SopsSecret を復号する age の鍵(sops-secrets-operator が読む。Argo CD は復号できない)。CI は SOPS_AGE にダミーを渡す
@@ -254,12 +247,10 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'name: argocd' argocd-server 'name: argocd-application-crd' manifests/crds/applicationset-crd.yaml \
 	'kind: Namespace\nmetadata:\n  name: argocd' \
-	'name: infisical' infisical-standalone 'metadata:\n  namespace: infisical' \
-	'kind: Namespace\nmetadata:\n  name: infisical' \
 	'name: cert-manager' cert-manager-webhook 'name: cert-manager-crds' \
 	"cert-manager/releases/download/$CERTMGR/cert-manager.crds.yaml" \
 	'kind: Namespace\nmetadata:\n  name: cert-manager' \
-	'name: infisical-secrets' 'name: cloudflare-secret'; do
+	'name: cloudflare-secret'; do
 	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
 done
 # 無いことを見る側(flannel はドキュメントが在るだけで有効になる)

@@ -42,7 +42,7 @@ spec:
           inCluster: true
           inClusterContextName: main
           oidc:
-            # 値は headlamp-secrets.yaml が作る Secret から envFrom で入る。
+            # 値は secrets.sops.yaml から sops-secrets-operator が作る Secret から envFrom で入る。
             # chart 側で作らせないこと。
             secret:
               create: false

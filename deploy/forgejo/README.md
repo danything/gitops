@@ -8,17 +8,16 @@
 | [postgres.yaml](postgres.yaml) | DB |
 | [runner.yaml](runner.yaml) | Runner(v13)+ docker(dind)。`runs-on: ubuntu-latest` をそのまま拾う |
 | [httproute.yaml](httproute.yaml) | 公開経路。SSH は出さない(clone / push は HTTPS + トークン) |
-| [forgejo-secrets.yaml](forgejo-secrets.yaml) | Infisical から Secret 3 つ |
-| [argocd-creds.yaml](argocd-creds.yaml) | ArgoCD が Forgejo のリポジトリを読むための資格情報 |
+| [secrets.sops.yaml](secrets.sops.yaml) | 秘密(SOPS。Secret `forgejo-db`・`forgejo-oauth`・`forgejo-runner` と VolSync の分) |
 
 バックアップは [volsync.yaml](volsync.yaml)(VolSync。PVC 2 本をスナップショットから、毎日 19:00 UTC)。
 
 ## 使い始め
 
-1. **Infisical に 2 つ入れる(同期より先に)**
-   - `/forgejo/forgejo-db`: `postgres-password` ── 英数字だけのランダム(`openssl rand -hex 32` など)。
+1. **[secrets.sops.yaml](secrets.sops.yaml) に 2 つ入れる(同期より先に。`tools/t sops edit`)**
+   - `forgejo-db`: `postgres-password` ── 英数字だけのランダム(`openssl rand -hex 32` など)。
      postgres は最初の起動でしかパスワードを設定しないので、**後から変えるなら DB 側も変える**
-   - `/forgejo/forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく deploy/auth にも平文で書いてある)、`secret` = `${prod.auth.auth-secrets.oidc-client-secret}`(値は写さず参照)
+   - `forgejo-oauth`: `key` = `b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e`(Main のクライアント ID。秘密ではなく deploy/auth にも平文で書いてある)、`secret` = Main のクライアントシークレット(`deploy/auth/secrets.sops.yaml` の `oidc-client-secret` と同じ値)
 2. Entra のアプリ登録 Main のリダイレクト URI に `https://fj.doany.io/user/oauth2/entra/callback`([pulumi/entra.ts](../../pulumi/entra.ts) にある)
 3. main にマージ → ArgoCD が同期
 4. **管理者を作る**(1 度だけ)。Entra のメールと同じにしておくと、Entra でログインしたときに自動で紐づいて管理者になる。
@@ -30,7 +29,7 @@
    ```
 
    **members を作る前にログインした人は、次のログインで入る**
-5. **Runner の秘密を入れる**: Infisical `/forgejo/forgejo-runner` に `runner-secret` = 16 進 40 文字のランダム。
+5. **Runner の秘密を入れる**: secrets.sops.yaml の `forgejo-runner` に `runner-secret` = 16 進 40 文字のランダム。
    値は画面に出さずに作って貼る(WSL なら `openssl rand -hex 20 | tr -d '\n' | clip.exe`。貼ったらクリップボードは消す)。
    管理画面での操作は要らない。Forgejo と Runner の Pod が入れ替わり、Forgejo の init が同じ秘密で Runner を登録し
    ([forgejo.yaml](forgejo.yaml) の setup.sh の 5)、Runner は同じ秘密から uuid / token を出して繋ぐ([runner.yaml](runner.yaml))。
@@ -44,7 +43,7 @@
 
 **Forgejo が唯一の置き場になる。** バックアップは VolSync(R2)の 1 日 1 回だけなので、手元の clone も捨てないこと。
 
-ArgoCD が読むトークンは Infisical `/argocd/forgejo-repo-creds`([argocd-creds.yaml](argocd-creds.yaml))。
+ArgoCD が読むトークンは [../argocd/secrets.sops.yaml](../argocd/secrets.sops.yaml) の `forgejo-repo-creds`。
 **スコープは repository・organization・issue の読み取り。** issue が無いと ApplicationSet が
 `token does not have at least one of required scope(s): [read:issue]` で止まる。
 ApplicationSet は GitHub 側と別の `repos-forgejo`(同居させると、Forgejo が空のクラスタで GitHub 側まで 1 本も作られない)。
@@ -54,7 +53,7 @@ ApplicationSet は GitHub 側と別の `repos-forgejo`(同居させると、Forg
 1. Forgejo の「新しい移行」で組織 `doa` の下に取り込む(Issue / PR / リリースも)。非公開のまま入り、チーム members が読める
 2. ワークフローを Forgejo 向けに直す(`.github/workflows/` のままで読まれる)
    - イメージは `ghcr.io/danything/<name>` → `fj.doany.io/doa/<name>`。push はワークフローの `secrets.GITHUB_TOKEN`(Forgejo のトークン)で通る
-   - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンを Infisical から `kubernetes.io/dockerconfigjson` で)
+   - クラスタが pull できるように、アプリの namespace に `imagePullSecrets` を足す(Forgejo の `read:package` トークンをアプリの secrets.sops.yaml から `kubernetes.io/dockerconfigjson` で)
    - claude-review(GitHub App)のワークフローは消す。Forgejo では動かない
 3. Forgejo で CI とイメージの push が通るのを確かめる
 4. **GitHub のリポジトリを消す**。両方に `deploy/argocd.yaml` があると Application 名がぶつかる

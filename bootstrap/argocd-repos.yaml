@@ -63,7 +63,7 @@ spec:
           - CreateNamespace=true
           # PVC の dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない(ignoreDifferences)
           - RespectIgnoreDifferences=true
-          # CRD を入れるもの(Infisical の operator・VolSync)と同じ同期の中に CR があるので、まっさらなクラスタで
+          # CRD を入れるもの(sops-secrets-operator・VolSync)と同じ同期の中に CR があるので、まっさらなクラスタで
           # CRD がまだ無くても dry-run で落ちないようにする。リソースごとの注釈は要らない
           - SkipDryRunOnMissingResource=true
         # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。
@@ -101,7 +101,7 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    # owner を改名したら必ずここと Infisical /argocd/forgejo-repo-creds の url を直す
+    # owner を改名したら必ずここと deploy/argocd/secrets.sops.yaml の forgejo-repo-creds の url を直す
     # (Forgejo の 307 を ArgoCD は追わず、repo-creds は URL の接頭辞で照合する)。
     # 同じリポジトリが GitHub にもあると Application 名がぶつかる。移すときは GitHub 側を消してから。
     - matrix:
@@ -151,7 +151,7 @@ spec:
           - CreateNamespace=true
           # PVC の dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない(ignoreDifferences)
           - RespectIgnoreDifferences=true
-          # CRD を入れるもの(Infisical の operator・VolSync)と同じ同期の中に CR があるので、まっさらなクラスタで
+          # CRD を入れるもの(sops-secrets-operator・VolSync)と同じ同期の中に CR があるので、まっさらなクラスタで
           # CRD がまだ無くても dry-run で落ちないようにする。リソースごとの注釈は要らない
           - SkipDryRunOnMissingResource=true
         # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。

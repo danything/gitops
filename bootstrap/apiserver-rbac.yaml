@@ -70,15 +70,13 @@ rules:
       - metrics.k8s.io
     resources: ["*"]
     verbs: ["get", "list", "watch"]
-  # クラスタに実際に居る CRD の群。InfisicalSecret は値ではなく参照しか持たないので
-  # 読めても秘密は出ない。
+  # クラスタに実際に居る CRD の群。秘密の値を持つものは入れない。
   - apiGroups:
       - gateway.networking.k8s.io
       - argoproj.io
       - cert-manager.io
       - acme.cert-manager.io
       - cilium.io
-      - secrets.infisical.com
       - volsync.backube
     resources: ["*"]
     verbs: ["get", "list", "watch"]

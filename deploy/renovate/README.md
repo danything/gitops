@@ -19,7 +19,7 @@ tools/t.ps1 --admin kubectl -n renovate create job --from=cronjob/renovate renov
 
 ## 秘密
 
-Infisical の `/renovate/renovate-secrets`。**無いあいだは、それを使う Pod は何もせずに終わる。**
+[secrets.sops.yaml](secrets.sops.yaml) の `renovate-secrets`(`tools/t sops edit`)。**無いあいだは、それを使う Pod は何もせずに終わる。**
 
 | キー | 中身 | 使う Pod |
 | --- | --- | --- |
