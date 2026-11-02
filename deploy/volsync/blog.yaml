@@ -19,7 +19,7 @@ spec:
       secretsScope:
         projectSlug: doa
         envSlug: prod
-        secretsPath: /k8up/k8up-global
+        secretsPath: /backup/backup
         recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-yosegaki-db

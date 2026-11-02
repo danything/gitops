@@ -56,7 +56,7 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 
 | ルーム | 送り元 | URL の在処 |
 | --- | --- | --- |
-| `server` | バックアップの通知([../backup/notify.yaml](../backup/notify.yaml)) | Infisical `/k8up/k8up-global` の `mattermostWebhook`(名前は据え置き) |
+| `server` | バックアップの通知([../backup/notify.yaml](../backup/notify.yaml)) | Infisical `/backup/backup` の `mattermostWebhook`(名前は据え置き) |
 | 〃 | Infisical(秘密の変更) | Infisical のプロジェクトの webhook(Project Settings → Webhooks。環境 prod、パス `/`) |
 | 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先([../../pulumi/notifications.ts](../../pulumi/notifications.ts)) |
 | `argocd` | Argo CD | `bootstrap/argocd-values.sops.yaml`(SOPS)の `service.webhook.mattermost` |

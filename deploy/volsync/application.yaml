@@ -4,7 +4,7 @@
 # VolSync には PVC をラベルやワイルドカードで選ぶ仕組みが無いので、1 本ずつ名前で書く。
 #
 # - **リポジトリは PVC ごと**に `<bucket>/volsync/<namespace>/<pvc>`。Secret(`volsync-<pvc>`)は namespace ごとの InfisicalSecret
-#   `volsync` が、`/k8up/k8up-global`(endpoint・bucket・鍵・repoPassword)からテンプレートで組む
+#   `volsync` が、`/backup/backup`(endpoint・bucket・鍵・repoPassword)からテンプレートで組む
 # - **スナップショットから取る**(copyMethod: Snapshot。既定の VolumeSnapshotClass `lvm` を使う。bootstrap/storage.yaml)。
 #   止めずに取れて、Postgres・SQLite・RocksDB は crash-consistent なスナップショットから自分で立ち直る
 # - **mover は root**(PVC の中の持ち主がアプリごとに違う)。namespace に `volsync.backube/privileged-movers: "true"` が要る。

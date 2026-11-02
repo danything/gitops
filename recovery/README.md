@@ -27,7 +27,7 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 
 `env.age` の中身は `KEY=値` の env ファイル(`RESTIC_REPOSITORY=s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>`・
 `RESTIC_PASSWORD`・`AWS_ACCESS_KEY_ID`・`AWS_SECRET_ACCESS_KEY`・`AWS_DEFAULT_REGION=auto`・`MATTERMOST_WEBHOOK`)。
-値を入れ替えたら作り直してコミットする(`age -p -o recovery/env.age <env ファイル>`。同じ値は Infisical の `/k8up/k8up-global` にもある)。
+値を入れ替えたら作り直してコミットする(`age -p -o recovery/env.age <env ファイル>`。同じ値は Infisical の `/backup/backup` にもある)。
 
 ## 何で戻すか
 
