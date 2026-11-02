@@ -85,7 +85,7 @@ Talos には helm-controller が無く、inlineManifests は Helm を実行で�
 
 | 層 | 中身 | 資格情報 |
 | --- | --- | --- |
-| **machine config** | **`bootstrap/` の全部**(`argocd-repos.yaml` を除く)。inline が 9 つ(cilium / lvm-localpv / `storage.yaml` / `apiserver-rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 2 つ)、URL で 10 個(CRD が gateway-api / argocd ×3 / cert-manager / VolumeSnapshot ×3、snapshot-controller ×2) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
+| **machine config** | **`bootstrap/` の全部**(`argocd-repos.yaml` を除く)。inline が 10(cilium / lvm-localpv / `storage.yaml` / `apiserver-rbac.yaml` / argocd / cert-manager / infisical / SOPS の Secret 3 つ)、URL で 10 個(CRD が gateway-api / argocd ×3 / cert-manager / VolumeSnapshot ×3、snapshot-controller ×2) | 入力(`bootstrap/talos-secrets.sops.yaml` など)が SOPS 済みで、生成物は git に置かない |
 | **ArgoCD** | `deploy/`。`ClusterIssuer`・Gateway・auth・`InfisicalSecret` など、本体が machine config に居る部品の平文のマニフェストもここ(2026-10 までは `bootstrap/` に混ぜて Application `bootstrap` が当てていた)。**infisical の本体は来ない**(下の「infisical だけは ArgoCD に移せない」) | — |
 
 - **CRD だけ URL で渡すのは大きさの都合。** 埋めると machine config が 341 KB → 4 MB を超える。

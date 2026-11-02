@@ -22,3 +22,14 @@ creation_rules:
     encrypted_regex: ^(service\.webhook\.mattermost|githubAppPrivateKey|password|postgresPassword|ENCRYPTION_KEY|AUTH_SECRET|CLIENT_ID_GITHUB_LOGIN|CLIENT_SECRET_GITHUB_LOGIN|CF_DNS_API_TOKEN)$
     mac_only_encrypted: true
     age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+  # クラスタの中で SopsSecret を復号する age の鍵(sops-secrets-operator が使う)。machine config に載せる
+  - path_regex: ^bootstrap/sops-age\.sops\.yaml$
+    encrypted_regex: ^keys\.txt$
+    mac_only_encrypted: true
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+  # アプリの秘密(SopsSecret)。値(data・stringData)だけ暗号化する。クラスタの鍵(sops-secrets-operator が復号)と
+  # 管理者の鍵の両方で開ける。各アプリのリポジトリの .sops.yaml も同じ 2 つ
+  - path_regex: ^deploy/.*\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    mac_only_encrypted: true
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r,age1yk0dk8tnjg5j4xaw40d42qesttru45rs3lwglza465nsphpxgq8qmf9ust
