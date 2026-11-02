@@ -59,7 +59,7 @@ Talos が消さない。#667 では古い経路が先に当たり、10.10 から
 - **AMT を使えるようにした(2026-11-01)。** 10.10.0.3 で電源と SOL(`ttyS0`)。`eno1` を 10.10 側に回し(#667)、MEBx を設定して、
   schematic に `console=` を足した(#670)。iLO の記述を直した
 - **バックアップを k8up から VolSync に替えた(2026-11-01)。** PVC ごとにスナップショットから restic で R2 へ([deploy/volsync/](deploy/volsync/))。
-  戻すのは `recovery/pv.sh`(ReplicationDestination で PVC を丸ごと)。見張りと etcd は [deploy/backup/](deploy/backup/)。k8up と pg_dump・tar のサイドカーはやめた。
+  戻すのは VolSync の populator(PVC を作ると R2 の最新から埋まる。2026-11-02)。見張りと etcd は [deploy/backup/](deploy/backup/)。k8up と pg_dump・tar のサイドカーはやめた。
   k8up の頃のリポジトリ(R2 のバケットの根)と Matrix の PVC の `backups/` も同じ日に消した(VolSync からの全件の取り出し確認が通ったあと)
 - **HP Z440 へ移した(2026-10-31)。** DL360 の SSD を移して Talos を入れ直し、PV を restic から戻した。PV の置き場を OpenEBS LVM LocalPV にし
   (#649〜#656)、ノードの防火壁を Cilium の Host Firewall に(#658。経緯は [bootstrap/talos.md](bootstrap/talos.md))、Arc の HuC を読めるようにした(#659)

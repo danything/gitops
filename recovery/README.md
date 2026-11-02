@@ -8,10 +8,10 @@
 | --- | --- |
 | `env.age` | バックアップ先の資格情報(R2 の鍵、restic のパスワード)。age のパスフレーズで暗号化 |
 | `sops-age.key.age` | `bootstrap/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
-| [pv.sh](pv.sh) | PV のデータを VolSync の `ReplicationDestination` で戻す道具(下の 8) |
+| [pv.sh](pv.sh) | 今ある PVC を時刻を選んで戻す・入れ直す前に全部取る道具(入れ直したときは使わない。下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
-**2 つの道具は、2026-10-17 に使ったものから決め打ちを外した形で、この形ではまだ流していない。** 次の建て直しで最初に確かめる(`pv.sh - plan-all` は 2026-10-20 に本番の restic と突き合わせて、全 namespace の判定が 8 の表どおりになるのを確かめた)。
+**populator で戻す形(8)は、この形ではまだ入れ直して流していない。** 次の建て直しで最初に確かめる(VolSync の populator が OpenEBS LVM のスナップショットから PVC を作れることは、machine config の PR ごとの QEMU の起動テストで見ている)。
 
 **手動のリハーサルは回さない。** 中身は月次の [restore-check](../deploy/backup/restore-check.yaml)、machine config は
 [talos-boot](../.github/workflows/talos-boot.yml) が確かめる。残るのはこの手順書の通し(道具そのもの)だけ。
@@ -36,7 +36,7 @@ base64 recovery/env.age recovery/sops-age.key.age   # 印刷して封筒へ
 | ホストの設定 | **machine config**。`bootstrap/render.sh` が repo から描く(`bootstrap/talos-secrets.sops.yaml` が同じなら同じクラスタ CA) |
 | k8s オブジェクト | **git から Argo CD で再構築**。`bootstrap/` は machine config が当てる |
 | Infisical の DB | **VolSync の `ReplicationDestination`、Secret は手元の restic.env から**(ほかの Secret が Infisical から来るので。[infisical.sh](infisical.sh)) |
-| ほかの PV データ | **VolSync の `ReplicationDestination`**([pv.sh](pv.sh)) |
+| ほかの PV データ | **VolSync の populator**(PVC の `dataSourceRef` → 各アプリの `<pvc>-dst`。Argo CD が PVC を作ると埋まる) |
 
 etcd のスナップショット(リポジトリ `<bucket>/etcd`、[../deploy/backup/etcd-snapshot.yaml](../deploy/backup/etcd-snapshot.yaml))は
 git に無い状態まで一度に戻したいときの近道で、主経路ではない([../bootstrap/talos.md](../bootstrap/talos.md)「etcd スナップショットから戻す(近道)」)。
@@ -156,39 +156,26 @@ kubectl get infisicalsecret -A       # 全部 Ready になる。backup/backup �
 
 `talos-secrets.sops.yaml` を作り直していなければ CA は前と同じなので、`ca` で頭が一致していれば `apply` は要らない。
 
-## 8. PV データを戻す(VolSync)
+## 8. PV データを戻す(VolSync の populator。待つだけ)
 
-**1 本で流す。** Argo CD を止め、Forgejo を先に戻し、非公開アプリの Application と PVC が出てくるのを待ってから、
-残りの namespace を 1 つずつ「止める → 戻す → 起こす」:
+**何も打たない。** 各アプリの PVC は `dataSourceRef` で ReplicationDestination(各アプリの `volsync.yaml` の `<pvc>-dst`)を指している。
+Argo CD が PVC を作ると、VolSync(volume populator)が R2 の `<bucket>/volsync/<ns>/<pvc>` の最新を一時的なボリュームに戻し、
+そのスナップショットから PVC を作ってから渡す。PVC は埋まるまで `Pending` で、アプリの Pod は空の PVC では起きない。
 
-```shell
-sh recovery/pv.sh - plan-all      # 読むだけ。namespace ごとに戻す PVC とスナップショット、PVC に入るか(fit)を出す。先にこれを見る
-sh recovery/pv.sh - restore-all
-```
+- **順番は勝手にそろう。** RD が使う Secret(`volsync-<pvc>`)は Infisical から来るので、6・7 が済むまで RD は失敗してやり直す(PVC は `Pending` のまま)。
+  Forgejo の PVC は gitops にあるので先に埋まり、非公開アプリ(マニフェストもイメージも Forgejo)はそのあとに出てきて埋まる
+- **空の PVC を取ることはない。** ReplicationSource は PVC が埋まるまでスナップショットを取れないので、戻す前の空の中身が「いちばん新しい」にならない
+- **Postgres・SQLite・Tuwunel(RocksDB)もファイルのまま戻る。** スナップショットから取っているので crash-consistent で、起きるときに自分で立ち直る
+- **infisical の PVC だけは別**(6 で `recovery/infisical.sh` が戻す。Infisical が無いと Secret が無いので)。denpa-raw は取っていないので空で作る
+- **バックアップがまだ無い PVC**(足したばかりのアプリ)は、リポジトリが空なので空のまま作る
+- 見るところ: `kubectl get pvc -A`(`Pending` が残っていないか)と `kubectl get replicationdestination -A`(`<pvc>-dst` の `latestMoverStatus`)
 
-`restore-all` がやっていること(途中で止まったら Argo CD が止まったままのことがあるので、止まったところの表示に従う。**流し直すと Forgejo からやり直す**ので、続きは `<ns> restore` を 1 つずつ):
+今あるクラスタで PVC を 1 つ前の中身に戻すとき(消した・壊した)は、PVC を消して作り直せば同じ仕組みで最新から埋まる
+(`<pvc>-dst` は作られたときの中身を持ち続けるので、**新しいものから埋めるなら `<pvc>-dst` も消して Argo CD に作り直させる**)。
+時刻を選んで戻すなら `recovery/pv.sh`(`argo-pause` → `<ns> stop` → `RESTORE_BEFORE=<RFC 3339> sh recovery/pv.sh <ns> pvc <pvc>` → `<ns> start` → `argo-resume`)。
 
-1. `argo-pause`(selfHeal が replicas を戻して、戻している最中にアプリが起き上がるので)
-2. `forgejo restore` ── **Forgejo を先に。** 非公開アプリのイメージ(fj.doany.io のレジストリ。中身は `forgejo-repos`)も、
-   Argo CD が読むマニフェストも、それを読むトークン(Forgejo の DB)も全部 Forgejo にあるので、戻すまで 1 本も上がらない
-3. `argo-resume` して ApplicationSet のエラーが消え、**Application が全部 Synced になる**まで待ち(10 分。過ぎたら Synced でないものを出して進む)、全部の `plan` が通るかと、
-   **全部が PVC に入るか(`fit`)を見て**(入らなければ同じく止まる)、また `argo-pause`
-4. R2 にあってクラスタにもある namespace(forgejo・infisical を除く)を 1 つずつ `<ns> restore`
-5. `argo-resume`。R2 にあるのに PVC が無かったもの(やめたアプリの残りなど)を並べる
-
-1 つだけ戻すなら `sh recovery/pv.sh <ns> plan` で見てから `sh recovery/pv.sh <ns> restore`(Argo CD は先に `argo-pause`)。
-
-- **PVC は丸ごと戻す。** `restore` は **R2 の `volsync/<ns>/` にある PVC 全部**を、1 つずつ、ReplicationDestination(`copyMethod: Direct`)で
-  リポジトリ `<bucket>/volsync/<ns>/<pvc>` から書き戻す。スナップショットから取っているので、Postgres・SQLite・Tuwunel(RocksDB)も
-  ファイルのまま戻り、起きるときに自分で立ち直る(k8up の頃の pg_dump・SQLite・tar の戻し分けは要らない)。戻す前の中身は消す(`enableFileDeletion`)
-- **戻すのはこのクラスタができる前のスナップショットだけ**(kube-system の namespace ができた時刻より前。`restoreAsOf`。`RESTORE_BEFORE` で上書きできる)。
-  ReplicationSource は Argo CD が作ると時刻を待ちはじめ、戻す前の空の PVC を取ったものが「いちばん新しい」になりうるため(2026-10-31 に k8up で踏んだ)
-- 使う Secret(`volsync-<pvc>`)は各アプリの `volsync.yaml` の InfisicalSecret が作る(7 が済んでいること)。無ければ `restore` は書く前に止まる
-- **何を戻すかは R2 が正。** 一覧はどこにも持たない(取る定義は各アプリのリポジトリの `volsync.yaml`)。クラスタに PVC が無いものは戻さずに飛ばし、最後に並べる。スナップショットが無いものは `plan` の時点で止まる
-  **取るのをやめて PVC だけ残すときは、R2 のリポジトリも消す**(残すと、戻すときに古いスナップショットで PVC を上書きする。`enableFileDeletion`)
-- PVC が `Pending`(StorageClass は使う Pod が付くまで bind しない)でも、VolSync の mover が付けば bind する
-- **PVC の requests が本当の上限**(OpenEBS LVM)。`fit` が `restic stats` の大きさと requests を比べ、9 割を超えるものがあれば
-  `plan-all` は 1 で終わり、`restore-all` は上書きする前に止まる。PVC を大きくするか、restic から要らないものを消す
+- **R2 にあるもの**は `sh recovery/pv.sh - list`(`restic.env` が要る)。取るのをやめて PVC だけ残したものはリポジトリを消しておく
+- **PVC の requests が本当の上限**(OpenEBS LVM)。中身が PVC より大きくなっていると埋められない。PVC を大きくしてから作り直す
 - **k8up の頃のリポジトリ**(バケットの根)は 2026-11-01 に消した。2026-11-01 より前のものは戻せない
 
 ## 9. 確かめる

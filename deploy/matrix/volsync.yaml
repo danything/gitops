@@ -49,3 +49,26 @@ spec:
     copyMethod: Snapshot
     retain: {daily: 7, weekly: 4, monthly: 6}
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+---
+# 戻す側(populator)。PVC tuwunel-data の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationDestination
+metadata:
+  name: tuwunel-data-dst
+  namespace: matrix
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  trigger:
+    manual: restore-once
+  restic:
+    repository: volsync-tuwunel-data
+    copyMethod: Snapshot
+    capacity: 10Gi
+    accessModes: [ReadWriteOnce]
+    storageClassName: local-path
+    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    # 戻した中身はスナップショットに残るので、作業用の PVC は消す
+    cleanupTempPVC: true
+    cleanupCachePVC: true

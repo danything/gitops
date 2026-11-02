@@ -6,6 +6,8 @@ metadata:
   namespace: netbird
   # VolSync がスナップショットから取る(volsync.yaml)。SQLite は crash-consistent で立ち直る。
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の netbird-data-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: netbird-data-dst}
   accessModes:
     - ReadWriteOnce
   resources:

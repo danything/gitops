@@ -304,7 +304,7 @@ StorageClass を変えた PVC を作り直すだけで中身が埋まるので�
   スナップショットから作った PVC に中身が戻る、再起動のあとも PV と infisical の Postgres が戻る
 
 local-path から変わったこと: **PVC の requests が本当の上限になった**(local-path はディスクの残り全部が使えた。
-`recovery/pv.sh` の `fit` が戻す前に見る)、**新しい PVC の直下が root の 0755**(local-path は 0777。root 以外で書くアプリは `fsGroup` が要る)。
+中身が PVC より大きいと populator は埋められない)、**新しい PVC の直下が root の 0755**(local-path は 0777。root 以外で書くアプリは `fsGroup` が要る)。
 
 確かめていないこと: **thin プールが溢れたときの挙動と見張り**(データとメタデータのどちらが溢れても書き込みが止まる。
 いまは `lvm-thinpool` が 90% で NotReady になるだけで、通知は無い。VolSync は毎日スナップショットを取るので、余裕と通知が要る)。

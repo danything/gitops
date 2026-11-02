@@ -18,6 +18,8 @@ metadata:
   name: postgres-data
   namespace: forgejo
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の postgres-data-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: postgres-data-dst}
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path

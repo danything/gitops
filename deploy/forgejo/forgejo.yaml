@@ -15,6 +15,8 @@ metadata:
   namespace: forgejo
   # リポジトリ・パッケージ・Actions のログ・app.ini。VolSync がスナップショットから取る(volsync.yaml)
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の forgejo-repos-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: forgejo-repos-dst}
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path
