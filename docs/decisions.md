@@ -45,8 +45,11 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 
 **`talosconfig` は保存しない。** `secrets.yaml` から `talosctl gen config` で毎回出てくる派生物で、
 TTL も付いている。使い捨てにするほうが安全(../bootstrap/talos.md)。
-例外は mado の PC に置く Talos のダッシュボード用の 1 つだけで、役割は `os:reader`、期限は 90 日、DPAPI で保護して置く
-(`mado/setup.ps1` が作り直す。[../mado/README.md](../mado/README.md))。読むだけの鍵なので、漏れてもクラスタは変えられない。
+例外は mado の PC に置く Talos のダッシュボードと電源の操作(シャットダウン・再起動)用の 1 つだけで、役割は `os:operator`、期限は 90 日、DPAPI で保護して置く
+(`mado/setup.ps1` が作り直す。[../mado/README.md](../mado/README.md))。`os:operator` でできるのはノードを止める・再起動するところまでで、
+設定の書き換え・リセット・アップグレードは `os:admin` が要るので、漏れてもクラスタの中身は変えられない。
+読むだけ(`os:reader`)にしないのは、mado の PC からは AMT で既に強制電源オフ・強制再起動ができ(漏れたときにできることはどのみち「止める」まで)、
+Talos に止める準備をさせてから止める道を足すほうが、普段の操作が安全側になるから。
 
 R2 の鍵を GitHub の秘密(gist・Actions)に置かないのは、GitHub のトークンがあちこちに散っているため。
 GitHub 側が丸ごと漏れても、バックアップ(を消せる鍵)だけは無事な状態を残す。
