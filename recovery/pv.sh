@@ -285,12 +285,20 @@ case $OP in
 		for h in $H; do sh "$0" "$h" restore; done
 		sh "$0" - argo-resume ;;
 	backup-all) # 入れ直す前の最後のバックアップ。全部の ReplicationSource を手動で 1 回ずつ取り、全部終わるまで待つ。
-		# 時刻(schedule)を手動(manual)に置き換えるので、Argo CD を止めておく(戻すと selfHeal が schedule に戻す)
+		# 時刻(schedule)を手動(manual)に置き換えるので、Argo CD を止めておく(戻すと selfHeal が schedule を戻す)。
+		# **manual は終わったら自分で消す。** Argo CD は ServerSideApply なので、自分が書いていない manual は消さない。
+		# 残ると VolSync は schedule を見ず、二度と取らない(2026-11-01 に 22 本が 1 日止まった)
 		t=final-$(date -u +%Y%m%d%H%M)
 		sh "$0" - argo-pause
-		trap 'sh "$0" - argo-resume' EXIT
 		rs=$($K get replicationsource -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}')
-		[ -n "$rs" ] || { echo "ReplicationSource が 1 つも無い(kubectl get replicationsource -A で見る)" >&2; exit 1; }
+		[ -n "$rs" ] || { sh "$0" - argo-resume; echo "ReplicationSource が 1 つも無い(kubectl get replicationsource -A で見る)" >&2; exit 1; }
+		unmanual() {
+			for r in $rs; do
+				$K -n "${r%/*}" patch replicationsource "${r#*/}" --type json -p '[{"op":"remove","path":"/spec/trigger/manual"}]' >/dev/null 2>&1 || true
+			done
+			sh "$0" - argo-resume
+		}
+		trap unmanual EXIT
 		for r in $rs; do
 			$K -n "${r%/*}" patch replicationsource "${r#*/}" --type merge -p "{\"spec\":{\"trigger\":{\"schedule\":null,\"manual\":\"$t\"}}}" >/dev/null
 		done
