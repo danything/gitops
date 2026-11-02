@@ -22,11 +22,12 @@ if (-not $Stage) {
     # 取り出したら消す (置いてあった鍵は残す)。復号した中身はメモリで受け取り、ファイルに書かない
     $key = Join-Path $root '.home\.config\sops\age\keys.txt'
     $placed = -not (Test-Path $key)
-    if ($placed) {
-        & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
-        if ($LASTEXITCODE -ne 0) { throw 'age: recovery/sops-age.key.age を開けない' }
-    }
+    # 鍵を置くところから try に入れる (開けずに途中で止まったときも、書きかけの鍵を残さない)
     try {
+        if ($placed) {
+            & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
+            if ($LASTEXITCODE -ne 0) { throw 'age: recovery/sops-age.key.age を開けない' }
+        }
         $decrypted = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sops -d --output-type json deploy/auth/secrets.sops.yaml
         if ($LASTEXITCODE -ne 0) { throw 'sops: deploy/auth/secrets.sops.yaml を開けない' }
     } finally {
