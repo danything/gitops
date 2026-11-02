@@ -14,4 +14,13 @@ export TMPDIR=/dev/shm
 trap 'rm -rf "$out"' EXIT
 trap 'exit 130' INT TERM
 ./bootstrap/render.sh "$out"
-talosctl apply-config "$@" -f "$out/controlplane.yaml"
+# **--dry-run の差分は、変わった inlineManifests(Secret を含む)を平文で出す。** 2026-11-02 にクラスタの age の鍵が
+# 端末に出て、そのまま貼られて作り直した。age の鍵と、名前が鍵・トークン・パスワードらしい行の値は伏せる。
+# 伏せきれないものもあるので、--dry-run の出力は人に見せない・貼らない
+case " $* " in
+*" --dry-run "*)
+	talosctl apply-config "$@" -f "$out/controlplane.yaml" 2>&1 | sed -E \
+		-e 's/AGE-SECRET-KEY-[0-9A-Z]+/AGE-SECRET-KEY-<伏せた>/g' \
+		-e 's/^([+-]? +[A-Za-z0-9_.-]*(key|Key|KEY|token|Token|TOKEN|password|Password|PASSWORD|secret|Secret|SECRET)[A-Za-z0-9_.-]*: ).+/\1<伏せた>/' ;;
+*) talosctl apply-config "$@" -f "$out/controlplane.yaml" ;;
+esac

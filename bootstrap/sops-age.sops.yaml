@@ -1,4 +1,4 @@
-# クラスタの中で SopsSecret を復号する age の鍵(公開鍵 age1yk0dk8tnjg5j4xaw40d42qesttru45rs3lwglza465nsphpxgq8qmf9ust)。sops-secrets-operator がファイルとして読む。
+# クラスタの中で SopsSecret を復号する age の鍵(公開鍵 age1z36xmmvjmwg4sus6k8nx6wgp8qyew7tj76077rvv5sagcgudd4tszrmwml)。sops-secrets-operator がファイルとして読む。
 # 秘密のファイルはこの鍵と管理者の鍵(recovery/sops-age.key.age)の両方で暗号化する(../.sops.yaml)。
 # Argo CD が復号できないので machine config に載せる(render.sh)。namespace は operator の Application と同じ
 apiVersion: v1
@@ -9,16 +9,16 @@ sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBCdjNsZmVrYWs5YjlnMDFx
-            bDVkMVVYamlyMU1RTjVFMzI5OUN0OFJnNEdBCm95YWxOaUVwb1oreFZzZFpsbUhX
-            NDdhNzBueUJZelpqaTNvZVlBdGtWZkEKLS0tIFJpOCtPU0loZ3JKNXZJaUE3dFg3
-            WCtjQ3c5K2hoKy9sTlR3ckxvSzI5TzAKmgNwWW4Q+V+r9H2DIFNn2yo/JP4W6qzp
-            jZLEniP/Z2MS1ycahOTBFaYpUqzcklxG5iEyuz7axCy0ER03dPjx3Q==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBUaW1mSS9DSHBQVW5XSUxH
+            L3B2VkN6Q0tnTm05QkswQmFQRGM0Z1YvRDNRCkRxcjRzbVh4VGxoc0JOSHpWT0xz
+            dU9JcFhjNkxyNURRM1dKOTlYOWx3ZWcKLS0tIHpZaHl4UklFSlZSbTM5MmovWW8w
+            R3REMjFRdkk2WlpiLy9RS3FjSDRSUGMKDYY4jfYGRotKhzW3bdDvUCL01m7JFOir
+            E+z+lyoFoce9sCpKP47S+PydzEscoj955eK/QiRshrioWsu9aZtdtQ==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^keys\.txt$
-    lastmodified: "2026-11-02T05:12:18Z"
-    mac: ENC[AES256_GCM,data:10Cw2ANVg7rqPviU9CesBBgcwwsmsKV1QXdX2BkTt2ZH6hoFV3ev5bgePHmbTqa/tRpKpBkEgokTlxiQiv0Sbo+lJCctaaA4s8UOnfIR3sMSyaTRBaa4p+CwWqJ6gglAuPGshnABXwCJqOZ97ojyaN5Zp8a3eHoA3wUMgDCi3Bk=,iv:eI/oyTIxPBjZhPVBI/AWBZIbGDZqcpdguqeWKLX0eFY=,tag:oK3TCkCt4ym7GbK0l1+fdw==,type:str]
+    lastmodified: "2026-11-02T06:00:49Z"
+    mac: ENC[AES256_GCM,data:02PVWOmLU8505ih/NrKpE99f5NvdnieOa7xUwQcdBgydFiRyUFZIN2ptW+p6JS5qbyT3P3g8kCHU0XyJywSaWQ/UOOU7pw22g9qGweyUOgHfO478HhItWsxmP9pI6RTyxXdoYL33tLvArpSlyFpk6RxuvtNzPzyZlvWgDIHMug0=,iv:Mh5z3pTUf3sUL1VJw+TsGKpZTx1VufRV24gGFlhu/3s=,tag:NzLzWiN2e896PiD10Nv+Nw==,type:str]
     mac_only_encrypted: true
     version: 3.13.3
 ---
@@ -28,20 +28,20 @@ metadata:
     name: sops-age-key-file
     namespace: sops-secrets-operator
 stringData:
-    keys.txt: ENC[AES256_GCM,data:cta27FXNBJACcB0xJMnc6K1B4iv8vpbteqa8rGmHjUueQYk2TPae2jOb7uDhN7T+kLBVMHDz0FwUXLO73q1MuuXRpZjOCNtrUJE=,iv:XxbIIZJhZX7oA1DnYsdavAnQa/zmsiHQZYHVxx8wAXs=,tag:1E+NhATfWaNrRXcBoz/FKA==,type:str]
+    keys.txt: ENC[AES256_GCM,data:2ytbxYaBXOmPccBNGw6NkFiIaarBkvqQoMQbm7G/WhQOkN4bipXB4A6ek52zf1YI7/lmvzer3WSZTWLcihwJldLiJOcqupFrGAo=,iv:cxt645XSBh1IIG3G7u9I4nRL2Ia1mDNcLRZ3jK+zwmE=,tag:GXcgPOZkaoa1hMazqbfbcQ==,type:str]
 sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBCdjNsZmVrYWs5YjlnMDFx
-            bDVkMVVYamlyMU1RTjVFMzI5OUN0OFJnNEdBCm95YWxOaUVwb1oreFZzZFpsbUhX
-            NDdhNzBueUJZelpqaTNvZVlBdGtWZkEKLS0tIFJpOCtPU0loZ3JKNXZJaUE3dFg3
-            WCtjQ3c5K2hoKy9sTlR3ckxvSzI5TzAKmgNwWW4Q+V+r9H2DIFNn2yo/JP4W6qzp
-            jZLEniP/Z2MS1ycahOTBFaYpUqzcklxG5iEyuz7axCy0ER03dPjx3Q==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBUaW1mSS9DSHBQVW5XSUxH
+            L3B2VkN6Q0tnTm05QkswQmFQRGM0Z1YvRDNRCkRxcjRzbVh4VGxoc0JOSHpWT0xz
+            dU9JcFhjNkxyNURRM1dKOTlYOWx3ZWcKLS0tIHpZaHl4UklFSlZSbTM5MmovWW8w
+            R3REMjFRdkk2WlpiLy9RS3FjSDRSUGMKDYY4jfYGRotKhzW3bdDvUCL01m7JFOir
+            E+z+lyoFoce9sCpKP47S+PydzEscoj955eK/QiRshrioWsu9aZtdtQ==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
     encrypted_regex: ^keys\.txt$
-    lastmodified: "2026-11-02T05:12:18Z"
-    mac: ENC[AES256_GCM,data:10Cw2ANVg7rqPviU9CesBBgcwwsmsKV1QXdX2BkTt2ZH6hoFV3ev5bgePHmbTqa/tRpKpBkEgokTlxiQiv0Sbo+lJCctaaA4s8UOnfIR3sMSyaTRBaa4p+CwWqJ6gglAuPGshnABXwCJqOZ97ojyaN5Zp8a3eHoA3wUMgDCi3Bk=,iv:eI/oyTIxPBjZhPVBI/AWBZIbGDZqcpdguqeWKLX0eFY=,tag:oK3TCkCt4ym7GbK0l1+fdw==,type:str]
+    lastmodified: "2026-11-02T06:00:49Z"
+    mac: ENC[AES256_GCM,data:02PVWOmLU8505ih/NrKpE99f5NvdnieOa7xUwQcdBgydFiRyUFZIN2ptW+p6JS5qbyT3P3g8kCHU0XyJywSaWQ/UOOU7pw22g9qGweyUOgHfO478HhItWsxmP9pI6RTyxXdoYL33tLvArpSlyFpk6RxuvtNzPzyZlvWgDIHMug0=,iv:Mh5z3pTUf3sUL1VJw+TsGKpZTx1VufRV24gGFlhu/3s=,tag:NzLzWiN2e896PiD10Nv+Nw==,type:str]
     mac_only_encrypted: true
     version: 3.13.3
