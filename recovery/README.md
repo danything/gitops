@@ -8,7 +8,7 @@
 | --- | --- |
 | `env.age` | バックアップ先の資格情報(R2 の鍵、restic のパスワード)。age のパスフレーズで暗号化 |
 | `sops-age.key.age` | `bootstrap/` の SOPS ファイルを復号する age 秘密鍵。**同じパスフレーズ**で暗号化 |
-| [pv.sh](pv.sh) | 今ある PVC を時刻を選んで戻す・入れ直す前に全部取る道具(入れ直したときは使わない。下の 8) |
+| [backup-all.sh](backup-all.sh) | 入れ直す前に全部の PVC を今すぐ取る道具(戻すのは populator。下の 8) |
 | [infisical.sh](infisical.sh) / [infisical-ca.mjs](infisical-ca.mjs) | Infisical を restic から直接戻す道具(下の 6・7) |
 
 **populator で戻す形(8)は、この形ではまだ入れ直して流していない。** 次の建て直しで最初に確かめる(VolSync の populator が OpenEBS LVM のスナップショットから PVC を作れることは、machine config の PR ごとの QEMU の起動テストで見ている)。
@@ -136,7 +136,7 @@ sh recovery/infisical.sh db      # users が 0 なら止まる
 ```
 
 Infisical の Postgres の PVC(`data-postgresql-0`)を、VolSync のリポジトリ(`<bucket>/volsync/infisical/data-postgresql-0`)の
-**このクラスタができる前の最新**のスナップショットで丸ごと置き換える([pv.sh](pv.sh) の `pvc` と同じ)。
+**このクラスタができる前の最新**のスナップショットで丸ごと置き換える(ReplicationDestination を Direct で。ここだけ populator を使えない)。
 VolSync の Secret はほかの namespace では Infisical から来るが、ここだけは戻すのが Infisical そのものなので、`restic.env` から作る。
 古いものを選ぶときは `RESTORE_BEFORE=2026-10-30T00:00:00Z sh recovery/infisical.sh db`。
 
@@ -170,11 +170,22 @@ Argo CD が PVC を作ると、VolSync(volume populator)が R2 の `<bucket>/vol
 - **バックアップがまだ無い PVC**(足したばかりのアプリ)は、リポジトリが空なので空のまま作る
 - 見るところ: `kubectl get pvc -A`(`Pending` が残っていないか)と `kubectl get replicationdestination -A`(`<pvc>-dst` の `latestMoverStatus`)
 
-今あるクラスタで PVC を 1 つ前の中身に戻すとき(消した・壊した)は、PVC を消して作り直せば同じ仕組みで最新から埋まる
-(`<pvc>-dst` は作られたときの中身を持ち続けるので、**新しいものから埋めるなら `<pvc>-dst` も消して Argo CD に作り直させる**)。
-時刻を選んで戻すなら `recovery/pv.sh`(`argo-pause` → `<ns> stop` → `RESTORE_BEFORE=<RFC 3339> sh recovery/pv.sh <ns> pvc <pvc>` → `<ns> start` → `argo-resume`)。
+今あるクラスタで PVC を戻すとき(消した・壊した)も同じ仕組みを使う。`<pvc>-dst` に戻したい時刻を入れて戻し直させ、PVC を消して Argo CD に作り直させる
+(`<pvc>-dst` は作られたときの中身を持ち続けるので、戻し直させないと古い中身で埋まる。`WHEN` を今にすれば最新):
 
-- **R2 にあるもの**は `sh recovery/pv.sh - list`(`restic.env` が要る)。取るのをやめて PVC だけ残したものはリポジトリを消しておく
+```shell
+NS=xool PVC=xool-db WHEN=2026-11-01T00:00:00Z
+kubectl -n $NS patch replicationdestination $PVC-dst --type merge \
+  -p "{\"spec\":{\"trigger\":{\"manual\":\"r-$(date +%s)\"},\"restic\":{\"restoreAsOf\":\"$WHEN\"}}}"
+kubectl -n $NS get replicationdestination $PVC-dst -w   # latestImage が変わる(latestMoverStatus が Successful)まで待つ
+kubectl -n argocd scale sts/argocd-application-controller --replicas=0   # selfHeal が replicas を戻さないように
+kubectl -n $NS scale deploy,sts --all --replicas=0
+kubectl -n $NS delete pvc $PVC
+kubectl -n argocd scale sts/argocd-application-controller --replicas=1   # PVC と replicas が戻り、PVC は <pvc>-dst から埋まる
+```
+
+- **入れ直す前は最後に全部取る**(`tools/t.ps1 --admin sh recovery/backup-all.sh`。終わると `manual` を消して Argo CD を戻す)
+- **R2 にあるもの**は R2 の画面か `restic -r <bucket>/volsync/<ns>/<pvc> snapshots`。取るのをやめて PVC だけ残したものはリポジトリを消しておく
 - **PVC の requests が本当の上限**(OpenEBS LVM)。中身が PVC より大きくなっていると埋められない。PVC を大きくしてから作り直す
 - **k8up の頃のリポジトリ**(バケットの根)は 2026-11-01 に消した。2026-11-01 より前のものは戻せない
 
