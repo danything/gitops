@@ -50,12 +50,19 @@ spec:
           # `_` で始まるディレクトリは寝かせているアプリ。`*` は `/` も跨ぐが `**/_*/**` は頭の `/` が要るので
           # `_*/**` も並べる
           exclude: '{**/argocd.yaml,bootstrap/**,_*/**,**/_*/**}'
+      # PVC の spec は作ったあと書き換えられない。populator の dataSourceRef を後から足した PVC で同期が止まらないように見ない
+      # (新しく作る PVC には当たる。../deploy/volsync/application.yaml)
+      ignoreDifferences:
+        - kind: PersistentVolumeClaim
+          jsonPointers: [/spec/dataSourceRef, /spec/dataSource]
       destination:
         server: https://kubernetes.default.svc
         namespace: '{{ .namespace }}'
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
+          # PVC の dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない(ignoreDifferences)
+          - RespectIgnoreDifferences=true
         # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。
         # リポジトリが Namespace を自分で書いているときはそちらが勝つので、そちらにも書く
         managedNamespaceMetadata:
@@ -128,12 +135,19 @@ spec:
         directory:
           include: '*.yaml'
           exclude: '{**/argocd.yaml,bootstrap/**,_*/**,**/_*/**}'
+      # PVC の spec は作ったあと書き換えられない。populator の dataSourceRef を後から足した PVC で同期が止まらないように見ない
+      # (新しく作る PVC には当たる。../deploy/volsync/application.yaml)
+      ignoreDifferences:
+        - kind: PersistentVolumeClaim
+          jsonPointers: [/spec/dataSourceRef, /spec/dataSource]
       destination:
         server: https://kubernetes.default.svc
         namespace: '{{ .namespace }}'
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
+          # PVC の dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない(ignoreDifferences)
+          - RespectIgnoreDifferences=true
         # Argo CD が作る namespace に付ける。VolSync の mover を root で動かす(../deploy/volsync/application.yaml)。
         # リポジトリが Namespace を自分で書いているときはそちらが勝つので、そちらにも書く
         managedNamespaceMetadata:
