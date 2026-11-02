@@ -2,7 +2,7 @@
 #   pwsh -File mado/setup.ps1
 # 普段のユーザーで流す。gitops の SOPS から Entra の client secret を取り出し、リリースの MSI を落として SHA-256 と出どころを
 # 確かめたあと (tools/t.ps1 は普段のユーザーの WSL コンテナで動く)、残りを UAC で昇格して流す。何度流してもよい。
-# Talos のダッシュボードの talosconfig (os:reader、90 日) も作り直して置く。期限が近い (mado の画面に出る) ときも流す
+# Talos のダッシュボードと電源の操作の talosconfig (os:operator、90 日) も作り直して置く。期限が近い (mado の画面に出る) ときも流す
 param([string]$Stage)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
@@ -33,11 +33,12 @@ if (-not $Stage) {
         }
         $decrypted = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sops -d --output-type json deploy/auth/secrets.sops.yaml
         if ($LASTEXITCODE -ne 0) { throw 'sops: deploy/auth/secrets.sops.yaml を開けない' }
-        # Talos のダッシュボード (mado の docs/talos.md) の talosconfig。役割は os:reader だけで、90 日で切れる。
+        # Talos のダッシュボードとシャットダウン・再起動 (mado の docs/talos.md) の talosconfig。役割は os:operator (設定の書き換え・
+        # リセット・アップグレードはできない。etcd のスナップショットは取れる。docs/decisions.md) で、90 日で切れる。AMT で既に強制の電源操作ができるので、安全な止め方を足すほうが安全側 (docs/decisions.md)。
         # 管理者の talosconfig (tools/creds.sh が SOPS の Talos の CA からコンテナの /dev/shm に作る) で Talos API に作らせ、
         # 平文は標準出力で受け取る (手元のディスクには書かない)。コンテナの中の書き出しも /dev/shm で、すぐ消す。クラスタは変えない
-        $talosconfig = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" --admin sh -c 'd=$(mktemp -d /dev/shm/reader.XXXXXX) && talosctl config new $d/talosconfig --roles os:reader --crt-ttl 2160h >&2 && cat $d/talosconfig; r=$?; rm -rf $d; exit $r'
-        if ($LASTEXITCODE -ne 0) { throw 'talosctl config new: os:reader の talosconfig を作れない (ノードに届くか、age の鍵で開けるか)' }
+        $talosconfig = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" --admin sh -c 'd=$(mktemp -d /dev/shm/operator.XXXXXX) && talosctl config new $d/talosconfig --roles os:operator --crt-ttl 2160h >&2 && cat $d/talosconfig; r=$?; rm -rf $d; exit $r'
+        if ($LASTEXITCODE -ne 0) { throw 'talosctl config new: os:operator の talosconfig を作れない (ノードに届くか、age の鍵で開けるか)' }
     } finally {
         if ($placed) { Remove-Item $key -ErrorAction SilentlyContinue }
     }
@@ -59,7 +60,7 @@ if (-not $Stage) {
         [Convert]::FromBase64String(($pem -replace '-----[^-]+-----', '' -replace '\s', ''))).NotAfter
     $talosBlob = [Security.Cryptography.ProtectedData]::Protect($plain, $null, 'LocalMachine')
     [Array]::Clear($plain)
-    Write-Host "Talos の talosconfig (os:reader): $($notAfter.ToString('yyyy-MM-dd')) まで"
+    Write-Host "Talos の talosconfig (os:operator): $($notAfter.ToString('yyyy-MM-dd')) まで"
 
     # talosctl.exe (mado が ConPTY で動かす)。版は tools/Dockerfile の talosctl と同じ (Renovate が上げる)。公式の sha256sum.txt と照らす
     $talosVersion = [regex]::Match((Get-Content -Raw "$root\tools\Dockerfile"), '(?m)^ARG TALOSCTL_VERSION=(\S+)').Groups[1].Value
@@ -147,7 +148,7 @@ try {
         Copy-Item (Join-Path $Stage $f) (Join-Path $data $f) -Force
         icacls (Join-Path $data $f) /reset | Out-Null
     }
-    # talosctl.exe (mado.json の talos.talosctl)。ダッシュボードを開いている間は掴まれていて置き換えられない
+    # talosctl.exe (mado.json の talos の先の talosctl)。ダッシュボードを開いている間は掴まれていて置き換えられない
     New-Item -ItemType Directory -Force "$data\bin" | Out-Null
     try { Copy-Item (Join-Path $Stage 'talosctl.exe') "$data\bin\talosctl.exe" -Force }
     catch { throw "talosctl.exe を置き換えられない (mado でダッシュボードを開いていれば閉じてから流し直す): $_" }
