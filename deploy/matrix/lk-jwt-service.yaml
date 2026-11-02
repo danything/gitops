@@ -23,7 +23,7 @@ metadata:
   name: lk-jwt-service
   namespace: matrix
   annotations:
-    secrets.infisical.com/auto-reload: "true"
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   selector:

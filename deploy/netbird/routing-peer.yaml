@@ -18,37 +18,13 @@ spec:
       # 中身は数 KB だが、StorageClass が xfs で、xfs は 300MB より小さいとフォーマットできない
       storage: 512Mi
 ---
-# 鍵は Infisical の /netbird/netbird-routing-peer に `setup-key` で置く。
-# ダッシュボードの Generate Setup Key で出るもの。
-apiVersion: secrets.infisical.com/v1alpha1
-kind: InfisicalSecret
-metadata:
-  name: netbird-routing-peer
-  namespace: netbird
-spec:
-  hostAPI: http://infisical.infisical.svc:8080/api
-  authentication:
-    kubernetesAuth:
-      identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
-      autoCreateServiceAccountToken: true
-      serviceAccountRef:
-        name: infisical-auth
-        namespace: infisical
-      secretsScope:
-        projectSlug: doa
-        envSlug: prod
-        secretsPath: /netbird/netbird-routing-peer
-  managedKubeSecretReferences:
-    - secretName: netbird-routing-peer
-      secretNamespace: netbird
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: netbird-routing-peer
   namespace: netbird
   annotations:
-    secrets.infisical.com/auto-reload: "true"
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   # hostPort で WireGuard のポートを掴むので、新旧 Pod が並ぶと衝突する

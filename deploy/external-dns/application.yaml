@@ -60,9 +60,9 @@ spec:
         # HTTPRoute が変わったらすぐ回す(既定は 1 分ごとの巡回だけ)
         triggerLoopOnEvent: true
         interval: 5m
-        # Infisical の値を変えたら入れ替わるように(auto-reload は Deployment 自身の注釈に要る)
+        # Secret が変わったら入れ替わるように(Reloader。注釈は Deployment 自身に要る)
         deploymentAnnotations:
-          secrets.infisical.com/auto-reload: "true"
+          reloader.stakater.com/auto: "true"
         resources:
           requests:
             cpu: 10m

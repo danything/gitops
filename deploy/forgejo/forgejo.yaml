@@ -110,7 +110,7 @@ metadata:
   name: forgejo-web
   namespace: forgejo
   annotations:
-    secrets.infisical.com/auto-reload: "true"
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   # ReadWriteOnce。Forgejo は同時に 2 つ動かせない

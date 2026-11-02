@@ -20,7 +20,7 @@ metadata:
   name: netbird-server
   namespace: netbird
   annotations:
-    secrets.infisical.com/auto-reload: "true"
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   # RWO の PVC を新旧 Pod で共有しないので Recreate。

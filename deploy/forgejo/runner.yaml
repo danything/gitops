@@ -100,7 +100,7 @@ metadata:
   name: forgejo-runner
   namespace: forgejo
   annotations:
-    secrets.infisical.com/auto-reload: "true"
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   strategy:

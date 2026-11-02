@@ -56,7 +56,7 @@ metadata:
   name: livekit
   namespace: matrix
   annotations:
-    secrets.infisical.com/auto-reload: "true"
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   # hostPort を持つので新旧の Pod が同じポートを奪い合わないように Recreate にする
