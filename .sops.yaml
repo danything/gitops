@@ -32,4 +32,4 @@ creation_rules:
   - path_regex: ^deploy/.*\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
     mac_only_encrypted: true
-    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r,age1yk0dk8tnjg5j4xaw40d42qesttru45rs3lwglza465nsphpxgq8qmf9ust
+    age: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r,age1z36xmmvjmwg4sus6k8nx6wgp8qyew7tj76077rvv5sagcgudd4tszrmwml
