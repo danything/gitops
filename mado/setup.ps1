@@ -1,6 +1,6 @@
 ﻿# このPC (10.10.0.2) に mado を入れる / 版や設定を当て直す。README.md の「入れ方」。
 #   pwsh -File mado/setup.ps1
-# 普段のユーザーで流す。Infisical から Entra の client secret を取り出し、リリースの MSI を落として SHA-256 と出どころを
+# 普段のユーザーで流す。gitops の SOPS から Entra の client secret を取り出し、リリースの MSI を落として SHA-256 と出どころを
 # 確かめたあと (tools/t.ps1 は普段のユーザーの WSL コンテナで動く)、残りを UAC で昇格して流す。何度流してもよい
 param([string]$Stage)
 $ErrorActionPreference = 'Stop'
@@ -17,28 +17,25 @@ $ipv6 = '2405:1201:5201:3a00::2'
 
 if (-not $Stage) {
     # --- 普段のユーザー: 秘密と MSI を用意して、昇格して続きを流す ---------------------------------
-    # 未ログインだと export がログインの入力を待つので、標準入力を閉じてすぐ失敗させる (dotfiles の init.ps1 と同じ)
-    function Export-Entra {
-        $psi = New-Object Diagnostics.ProcessStartInfo $pwsh, ("-NoProfile -ExecutionPolicy Bypass -File `"$root\tools\t.ps1`" " +
-            'infisical export --domain https://il.doany.io/api --projectId b3ee533f-5b9e-4fdf-8c44-109926b78f20 ' +
-            '--env prod --path /shared/entra --silent --format json')
-        $psi.UseShellExecute = $false
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $p = [Diagnostics.Process]::Start($psi)
-        $p.StandardInput.Close()
-        $out = $p.StandardOutput.ReadToEnd()
-        $p.WaitForExit()
-        if ($p.ExitCode -eq 0) { $out }
+    # client secret は Entra の共用のアプリ登録の値。gitops の SOPS (deploy/auth/secrets.sops.yaml の auth-secrets の
+    # oidc-client-secret) から取る。管理者の age の鍵が .home に無ければ recovery/sops-age.key.age をパスフレーズで開いて置き、
+    # 取り出したら消す (置いてあった鍵は残す)。復号した中身はメモリで受け取り、ファイルに書かない
+    $key = Join-Path $root '.home\.config\sops\age\keys.txt'
+    $placed = -not (Test-Path $key)
+    if ($placed) {
+        & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sh -c 'mkdir -p ~/.config/sops/age && age -d -o ~/.config/sops/age/keys.txt recovery/sops-age.key.age'
+        if ($LASTEXITCODE -ne 0) { throw 'age: recovery/sops-age.key.age を開けない' }
     }
-    $exported = Export-Entra
-    if (-not $exported) {
-        & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" infisical login --domain https://il.doany.io/api
-        $exported = Export-Entra
-        if (-not $exported) { throw 'infisical: /shared/entra を取り出せない' }
+    try {
+        $decrypted = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sops -d --output-type json deploy/auth/secrets.sops.yaml
+        if ($LASTEXITCODE -ne 0) { throw 'sops: deploy/auth/secrets.sops.yaml を開けない' }
+    } finally {
+        if ($placed) { Remove-Item $key -ErrorAction SilentlyContinue }
     }
-    $secret = ($exported | Out-String | ConvertFrom-Json | Where-Object key -EQ 'client-secret').value
-    if (-not $secret) { throw 'infisical: /shared/entra に client-secret がない' }
+    $secret = (($decrypted | Out-String | ConvertFrom-Json).spec.secretTemplates |
+        Where-Object name -EQ 'auth-secrets').stringData.'oidc-client-secret'
+    $decrypted = $null
+    if (-not $secret) { throw 'sops: deploy/auth/secrets.sops.yaml の auth-secrets に oidc-client-secret がない' }
 
     # 受け渡しのフォルダ。本人だけが読める
     $tmp = Join-Path $env:TEMP "mado-setup-$PID"
