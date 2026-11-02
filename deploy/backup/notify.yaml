@@ -113,6 +113,8 @@ data:
     //   - ReplicationSource の lastSyncTime が 26 時間以内か。VolSync は成功したときしかこれを進めない
     //   - latestMoverStatus.result が Successful か。最後の回だけ失敗して、前の成功が 26 時間以内に残っている日を拾う
     //   - lastSyncTime が無い(一度も取れていない)。足したのに Secret や注釈が足りないと、ここで止まる
+    //   - spec.trigger.manual が残っていないか。残ると schedule が効かず、手で取った回を最後に止まる
+    //     (Argo CD は ServerSideApply で、自分が書いていない manual を消さない。recovery/pv.sh backup-all の後に 1 日止まった)
     //   - etcd-snapshot の CronJob の最後の成功が 26 時間以内か(PVC ではないので ReplicationSource が無い)
     //   - backup の namespace の CronJob が最後まで走ったか(restore-check は OOMKilled や期限切れでは投稿まで届かない)
     // 残る穴: ReplicationSource を書き忘れた PVC は見えない(PVC を足すときは README.md の「足す」を見る)。
@@ -138,7 +140,7 @@ data:
     try {
       const sources = await list("/apis/volsync.backube/v1alpha1/replicationsources");
       total = sources.length;
-      const never = [], stale = [], failed = [];
+      const never = [], stale = [], failed = [], manual = [];
       for (const o of sources) {
         const key = `${o.metadata.namespace}/${o.metadata.name}`;
         // 止めてあるもの(spec.paused)は鳴らさずに数だけ言う。寝かせている間ずっと鳴るため
@@ -146,6 +148,7 @@ data:
           paused.push(key);
           continue;
         }
+        if (o.spec?.trigger?.manual) manual.push(`${key} (${o.spec.trigger.manual})`);
         const s = o.status ?? {};
         if (!s.lastSyncTime) never.push(key);
         else if (hours(s.lastSyncTime) > WINDOW_H) stale.push({ key, h: hours(s.lastSyncTime) });
@@ -156,6 +159,11 @@ data:
         }
       }
       if (!sources.length) lines.push(`**ReplicationSource が 1 つも無い**`);
+      if (manual.length) {
+        lines.push(`**${manual.length} 件に trigger.manual が残っていて、schedule が効かない**(kubectl patch で /spec/trigger/manual を消す)`);
+        for (const k of manual.slice(0, 10)) lines.push(`- ${k}`);
+        if (manual.length > 10) lines.push(`- ほか ${manual.length - 10} 件`);
+      }
       if (never.length) {
         lines.push(`**一度も取れていない ReplicationSource**`);
         for (const k of never) lines.push(`- ${k}`);
