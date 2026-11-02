@@ -7,5 +7,8 @@
 		"client_secret_file": "client-secret.txt",
 		"required_role": "admin"
 	},
-	"targets": [{ "name": "OD00(この PC)", "host": "127.0.0.1" }]
+	"targets": [
+		{ "name": "OD00(この PC)", "host": "127.0.0.1" },
+		{ "name": "Z440(AMT)", "type": "amt", "host": "10.10.0.3" }
+	]
 }
