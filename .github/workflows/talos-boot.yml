@@ -131,12 +131,15 @@ jobs:
           # cert-manager: 2 つめ(DNS-01 の Secret)のトークンをダミーに
           yq -I4 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "ci-dummy"' \
             bootstrap/cert-manager-values.sops.yaml > /tmp/cert-manager-values.yaml
-          for f in /tmp/controlplane.yaml /tmp/argocd-values.yaml /tmp/infisical-values.yaml /tmp/cert-manager-values.yaml; do
+          # sops-age: クラスタの age の鍵はダミー(operator は CI では復号しない。Secret の形だけ見る)
+          yq -I4 'del(.sops) | (.. | select(tag == "!!str" and test("^ENC\\["))) |= "AGE-SECRET-KEY-CI-DUMMY"' \
+            bootstrap/sops-age.sops.yaml > /tmp/sops-age.yaml
+          for f in /tmp/controlplane.yaml /tmp/argocd-values.yaml /tmp/infisical-values.yaml /tmp/cert-manager-values.yaml /tmp/sops-age.yaml; do
             ! grep -q 'ENC\[' "$f" || { echo "::error::$f に暗号文が残っている"; exit 1; }
           done
           SECRETS=/tmp/secrets.yaml CONTROLPLANE=/tmp/controlplane.yaml \
             ARGOCD_VALUES=/tmp/argocd-values.yaml INFISICAL_VALUES=/tmp/infisical-values.yaml \
-            CERT_MANAGER_VALUES=/tmp/cert-manager-values.yaml \
+            CERT_MANAGER_VALUES=/tmp/cert-manager-values.yaml SOPS_AGE=/tmp/sops-age.yaml \
             ./bootstrap/render.sh /tmp/out
           talosctl config endpoint 127.0.0.1
           talosctl config node "$NODE"

@@ -183,6 +183,11 @@ chart cert-manager cert-manager
 inline infisical-secrets < "$WORK/infisical-secret.yaml" > "$WORK/inline-infisical-secrets.yaml"
 inline cloudflare-secret < "$WORK/cert-manager-secret.yaml" > "$WORK/inline-cloudflare-secret.yaml"
 
+# クラスタの中で SopsSecret を復号する age の鍵(sops-secrets-operator が読む。Argo CD は復号できない)。CI は SOPS_AGE にダミーを渡す
+if [ -n "${SOPS_AGE:-}" ]; then cp "$SOPS_AGE" "$WORK/sops-age.yaml"; else sops -d bootstrap/sops-age.sops.yaml > "$WORK/sops-age.yaml"; fi
+! grep -q 'ENC\[' "$WORK/sops-age.yaml" || { echo "ERROR: sops-age.sops.yaml に暗号文が残っている" >&2; exit 1; }
+inline sops-age < "$WORK/sops-age.yaml" > "$WORK/inline-sops-age.yaml"
+
 # cert-manager の CRD も URL(理由は cert-manager-values.sops.yaml の `crds`)。
 cat >> "$WORK/external-crds.yaml" <<PATCH
 apiVersion: v1alpha1

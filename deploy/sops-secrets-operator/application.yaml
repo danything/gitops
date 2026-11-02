@@ -1,0 +1,54 @@
+# sops-secrets-operator。git に暗号化したまま置いた SopsSecret を、クラスタの中で復号して Secret にする
+# (Infisical の後継。理由は docs/decisions.md「秘密は SOPS で git に置く」)。
+#
+# - 鍵はクラスタ用の age の鍵(bootstrap/sops-age.sops.yaml。machine config が namespace ごと入れる)。
+#   SopsSecret はこの鍵と管理者の鍵の両方で暗号化する(../../.sops.yaml)ので、手元でも `sops edit` できる
+# - SopsSecret を変えて push すると、Argo CD が当てた時点で operator が Secret を書き換える。Pod の入れ替えは Reloader(../reloader/)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sops-secrets-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sops-secrets-operator
+  source:
+    repoURL: https://isindir.github.io/sops-secrets-operator/
+    chart: sops-secrets-operator
+    targetRevision: 0.28.1
+    helm:
+      valuesObject:
+        # 今ある Secret(Infisical の operator が作ったもの)も引き取る。復元したあとに持ち主の印が古いまま残ったものも
+        defaultEnforceOwnership: true
+        secretsAsFiles:
+          - name: sops-age-key-file
+            mountPath: /etc/sops-age-key-file
+            secretName: sops-age-key-file
+        extraEnv:
+          - name: SOPS_AGE_KEY_FILE
+            value: /etc/sops-age-key-file/keys.txt
+        securityContext:
+          enabled: true
+          container:
+            enabled: true
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {memory: 256Mi}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      # namespace と鍵の Secret は machine config が先に作る(bootstrap/sops-age.sops.yaml)
+      - CreateNamespace=true
+      - ServerSideApply=true

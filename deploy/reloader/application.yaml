@@ -1,0 +1,34 @@
+# Reloader。Secret・ConfigMap が変わったら、それを使う Deployment・StatefulSet を入れ替える
+# (sops-secrets-operator は Secret を書き換えるだけで Pod は入れ替えないので、Infisical の operator の auto-reload の代わり)。
+# 入れ替えたい workload の metadata.annotations に `reloader.stakater.com/auto: "true"` を書く。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reloader
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: reloader
+  source:
+    repoURL: https://stakater.github.io/stakater-charts
+    chart: reloader
+    targetRevision: 2.2.19
+    helm:
+      valuesObject:
+        reloader:
+          # 既定(env-vars)は Pod の template に環境変数を足すので、Argo CD が git との差分として見る。注釈で入れ替える
+          reloadStrategy: annotations
+          deployment:
+            resources:
+              requests: {cpu: 10m, memory: 32Mi}
+              limits: {memory: 128Mi}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
