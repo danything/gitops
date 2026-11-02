@@ -6,7 +6,7 @@ metadata:
   name: volsync
   namespace: matrix
   annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -38,8 +38,6 @@ kind: ReplicationSource
 metadata:
   name: tuwunel-data
   namespace: matrix
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: tuwunel-data
   trigger:
@@ -57,8 +55,6 @@ kind: ReplicationDestination
 metadata:
   name: tuwunel-data-dst
   namespace: matrix
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once

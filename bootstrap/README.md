@@ -183,22 +183,20 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 DB の PVC は VolSync で戻すが、Secret は手元の restic.env から作る(ほかの VolSync の Secret が Infisical から来るので)。戻したら operator の
 Kubernetes auth の CA も差し替える。手順は [../recovery/README.md](../recovery/README.md) の 6・7。
 
-### `InfisicalSecret` には sync-options を 2 つ付けること
+### `InfisicalSecret` には `Prune=false` を付けること
 
 ```yaml
-argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
+argocd.argoproj.io/sync-options: Prune=false
 ```
 
-**`Prune=false`** ── operator は CR の annotation を、作った `Secret` にもコピーする。
+operator は CR の annotation を、作った `Secret` にもコピーする。
 ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` を「git に無い管理対象」と
 見なして sync のたびに prune する。
 `Prune=false` も一緒にコピーさせて、prune の対象から外す。
 
-**`SkipDryRunOnMissingResource=true`** ── **まっさらなクラスタでは CRD がまだ無く、`deploy/` の同期が丸ごと落ちる**
-(CRD を入れる `deploy/infisical/operator.yaml` が同じ同期の中にいる)。
-VolSync の `ReplicationSource` も同じ(CRD を入れる `deploy/volsync/application.yaml` が同じ同期の中にいる)。
-
-このリポジトリの `InfisicalSecret`(`deploy/argocd/oidc-secret.yaml`・`deploy/auth/secrets.yaml`・`deploy/infisical/smtp-secret.yaml` など)にも付けてある。
+**`SkipDryRunOnMissingResource` は要らない。** まっさらなクラスタでは CRD(Infisical の operator・VolSync)がまだ無く、
+同じ同期の中の CR の dry-run で同期が丸ごと落ちる。これは ApplicationSet(`argocd-repos.yaml`)の syncOptions で全部のアプリに付けてある。
+ApplicationSet の外の Application(chart を入れるものなど)で CR を書くときだけ、そちらに付ける。
 
 ### アプリ側の書き方
 

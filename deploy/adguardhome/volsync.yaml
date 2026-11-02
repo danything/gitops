@@ -6,7 +6,7 @@ metadata:
   name: volsync
   namespace: adguardhome
   annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -48,8 +48,6 @@ kind: ReplicationSource
 metadata:
   name: adguardhome-conf
   namespace: adguardhome
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: adguardhome-conf
   trigger:
@@ -65,8 +63,6 @@ kind: ReplicationSource
 metadata:
   name: adguardhome-work
   namespace: adguardhome
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: adguardhome-work
   trigger:
@@ -84,8 +80,6 @@ kind: ReplicationDestination
 metadata:
   name: adguardhome-conf-dst
   namespace: adguardhome
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
@@ -107,8 +101,6 @@ kind: ReplicationDestination
 metadata:
   name: adguardhome-work-dst
   namespace: adguardhome
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once

@@ -6,7 +6,7 @@ metadata:
   name: volsync
   namespace: infisical
   annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -38,8 +38,6 @@ kind: ReplicationSource
 metadata:
   name: data-postgresql-0
   namespace: infisical
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: data-postgresql-0
   trigger:
