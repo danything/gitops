@@ -1,34 +1,6 @@
-# この namespace の PVC を VolSync で R2 に取る(リポジトリは PVC ごとに `<bucket>/volsync/matrix/<pvc>`)。
-# 取り方・時刻・Secret の組み方は ../volsync/application.yaml。アプリと一緒に置くので、アプリを消せばこれも消える
-apiVersion: secrets.infisical.com/v1alpha1
-kind: InfisicalSecret
-metadata:
-  name: volsync
-  namespace: matrix
-spec:
-  hostAPI: http://infisical.infisical.svc:8080/api
-  authentication:
-    kubernetesAuth:
-      identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
-      autoCreateServiceAccountToken: true
-      serviceAccountRef:
-        name: infisical-auth
-        namespace: infisical
-      secretsScope:
-        projectSlug: doa
-        envSlug: prod
-        secretsPath: /backup/backup
-  managedKubeSecretReferences:
-    - secretName: volsync-tuwunel-data
-      secretNamespace: matrix
-      template:
-        data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/matrix/tuwunel-data"
-          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
-          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
-          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
-          AWS_DEFAULT_REGION: auto
----
+# この namespace の PVC を VolSync で R2 に取り(ReplicationSource)、PVC を作るときに埋める(ReplicationDestination <pvc>-dst)。
+# リポジトリは PVC ごとに `<bucket>/volsync/matrix/<pvc>`、その Secret(volsync-<pvc>)は secrets.sops.yaml。取り方は ../volsync/application.yaml
+# アプリと一緒に置くので、アプリを消せばこれも消える
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
 metadata:

@@ -273,7 +273,7 @@ data:
         tls: { ca: await Bun.file(`${SA}/ca.crt`).text() },
       });
       if (!r.ok) throw new Error(`replicationsources: ${r.status} ${(await r.text()).slice(0, 200)}`);
-      // リポジトリの場所は 各アプリの volsync.yaml の InfisicalSecret と同じ組み方(PVC の名前で切る)
+      // リポジトリの場所は 各アプリの secrets.sops.yaml の volsync-<pvc> と同じ組み方(PVC の名前で切る)
       const pvcs = [...new Set(
         ((await r.json()).items ?? [])
           .filter((o) => o.spec?.sourcePVC && o.spec?.restic)

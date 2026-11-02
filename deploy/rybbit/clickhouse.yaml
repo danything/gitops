@@ -93,7 +93,7 @@ metadata:
   name: clickhouse
   namespace: rybbit
   annotations:
-    secrets.infisical.com/auto-reload: "true"
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   # ReadWriteOnce なので古い Pod が消えてから新しい Pod が付ける

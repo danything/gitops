@@ -14,10 +14,10 @@ PVC のバックアップは VolSync([../volsync/application.yaml](../volsync/ap
 
 ## 秘密
 
-**Secret `backup` の正本は Infisical の `/backup/backup`**([secret.yaml](secret.yaml))。
+**Secret `backup` は [secrets.sops.yaml](secrets.sops.yaml)**(SOPS。`tools/t sops edit` で直す)。
 キーは `endpoint` / `bucket` / `accessKeyId` / `secretAccessKey` / `repoPassword` / `mattermostWebhook` の 6 つ。
-VolSync の Secret(namespace ごとの InfisicalSecret `volsync` が作る `volsync-<pvc>`)も同じフォルダから組む。
-値は `recovery/env.age` にもある(Infisical を戻すときは Infisical が無いので、こちらを使う。recovery/README.md の 6)。
+VolSync の Secret(`volsync-<pvc>`。各 namespace の secrets.sops.yaml)も同じ R2 の資格情報とパスワード(変えるときは全部)。
+値は `recovery/env.age` にもある。
 
 `mattermostWebhook` は名前は据え置きで、中身は Matrix の部屋 `server` の webhook([../matrix/README.md](../matrix/README.md)「通知のルーム」)。
 
@@ -26,9 +26,9 @@ VolSync の Secret(namespace ごとの InfisicalSecret `volsync` が作る `vols
 **取る定義はアプリと一緒に置く**(そのアプリのリポジトリの `deploy/volsync.yaml`。gitops の中のアプリは `../<アプリ>/volsync.yaml`)。
 アプリを消せば定義も消えるので、gitops を直す必要は無い。戻すときは各 PVC の `dataSourceRef`(volsync.yaml の `<pvc>-dst`)で、PVC を作ると R2 の最新から埋まる。
 
-- **足す**: アプリの `volsync.yaml` に InfisicalSecret の `managedKubeSecretReferences`・ReplicationSource・ReplicationDestination(`<pvc>-dst`。
+- **足す**: アプリの secrets.sops.yaml に `volsync-<pvc>` の secretTemplate(ほかの PVC のものを写してリポジトリだけ変える)、`volsync.yaml` に ReplicationSource・ReplicationDestination(`<pvc>-dst`。
   capacity は PVC と同じ)を 1 組足し、PVC に `dataSourceRef` で `<pvc>-dst` を書く(ほかのアプリの volsync.yaml と pvc.yaml を写す。時刻はどれも 19:00)。
-  **dataSourceRef は PVC を作るときにしか書けない**(今ある PVC に足しても効かない。Argo CD は差分を見ない設定)。新しいアプリなら InfisicalSecret ごと写す。
+  **dataSourceRef は PVC を作るときにしか書けない**(今ある PVC に足しても効かない。Argo CD は差分を見ない設定)。新しいアプリなら secrets.sops.yaml ごと作る。
   その namespace に `volsync.backube/privileged-movers: "true"` の注釈があるかを見る(無いと mover が root で動けず、読めないファイルで落ちる)
 - **やめる**: 定義を消す(アプリごと消すなら何もしない)。**PVC を残したまま取るのだけやめるなら、R2 のリポジトリも消す**(残すと、あとで同じ名前の PVC を作ったときに古い中身で埋まる)。
   アプリごとやめたときもリポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残る。要らなければ `rclone purge` か R2 の画面で消す

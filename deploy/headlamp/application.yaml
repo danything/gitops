@@ -35,9 +35,9 @@ spec:
         clusterRoleBinding:
           # Headlamp 自身は API サーバを叩かない。利用者のトークンを転送するだけ。
           create: false
-        # Infisical が Secret を差し替えたら入れ替わるように(push-bridge → operator)。
+        # Secret が変わったら入れ替わるように(Reloader)。
         deploymentAnnotations:
-          secrets.infisical.com/auto-reload: "true"
+          reloader.stakater.com/auto: "true"
         config:
           inCluster: true
           inClusterContextName: main

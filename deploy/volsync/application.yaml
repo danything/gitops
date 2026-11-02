@@ -4,8 +4,8 @@
 # アプリを消せば定義も消える。VolSync には PVC をラベルやワイルドカードで選ぶ仕組みが無いので、1 本ずつ名前で書く
 # (denpa-raw だけは取らない)。書き方は ../backup/README.md「PVC を足すとき・やめるとき」。
 #
-# - **リポジトリは PVC ごと**に `<bucket>/volsync/<namespace>/<pvc>`。Secret(`volsync-<pvc>`)は namespace ごとの InfisicalSecret
-#   `volsync` が、`/backup/backup`(endpoint・bucket・鍵・repoPassword)からテンプレートで組む
+# - **リポジトリは PVC ごと**に `<bucket>/volsync/<namespace>/<pvc>`。Secret(`volsync-<pvc>`。RESTIC_REPOSITORY・RESTIC_PASSWORD・
+#   AWS_*)は namespace ごとの secrets.sops.yaml(SOPS)。中身は R2 の資格情報とパスワードが backup の Secret と同じで、リポジトリだけ PVC ごと
 # - **スナップショットから取る**(copyMethod: Snapshot。既定の VolumeSnapshotClass `lvm` を使う。bootstrap/storage.yaml)。
 #   止めずに取れて、Postgres・SQLite・RocksDB は crash-consistent なスナップショットから自分で立ち直る
 # - **戻すのは populator**(docs/decisions.md「戻すのが自動になる」)。各 PVC の dataSourceRef が ReplicationDestination `<pvc>-dst` を指し、
