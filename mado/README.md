@@ -15,7 +15,7 @@ NetBird は管理サーバーも routing peer も `main` の上なので、`main
 | 証明書 | mado が Let's Encrypt から自分で取る(80 で HTTP-01)。30 日を切ったら取り直す |
 | ログイン | Entra の共用のアプリ登録(戻り先 `https://md.doany.io/callback` は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れない(ほかのアプリと共通) |
 | 設定 | [mado.json](mado.json)。`targets` がつなぐ先(画面で選ぶ。この PC(RDP)と Z440 の AMT(`"type": "amt"`、電源と SOL。AMT の port 16992 / 16994 はルーターで開けない。この PC から届けばよい)。10.0 側の PC は、この PC の Wi-Fi がつながっているときだけ届く)。秘密は書かない(client secret は `setup.ps1` が gitops の SOPS から取り出して `client-secret.txt` に置く)。`required_role` の `admin` はほかのアプリと共通([docs/entra.md](../docs/entra.md)) |
-| 版 | **mado が自分で上げる**(6 時間ごとに GitHub のリリースを見て、ECDSA の署名を確かめた MSI を、誰もつないでいないときに入れる)。タスクトレイの「今すぐ更新を確かめる」でもよい。`setup.ps1` は版を固定せず、流したときの最新のリリースを入れる(`gh release view`)。動いているほうが新しければ MSI は入れない |
+| 版 | **mado が自分で上げる**(6 時間ごとに GitHub のリリースを見て、ECDSA の署名を確かめた MSI を、誰もつないでいないときに入れる)。タスクトレイの「今すぐ更新を確かめる」でもよい。`setup.ps1` は版を固定せず、流したときの最新のリリースを入れる(`gh release view`)。動いているほうが同じか新しければ MSI は入れない |
 
 ## 入れ方
 

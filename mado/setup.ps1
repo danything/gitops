@@ -43,7 +43,8 @@ if (-not $Stage) {
     New-Item -ItemType Directory $tmp | Out-Null
     icacls $tmp /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
     try {
-        # 動いている mado の版 (状態の口)。自分で上げてこちらより新しければ MSI は入れない (設定と秘密だけ置き直す)
+        # 動いている mado の版 (状態の口)。自分で上げてこちら以上なら MSI は入れない (設定と秘密だけ置き直す)。
+        # 同じ版の MSI を入れると Windows Installer は修復として扱い、自動更新が入れたときの MSI (もう無い) を探して 1603 で落ちる
         function ConvertTo-Version([string]$v) {
             try { [version](($v -replace '^v', '') -replace '[-+].*$', '') } catch { $null }
         }
@@ -54,8 +55,8 @@ if (-not $Stage) {
         try { $running = (Invoke-RestMethod http://127.0.0.1:8788/status -TimeoutSec 3).version } catch {}
         $a = ConvertTo-Version $running
         $b = ConvertTo-Version $version
-        if ($a -and $b -and $a -gt $b) {
-            Write-Host "動いている mado ($running) のほうが新しいので、MSI はそのまま ($version は入れない)"
+        if ($a -and $b -and $a -ge $b) {
+            Write-Host "動いている mado ($running) が $version 以上なので、MSI はそのまま (設定と秘密だけ置き直す)"
         } else {
             # リリースの MSI と SHA-256。照らして合わなければ止める
             gh release download $version --repo danything/mado --dir $tmp --pattern 'mado.msi' --pattern 'mado.msi.sha256'
