@@ -1,5 +1,5 @@
 # Infisical 純正 Kubernetes operator。InfisicalSecret CR を見て Infisical から値を取り、
-# 普通の Secret を作る。`reloader.stakater.com/auto: "true"` 注釈のある Deployment は
+# 普通の Secret を作る。`secrets.infisical.com/auto-reload: "true"` 注釈のある Deployment は
 # Secret 更新時に自動でローリング再起動される。
 # https://infisical.com/docs/integrations/platforms/kubernetes/overview
 #
