@@ -18,11 +18,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /backup/backup
-        recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-clickhouse-data
       secretNamespace: rybbit
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/rybbit/clickhouse-data"
@@ -32,7 +30,6 @@ spec:
           AWS_DEFAULT_REGION: auto
     - secretName: volsync-postgres-data
       secretNamespace: rybbit
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/rybbit/postgres-data"

@@ -38,11 +38,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /netbird/netbird-routing-peer
-        recursive: false
   managedKubeSecretReferences:
     - secretName: netbird-routing-peer
       secretNamespace: netbird
-      creationPolicy: Orphan
 ---
 apiVersion: apps/v1
 kind: Deployment

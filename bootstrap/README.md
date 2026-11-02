@@ -215,11 +215,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /denpa/denpa-oidc
-        recursive: false
   managedKubeSecretReferences:
     - secretName: denpa-oidc
       secretNamespace: denpa
-      creationPolicy: Orphan
 ```
 
 `kubernetes.io/dockerconfigjson` のような型が要るときは `managedKubeSecretReferences` に
