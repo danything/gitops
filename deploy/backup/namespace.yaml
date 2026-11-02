@@ -1,4 +1,4 @@
-# バックアップの見張りと etcd のスナップショット(PVC のバックアップそのものは ../volsync/)。
+# バックアップの見張りと etcd のスナップショット(PVC のバックアップそのものは VolSync。各アプリの volsync.yaml)。
 # k8up の namespace の後を継いだ。PSA は既定(baseline)のままでよい(どれも root を使わない)
 apiVersion: v1
 kind: Namespace

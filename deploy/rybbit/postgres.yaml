@@ -1,4 +1,4 @@
-# Rybbit のユーザー・サイト・設定の DB。forgejo/postgres.yaml と同じ形(17 系、PVC は VolSync がスナップショットから取る。../volsync/rybbit.yaml)。
+# Rybbit のユーザー・サイト・設定の DB。forgejo/postgres.yaml と同じ形(17 系、PVC は VolSync がスナップショットから取る。volsync.yaml)。
 apiVersion: v1
 kind: Service
 metadata:

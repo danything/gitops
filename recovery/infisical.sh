@@ -16,7 +16,7 @@ case ${1:-} in
 	db)
 		# **PVC(data-postgresql-0)を丸ごと戻す**(VolSync のスナップショット。pv.sh の pvc と同じ)。
 		# ReplicationDestination の Secret は、ほかの namespace と違って InfisicalSecret から作れない(戻すのが Infisical そのもの)ので、
-		# 手元の restic.env から作る。あとで deploy/volsync/infisical.yaml の InfisicalSecret が同じ名前で上書きする(中身は同じ)
+		# 手元の restic.env から作る。あとで deploy/infisical/volsync.yaml の InfisicalSecret が同じ名前で上書きする(中身は同じ)
 		set -a; . "$HOME/.config/restic.env"; set +a
 		repo=${RESTIC_REPOSITORY%/}/volsync/infisical/data-postgresql-0
 		$K -n infisical create secret generic volsync-data-postgresql-0 \

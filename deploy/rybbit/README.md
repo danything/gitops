@@ -15,7 +15,7 @@
 | [rybbit-secrets.yaml](rybbit-secrets.yaml) | Infisical `/rybbit/rybbit` の 4 キー → Secret `rybbit` |
 | [httproute.yaml](httproute.yaml) | `rt.doany.io`。`/api` は backend、ほかは client。上流の Caddyfile にある `/.well-known/oauth-*`(MCP 向け)は使わないので置かない |
 
-バックアップは [../volsync/rybbit.yaml](../volsync/rybbit.yaml)(VolSync。ClickHouse と PostgreSQL の PVC をスナップショットから)。
+バックアップは [volsync.yaml](volsync.yaml)(VolSync。ClickHouse と PostgreSQL の PVC をスナップショットから)。
 
 ## 使い始め
 
