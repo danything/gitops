@@ -1,0 +1,50 @@
+# External Secrets Operator(ESO)。Infisical(や、あとで別の置き場)から Secret を作る。InfisicalSecret(Infisical の operator)の後継で、
+# 置き場への認証は clustersecretstore.yaml の 1 か所だけに書き、各アプリの ExternalSecret は「どのフォルダを」だけ書く。
+#
+# - **反映の速さは各 ExternalSecret の refreshInterval**(既定 1h)。Infisical はクラスタの中にあり読みにいっても費用も負荷もほぼ無いので、
+#   30s にして待ち時間を 30 秒以内にする(Webhook を受ける仕組みは置かない)
+# - 移すまでは InfisicalSecret と並べて動かす(同じ Secret を両方から作らないこと)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  source:
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    targetRevision: 2.14.0
+    helm:
+      valuesObject:
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {memory: 256Mi}
+        webhook:
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+        certController:
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # CRD より先に同期しにいくと既定の 5 回で諦める。15s から倍々・上限 5 分・10 回
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+      # CRD が大きく、client-side apply の注釈(256KB)に入らない
+      - ServerSideApply=true
