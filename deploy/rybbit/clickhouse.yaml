@@ -22,6 +22,8 @@ metadata:
   namespace: rybbit
   # VolSync がスナップショットから取る(volsync.yaml)。論理バックアップ(BACKUP 文)は S3 先が要るので使わない
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の clickhouse-data-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: clickhouse-data-dst}
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path

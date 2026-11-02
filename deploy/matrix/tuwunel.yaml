@@ -94,6 +94,8 @@ metadata:
   namespace: matrix
   # VolSync がスナップショットから取る(volsync.yaml)
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の tuwunel-data-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: tuwunel-data-dst}
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path

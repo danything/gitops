@@ -10,7 +10,7 @@ PVC のバックアップは VolSync([../volsync/application.yaml](../volsync/ap
 | [notify.yaml](notify.yaml) | 全部の ReplicationSource と etcd-snapshot が 26 時間以内に成功したかを、日次で通知の部屋に 1 行 | 21:00 |
 | [restore-check.yaml](restore-check.yaml) | 毎月 1 日、全部の PVC の最新を実際に取り出して開けるかを確かめる | 06:00(1 日) |
 
-戻し方は [../../recovery/README.md](../../recovery/README.md) の 6(Infisical)と 8(ほかの PVC。`recovery/pv.sh`)。
+戻し方は [../../recovery/README.md](../../recovery/README.md) の 6(Infisical)と 8(ほかの PVC。populator で PVC を作ると埋まる)。
 
 ## 秘密
 
@@ -24,13 +24,14 @@ VolSync の Secret(namespace ごとの InfisicalSecret `volsync` が作る `vols
 ## PVC を足すとき・やめるとき
 
 **取る定義はアプリと一緒に置く**(そのアプリのリポジトリの `deploy/volsync.yaml`。gitops の中のアプリは `../<アプリ>/volsync.yaml`)。
-アプリを消せば定義も消えるので、gitops を直す必要は無い。戻すとき(`recovery/pv.sh`)は R2 にあるものを全部戻す。
+アプリを消せば定義も消えるので、gitops を直す必要は無い。戻すときは各 PVC の `dataSourceRef`(volsync.yaml の `<pvc>-dst`)で、PVC を作ると R2 の最新から埋まる。
 
-- **足す**: アプリの `volsync.yaml` に InfisicalSecret の `managedKubeSecretReferences` と ReplicationSource を 1 組足す
-  (ほかのアプリの volsync.yaml を写す。時刻はどれも 19:00)。新しいアプリなら InfisicalSecret ごと写す。
+- **足す**: アプリの `volsync.yaml` に InfisicalSecret の `managedKubeSecretReferences`・ReplicationSource・ReplicationDestination(`<pvc>-dst`。
+  capacity は PVC と同じ)を 1 組足し、PVC に `dataSourceRef` で `<pvc>-dst` を書く(ほかのアプリの volsync.yaml と pvc.yaml を写す。時刻はどれも 19:00)。
+  **dataSourceRef は PVC を作るときにしか書けない**(今ある PVC に足しても効かない。Argo CD は差分を見ない設定)。新しいアプリなら InfisicalSecret ごと写す。
   その namespace に `volsync.backube/privileged-movers: "true"` の注釈があるかを見る(無いと mover が root で動けず、読めないファイルで落ちる)
-- **やめる**: 定義を消す(アプリごと消すなら何もしない)。**PVC を残したまま取るのだけやめるなら、R2 のリポジトリも消す**(残すと戻すときに古い中身で上書きする)。リポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残る。
-  残っていても戻すときは PVC が無いので飛ばす(最後に並ぶ)。要らなければ `rclone purge` か R2 の画面で消す
+- **やめる**: 定義を消す(アプリごと消すなら何もしない)。**PVC を残したまま取るのだけやめるなら、R2 のリポジトリも消す**(残すと、あとで同じ名前の PVC を作ったときに古い中身で埋まる)。
+  アプリごとやめたときもリポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残る。要らなければ `rclone purge` か R2 の画面で消す
 
 ## バケットの中
 

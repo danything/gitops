@@ -9,6 +9,8 @@ metadata:
   namespace: netbird
   # ピアの identity(秘密鍵)と設定だけ。消えると再登録が要るので取る(volsync.yaml)。
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の netbird-routing-peer-data-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: netbird-routing-peer-data-dst}
   accessModes:
     - ReadWriteOnce
   resources:

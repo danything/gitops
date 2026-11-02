@@ -5,6 +5,8 @@ metadata:
   name: adguardhome-conf
   namespace: adguardhome
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の adguardhome-conf-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: adguardhome-conf-dst}
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path
@@ -18,6 +20,8 @@ metadata:
   name: adguardhome-work
   namespace: adguardhome
 spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の adguardhome-work-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: adguardhome-work-dst}
   accessModes:
     - ReadWriteOnce
   storageClassName: local-path
