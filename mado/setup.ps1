@@ -17,6 +17,8 @@ $data = Join-Path $env:ProgramData 'mado'
 $ipv6 = '2405:1201:5201:3a00::2'
 
 if (-not $Stage) {
+    # talosconfig の期限を読む X509CertificateLoader は .NET 9 (pwsh 7.5) から。DPAPI の ProtectedData は pwsh 7 に入っている
+    if ($PSVersionTable.PSVersion -lt [version]'7.5') { throw "pwsh 7.5 以上で流す (今は $($PSVersionTable.PSVersion))" }
     # --- 普段のユーザー: 秘密と MSI を用意して、昇格して続きを流す ---------------------------------
     # client secret は Entra の共用のアプリ登録の値。gitops の SOPS (deploy/auth/secrets.sops.yaml の auth-secrets の
     # oidc-client-secret) から取る。管理者の age の鍵が .home に無ければ recovery/sops-age.key.age をパスフレーズで開いて置き、
