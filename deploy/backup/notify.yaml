@@ -63,7 +63,7 @@ metadata:
   name: notify
   namespace: backup
 spec:
-  # VolSync(19:00〜20:45 UTC)の後。その日に足した ReplicationSource の初回が間に合わないと「一度も取れていない」と鳴る
+  # VolSync(19:00 UTC から 5 分ほど)の後。その日に足した ReplicationSource の初回が間に合わないと「一度も取れていない」と鳴る
   schedule: "0 21 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1

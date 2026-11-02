@@ -19,7 +19,6 @@ spec:
       secretsScope:
         projectSlug: doa
         envSlug: prod
-        # k8up と同じ R2 の資格情報とリポジトリのパスワード(経路だけ分ける)
         secretsPath: /k8up/k8up-global
         recursive: false
   managedKubeSecretReferences:
@@ -54,13 +53,11 @@ metadata:
 spec:
   sourcePVC: netbird-data
   trigger:
-    schedule: "5 20 * * *"
+    schedule: "0 19 * * *"
   restic:
     repository: volsync-netbird-data
     copyMethod: Snapshot
-    volumeSnapshotClassName: lvm
     retain: {daily: 7, weekly: 4, monthly: 6}
-    pruneIntervalDays: 7
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
 ---
 apiVersion: volsync.backube/v1alpha1
@@ -73,11 +70,9 @@ metadata:
 spec:
   sourcePVC: netbird-routing-peer-data
   trigger:
-    schedule: "10 20 * * *"
+    schedule: "0 19 * * *"
   restic:
     repository: volsync-netbird-routing-peer-data
     copyMethod: Snapshot
-    volumeSnapshotClassName: lvm
     retain: {daily: 7, weekly: 4, monthly: 6}
-    pruneIntervalDays: 7
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
