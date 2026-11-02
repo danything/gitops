@@ -9,6 +9,16 @@
 	},
 	"targets": [
 		{ "name": "OD00(この PC)", "host": "127.0.0.1" },
-		{ "name": "Z440(AMT)", "type": "amt", "host": "10.10.0.3" }
+		{
+			"name": "Z440(AMT)",
+			"type": "amt",
+			"host": "10.10.0.3",
+			"talos": {
+				"talosconfig": "talosconfig.dpapi",
+				"node": "10.10.0.4",
+				"endpoints": ["10.10.0.4"],
+				"talosctl": "bin/talosctl.exe"
+			}
+		}
 	]
 }
