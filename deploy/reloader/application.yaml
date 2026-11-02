@@ -1,5 +1,5 @@
 # Reloader。Secret・ConfigMap が変わったら、それを使う Deployment・StatefulSet を入れ替える
-# (ESO は Secret を書き換えるだけで Pod は入れ替えないので、Infisical の operator の auto-reload の代わり)。
+# (sops-secrets-operator は Secret を書き換えるだけで Pod は入れ替えないので、Infisical の operator の auto-reload の代わり)。
 # 入れ替えたい workload の metadata.annotations に `reloader.stakater.com/auto: "true"` を書く。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
