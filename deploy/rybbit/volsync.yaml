@@ -5,8 +5,6 @@ kind: InfisicalSecret
 metadata:
   name: volsync
   namespace: rybbit
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:

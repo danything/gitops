@@ -183,20 +183,13 @@ Headlamp が利用者本人の id_token を API サーバへ転送する。ア�
 DB の PVC は VolSync で戻すが、Secret は手元の restic.env から作る(ほかの VolSync の Secret が Infisical から来るので)。戻したら operator の
 Kubernetes auth の CA も差し替える。手順は [../recovery/README.md](../recovery/README.md) の 6・7。
 
-### `InfisicalSecret` には `Prune=false` を付けること
+### `InfisicalSecret` に sync-options の注釈は要らない
 
-```yaml
-argocd.argoproj.io/sync-options: Prune=false
-```
-
-operator は CR の annotation を、作った `Secret` にもコピーする。
-ArgoCD の tracking-id までコピーされると、ArgoCD がその `Secret` を「git に無い管理対象」と
-見なして sync のたびに prune する。
-`Prune=false` も一緒にコピーさせて、prune の対象から外す。
-
-**`SkipDryRunOnMissingResource` は要らない。** まっさらなクラスタでは CRD(Infisical の operator・VolSync)がまだ無く、
-同じ同期の中の CR の dry-run で同期が丸ごと落ちる。これは ApplicationSet(`argocd-repos.yaml`)の syncOptions で全部のアプリに付けてある。
-ApplicationSet の外の Application(chart を入れるものなど)で CR を書くときだけ、そちらに付ける。
+- **prune されない。** operator は CR の annotation(Argo CD の tracking-id も)を作った `Secret` にコピーするが、
+  Argo CD は `Secret` を丸ごと管理の対象から外している(`argocd-values.sops.yaml` の `resource.exclusions`)ので見ない
+- **CRD が無くても止まらない。** まっさらなクラスタでは CRD(Infisical の operator・VolSync)がまだ無く、同じ同期の中の CR の
+  dry-run で同期が丸ごと落ちる。これは ApplicationSet(`argocd-repos.yaml`)の syncOptions の `SkipDryRunOnMissingResource=true` で
+  全部のアプリに効かせてある。ApplicationSet の外の Application(chart を入れるものなど)で CR を書くときだけ、そちらに付ける
 
 ### アプリ側の書き方
 

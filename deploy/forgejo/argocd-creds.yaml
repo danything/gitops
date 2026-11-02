@@ -13,8 +13,6 @@ kind: InfisicalSecret
 metadata:
   name: forgejo-repo-creds
   namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
