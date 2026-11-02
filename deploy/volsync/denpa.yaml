@@ -19,7 +19,6 @@ spec:
       secretsScope:
         projectSlug: doa
         envSlug: prod
-        # k8up と同じ R2 の資格情報とリポジトリのパスワード(経路だけ分ける)
         secretsPath: /k8up/k8up-global
         recursive: false
   managedKubeSecretReferences:
@@ -64,13 +63,11 @@ metadata:
 spec:
   sourcePVC: agent-config
   trigger:
-    schedule: "20 19 * * *"
+    schedule: "0 19 * * *"
   restic:
     repository: volsync-agent-config
     copyMethod: Snapshot
-    volumeSnapshotClassName: lvm
     retain: {daily: 7, weekly: 4, monthly: 6}
-    pruneIntervalDays: 7
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
 ---
 apiVersion: volsync.backube/v1alpha1
@@ -83,13 +80,11 @@ metadata:
 spec:
   sourcePVC: denpa-data
   trigger:
-    schedule: "25 19 * * *"
+    schedule: "0 19 * * *"
   restic:
     repository: volsync-denpa-data
     copyMethod: Snapshot
-    volumeSnapshotClassName: lvm
     retain: {daily: 7, weekly: 4, monthly: 6}
-    pruneIntervalDays: 7
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
 ---
 apiVersion: volsync.backube/v1alpha1
@@ -102,12 +97,10 @@ metadata:
 spec:
   sourcePVC: denpa-encoded
   trigger:
-    schedule: "30 19 * * *"
+    schedule: "0 19 * * *"
   restic:
     repository: volsync-denpa-encoded
     copyMethod: Snapshot
-    volumeSnapshotClassName: lvm
     # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
     retain: {last: "1"}
-    pruneIntervalDays: 7
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}

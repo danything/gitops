@@ -5,7 +5,7 @@ PVC のバックアップは VolSync([../volsync/application.yaml](../volsync/ap
 
 | | 何 | 時刻(UTC) |
 | --- | --- | --- |
-| [../volsync/](../volsync/) | PVC ごとの ReplicationSource。保持は日次 7・週次 4・月次 6(録画だけ 1 世代) | 19:00〜20:45 |
+| [../volsync/](../volsync/) | PVC ごとの ReplicationSource。保持は日次 7・週次 4・月次 6(録画だけ 1 世代) | 19:00 |
 | [etcd-snapshot.yaml](etcd-snapshot.yaml) | etcd のスナップショット(`<bucket>/etcd`)。保持は日次 7・週次 4 | 13:00 |
 | [notify.yaml](notify.yaml) | 全部の ReplicationSource と etcd-snapshot が 26 時間以内に成功したかを、日次で通知の部屋に 1 行 | 21:00 |
 | [restore-check.yaml](restore-check.yaml) | 毎月 1 日、全部の PVC の最新を実際に取り出して開けるかを確かめる | 06:00(1 日) |
@@ -23,7 +23,7 @@ VolSync の Secret(namespace ごとの InfisicalSecret `volsync` が作る `vols
 
 ## PVC を足すとき・やめるとき
 
-- **足す**: `../volsync/<namespace>.yaml` に InfisicalSecret の `managedKubeSecretReferences` と ReplicationSource を足す(時刻は 5 分ずらす)。
+- **足す**: `../volsync/<namespace>.yaml` に InfisicalSecret の `managedKubeSecretReferences` と ReplicationSource を足す(時刻はほかと同じ 19:00)。
   その namespace に `volsync.backube/privileged-movers: "true"` の注釈があるかを見る(無いと mover が root で動けず、読めないファイルで落ちる)
 - **やめる**: `../volsync/` から消す。リポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残るので、要らなければ消す
   (`rclone purge` か R2 の画面。リポジトリが PVC ごとなので、ほかを巻き込まない)

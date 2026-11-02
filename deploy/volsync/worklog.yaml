@@ -19,7 +19,6 @@ spec:
       secretsScope:
         projectSlug: doa
         envSlug: prod
-        # k8up と同じ R2 の資格情報とリポジトリのパスワード(経路だけ分ける)
         secretsPath: /k8up/k8up-global
         recursive: false
   managedKubeSecretReferences:
@@ -44,11 +43,9 @@ metadata:
 spec:
   sourcePVC: worklog-db
   trigger:
-    schedule: "35 20 * * *"
+    schedule: "0 19 * * *"
   restic:
     repository: volsync-worklog-db
     copyMethod: Snapshot
-    volumeSnapshotClassName: lvm
     retain: {daily: 7, weekly: 4, monthly: 6}
-    pruneIntervalDays: 7
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}

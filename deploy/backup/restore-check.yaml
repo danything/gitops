@@ -24,7 +24,7 @@ metadata:
   name: restore-check
   namespace: backup
 spec:
-  # 毎月 1 日 06:00 UTC。VolSync(19:00〜20:45 UTC)と etcd-snapshot(13:00 UTC)の外
+  # 毎月 1 日 06:00 UTC。VolSync(19:00 UTC)と etcd-snapshot(13:00 UTC)の外
   schedule: "0 6 1 * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
