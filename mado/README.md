@@ -2,7 +2,7 @@
 
 **`main` が落ちたときの入口。** JCOM 側の PC(10.10.0.2、手元の Windows)で [mado](https://github.com/danything/mado)
 (OIDC でログインしてブラウザから RDP する、自作の小さなゲートウェイ。.NET の Windows サービスとタスクトレイ)を動かし、`https://md.doany.io` から
-この PC の画面に入る。入ったら、この PC から Z440 の AMT(10.10.0.3。電源と SOL)を開いて `main` を直す。
+この PC の画面に入るか、Z440 の AMT(10.10.0.3)を直接開いて電源を入れ直し、SOL で Talos のコンソールを見て `main` を直す。
 NetBird は管理サーバーも routing peer も `main` の上なので、`main` が落ちると使えない。
 
 | | |
@@ -14,7 +14,7 @@ NetBird は管理サーバーも routing peer も `main` の上なので、`main
 | ルーター | J:COM のアプリで、この PC(OD00)を 10.10.0.2 に予約し、TCP 80 / 443 を転送する。IPv6 はルーターが止めないので設定は要らない([docs/router.md](../docs/router.md)) |
 | 証明書 | mado が Let's Encrypt から自分で取る(80 で HTTP-01)。30 日を切ったら取り直す |
 | ログイン | Entra の共用のアプリ登録(戻り先 `https://md.doany.io/callback` は [pulumi/entra.ts](../pulumi/entra.ts))。アプリロール `admin` が無いと入れない(ほかのアプリと共通) |
-| 設定 | [mado.json](mado.json)。`targets` がつなぐ先(画面で選ぶ。今はこの PC だけ。10.0 側の PC は、この PC の Wi-Fi がつながっているときだけ届く)。秘密は書かない(client secret は `setup.ps1` が gitops の SOPS から取り出して `client-secret.txt` に置く)。`required_role` の `admin` はほかのアプリと共通([docs/entra.md](../docs/entra.md)) |
+| 設定 | [mado.json](mado.json)。`targets` がつなぐ先(画面で選ぶ。この PC(RDP)と Z440 の AMT(`"type": "amt"`、電源と SOL。AMT の port 16992 / 16994 はルーターで開けない。この PC から届けばよい)。10.0 側の PC は、この PC の Wi-Fi がつながっているときだけ届く)。秘密は書かない(client secret は `setup.ps1` が gitops の SOPS から取り出して `client-secret.txt` に置く)。`required_role` の `admin` はほかのアプリと共通([docs/entra.md](../docs/entra.md)) |
 | 版 | **mado が自分で上げる**(6 時間ごとに GitHub のリリースを見て、ECDSA の署名を確かめた MSI を、誰もつないでいないときに入れる)。タスクトレイの「今すぐ更新を確かめる」でもよい。`setup.ps1` は版を固定せず、流したときの最新のリリースを入れる(`gh release view`)。動いているほうが新しければ MSI は入れない |
 
 ## 入れ方
@@ -33,6 +33,9 @@ SHA-256 と出どころ(`gh attestation verify`)を確かめたあと、残り�
 
 `https://md.doany.io` を開く → Entra でログイン → つなぐ先を選び(複数あるとき)、Windows のユーザー名とパスワードを入れて「つなぐ」。
 画面の上に Ctrl+Alt+Del・Windows キー・全画面・切断のボタンがある。
+
+Z440 の AMT は一覧の「Z440(AMT)」を選び、AMT のユーザー名(`admin`)とパスワードで「開く」。電源の状態と、入れる・リセット・入れ直す・切るのボタン(押す前に確かめる)、「SOL をつなぐ」で Talos のシリアルのコンソールが出る。
+AMT のパスワードはブラウザの中で Digest の計算に使うだけで、mado には届かない。詳しくは mado の [docs/amt.md](https://github.com/danything/mado/blob/main/docs/amt.md)。
 
 ## 遅いとき
 
