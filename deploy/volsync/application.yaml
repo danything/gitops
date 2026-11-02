@@ -1,7 +1,8 @@
 # VolSync。PVC をスナップショットから restic で R2 に取る(理由は docs/decisions.md
 # 「ストレージを OpenEBS LVM LocalPV に、バックアップを VolSync にする」)。
-# 取る PVC は同じフォルダの <namespace>.yaml の ReplicationSource(denpa-raw だけは取らない)。
-# VolSync には PVC をラベルやワイルドカードで選ぶ仕組みが無いので、1 本ずつ名前で書く。
+# **取る PVC はアプリと一緒に書く**(各アプリのリポジトリの deploy/volsync.yaml、gitops の中のアプリは deploy/<アプリ>/volsync.yaml)。
+# アプリを消せば定義も消える。VolSync には PVC をラベルやワイルドカードで選ぶ仕組みが無いので、1 本ずつ名前で書く
+# (denpa-raw だけは取らない)。書き方は ../backup/README.md「PVC を足すとき・やめるとき」。
 #
 # - **リポジトリは PVC ごと**に `<bucket>/volsync/<namespace>/<pvc>`。Secret(`volsync-<pvc>`)は namespace ごとの InfisicalSecret
 #   `volsync` が、`/backup/backup`(endpoint・bucket・鍵・repoPassword)からテンプレートで組む

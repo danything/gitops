@@ -1,10 +1,10 @@
-# ashi の PVC を VolSync で取る(取り方・Secret・時刻の決め方は application.yaml の冒頭)。
-# リポジトリは PVC ごとに `<bucket>/volsync/ashi/<pvc>`
+# この namespace の PVC を VolSync で R2 に取る(リポジトリは PVC ごとに `<bucket>/volsync/infisical/<pvc>`)。
+# 取り方・時刻・Secret の組み方は ../volsync/application.yaml。アプリと一緒に置くので、アプリを消せばこれも消える
 apiVersion: secrets.infisical.com/v1alpha1
 kind: InfisicalSecret
 metadata:
   name: volsync
-  namespace: ashi
+  namespace: infisical
   annotations:
     argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
@@ -22,12 +22,12 @@ spec:
         secretsPath: /backup/backup
         recursive: false
   managedKubeSecretReferences:
-    - secretName: volsync-ashi-data
-      secretNamespace: ashi
+    - secretName: volsync-data-postgresql-0
+      secretNamespace: infisical
       creationPolicy: Orphan
       template:
         data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/ashi/ashi-data"
+          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/infisical/data-postgresql-0"
           RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
           AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
           AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
@@ -36,16 +36,16 @@ spec:
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
 metadata:
-  name: ashi-data
-  namespace: ashi
+  name: data-postgresql-0
+  namespace: infisical
   annotations:
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  sourcePVC: ashi-data
+  sourcePVC: data-postgresql-0
   trigger:
     schedule: "0 19 * * *"
   restic:
-    repository: volsync-ashi-data
+    repository: volsync-data-postgresql-0
     copyMethod: Snapshot
     retain: {daily: 7, weekly: 4, monthly: 6}
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}

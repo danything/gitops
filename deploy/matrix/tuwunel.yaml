@@ -92,7 +92,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: tuwunel-data
   namespace: matrix
-  # VolSync がスナップショットから取る(../volsync/matrix.yaml)
+  # VolSync がスナップショットから取る(volsync.yaml)
 spec:
   accessModes:
     - ReadWriteOnce

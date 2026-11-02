@@ -4,7 +4,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: netbird-data
   namespace: netbird
-  # VolSync がスナップショットから取る(../volsync/netbird.yaml)。SQLite は crash-consistent で立ち直る。
+  # VolSync がスナップショットから取る(volsync.yaml)。SQLite は crash-consistent で立ち直る。
 spec:
   accessModes:
     - ReadWriteOnce

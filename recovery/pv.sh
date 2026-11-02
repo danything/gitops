@@ -23,8 +23,8 @@
 #
 # 前提: tools/t.ps1 --admin で動かす(kubectl の管理者の資格情報。tools/README.md「クラスタの資格情報」)、
 # ~/.config/restic.env がある(README の 6。plan と fit が restic でスナップショットを見る)、
-# リポジトリのルート(このファイルが deploy/volsync/ を読む)で打つ。
-# ReplicationDestination が使う Secret(`volsync-<pvc>`)は Argo CD が deploy/volsync/ の InfisicalSecret から作る(README の 7 のあと)。
+# リポジトリのルートで打つ。
+# ReplicationDestination が使う Secret(`volsync-<pvc>`)は、Argo CD が各アプリの volsync.yaml の InfisicalSecret から作る(README の 7 のあと)。
 set -eu
 NS=${1:?usage: pv.sh <namespace> <操作> [引数…]}
 OP=${2:?usage: pv.sh <namespace> <操作> [引数…]}
@@ -91,11 +91,10 @@ P
 unhelper() { $K -n "$NS" delete pod "h-$1" --wait=false >/dev/null; }
 
 # --- まとめて戻す(plan / restore / plan-all / restore-all) ---
-# 戻す PVC は git の deploy/volsync/<namespace>.yaml の ReplicationSource(sourcePVC)。クラスタの中のものは見ない
-# (建て直した直後は Argo CD がまだ作っていないことがある)。
-#
-# **namespace や PVC が無いのは飛ばさずに止める。** 「まだ Argo CD が作っていない」と「やめたアプリの残り」を
-# 区別できないので。やめたアプリは deploy/volsync/ から消す。
+# **戻すのは R2 にあるもの全部。** バケットの `volsync/<namespace>/<pvc>/` を一覧して、クラスタにその PVC があれば戻す。
+# 取る定義(ReplicationSource)は各アプリのリポジトリにあるので、ここでは一覧を持たない。
+# PVC が無いもの(やめたアプリの残り・Argo CD がまだ出していないアプリ)は戻さずに最後に並べる(`skipped`)。
+# restore-all は先に Argo CD の Application が Synced になるのを待つので、出しそびれは並んだ一覧で気づく。
 
 # **このクラスタができる前のものだけを戻す。** ReplicationSource は Argo CD が作るとすぐ時刻を待ちはじめ、
 # 戻すより先に空の PVC を取ったスナップショットが「いちばん新しい」になりうる(2026-10-31 の Z440 への移行で、k8up で踏んだ)。
@@ -105,7 +104,32 @@ before() {
 	$K get ns kube-system -o jsonpath='{.metadata.creationTimestamp}'
 }
 
-pvcs() { sed -n 's/^  sourcePVC: *//p' "deploy/volsync/$NS.yaml"; }
+# R2 の `volsync/` の下を 2 段(namespace と PVC)一覧する。1 行に `<namespace> <pvc>`
+r2() {
+	bun -e '
+const m = process.env.RESTIC_REPOSITORY.match(/^s3:(https?:\/\/[^/]+)\/([^/]+)/);
+if (!m) throw new Error("RESTIC_REPOSITORY を s3:<endpoint>/<bucket> として読めない");
+const s3 = new Bun.S3Client({ endpoint: m[1], bucket: m[2], region: "auto",
+	accessKeyId: process.env.AWS_ACCESS_KEY_ID, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY });
+const dirs = async (prefix) => {
+	const out = [];
+	let token;
+	do {
+		const r = await s3.list({ prefix, delimiter: "/", continuationToken: token });
+		for (const p of r.commonPrefixes ?? []) out.push(p.prefix.slice(prefix.length, -1));
+		token = r.isTruncated ? r.nextContinuationToken : undefined;
+	} while (token);
+	return out;
+};
+for (const ns of await dirs("volsync/")) for (const pvc of await dirs(`volsync/${ns}/`)) console.log(ns, pvc);'
+}
+pvcs() { r2 | awk -v ns="$NS" '$1 == ns {print $2}'; }
+# R2 にあるのにクラスタに PVC が無いもの
+skipped() {
+	r2 | while read -r n p; do
+		$K -n "$n" get pvc "$p" >/dev/null 2>&1 || echo "$n/$p"
+	done
+}
 
 snap() { # $1=pvc → 境目より前でいちばん新しいスナップショットの ID(無ければ空)
 	RESTIC_REPOSITORY=$(repo "$1") restic snapshots --json 2>/dev/null \
@@ -118,10 +142,11 @@ if (s) console.log(s.id);'
 
 # 「PVC スナップショット」を 1 行ずつ。決められないものは止める(黙って飛ばさない)
 plan() {
-	[ -f "deploy/volsync/$NS.yaml" ] || { echo "ERROR: $NS: deploy/volsync/$NS.yaml が無い" >&2; exit 2; }
-	$K get ns "$NS" >/dev/null 2>&1 || { echo "ERROR: $NS: namespace が無い" >&2; exit 1; }
-	for pvc in $(pvcs); do
-		$K -n "$NS" get pvc "$pvc" >/dev/null 2>&1 || { echo "ERROR: $NS: PVC $pvc が無い" >&2; exit 1; }
+	list=$(pvcs)
+	[ -n "$list" ] || { echo "ERROR: $NS: R2 に volsync/$NS/ が無い" >&2; exit 2; }
+	for pvc in $list; do
+		# 無い PVC は戻さない(skipped に出る)
+		$K -n "$NS" get pvc "$pvc" >/dev/null 2>&1 || { echo "skip: $NS/$pvc(クラスタに PVC が無い)" >&2; continue; }
 		id=$(snap "$pvc")
 		[ -n "$id" ] || { echo "ERROR: $NS: $pvc の $(before) より前のスナップショットが無い($(repo "$pvc"))" >&2; exit 2; }
 		echo "$pvc $id"
@@ -162,7 +187,7 @@ fit() {
 	[ "$bad" = 0 ]
 }
 
-# 1 つの PVC を戻す。Secret は deploy/volsync/ の InfisicalSecret が作った `volsync-<pvc>`
+# 1 つの PVC を戻す。Secret は 各アプリの volsync.yaml の InfisicalSecret が作った `volsync-<pvc>`
 # (infisical の namespace だけは Infisical がまだ無いので recovery/infisical.sh が restic.env から作る)。
 # mover は root(namespace の privileged-movers の注釈)、境目より前の最新(restoreAsOf)、PVC の中は先に消す(enableFileDeletion)
 restore_pvc() { # $1=pvc
@@ -200,18 +225,30 @@ R
 
 restore() {
 	steps=$(plan)
+	[ -n "$steps" ] || { echo "== $NS: 戻すものが無い"; return 0; }
 	echo "== $NS"; echo "$steps" | sed 's/^/  /'
 	stop
 	echo "$steps" | while read -r pvc _; do restore_pvc "$pvc"; done
 	start
 }
 
-# 戻す namespace = deploy/volsync/ のファイル(forgejo は先に別で戻す。infisical は recovery/infisical.sh)
+# 戻す namespace = R2 にあって、クラスタにもあるもの(forgejo は先に別で戻す。infisical は recovery/infisical.sh)
 hosts() {
-	for f in deploy/volsync/*.yaml; do
-		n=$(basename "$f" .yaml)
-		case $n in application | forgejo | infisical) ;; *) echo "$n" ;; esac
+	for n in $(r2 | awk '{print $1}' | sort -u); do
+		case $n in forgejo | infisical) continue ;; esac
+		$K get ns "$n" >/dev/null 2>&1 && echo "$n"
 	done
+	return 0
+}
+
+# Argo CD の Application が全部 Synced になるまで待つ(最大 10 分)。過ぎたら Synced でないものを出して先に進む
+wait_synced() {
+	for _ in $(seq 1 60); do
+		out=$($K -n argocd get application -o jsonpath='{range .items[*]}{.metadata.name} {.status.sync.status}{"\n"}{end}' | awk '$2 != "Synced" {print $1}')
+		[ -z "$out" ] && { echo "application: 全部 Synced"; return 0; }
+		sleep 10
+	done
+	echo "10 分待っても Synced でない Application がある(そのアプリの PVC は戻らないかもしれない): $(echo $out)" >&2
 }
 
 # 全部の plan が通るか。通らなければ 1(何も触らない)
@@ -254,6 +291,8 @@ case $OP in
 		plan_all forgejo $H || rc=1
 		echo "== PVC に入るか"
 		for h in forgejo $H; do sh "$0" "$h" fit || rc=1; done
+		echo "== R2 にあるがクラスタに PVC が無い(戻さない)"
+		skipped | sed 's/^/  /'
 		exit $rc ;;
 	restore-all) # README の 8 を通しで。Forgejo を先に戻し、非公開アプリが出てくるのを待ってから残り
 		restic_env
@@ -271,19 +310,18 @@ case $OP in
 		sh "$0" forgejo restore
 		sh "$0" - argo-resume
 		wait_appsets
-		# 残りの namespace と PVC が全部出そろうまで待つ(Argo CD は動かしたまま)。1 つでも欠けていれば、どこも上書きする前に止まる
-		H=$(hosts); ok=
-		for _ in $(seq 1 30); do
-			plan_all $H >/dev/null 2>&1 && { ok=1; break; }
-			sleep 20
-		done
-		[ -n "$ok" ] || { plan_all $H >/dev/null || true; echo "10 分待っても上の plan が通らない。forgejo だけ戻した状態で止めた(Argo CD は動いている)" >&2; exit 1; }
+		# アプリが出そろうのを待ってから、R2 にあってクラスタにもある PVC を全部戻す(Argo CD は動かしたまま待つ)
+		wait_synced
+		H=$(hosts)
+		plan_all $H >/dev/null || { echo "上の plan が通らない。forgejo だけ戻した状態で止めた(Argo CD は動いている)" >&2; exit 1; }
 		big=
 		for h in $H; do sh "$0" "$h" fit >/dev/null || big="$big $h"; done
 		[ -z "$big" ] || { echo "PVC に入らないものがある:$big(forgejo だけ戻した状態で止めた。Argo CD は動いている)" >&2; exit 1; }
 		sh "$0" - argo-pause
 		for h in $H; do sh "$0" "$h" restore; done
-		sh "$0" - argo-resume ;;
+		sh "$0" - argo-resume
+		left=$(skipped)
+		[ -z "$left" ] || { echo "R2 にあるが PVC が無いので戻さなかった(やめたアプリなら放っておく。要るアプリなら出してから <ns> restore):"; echo "$left" | sed 's/^/  /'; } ;;
 	backup-all) # 入れ直す前の最後のバックアップ。全部の ReplicationSource を手動で 1 回ずつ取り、全部終わるまで待つ。
 		# 時刻(schedule)を手動(manual)に置き換えるので、Argo CD を止めておく(戻すと selfHeal が schedule を戻す)。
 		# **manual は終わったら自分で消す。** Argo CD は ServerSideApply なので、自分が書いていない manual は消さない。
