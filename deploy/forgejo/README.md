@@ -11,7 +11,7 @@
 | [forgejo-secrets.yaml](forgejo-secrets.yaml) | Infisical から Secret 3 つ |
 | [argocd-creds.yaml](argocd-creds.yaml) | ArgoCD が Forgejo のリポジトリを読むための資格情報 |
 
-バックアップは [../volsync/forgejo.yaml](../volsync/forgejo.yaml)(VolSync。PVC 2 本をスナップショットから、毎日 19:35・19:40 UTC)。
+バックアップは [volsync.yaml](volsync.yaml)(VolSync。PVC 2 本をスナップショットから、毎日 19:00 UTC)。
 
 ## 使い始め
 

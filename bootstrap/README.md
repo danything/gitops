@@ -133,7 +133,7 @@ infisical の Postgres が要るので bootstrap 層に居る。選んだ理由�
 
 - **本体**(chart + Postgres/Redis)だけがここ(machine config)。`infisical-values.sops.yaml` の 2 つめのドキュメントの
   `ENCRYPTION_KEY` が DB の暗号鍵で、これを失うと Infisical の中身が全部読めなくなる(クラスタで一番失ってはいけない値)。
-  Postgres の PVC は既定の `local-path`(OpenEBS LVM)で、VolSync が日次でスナップショットから取っている([../deploy/volsync/infisical.yaml](../deploy/volsync/infisical.yaml))。
+  Postgres の PVC は既定の `local-path`(OpenEBS LVM)で、VolSync が日次でスナップショットから取っている([../deploy/infisical/volsync.yaml](../deploy/infisical/volsync.yaml))。
 - **公開経路・operator・push-bridge は [`deploy/infisical/`](../deploy/infisical/)**(ArgoCD 自身は operator に依存しないので、ここに置く理由がない)。
 - 認証は Infisical の Kubernetes auth: operator が SA `infisical-auth` のトークンで Infisical にログインし、
   Infisical がそのトークンで TokenReview を呼んで本物か確かめる(なので SA に `system:auth-delegator` を付けてある。

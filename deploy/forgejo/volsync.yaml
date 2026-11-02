@@ -1,10 +1,10 @@
-# denpa の PVC を VolSync で取る(取り方・Secret・時刻の決め方は application.yaml の冒頭)。
-# リポジトリは PVC ごとに `<bucket>/volsync/denpa/<pvc>`
+# この namespace の PVC を VolSync で R2 に取る(リポジトリは PVC ごとに `<bucket>/volsync/forgejo/<pvc>`)。
+# 取り方・時刻・Secret の組み方は ../volsync/application.yaml。アプリと一緒に置くので、アプリを消せばこれも消える
 apiVersion: secrets.infisical.com/v1alpha1
 kind: InfisicalSecret
 metadata:
   name: volsync
-  namespace: denpa
+  namespace: forgejo
   annotations:
     argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
@@ -22,32 +22,22 @@ spec:
         secretsPath: /backup/backup
         recursive: false
   managedKubeSecretReferences:
-    - secretName: volsync-agent-config
-      secretNamespace: denpa
+    - secretName: volsync-forgejo-repos
+      secretNamespace: forgejo
       creationPolicy: Orphan
       template:
         data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/agent-config"
+          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/forgejo/forgejo-repos"
           RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
           AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
           AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
           AWS_DEFAULT_REGION: auto
-    - secretName: volsync-denpa-data
-      secretNamespace: denpa
+    - secretName: volsync-postgres-data
+      secretNamespace: forgejo
       creationPolicy: Orphan
       template:
         data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-data"
-          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
-          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
-          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
-          AWS_DEFAULT_REGION: auto
-    - secretName: volsync-denpa-encoded
-      secretNamespace: denpa
-      creationPolicy: Orphan
-      template:
-        data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-encoded"
+          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/forgejo/postgres-data"
           RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
           AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
           AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
@@ -56,16 +46,16 @@ spec:
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
 metadata:
-  name: agent-config
-  namespace: denpa
+  name: forgejo-repos
+  namespace: forgejo
   annotations:
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  sourcePVC: agent-config
+  sourcePVC: forgejo-repos
   trigger:
     schedule: "0 19 * * *"
   restic:
-    repository: volsync-agent-config
+    repository: volsync-forgejo-repos
     copyMethod: Snapshot
     retain: {daily: 7, weekly: 4, monthly: 6}
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
@@ -73,34 +63,16 @@ spec:
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
 metadata:
-  name: denpa-data
-  namespace: denpa
+  name: postgres-data
+  namespace: forgejo
   annotations:
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  sourcePVC: denpa-data
+  sourcePVC: postgres-data
   trigger:
     schedule: "0 19 * * *"
   restic:
-    repository: volsync-denpa-data
+    repository: volsync-postgres-data
     copyMethod: Snapshot
     retain: {daily: 7, weekly: 4, monthly: 6}
-    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
----
-apiVersion: volsync.backube/v1alpha1
-kind: ReplicationSource
-metadata:
-  name: denpa-encoded
-  namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-spec:
-  sourcePVC: denpa-encoded
-  trigger:
-    schedule: "0 19 * * *"
-  restic:
-    repository: volsync-denpa-encoded
-    copyMethod: Snapshot
-    # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
-    retain: {last: "1"}
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}

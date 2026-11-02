@@ -1,4 +1,4 @@
-# 2 本とも VolSync がスナップショットから取る(../volsync/adguardhome.yaml)。
+# 2 本とも VolSync がスナップショットから取る(volsync.yaml)。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

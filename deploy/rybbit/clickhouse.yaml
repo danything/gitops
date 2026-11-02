@@ -20,7 +20,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: clickhouse-data
   namespace: rybbit
-  # VolSync がスナップショットから取る(../volsync/rybbit.yaml)。論理バックアップ(BACKUP 文)は S3 先が要るので使わない
+  # VolSync がスナップショットから取る(volsync.yaml)。論理バックアップ(BACKUP 文)は S3 先が要るので使わない
 spec:
   accessModes:
     - ReadWriteOnce

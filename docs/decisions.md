@@ -71,7 +71,7 @@ diceware 6〜7 語相当を使う。**同期ストレージ(OneDrive など)を�
 ## DB の整合性の取り方
 
 **scale down せず、ダンプも取らない。** VolSync が PVC のスナップショットから取る(crash-consistent。Postgres・SQLite の WAL・RocksDB は
-そこから自分で立ち直る)。取っている PVC の一覧は [../deploy/volsync/](../deploy/volsync/)。
+そこから自分で立ち直る)。取る定義は各アプリの `deploy/volsync.yaml`(アプリと一緒に消える)、VolSync 本体は [../deploy/volsync/](../deploy/volsync/)。
 
 ## Talos の起動順序をどう組むか
 
@@ -251,7 +251,7 @@ PV の `claimRef` を外して書き換え、新しい PVC を `volumeName` で�
 
 | 対象 | 判断 |
 | --- | --- |
-| 録画 | **エンコード済み(`denpa-encoded`)だけ、1 世代**(ReplicationSource の `retain: {last: "1"}`。[../deploy/volsync/denpa.yaml](../deploy/volsync/denpa.yaml))。放送は取り直せないので容量より価値を優先する(本人)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける |
+| 録画 | **エンコード済み(`denpa-encoded`)だけ、1 世代**(ReplicationSource の `retain: {last: "1"}`。danything/denpa の `deploy/volsync.yaml`)。放送は取り直せないので容量より価値を優先する(本人)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける |
 | 生 TS の作業領域(`denpa-raw`) | **取らない。** エンコードが終われば消え、数時間で入れ替わる。14 GB まで育つ |
 | AdGuard のクエリログ | **保持を 7 日に。** 純粋な計測データで、復元時に無くても困らない |
 

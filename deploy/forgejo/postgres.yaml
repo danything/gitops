@@ -1,4 +1,4 @@
-# Forgejo の DB。PostgreSQL 17 系。PVC は VolSync がスナップショットから取る(crash-consistent で立ち直る。../volsync/forgejo.yaml)。
+# Forgejo の DB。PostgreSQL 17 系。PVC は VolSync がスナップショットから取る(crash-consistent で立ち直る。volsync.yaml)。
 apiVersion: v1
 kind: Service
 metadata:

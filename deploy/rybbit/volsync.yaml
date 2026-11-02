@@ -1,5 +1,5 @@
-# rybbit の PVC を VolSync で取る(取り方・Secret・時刻の決め方は application.yaml の冒頭)。
-# リポジトリは PVC ごとに `<bucket>/volsync/rybbit/<pvc>`
+# この namespace の PVC を VolSync で R2 に取る(リポジトリは PVC ごとに `<bucket>/volsync/rybbit/<pvc>`)。
+# 取り方・時刻・Secret の組み方は ../volsync/application.yaml。アプリと一緒に置くので、アプリを消せばこれも消える
 apiVersion: secrets.infisical.com/v1alpha1
 kind: InfisicalSecret
 metadata:
