@@ -185,6 +185,7 @@ sh recovery/pv.sh - restore-all
   ReplicationSource は Argo CD が作ると時刻を待ちはじめ、戻す前の空の PVC を取ったものが「いちばん新しい」になりうるため(2026-10-31 に k8up で踏んだ)
 - 使う Secret(`volsync-<pvc>`)は各アプリの `volsync.yaml` の InfisicalSecret が作る(7 が済んでいること)。無ければ `restore` は書く前に止まる
 - **何を戻すかは R2 が正。** 一覧はどこにも持たない(取る定義は各アプリのリポジトリの `volsync.yaml`)。クラスタに PVC が無いものは戻さずに飛ばし、最後に並べる。スナップショットが無いものは `plan` の時点で止まる
+  **取るのをやめて PVC だけ残すときは、R2 のリポジトリも消す**(残すと、戻すときに古いスナップショットで PVC を上書きする。`enableFileDeletion`)
 - PVC が `Pending`(StorageClass は使う Pod が付くまで bind しない)でも、VolSync の mover が付けば bind する
 - **PVC の requests が本当の上限**(OpenEBS LVM)。`fit` が `restic stats` の大きさと requests を比べ、9 割を超えるものがあれば
   `plan-all` は 1 で終わり、`restore-all` は上書きする前に止まる。PVC を大きくするか、restic から要らないものを消す

@@ -29,7 +29,7 @@ VolSync の Secret(namespace ごとの InfisicalSecret `volsync` が作る `vols
 - **足す**: アプリの `volsync.yaml` に InfisicalSecret の `managedKubeSecretReferences` と ReplicationSource を 1 組足す
   (ほかのアプリの volsync.yaml を写す。時刻はどれも 19:00)。新しいアプリなら InfisicalSecret ごと写す。
   その namespace に `volsync.backube/privileged-movers: "true"` の注釈があるかを見る(無いと mover が root で動けず、読めないファイルで落ちる)
-- **やめる**: 定義を消す(アプリごと消すなら何もしない)。リポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残る。
+- **やめる**: 定義を消す(アプリごと消すなら何もしない)。**PVC を残したまま取るのだけやめるなら、R2 のリポジトリも消す**(残すと戻すときに古い中身で上書きする)。リポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残る。
   残っていても戻すときは PVC が無いので飛ばす(最後に並ぶ)。要らなければ `rclone purge` か R2 の画面で消す
 
 ## バケットの中
