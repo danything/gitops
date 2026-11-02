@@ -34,7 +34,7 @@ if (-not $Stage) {
         $decrypted = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sops -d --output-type json deploy/auth/secrets.sops.yaml
         if ($LASTEXITCODE -ne 0) { throw 'sops: deploy/auth/secrets.sops.yaml を開けない' }
         # Talos のダッシュボードとシャットダウン・再起動 (mado の docs/talos.md) の talosconfig。役割は os:operator (設定の書き換え・
-        # リセット・アップグレードはできない) で、90 日で切れる。AMT で既に強制の電源操作ができるので、安全な止め方を足すほうが安全側 (docs/decisions.md)。
+        # リセット・アップグレードはできない。etcd のスナップショットは取れる。docs/decisions.md) で、90 日で切れる。AMT で既に強制の電源操作ができるので、安全な止め方を足すほうが安全側 (docs/decisions.md)。
         # 管理者の talosconfig (tools/creds.sh が SOPS の Talos の CA からコンテナの /dev/shm に作る) で Talos API に作らせ、
         # 平文は標準出力で受け取る (手元のディスクには書かない)。コンテナの中の書き出しも /dev/shm で、すぐ消す。クラスタは変えない
         $talosconfig = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" --admin sh -c 'd=$(mktemp -d /dev/shm/operator.XXXXXX) && talosctl config new $d/talosconfig --roles os:operator --crt-ttl 2160h >&2 && cat $d/talosconfig; r=$?; rm -rf $d; exit $r'

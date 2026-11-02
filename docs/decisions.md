@@ -46,10 +46,14 @@ Object Read & Write をこのバケットだけに絞った Account API token。
 **`talosconfig` は保存しない。** `secrets.yaml` から `talosctl gen config` で毎回出てくる派生物で、
 TTL も付いている。使い捨てにするほうが安全(../bootstrap/talos.md)。
 例外は mado の PC に置く Talos のダッシュボードと電源の操作(シャットダウン・再起動)用の 1 つだけで、役割は `os:operator`、期限は 90 日、DPAPI で保護して置く
-(`mado/setup.ps1` が作り直す。[../mado/README.md](../mado/README.md))。`os:operator` でできるのはノードを止める・再起動するところまでで、
-設定の書き換え・リセット・アップグレードは `os:admin` が要るので、漏れてもクラスタの中身は変えられない。
-読むだけ(`os:reader`)にしないのは、mado の PC からは AMT で既に強制電源オフ・強制再起動ができ(漏れたときにできることはどのみち「止める」まで)、
+(`mado/setup.ps1` が作り直す。[../mado/README.md](../mado/README.md))。`os:operator` は `os:reader` に、ノードの再起動・シャットダウン、etcd のバックアップ(スナップショット)と警報の扱いなどを足したもの。
+設定の書き換え・リセット・アップグレードは `os:admin` が要るので、漏れてもクラスタの設定は変えられない。
+ただし **etcd のスナップショットは取れる**。Kubernetes の Secret は Talos の secretbox で暗号化して etcd に入っていて、
+その鍵はマシンの設定の秘密の部分(`os:operator` では読めない。`bootstrap/talos-secrets.sops.yaml` の `secretboxencryptionsecret`)にあるので、
+スナップショットからそのままは読めないが、ConfigMap などほかのリソースは平文で読める。`os:reader` より漏れたときの影響は大きい。
+それでも読むだけ(`os:reader`)にしないのは、mado の PC からは AMT で既に強制電源オフ・強制再起動ができ、
 Talos に止める準備をさせてから止める道を足すほうが、普段の操作が安全側になるから。
+鍵は mado の PC(SYSTEM と Administrators だけが読める `C:\ProgramData\mado`)に DPAPI で置き、90 日で切れるので、その範囲で受け入れる。
 
 R2 の鍵を GitHub の秘密(gist・Actions)に置かないのは、GitHub のトークンがあちこちに散っているため。
 GitHub 側が丸ごと漏れても、バックアップ(を消せる鍵)だけは無事な状態を残す。
