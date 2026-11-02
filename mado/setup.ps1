@@ -1,7 +1,8 @@
 ﻿# このPC (10.10.0.2) に mado を入れる / 版や設定を当て直す。README.md の「入れ方」。
 #   pwsh -File mado/setup.ps1
 # 普段のユーザーで流す。gitops の SOPS から Entra の client secret を取り出し、リリースの MSI を落として SHA-256 と出どころを
-# 確かめたあと (tools/t.ps1 は普段のユーザーの WSL コンテナで動く)、残りを UAC で昇格して流す。何度流してもよい
+# 確かめたあと (tools/t.ps1 は普段のユーザーの WSL コンテナで動く)、残りを UAC で昇格して流す。何度流してもよい。
+# Talos のダッシュボードの talosconfig (os:reader、90 日) も作り直して置く。期限が近い (mado の画面に出る) ときも流す
 param([string]$Stage)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
@@ -30,6 +31,11 @@ if (-not $Stage) {
         }
         $decrypted = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" sops -d --output-type json deploy/auth/secrets.sops.yaml
         if ($LASTEXITCODE -ne 0) { throw 'sops: deploy/auth/secrets.sops.yaml を開けない' }
+        # Talos のダッシュボード (mado の docs/talos.md) の talosconfig。役割は os:reader だけで、90 日で切れる。
+        # 管理者の talosconfig (tools/creds.sh が SOPS の Talos の CA からコンテナの /dev/shm に作る) で Talos API に作らせ、
+        # 平文は標準出力で受け取る (手元のディスクには書かない)。コンテナの中の書き出しも /dev/shm で、すぐ消す。クラスタは変えない
+        $talosconfig = & $pwsh -NoProfile -ExecutionPolicy Bypass -File "$root\tools\t.ps1" --admin sh -c 'd=$(mktemp -d /dev/shm/reader.XXXXXX) && talosctl config new $d/talosconfig --roles os:reader --crt-ttl 2160h >&2 && cat $d/talosconfig; r=$?; rm -rf $d; exit $r'
+        if ($LASTEXITCODE -ne 0) { throw 'talosctl config new: os:reader の talosconfig を作れない (ノードに届くか、age の鍵で開けるか)' }
     } finally {
         if ($placed) { Remove-Item $key -ErrorAction SilentlyContinue }
     }
@@ -37,6 +43,25 @@ if (-not $Stage) {
         Where-Object name -EQ 'auth-secrets').stringData.'oidc-client-secret'
     $decrypted = $null
     if (-not $secret) { throw 'sops: deploy/auth/secrets.sops.yaml の auth-secrets に oidc-client-secret がない' }
+
+    # talosconfig は DPAPI の LocalMachine の範囲で保護してから書く (サービスは LocalSystem なので、普段のユーザーの範囲では開けない)。
+    # 誰が読めるかは置き場の ACL (SYSTEM と Administrators) で絞る。中身は画面にもログにも出さない (期限だけ出す)
+    $plain = [Text.Encoding]::UTF8.GetBytes((@($talosconfig) -join "`n") + "`n")
+    $talosconfig = $null
+    $text = [Text.Encoding]::UTF8.GetString($plain)
+    $crt = [regex]::Match($text, '(?m)^\s*crt:\s*(\S+)\s*$').Groups[1].Value
+    $text = $null
+    if (-not $crt) { [Array]::Clear($plain); throw 'talosctl config new: 出てきたものに crt が無い (talosconfig の形でない)' }
+    $pem = [Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($crt))
+    $notAfter = [Security.Cryptography.X509Certificates.X509CertificateLoader]::LoadCertificate(
+        [Convert]::FromBase64String(($pem -replace '-----[^-]+-----', '' -replace '\s', ''))).NotAfter
+    $talosBlob = [Security.Cryptography.ProtectedData]::Protect($plain, $null, 'LocalMachine')
+    [Array]::Clear($plain)
+    Write-Host "Talos の talosconfig (os:reader): $($notAfter.ToString('yyyy-MM-dd')) まで"
+
+    # talosctl.exe (mado が ConPTY で動かす)。版は tools/Dockerfile の talosctl と同じ (Renovate が上げる)。公式の sha256sum.txt と照らす
+    $talosVersion = [regex]::Match((Get-Content -Raw "$root\tools\Dockerfile"), '(?m)^ARG TALOSCTL_VERSION=(\S+)').Groups[1].Value
+    if (-not $talosVersion) { throw 'tools/Dockerfile に TALOSCTL_VERSION が無い' }
 
     # 受け渡しのフォルダ。本人だけが読める
     $tmp = Join-Path $env:TEMP "mado-setup-$PID"
@@ -68,6 +93,14 @@ if (-not $Stage) {
             gh attestation verify "$tmp\mado.msi" --repo danything/mado --signer-workflow danything/mado/.github/workflows/release.yml | Out-Null
             if ($LASTEXITCODE) { throw "mado.msi の出どころを確かめられない ($LASTEXITCODE)" }
         }
+
+        gh release download $talosVersion --repo siderolabs/talos --dir $tmp --pattern 'talosctl-windows-amd64.exe' --pattern 'sha256sum.txt'
+        if ($LASTEXITCODE) { throw "gh release download: talosctl $talosVersion ($LASTEXITCODE)" }
+        $want = ((Get-Content "$tmp\sha256sum.txt" | Select-String 'talosctl-windows-amd64\.exe$') -split '\s+')[0]
+        $got = (Get-FileHash "$tmp\talosctl-windows-amd64.exe" -Algorithm SHA256).Hash
+        if (-not $want -or $want.ToLower() -ne $got.ToLower()) { throw "talosctl-windows-amd64.exe の SHA-256 が合わない ($got / $want)" }
+        Move-Item "$tmp\talosctl-windows-amd64.exe" "$tmp\talosctl.exe"
+        [IO.File]::WriteAllBytes("$tmp\talosconfig.dpapi", $talosBlob)
 
         [IO.File]::WriteAllText("$tmp\client-secret.txt", $secret)
         Copy-Item "$PSScriptRoot\mado.json" $tmp
@@ -107,10 +140,16 @@ try {
     Get-NetFirewallRule -Name 'mado-In' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 
     # --- 設定と client secret (MSI には入れない。サービスが起動したときに読めるよう、MSI より先に置く) ---
-    foreach ($f in 'mado.json', 'client-secret.txt') {
+    # talosconfig.dpapi は Talos のダッシュボードの鍵 (DPAPI で保護したもの)。mado は開くたびに読むので、置き直せば再起動は要らない
+    foreach ($f in 'mado.json', 'client-secret.txt', 'talosconfig.dpapi') {
         Copy-Item (Join-Path $Stage $f) (Join-Path $data $f) -Force
         icacls (Join-Path $data $f) /reset | Out-Null
     }
+    # talosctl.exe (mado.json の talos.talosctl)。ダッシュボードを開いている間は掴まれていて置き換えられない
+    New-Item -ItemType Directory -Force "$data\bin" | Out-Null
+    try { Copy-Item (Join-Path $Stage 'talosctl.exe') "$data\bin\talosctl.exe" -Force }
+    catch { throw "talosctl.exe を置き換えられない (mado でダッシュボードを開いていれば閉じてから流し直す): $_" }
+    icacls "$data\bin" /reset /T | Out-Null
 
     # --- MSI (サービス・ファイアウォール・ProgramData の権限)。新しい版なら古い版を外して入れ替える。同じ版ならそのまま ---
     # 受け渡しのフォルダは本人だけが読めるので、MSI を読む Windows Installer (SYSTEM) には読めない (1619 になる)。
