@@ -240,7 +240,7 @@ spec:
       containers:
         - name: adguardhome
           # 版を上げる Renovate の PR では renovate-post-upgrade.sh が `CONFIG` も移行する(上の注記)。その PR は自動マージする
-          image: adguard/adguardhome:v0.107.79
+          image: adguard/adguardhome:v0.107.80
           # LoadBalancer は使わず、ノードの全アドレスで受けるために hostPort を持つ(docs/decisions.md「LoadBalancer をどう置き換えるか」)。
           # hostPort は送信元 IP を保つので、AdGuard のクライアント別統計が取れる。
           ports:
