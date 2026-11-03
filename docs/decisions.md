@@ -377,3 +377,17 @@ SMTP AUTH の Basic 認証は 2026-12 末に既定で無効になる。移る先
   送れるメールボックスを `info@doany.io` だけに絞った。初回は組織が dehydrated で `Enable-OrganizationCustomization`(取り消せない)が要り、
   実体化まで数時間かかった
 - 中継は秘密を持たない(アプリが SMTP AUTH でクライアントシークレットを渡す)。クラスタの中だけで TLS なし、届く namespace は NetworkPolicy で絞る
+
+## Argo CD に Secret も管理させる(resource.exclusions を外した。2026-11-03)
+
+**Secret を `resource.exclusions` で丸ごと外すのをやめた。** 外したのは 2026-09-06 の復元リハーサルのときで、
+当時の Infisical operator が `InfisicalSecret` の注釈を Secret にコピーし、`argocd.argoproj.io/tracking-id` まで付いていたため、
+Argo CD がその Secret を自分の資源と見なし、git に無いので prune していた。
+
+いまは Infisical を使っておらず、Secret を作るのは sops-secrets-operator だけ。こちらは `secretTemplates` に書いたラベルと注釈しか
+Secret に付けない(`sopssecret_controller.go`)ので、tracking-id は付かず、外す理由が無くなった。
+一方で外したままだと、chart が作る Secret が黙って作られない。2026-11-03 に denpa の chart の Secret(エージェントと組む合言葉)が
+これで作られず、denpa が起動できなかった(Forgejo を chart で入れなかったのも同じ理由)。
+
+外したときに Argo CD に引っかかっていた Secret はその 1 つだけだった(各 Application の「excluded in the settings」の条件)。
+bootstrap の Secret は machine config で入れていて、Argo CD の対象外(`exclude: bootstrap/**`)なので変わらない。

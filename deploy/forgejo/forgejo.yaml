@@ -1,8 +1,8 @@
 # Forgejo 本体(git のホスティング + Forgejo Actions)。fj.doany.io。
 #
 # **chart(forgejo-helm)は使わない。** chart は app.ini の元と init のスクリプトを Secret で作るが、
-# このクラスタの ArgoCD は Secret を丸ごと管理対象から外している(bootstrap/argocd-values.sops.yaml の
-# resource.exclusions)ので、それらが作られず Pod が起動しない。
+# 決めた当時はこのクラスタの ArgoCD が Secret を丸ごと管理対象から外していて(resource.exclusions。2026-11-03 に外した)、
+# それらが作られず Pod が起動しなかった。いまは chart でも動くはずだが、移す理由が無いのでこのまま。
 # 設定は環境変数(FORGEJO__<section>__<KEY>)で渡し、イメージの docker-setup.sh が app.ini に書く。
 #
 # 版は最新を追う(LTS に留めない)。メジャーを上げるときはリリースノートの破壊的変更を読んでから。
