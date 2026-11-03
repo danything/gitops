@@ -35,11 +35,6 @@ configs:
               - openid
               - profile
               - email
-        # Secret は管理対象から外す。Secret は sops-secrets-operator(など)が作り、Argo CD は持たない。
-        resource.exclusions: |
-            - apiGroups: [""]
-              kinds: ["Secret"]
-              clusters: ["*"]
     rbac:
         policy.default: role:readonly
         policy.csv: |

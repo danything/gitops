@@ -164,4 +164,5 @@ tools/t.ps1 sops edit deploy/<アプリ>/secrets.sops.yaml   # 直して push �
 **sync-options の注釈は要らない。** まっさらなクラスタでは `SopsSecret` の CRD がまだ無く、同じ同期の中の CR の
 dry-run で同期が丸ごと落ちる。これは ApplicationSet(`argocd-repos.yaml`)の syncOptions の `SkipDryRunOnMissingResource=true` で
 全部のアプリに効かせてある。ApplicationSet の外の Application(chart を入れるものなど)で CR を書くときだけ、そちらに付ける。
-作られた `Secret` は Argo CD が丸ごと管理の対象から外している(`argocd-values.sops.yaml` の `resource.exclusions`)ので prune されない。
+作られた `Secret` に Argo CD の tracking-id は付かない(operator は `secretTemplates` のラベルと注釈しか付けない)ので、Argo CD の資源と見なされず prune されない。
+chart が作る `Secret` は Argo CD がそのまま当てる(以前は `resource.exclusions` で Secret を丸ごと外していた。docs/decisions.md)。
