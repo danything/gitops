@@ -1,6 +1,6 @@
 # chart と版。Renovate が上げ、render.sh が読む(README.md「Helm で入れるもの」)。
 # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
-# version: 10.12.1
+# version: 10.13.1
 # argo-cd の chart の値。描いて machine config に載せるのは render.sh。
 # 秘密(通知先の URL と GitHub App の鍵)の値だけ SOPS で暗号化してある(../.sops.yaml)。平文の部分はそのまま直してよい。
 # 秘密を変えるときは `sops edit bootstrap/argocd-values.sops.yaml`。末尾の `sops:` は SOPS のメタデータ(触らない)。
