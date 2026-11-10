@@ -15,7 +15,7 @@
 # Talos。Factory のレジストリはタグ一覧を返さないので github-releases で追う。tools/Dockerfile の talosctl と同じ depName。
 # dvb-pt3 が v1.15.0-alpha.1 からなので alpha に乗っている(Renovate は次の alpha / beta も出す)。
 # renovate: datasource=github-releases depName=siderolabs/talos
-# version: v1.15.0-alpha.2
+# version: v1.15.0-beta.0
 # 拡張(dvb-pt3、i915、intel-ucode、mei)とカーネル引数(intel_iommu=on / iommu=pt / console=tty0 / console=ttyS0,115200n8)を焼き込んだ Image Factory の ID。i915 は Z440 の Arc A310(DG2)用。
 # mei は Arc の HuC を読むため(DG2 の HuC は GSC(MEI)経由で認証される。無いと `HuC: timed out waiting for MEI GSC` で、
 # QSV / VA-API の ICQ が `Selected ratecontrol mode is unsupported` で使えず、denpa は VA-API の CQP に落ちる)。
