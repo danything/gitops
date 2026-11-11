@@ -232,9 +232,13 @@ talosctl gen config doany https://10.0.0.2:6443 "$@" --output-dir "$OUT" >/dev/n
 echo "wrote $OUT/controlplane.yaml ($(wc -l < "$OUT/controlplane.yaml") 行)"
 
 # 描いたものが入ったか。controlplane.yaml のキーは gen config が知らないキーで落とすので見ない(helm は黙って捨てる)。
-# 生成物の manifest は 1 行のエスケープ文字列なので、引用符は \" で探す。
+# 生成物の manifest は、talosctl の版と中身によって 1 行のエスケープ文字列にもブロック(|-)にもなる
+# (v1.15.0-alpha.2 までは前者、beta.0 から後者)。どちらでも同じに探せるよう、エスケープ(\n と \")を戻して
+# 字下げを落としたものを見る。
+FLAT=$WORK/controlplane.flat
+awk '{ gsub(/\\n/, "\n"); gsub(/\\"/, "\""); print }' "$OUT/controlplane.yaml" | sed 's/^ *//' > "$FLAT"
 for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
-	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: \"7445\"' 'cgroup-root: \"/sys/fs/cgroup\"' \
+	'name: cilium' cilium-operator KUBERNETES_SERVICE_PORT 'value: "7445"' 'cgroup-root: "/sys/fs/cgroup"' \
 	'kind: GatewayClass' io.cilium/gateway-controller \
 	'kind: RawVolumeConfig' 'kind: LVMVolumeGroupConfig' 'name: dm_thin_pool' \
 	'name: lvm-localpv' lvm-localpv-node lvm-localpv-controller 'storageCapacity: false' 'doany.io/lvm-thinpool: ready' \
@@ -246,12 +250,15 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	'name: apiserver-rbac' 'name: cilium-drift' \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'name: argocd' argocd-server 'name: argocd-application-crd' manifests/crds/applicationset-crd.yaml \
-	'kind: Namespace\nmetadata:\n  name: argocd' \
 	'name: cert-manager' cert-manager-webhook 'name: cert-manager-crds' \
 	"cert-manager/releases/download/$CERTMGR/cert-manager.crds.yaml" \
-	'kind: Namespace\nmetadata:\n  name: cert-manager' \
 	'name: cloudflare-secret'; do
-	grep -qF -- "$n" "$OUT/controlplane.yaml" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
+	grep -qF -- "$n" "$FLAT" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }
+done
+# bootstrap 層の Namespace(chart() が先頭に付けたもの)。3 行が続いていることを見る
+for ns in argocd cert-manager; do
+	awk -v n="name: $ns" 'a == "kind: Namespace" && b == "metadata:" && $0 == n { f = 1 } { a = b; b = $0 } END { exit !f }' "$FLAT" \
+		|| { echo "ERROR: Namespace $ns が生成物に無い" >&2; exit 1; }
 done
 # 無いことを見る側(flannel はドキュメントが在るだけで有効になる)
 # (snapshot-controller と VolumeSnapshot の CRD は URL で入れるので、chart の同梱が混ざると 2 つになる)
