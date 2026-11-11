@@ -144,6 +144,11 @@ Argo CD が PVC を作ると、VolSync(volume populator)が R2 の `<bucket>/vol
 - denpa-raw は取っていないので空で作る
 - **バックアップがまだ無い PVC**(足したばかりのアプリ)は、リポジトリが空なので空のまま作る
 - 見るところ: `kubectl get pvc -A`(`Pending` が残っていないか)と `kubectl get replicationdestination -A`(`<pvc>-dst` の `latestMoverStatus`)
+- **全部の PVC が Bound になったら、戻すのに使ったスナップショットを消す**(`kubectl get volumesnapshot -A` の `volsync-<pvc>-dst-dest-<時刻>`)。
+  `<pvc>-dst` は戻した中身をスナップショットで持ち続け、LVM はスナップショットのある元のボリュームを消せないので、作業用の PV
+  (`volsync-<pvc>-dst-dest`)が `Released` のまま残り、`VolumeFailedDelete`(`with 1 active snapshots`)を出し続ける
+  (2026-11-02 の入れ直しの 21 個が 11-11 まで残っていた)。スナップショットを消せば PV は数分で消える。thin なので、そこから作った PVC には響かない。
+  消したあとで PVC を作り直すときは、下の手順どおり `<pvc>-dst` に戻し直させてから(消えたスナップショットを指したままだと埋まらない)
 
 今あるクラスタで PVC を戻すとき(消した・壊した)も同じ仕組みを使う。`<pvc>-dst` に戻したい時刻を入れて戻し直させ、PVC を消して Argo CD に作り直させる
 (`<pvc>-dst` は作られたときの中身を持ち続けるので、戻し直させないと古い中身で埋まる。`WHEN` を今にすれば最新):
