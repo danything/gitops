@@ -6,7 +6,7 @@
       "name": "r2-drift",
       "dependencies": {
         "@pulumi/azuread": "6.11.2",
-        "@pulumi/cloudflare": "6.23.3",
+        "@pulumi/cloudflare": "6.24.0",
         "@pulumi/netbird": "file:sdks/netbird",
         "@pulumi/pulumi": "3.274.1",
       },
@@ -171,7 +171,7 @@
 
     "@pulumi/azuread": ["@pulumi/azuread@6.11.2", "", { "dependencies": { "@pulumi/pulumi": "^3.142.0" } }, "sha512-n+9Q0onwDJAyg/t+Dn+sYl82uIMa5alCtJKTlGGZd/MB0nKa7GPxgbHDRumIX60lfUGqAVTSHhTo5dGxygexqw=="],
 
-    "@pulumi/cloudflare": ["@pulumi/cloudflare@6.23.3", "", { "dependencies": { "@pulumi/pulumi": "^3.269.0" } }, "sha512-etEo7csPhmv2K2dbRfyj9lCKcka5vTH9qowVufK9b+iDB2qEta9M/CPo+2QgsaANeEmxRTztqg+pIi+Xtzhjow=="],
+    "@pulumi/cloudflare": ["@pulumi/cloudflare@6.24.0", "", { "dependencies": { "@pulumi/pulumi": "^3.269.0" } }, "sha512-UsgQbHLExQgIFLoGjACgpTeRp359khU6wCNyQ7CNqK6hzgRgyOWKRXg1GqZYOKLEXmA/nKv32p+2S3gM0Va1Vg=="],
 
     "@pulumi/netbird": ["@pulumi/netbird@file:sdks/netbird", { "dependencies": { "@pulumi/pulumi": "^3.269.0", "@types/node": "^20", "typescript": "^4.7.0" }, "hasInstallScript": true }],
 
