@@ -20,6 +20,7 @@ const WEB_REDIRECTS: [string, string, string][] = [
   ["md.doany.io", "/callback", "mado(mado/。このクラスタの外)"],
   ["nb.doany.io", "/oauth2/callback", "NetBird"],
   ["nb.doany.io", "/oauth2/logout/callback", "NetBird(ログアウト)"],
+  ["s.doany.io", "/auth/callback", "sonae(地震情報。danything/sonae)"],
   ["yk.doany.io", "/admin/callback", "yosegaki の管理画面"],
 ];
 
