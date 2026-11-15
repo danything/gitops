@@ -50,6 +50,8 @@ data:
     feeds:
       enabled: true
       pollIntervalSeconds: 600
+    # 管理用の部屋 (秘密の webhook の URL が届く所) は @info:doany.io と hookshot の暗号化なしの DM。
+    # 招待で作った DM は、hookshot を再起動したあとに管理用の部屋として読まれる (README「webhook」)
     permissions:
       - actor: doany.io
         services:
