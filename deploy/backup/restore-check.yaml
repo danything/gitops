@@ -280,7 +280,10 @@ data:
       const sources = ((await r.json()).items ?? []).filter((o) => o.spec?.sourcePVC && o.spec?.restic);
       const keyOf = (o) => `${o.metadata.namespace}/${o.spec.sourcePVC}`;
       for (const o of sources) {
-        if (o.metadata.annotations?.[CHECK_ONLY_ANNOTATION] === "check-only") CHECK_ONLY.add(keyOf(o));
+        const v = o.metadata.annotations?.[CHECK_ONLY_ANNOTATION];
+        if (v === "check-only") CHECK_ONLY.add(keyOf(o));
+        // 綴りを間違えると黙って丸ごと取り出しにいくので、知らない値は失敗に数える(取り出しはふつうにする)
+        else if (v !== undefined) (bad++, lines.push(`- ❌ ${keyOf(o)}: ${CHECK_ONLY_ANNOTATION} の値 "${v}" を知らない(使えるのは check-only だけ)`));
       }
       const pvcs = [...new Set(sources.map(keyOf))].sort();
       if (!pvcs.length) (bad++, lines.push("- ❌ ReplicationSource が 1 つも無い"));
