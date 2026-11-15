@@ -29,7 +29,7 @@ metadata:
 | `ah` | 同じ名前で DoT の 853 | `deploy/adguardhome/httproute.yaml` |
 | `fj` | コンテナイメージの大きな層の push が、無料プランの 100MB の上限に当たる | `deploy/forgejo/httproute.yaml` |
 | `lk` | 通話の合図の WebSocket。音声と映像は 8443 で IP に直接来る | `deploy/matrix/httproute.yaml` |
-| `dp` / `dp.l` | 映像の配信と遅延。住所の判定が接続元の IP に頼る | denpa のリポジトリ |
+| アプリのもの(例: denpa の `dp` / `dp.l`) | アプリが決める(denpa は映像の配信と遅延。住所の判定が接続元の IP に頼る) | アプリのリポジトリの HTTPRoute の注釈(上)。今あるものは `kubectl get httproute -A` の注釈で見る |
 | `ks` | API サーバ。6443 は Cloudflare が通さない | `pulumi/dns.ts`(HTTPRoute が無い) |
 | `px` | 3proxy。hostPort の 3129 | `pulumi/dns.ts` |
 | `*.s` | 2 段の名前。無料の証明書は 1 段(`*.doany.io`)しか守れない | `pulumi/dns.ts` |
