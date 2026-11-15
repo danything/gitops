@@ -53,7 +53,9 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
   - **静的な接続**: [hookshot.yaml](hookshot.yaml) の `connections`。ID は [secrets.sops.yaml](secrets.sops.yaml) の `matrix` の
     `hook-<部屋>`(公開のリポジトリなので平文では置かない)。変換のスクリプト(Slack の attachments など)が要るものと、gitops の中のもの
   - **ルームの state**: 部屋で `!hookshot webhook <名前>` を打って作る(下の「webhook」)。gitops には何も書かないので、
-    gitops の外のアプリはこちらにする(アプリを消しても gitops を直さなくてよい)。今は `denpa`
+    gitops の外のアプリはこちらにする(アプリを消しても gitops を直さなくてよい)。今は `denpa`・`ashi`・`todoroku`・`worklog`・`contact`。
+    Slack 形式を Markdown に直す変換が要るものは、state の `transformationFunction` に hookshot.yaml の `&slack` と同じ中身を入れてある
+    (Element の `/devtools` →「ルームの状態を調査」→ `uk.half-shot.matrix-hookshot.generic.hook` → 名前 → 編集)
 - **投稿は全部 m.notice(bot の発言)**。通知と音は Element の設定で決める:
   グループの会話は「音あり」、bot のメッセージは「オン」(音無しで通知)、要らない部屋は部屋ごとに「メンションのみ」。
 
@@ -62,12 +64,12 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | `server` | バックアップの通知([../backup/notify.yaml](../backup/notify.yaml)) | [../backup/secrets.sops.yaml](../backup/secrets.sops.yaml) の `mattermostWebhook`(名前は据え置き) |
 | 〃 | Cloudflare(証明書・DDoS・オリジン不達など) | Cloudflare の通知の webhook の送り先([../../pulumi/notifications.ts](../../pulumi/notifications.ts)) |
 | `argocd` | Argo CD | `bootstrap/argocd-values.sops.yaml`(SOPS)の `service.webhook.mattermost` |
-| `ashi` | ashi | ashi のリポジトリの `deploy/secrets.sops.yaml`(`ashi-secrets` の `notify-webhook-url`) |
-| `todoroku` | todoroku | todoroku のリポジトリの `deploy/secrets.sops.yaml`(`todoroku-secrets` の `mattermost-webhook-url`) |
-| `worklog` | worklog | worklog のリポジトリの `deploy/secrets.sops.yaml`(`worklog-secrets` の `mattermost-webhook-url`) |
+| `ashi` | ashi(webhook はルームの state) | ashi のリポジトリの `deploy/secrets.sops.yaml`(`ashi-secrets` の `notify-webhook-url`) |
+| `todoroku` | todoroku(webhook はルームの state) | todoroku のリポジトリの `deploy/secrets.sops.yaml`(`todoroku-secrets` の `mattermost-webhook-url`) |
+| `worklog` | worklog(webhook はルームの state) | worklog のリポジトリの `deploy/secrets.sops.yaml`(`worklog-secrets` の `mattermost-webhook-url`) |
 | `denpa` | denpa(webhook はルームの state) | denpa の DB(`webhooks` テーブル。画面の設定) |
 | `forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
-| `contact` | doany.io のお問い合わせフォーム(danything/corp) | corp のリポジトリの `deploy/secrets.sops.yaml`(`corp-secrets` の `contact-webhook-url`) |
+| `contact` | doany.io のお問い合わせフォーム(danything/corp。webhook はルームの state) | corp のリポジトリの `deploy/secrets.sops.yaml`(`corp-secrets` の `contact-webhook-url`) |
 
 足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → 下の「webhook」で作る。
 静的な接続にするときだけ、secrets.sops.yaml に `hook-<部屋>` を足し(`sops edit`)、`connections` と render の env に足す。

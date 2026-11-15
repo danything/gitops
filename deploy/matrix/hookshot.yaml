@@ -98,37 +98,12 @@ data:
         state:
           name: argocd
           transformationFunction: *slack
-      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
-        stateKey: ${HOOK_ASHI}
-        roomId: "!Ffdb9KuBulsduDwuX3ig_Mm_L58QUBd78rcfGOTWoNs"
-        state:
-          name: ashi
-          transformationFunction: *slack
-      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
-        stateKey: ${HOOK_TODOROKU}
-        roomId: "!6cY5BJsmPL_0_-t2q2E-veifDIO73fz2ABcZErJXkhQ"
-        state:
-          name: todoroku
-          transformationFunction: *slack
-      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
-        stateKey: ${HOOK_WORKLOG}
-        roomId: "!aAFRLm9zquKQuIO3X7L-PkvvWcPg7_dqu5WIgYQNhe0"
-        state:
-          name: worklog
-          transformationFunction: *slack
       # 部屋 forgejo: Forgejo の組織 doa の webhook(種類は Slack)
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
         stateKey: ${HOOK_FORGEJO}
         roomId: "!46KHKR8zfKiW1lpfzy5QvvoV4y41Hwy9UNmFpStxYHA"
         state:
           name: Forgejo
-          transformationFunction: *slack
-      # 部屋 contact: doany.io のお問い合わせフォーム(danything/corp。{text} を送る)
-      - connectionType: uk.half-shot.matrix-hookshot.generic.hook
-        stateKey: ${HOOK_CONTACT}
-        roomId: "!zU_5HDLbyF3sgz5PvBJ9GAVEdfwFwuqBQAPWQilx9uo"
-        state:
-          name: contact
           transformationFunction: *slack
       # 部屋 server: Cloudflare の通知(証明書・DDoS・オリジン不達など。pulumi/notifications.ts)。本文は text に来る
       - connectionType: uk.half-shot.matrix-hookshot.generic.hook
@@ -215,16 +190,8 @@ spec:
               valueFrom: {secretKeyRef: {name: matrix, key: hook-server}}
             - name: HOOK_ARGOCD
               valueFrom: {secretKeyRef: {name: matrix, key: hook-argocd}}
-            - name: HOOK_ASHI
-              valueFrom: {secretKeyRef: {name: matrix, key: hook-ashi}}
-            - name: HOOK_TODOROKU
-              valueFrom: {secretKeyRef: {name: matrix, key: hook-todoroku}}
-            - name: HOOK_WORKLOG
-              valueFrom: {secretKeyRef: {name: matrix, key: hook-worklog}}
             - name: HOOK_FORGEJO
               valueFrom: {secretKeyRef: {name: matrix, key: hook-forgejo}}
-            - name: HOOK_CONTACT
-              valueFrom: {secretKeyRef: {name: matrix, key: hook-contact}}
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
