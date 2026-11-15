@@ -49,8 +49,11 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
   なので、権限は最上位で外されない
 - **暗号化していない。** hookshot は暗号化したルームに書けない。暗号化を後から入れると戻せないので、入れないこと
   (Element は非公開のルームを既定で暗号化するので、作るときに切る)
-- webhook は [hookshot.yaml](hookshot.yaml) の `connections`。URL は `https://m.doany.io/webhook/<ID>` で、ID は
-  [secrets.sops.yaml](secrets.sops.yaml) の `matrix` の `hook-<部屋>`(公開のリポジトリなので平文では置かない)
+- webhook の置き場は 2 通り。URL はどちらも `https://m.doany.io/webhook/<ID>`
+  - **静的な接続**: [hookshot.yaml](hookshot.yaml) の `connections`。ID は [secrets.sops.yaml](secrets.sops.yaml) の `matrix` の
+    `hook-<部屋>`(公開のリポジトリなので平文では置かない)。変換のスクリプト(Slack の attachments など)が要るものと、gitops の中のもの
+  - **ルームの state**: 部屋で `!hookshot webhook <名前>` を打って作る(下の「webhook」)。gitops には何も書かないので、
+    gitops の外のアプリはこちらにする(アプリを消しても gitops を直さなくてよい)。今は `denpa`
 - **投稿は全部 m.notice(bot の発言)**。通知と音は Element の設定で決める:
   グループの会話は「音あり」、bot のメッセージは「オン」(音無しで通知)、要らない部屋は部屋ごとに「メンションのみ」。
 
@@ -62,12 +65,31 @@ Entra だけ(Tuwunel の `[[global.identity_provider]]`)。パスワードのロ
 | `ashi` | ashi | ashi のリポジトリの `deploy/secrets.sops.yaml`(`ashi-secrets` の `notify-webhook-url`) |
 | `todoroku` | todoroku | todoroku のリポジトリの `deploy/secrets.sops.yaml`(`todoroku-secrets` の `mattermost-webhook-url`) |
 | `worklog` | worklog | worklog のリポジトリの `deploy/secrets.sops.yaml`(`worklog-secrets` の `mattermost-webhook-url`) |
-| `denpa` | denpa | denpa の DB(`webhooks` テーブル。画面の設定) |
+| `denpa` | denpa(webhook はルームの state) | denpa の DB(`webhooks` テーブル。画面の設定) |
 | `forgejo` | Forgejo | Forgejo の組織 `doa` の webhook(種類は Slack。DB の `webhook` id 2) |
 | `contact` | doany.io のお問い合わせフォーム(danything/corp) | corp のリポジトリの `deploy/secrets.sops.yaml`(`corp-secrets` の `contact-webhook-url`) |
 
-足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → secrets.sops.yaml に `hook-<部屋>` を足す(`sops edit`) →
-`connections` と render の env に足す。
+足すとき:ルームを暗号化なしで作り、hookshot を招待して権限を上げる → 下の「webhook」で作る。
+静的な接続にするときだけ、secrets.sops.yaml に `hook-<部屋>` を足し(`sops edit`)、`connections` と render の env に足す。
+
+### webhook(ルームの state)
+
+hookshot の汎用の webhook はルームの state(`uk.half-shot.matrix-hookshot.generic.hook`、state key は名前)に置ける。
+ID(URL の秘密の部分)は hookshot の bot の room account data にあり、Tuwunel の DB(VolSync で取っている)に残るので、
+Redis が無くても再起動で変わらない(hookshot の `src/Connections/GenericHook.ts`)。
+
+- **作る**: 部屋で `!hookshot webhook <名前>`(3〜64 文字)。部屋には「See admin room for secret url.」とだけ返り、
+  **URL は管理用の部屋に届く**。それを送り元(アプリの設定など)に入れる。本文 `{"text": …}` はそのまま m.notice で投稿される
+- **消す**: `!hookshot webhook remove <名前>`。一覧は `!hookshot webhook list`(名前だけ。URL は出ない)
+- **作り直すときは、必ず先に remove する。** 同じ名前でもう一度 `!hookshot webhook <名前>` を打つと、1 つの名前に ID が 2 つできる。
+  再起動のあとどちらの URL が効くかは account data の並び順で決まり、選べない
+- **管理用の部屋**は `@info:doany.io` と `@hookshot:doany.io` の暗号化なしの DM。hookshot は起動するときに、
+  account data に `admin_user` のある部屋を管理用の部屋として読む。1 人に 1 つだけにしておく(複数あると、どれに届くか選べない)
+  - **DM を招待で作ったときは、hookshot を再起動するまで管理用の部屋にならない。** hookshot は招待に入ってから account data を書くが、
+    管理用の部屋にするかは入った時点で見るため(`src/Bridge.ts` の `onRoomInvite`・`onRoomJoin`)。それまでは `help` などにも答えない。
+    再起動は hookshot.yaml の ConfigMap を変える PR で起こす(Reloader が入れ替える)
+  - 古い管理用の部屋を自分が抜けていても、hookshot はそこに URL を送り続ける(相手がまだ居るかを見ない)。
+    使わなくなった管理用の部屋は、Tuwunel の管理用の部屋で `!admin users force-leave-room @hookshot:doany.io <部屋の ID>` で hookshot を出してから再起動する
 
 ## GitHub 連携(hookshot)
 
