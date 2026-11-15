@@ -10,7 +10,9 @@
 #     スナップショットから取っているので -wal も隣に戻る。読み取り専用で開く
 #   - Postgres のデータ(PG_VERSION と global/ のあるところ): PG_VERSION と global/pg_control が読める。
 #     立ち上げはしない(crash-consistent なので、本当に戻すときは postgres が自分で WAL を流す)
-#   - denpa-encoded(録画、大きい)だけは取り出さず `restic check --read-data-subset=1%`
+#   - ReplicationSource に注釈 `backup.doany.io/restore-check: check-only` があるものは取り出さず
+#     `restic check --read-data-subset=1%` だけ(大きくて開いて見るものが無いもの。例: denpa の録画)。
+#     注釈はアプリのリポジトリの volsync.yaml に書くので、アプリを消しても gitops は直さなくてよい
 #   - etcd(`<bucket>/etcd`、etcd-snapshot.yaml): 取り出して etcd.snapshot が bbolt の頭を持つ
 #
 # **リポジトリには書かない。** restic は全部 `--no-lock`(読むだけでもロックのファイルを書くため)。
@@ -118,8 +120,9 @@ data:
     const T = `${W}/r`;
     const API = "https://kubernetes.default.svc";
     const SA = "/var/run/secrets/kubernetes.io/serviceaccount";
-    // 取り出さずに check だけするもの(録画。大きく、中身は ffmpeg の出力で開いて見るものが無い)
-    const CHECK_ONLY = new Set(["denpa/denpa-encoded"]);
+    // 取り出さずに check だけするもの(`<namespace>/<pvc>`)。ReplicationSource の注釈で決める(下の一覧を読むところで埋める)
+    const CHECK_ONLY_ANNOTATION = "backup.doany.io/restore-check";
+    const CHECK_ONLY = new Set();
 
     // 失敗したら標準エラーの末尾ごと投げる(呼んだ側がそのまま理由に使う)。
     // 1 つ 30 分で打ち切る。restic は R2 のエラーを黙って retry するので、待つと投稿まで届かない
@@ -274,11 +277,12 @@ data:
       });
       if (!r.ok) throw new Error(`replicationsources: ${r.status} ${(await r.text()).slice(0, 200)}`);
       // リポジトリの場所は 各アプリの secrets.sops.yaml の volsync-<pvc> と同じ組み方(PVC の名前で切る)
-      const pvcs = [...new Set(
-        ((await r.json()).items ?? [])
-          .filter((o) => o.spec?.sourcePVC && o.spec?.restic)
-          .map((o) => `${o.metadata.namespace}/${o.spec.sourcePVC}`),
-      )].sort();
+      const sources = ((await r.json()).items ?? []).filter((o) => o.spec?.sourcePVC && o.spec?.restic);
+      const keyOf = (o) => `${o.metadata.namespace}/${o.spec.sourcePVC}`;
+      for (const o of sources) {
+        if (o.metadata.annotations?.[CHECK_ONLY_ANNOTATION] === "check-only") CHECK_ONLY.add(keyOf(o));
+      }
+      const pvcs = [...new Set(sources.map(keyOf))].sort();
       if (!pvcs.length) (bad++, lines.push("- ❌ ReplicationSource が 1 つも無い"));
       for (const key of pvcs) one(key, () => checkPvc(...key.split("/")));
       one("etcd", checkEtcd);

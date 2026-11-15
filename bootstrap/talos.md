@@ -66,7 +66,8 @@ VM で確かめられないのは PT3 と bond の復旧方向。所要は apply
 
 `KubeAdmissionControlConfig` は `enforce: baseline`(例外は `kube-system`)。**`hostPath` / `privileged` / `hostNetwork` / `hostPort` を使う namespace は
 `namespace.yaml` に `enforce: privileged` が要る。** 無いと Pod が作られず、ReplicaSet や DaemonSet の events に出るだけ。
-今あるのは netbird・denpa(**ラベルは denpa リポジトリの `deploy/namespace.yaml`**)・adguardhome・matrix・3proxy・cloudflare-ddns・forgejo。
+gitops の中で今あるのは netbird・adguardhome・matrix・3proxy・cloudflare-ddns・forgejo。アプリのリポジトリの namespace は、
+**ラベルもそのリポジトリの `deploy/namespace.yaml`** に書く(例: denpa)。今あるものは `kubectl get ns -l pod-security.kubernetes.io/enforce=privileged` で見る。
 新しく足すときは `kubectl get pods -A -o json` で hostNetwork・privileged・capabilities・hostPort・hostPath を数えて洗い出す。
 
 ## 当て方

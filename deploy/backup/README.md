@@ -29,7 +29,9 @@ VolSync の Secret(`volsync-<pvc>`。各 namespace の secrets.sops.yaml)も同�
 - **足す**: アプリの secrets.sops.yaml に `volsync-<pvc>` の secretTemplate(ほかの PVC のものを写してリポジトリだけ変える)、`volsync.yaml` に ReplicationSource・ReplicationDestination(`<pvc>-dst`。
   capacity は PVC と同じ)を 1 組足し、PVC に `dataSourceRef` で `<pvc>-dst` を書く(ほかのアプリの volsync.yaml と pvc.yaml を写す。時刻はどれも 19:00)。
   **dataSourceRef は PVC を作るときにしか書けない**(今ある PVC に足しても効かない。Argo CD は差分を見ない設定)。新しいアプリなら secrets.sops.yaml ごと作る。
-  その namespace に `volsync.backube/privileged-movers: "true"` の注釈があるかを見る(無いと mover が root で動けず、読めないファイルで落ちる)
+  その namespace に `volsync.backube/privileged-movers: "true"` の注釈があるかを見る(無いと mover が root で動けず、読めないファイルで落ちる)。
+  大きくて開いて見るものが無い PVC(録画など)は、ReplicationSource に注釈 `backup.doany.io/restore-check: check-only` を付けると、
+  月次の [restore-check](restore-check.yaml) が取り出さずに `restic check` の 1% だけにする
 - **やめる**: 定義を消す(アプリごと消すなら何もしない)。**PVC を残したまま取るのだけやめるなら、R2 のリポジトリも消す**(残すと、あとで同じ名前の PVC を作ったときに古い中身で埋まる)。
   アプリごとやめたときもリポジトリ `<bucket>/volsync/<namespace>/<pvc>` は R2 に残る。要らなければ `rclone purge` か R2 の画面で消す
 

@@ -8,8 +8,9 @@
 # 容量で Pod の置き場を絞らせない。thin なので PVC の大きさは上限でしかなく、合計がプールを超えても作れる。
 # true だと kube-scheduler が「プールの空き < PVC」のものを置けずに Pending にする。
 # ただし**全部の PVC の合計はプール(約 340Gi)に収める。** 超えて実際に埋まると、PVC の中の残量の見張り
-# (denpa の disk.ts など)が鳴る前にプールが埋まり、全部の PVC の書き込みが止まる。
-# 残りは録画(danything/denpa の deploy/application.yaml の encoded)に回してあるので、ほかの PVC を増やしたらそこを減らす。
+# (アプリの中の見張り。例: denpa の disk.ts)が鳴る前にプールが埋まり、全部の PVC の書き込みが止まる。
+# 残りは一番大きい PVC(今は録画。各アプリのリポジトリの deploy/ にある)に回してあるので、ほかの PVC を増やしたらそこを減らす。
+# 合計は `kubectl get pvc -A` の容量を足して見る。
 storageCapacity: false
 # 匿名の利用統計(Google Analytics)を送らない
 analytics:
