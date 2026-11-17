@@ -15,6 +15,7 @@ data:
   #   identifierFilter で doany.io のアカウントだけに絞る(ゲストは入れない。README「誰が入れるか」)。
   # instanceSettings: 閲覧はログインした人だけ(PRIVATE)。パスワードでのログインと登録は止め(ADMIN は非常口として残る)、
   #   Entra で初めて入った人のアカウントは自動で作る(disallowUserRegistration が true だと SSO の自動作成も止まる)。
+  #   USAGE_LIMITS: 1 つのメモの中身は 1MiB まで(既定の 8KiB では事業の検討書などの長い文書が入らない)。添付 1 つは既定と同じ 32MiB。
   # users / linkedIdentities: 管理者 info。Entra の info@doany.io をこのアカウントに結ぶ(結ばないと UUID の名前の別人ができる)。
   #   パスワードは Secret の admin-password。送り直すのは writeOnlyVersion を上げたときだけ(上げるとセッションが切れる)。
   instance.json: |
@@ -52,6 +53,14 @@ data:
           "generalSetting": {
             "disallowPasswordAuth": true,
             "disallowUserRegistration": false
+          }
+        },
+        {
+          "name": "instance/settings/USAGE_LIMITS",
+          "usageLimitsSetting": {
+            "limits": [
+              { "allUsers": true, "memoContentBytes": "1048576", "uploadBytes": "33554432" }
+            ]
           }
         }
       ],
