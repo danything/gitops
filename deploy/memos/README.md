@@ -17,6 +17,7 @@ AI(Claude Code)からは公式の MCP(`https://ms.doany.io/mcp`)か REST API で
 
 - **入れるのは doany.io のアカウントだけ**(`identifierFilter`)。初めて Entra で入るとアカウントが自動で作られる。
   ゲスト(ほかのドメイン)を入れたくなったら `identifierFilter` を広げる
+- **Entra のユーザーの mail 属性が空だと入れない**(identifier に使う email が Graph の userinfo に来ないため。ライセンスの無いアカウントなど)。入れないときはまずここを見る
 - **パスワードでのログインと登録は止めてある**(`disallowPasswordAuth`)。ただし ADMIN の info はパスワードでも入れる(非常口)
 - **閲覧はログインした人だけ**(`INSTANCE_ACCESS_MODE_PRIVATE`)。メモの公開範囲は各メモで決める
   (PRIVATE は本人だけ、PROTECTED はログインした人全員、PUBLIC は誰でも)
