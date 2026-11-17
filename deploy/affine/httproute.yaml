@@ -16,3 +16,6 @@ spec:
     - backendRefs:
         - name: affine
           port: 3010
+      # 同期は WebSocket(socket.io)で長くつなぎ続け、大きいファイルのアップロードもある。Gateway の既定の 15 秒では切れる
+      timeouts:
+        request: 0s
