@@ -91,6 +91,7 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`renovate/`](deploy/renovate/) | Renovate(GitHub の danything・5ym と Forgejo の doa の全リポジトリの依存を上げる PR)。CronJob で 15 分おき。**秘密の入れ方は [deploy/renovate/README.md](deploy/renovate/README.md)** |
 | [`headlamp/`](deploy/headlamp/) | Kubernetes の Web UI(`h.doany.io`)。認証は Entra、権限は `bootstrap/apiserver-rbac.yaml` |
 | [`rybbit/`](deploy/rybbit/) | Rybbit(`rt.doany.io`、アクセス解析。クッキー無し)+ ClickHouse + PostgreSQL + Redis。トドロクの離脱をファネル・ジャーニー・セッションリプレイで見る。**使い始めは [deploy/rybbit/README.md](deploy/rybbit/README.md)** |
+| [`affine/`](deploy/affine/) | AFFiNE(`an.doany.io`、ドキュメントとホワイトボード)+ PostgreSQL(pgvector)+ Redis。ログインは Entra ID。**使い始めと誰が何を見られるかは [deploy/affine/README.md](deploy/affine/README.md)** |
 
 **動かしていないもの**は `deploy/_<name>/` に置く。`_` で始まるディレクトリは Argo CD が同期しない
 ([bootstrap/argocd-repos.yaml](bootstrap/argocd-repos.yaml) の `directory.exclude`。全リポジトリ共通の決まり)。

@@ -1,0 +1,192 @@
+# AFFiNE 本体。an.doany.io(README.md)。上流の .docker/selfhost/compose.yml を k8s に写した。
+# 起動前の処理(self-host-predeploy.js: DB のマイグレーション)は同じイメージの initContainer で毎回流す(何度流しても同じ)。
+#
+# 設定の重ね方は 既定値 → 環境変数 → config.json → DB(管理画面で保存した値)の順で後ろが勝つ。
+# 認証まわりは config.json(下の ConfigMap)で持つので、管理画面で認証の項目は触らない。
+# config.json に OIDC の client secret を入れるため、ConfigMap の雛形から initContainer で描いて emptyDir に置く。
+#
+# 署名の鍵(private.key)は Secret の private-key を AFFINE_PRIVATE_KEY で渡す(predeploy が作るファイルより優先される。
+# src/prelude.ts)。変えるとログインのトークンが全部切れる。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: affine-config
+  namespace: affine
+data:
+  # __OIDC_CLIENT_SECRET__ は initContainer が Secret の値に差し替える。
+  # auth: パスワード・マジックリンクでの新規登録は閉じ、Entra ID での初回ログインはアカウントを作る。
+  #   アカウントができても、招待されたワークスペースのほかは見えない(README「誰が何を見られるか」)。
+  #   パスワードでのログインそのものを止める設定は AFFiNE に無い。メール(MAILER)を設定していないので、
+  #   パスワードを持つのは最初の管理者だけ。
+  # oauth.providers.oidc: 共用の Entra のアプリ登録 Main(docs/entra.md)。issuer はテナントの GUID で書く
+  #   (discovery が返す issuer と完全一致で比べるため)。redirect URI は https://an.doany.io/oauth/callback(pulumi/entra.ts)。
+  config.json.tmpl: |
+    {
+      "$schema": "https://github.com/toeverything/affine/releases/latest/download/config.schema.json",
+      "server": {
+        "name": "AFFiNE (doany)"
+      },
+      "auth": {
+        "allowSignup": false,
+        "allowSignupForOauth": true
+      },
+      "oauth": {
+        "providers": {
+          "oidc": {
+            "clientId": "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e",
+            "clientSecret": "__OIDC_CLIENT_SECRET__",
+            "issuer": "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/v2.0",
+            "args": {
+              "scope": "openid profile email",
+              "claim_id": "sub",
+              "claim_email": "email",
+              "claim_name": "name"
+            }
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: affine
+  namespace: affine
+spec:
+  selector:
+    app: affine
+  ports:
+    - name: http
+      port: 3010
+      targetPort: 3010
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage
+  namespace: affine
+spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の storage-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: storage-dst}
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: affine
+  namespace: affine
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  # ReadWriteOnce の storage を付け替えるので、古い Pod が消えてから新しい Pod を起こす
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: affine
+  template:
+    metadata:
+      labels:
+        app: affine
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.38.0
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres 5432; do echo "PostgreSQL を待っている"; sleep 5; done
+              until nc -z redis 6379; do echo "Redis を待っている"; sleep 5; done
+        # config.json を雛形から描く(client secret を差し込む)。secret に / や & が入っても崩れないよう awk で置き換える
+        - name: render-config
+          image: busybox:1.38.0
+          env:
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: affine
+                  key: oidc-client-secret
+          command:
+            - sh
+            - -c
+            - awk -v s="$OIDC_CLIENT_SECRET" '{ gsub("__OIDC_CLIENT_SECRET__", s); print }' /tmpl/config.json.tmpl > /config/config.json
+          volumeMounts:
+            - name: tmpl
+              mountPath: /tmpl
+            - name: config
+              mountPath: /config
+        - name: predeploy
+          image: ghcr.io/toeverything/affine:0.27.4
+          command: [sh, -c, node ./scripts/self-host-predeploy.js]
+          env: &env
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: affine
+                  key: postgres-password
+            - name: DATABASE_URL
+              value: postgresql://affine:$(POSTGRES_PASSWORD)@postgres:5432/affine
+            - name: REDIS_SERVER_HOST
+              value: redis
+            - name: REDIS_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: affine
+                  key: redis-password
+            - name: AFFINE_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: affine
+                  key: private-key
+            - name: AFFINE_SERVER_EXTERNAL_URL
+              value: https://an.doany.io
+            # 全文検索の外部サービス(Manticore / Elasticsearch)は置かない。上流の compose と同じ
+            - name: AFFINE_INDEXER_ENABLED
+              value: "false"
+          volumeMounts: &mounts
+            - name: storage
+              mountPath: /root/.affine/storage
+            - name: config
+              mountPath: /root/.affine/config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+      containers:
+        - name: affine
+          image: ghcr.io/toeverything/affine:0.27.4
+          ports:
+            - containerPort: 3010
+          env: *env
+          volumeMounts: *mounts
+          readinessProbe:
+            httpGet:
+              path: /info
+              port: 3010
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: storage
+        - name: tmpl
+          configMap:
+            name: affine-config
+        # config.json は毎回 initContainer が描く。private.key は環境変数で渡すので、ここに残す物は無い
+        - name: config
+          emptyDir: {}

@@ -1,0 +1,13 @@
+# PSA は baseline。AFFiNE の公式イメージは root で動くが、特権も hostPort も要らない。
+# 一覧と背景は bootstrap/talos.md「PSA のラベル」。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: affine
+  annotations:
+    # VolSync の mover を root で動かす(PVC の中の持ち主がアプリごとに違うので。../volsync/application.yaml)
+    volsync.backube/privileged-movers: "true"
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
