@@ -12,6 +12,7 @@
 | [redis.yaml](redis.yaml) | キャッシュとジョブのキュー。PVC は持たない |
 | [setup-admin.yaml](setup-admin.yaml) | 最初の管理者(info@doany.io)を作る Job。2 回目からは何もしない |
 | [secrets.sops.yaml](secrets.sops.yaml) | 秘密(SOPS)。Secret `affine` の 5 キーと VolSync の分 |
+| [httproute.yaml](httproute.yaml) | `an.doany.io`。全部 3010 に流す |
 | [volsync.yaml](volsync.yaml) | バックアップ(VolSync。PostgreSQL と storage の PVC をスナップショットから) |
 
 ## 誰が何を見られるか
@@ -29,8 +30,8 @@
 AFFiNE は利用者が 0 人のあいだだけ管理者を作らせる。先に誰かが Entra で入ると管理者のいないまま初期化されるので、
 **公開の経路(HTTPRoute)より先に** [setup-admin.yaml](setup-admin.yaml) の Job がクラスタの中から info@doany.io で作る。
 
-1. この PR(経路なし)が入ると、Job が管理者を作る(`kubectl logs -n affine job/setup-admin` に「管理者を作った」)
-2. 次の PR で `httproute.yaml` と `pulumi/entra.ts` のリダイレクト URI を足して公開する
+1. 経路なしで入れた最初の PR(#872)で、Job が管理者を作った(2026-11-17 済み。`kubectl logs -n affine job/setup-admin` に「管理者を作った」か「もう作ってある」)
+2. そのあとの PR で `httproute.yaml` と `pulumi/entra.ts` のリダイレクト URI を足して公開した
 3. <https://an.doany.io> で「Entra(OIDC)でログイン」→ info@doany.io で入ると、同じアドレスの管理者に結び付く
 4. パスワード(Secret の `admin-password`)は Entra が使えないときの非常口。`tools/t sops -d` で見られる
 
