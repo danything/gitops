@@ -1,0 +1,185 @@
+# Memos 本体。ms.doany.io(README.md)。SQLite で 1 レプリカ(/var/opt/memos の PVC)。
+#
+# 設定は宣言的設定(MEMOS_CONFIG_DIR の instance.json、26.10 から)で持ち、起動のたびに DB に当てる
+# (migrate → apply → 待ち受け開始の順なので、管理者と Entra の設定は公開より先に入る)。
+# ここで持つ項目は画面や API から書き換えられない(MANAGED_BY_CONFIGURATION で断られる)。
+# 書き方: https://usememos.com/docs/configuration/declarative-configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memos-config
+  namespace: memos
+data:
+  # identityProviders: 共用の Entra のアプリ登録 Main(docs/entra.md)。redirect URI は https://ms.doany.io/auth/callback
+  #   (pulumi/entra.ts)。identifier は email(Entra のユーザーの mail 属性。テナントの管理者が持つ値で本人は変えられない)。
+  #   identifierFilter で doany.io のアカウントだけに絞る(ゲストは入れない。README「誰が入れるか」)。
+  # instanceSettings: 閲覧はログインした人だけ(PRIVATE)。パスワードでのログインと登録は止め(ADMIN は非常口として残る)、
+  #   Entra で初めて入った人のアカウントは自動で作る(disallowUserRegistration が true だと SSO の自動作成も止まる)。
+  # users / linkedIdentities: 管理者 info。Entra の info@doany.io をこのアカウントに結ぶ(結ばないと UUID の名前の別人ができる)。
+  #   パスワードは Secret の admin-password。送り直すのは writeOnlyVersion を上げたときだけ(上げるとセッションが切れる)。
+  instance.json: |
+    {
+      "identityProviders": [
+        {
+          "name": "identity-providers/entra",
+          "type": "OAUTH2",
+          "title": "Microsoft Entra ID",
+          "identifierFilter": "^[A-Za-z0-9._%+-]+@doany\\.io$",
+          "config": {
+            "oauth2Config": {
+              "clientId": "b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e",
+              "clientSecret": "${env:ENTRA_CLIENT_SECRET}",
+              "authUrl": "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/oauth2/v2.0/authorize",
+              "tokenUrl": "https://login.microsoftonline.com/22ac977d-b140-4dc8-8150-90d645d3475b/oauth2/v2.0/token",
+              "userInfoUrl": "https://graph.microsoft.com/oidc/userinfo",
+              "scopes": ["openid", "profile", "email"],
+              "fieldMapping": {
+                "identifier": "email",
+                "displayName": "name",
+                "email": "email"
+              }
+            }
+          }
+        }
+      ],
+      "instanceSettings": [
+        {
+          "name": "instance/settings/ACCESS",
+          "accessSetting": { "accessMode": "INSTANCE_ACCESS_MODE_PRIVATE" }
+        },
+        {
+          "name": "instance/settings/GENERAL",
+          "generalSetting": {
+            "disallowPasswordAuth": true,
+            "disallowUserRegistration": false
+          }
+        }
+      ],
+      "users": [
+        {
+          "name": "users/info",
+          "username": "info",
+          "role": "ADMIN",
+          "email": "info@doany.io",
+          "password": "${file:/run/secrets/memos/admin-password}"
+        }
+      ],
+      "linkedIdentities": [
+        {
+          "name": "users/info/linkedIdentities/entra",
+          "externalUid": "info@doany.io"
+        }
+      ],
+      "lifecycle": [
+        { "resource": "users/info", "preventDestroy": true, "writeOnlyVersion": 1 }
+      ]
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memos
+  namespace: memos
+spec:
+  selector:
+    app: memos
+  ports:
+    - name: http
+      port: 5230
+      targetPort: 5230
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: memos
+spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の data-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: data-dst}
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memos
+  namespace: memos
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  # SQLite を ReadWriteOnce の PVC に置くので、古い Pod が消えてから新しい Pod を起こす
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: memos
+  template:
+    metadata:
+      labels:
+        app: memos
+    spec:
+      # イメージは root で起きて chown してから 10001 に降りる。最初から 10001 で動かし、PVC は fsGroup で渡す
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        fsGroup: 10001
+      containers:
+        - name: memos
+          image: neosmemo/memos:26.11.1
+          ports:
+            - containerPort: 5230
+          env:
+            - name: MEMOS_PORT
+              value: "5230"
+            - name: MEMOS_DRIVER
+              value: sqlite
+            # robots.txt・CORS・MCP の Origin の判定に使う(OAuth の戻り先はブラウザの origin から作られる)
+            - name: MEMOS_INSTANCE_URL
+              value: https://ms.doany.io
+            - name: MEMOS_CONFIG_DIR
+              value: /etc/memos/config
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: memos
+                  key: oidc-client-secret
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5230
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/opt/memos
+            - name: config
+              mountPath: /etc/memos/config
+              readOnly: true
+            - name: admin-password
+              mountPath: /run/secrets/memos
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
+        - name: config
+          configMap:
+            name: memos-config
+        - name: admin-password
+          secret:
+            secretName: memos
+            items:
+              - key: admin-password
+                path: admin-password
