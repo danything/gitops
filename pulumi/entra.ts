@@ -11,7 +11,6 @@ const WEB_REDIRECTS: [string, string, string][] = [
   ["a.doany.io", "/oauth2/callback", "auth(oauth2-proxy。deploy/auth/)"],
   ["ac.doany.io", "/auth/callback", "Argo CD"],
   ["ah.doany.io", "/oauth2/callback", "AdGuard Home の前段(oauth2-proxy)"],
-  ["an.doany.io", "/oauth/callback", "AFFiNE(deploy/affine/)"],
   ["as.doany.io", "/auth/callback", "ashi"],
   ["dp.doany.io", "/login/callback", "denpa"],
   ["fj.doany.io", "/user/oauth2/entra/callback", "Forgejo"],
