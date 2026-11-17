@@ -6,6 +6,8 @@
 # このアカウントに結び付く(plugins/oauth/service.ts の fulfill)。パスワードは Secret の admin-password で、
 # Entra が使えないときの非常口(README「最初の管理者」)。
 #
+# パスワードは printf で JSON に埋めるので、" や \ を含めない(secrets.sops.yaml では英数字 24 文字で作った)。
+#
 # 2 回目以降は「First user already created」で断られるので、それも成功として扱う(Argo CD が流し直しても同じ)。
 apiVersion: batch/v1
 kind: Job

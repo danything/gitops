@@ -20,6 +20,9 @@ data:
   #   パスワードを持つのは最初の管理者だけ。
   # oauth.providers.oidc: 共用の Entra のアプリ登録 Main(docs/entra.md)。issuer はテナントの GUID で書く
   #   (discovery が返す issuer と完全一致で比べるため)。redirect URI は https://an.doany.io/oauth/callback(pulumi/entra.ts)。
+  #   email は userinfo(Graph)を先に見て、無ければ ID トークンを見る。Entra のユーザーの mail 属性(テナントの管理者が持つ値で、
+  #   本人は変えられない)から来るので、メールボックスの無いユーザーは email が空になり入れない。いまの利用者は info@ とゲストで、
+  #   どちらも mail がある。管理者のアカウントにはこの email で結び付く(setup-admin.yaml)。
   config.json.tmpl: |
     {
       "$schema": "https://github.com/toeverything/affine/releases/latest/download/config.schema.json",
@@ -104,7 +107,9 @@ spec:
             - |
               until nc -z postgres 5432; do echo "PostgreSQL を待っている"; sleep 5; done
               until nc -z redis 6379; do echo "Redis を待っている"; sleep 5; done
-        # config.json を雛形から描く(client secret を差し込む)。secret に / や & が入っても崩れないよう awk で置き換える
+        # config.json を雛形から描く(client secret を差し込む)。awk の gsub は & と \ を特別に扱うので、
+        # ENVIRON で受けて index/substr で文字どおりに置き換える。JSON のエスケープはしないが、Entra の client secret は
+        # 英数字と ~ . _ - だけなので要らない
         - name: render-config
           image: busybox:1.38.0
           env:
@@ -116,7 +121,10 @@ spec:
           command:
             - sh
             - -c
-            - awk -v s="$OIDC_CLIENT_SECRET" '{ gsub("__OIDC_CLIENT_SECRET__", s); print }' /tmpl/config.json.tmpl > /config/config.json
+            - |
+              awk 'BEGIN { k = "__OIDC_CLIENT_SECRET__"; s = ENVIRON["OIDC_CLIENT_SECRET"] }
+                { while ((i = index($0, k)) > 0) $0 = substr($0, 1, i - 1) s substr($0, i + length(k)); print }' \
+                /tmpl/config.json.tmpl > /config/config.json
           volumeMounts:
             - name: tmpl
               mountPath: /tmpl
