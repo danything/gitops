@@ -1,0 +1,38 @@
+# この namespace の PVC を VolSync で R2 に取り(ReplicationSource)、PVC を作るときに埋める(ReplicationDestination <pvc>-dst)。
+# リポジトリは `<bucket>/volsync/memos/data`、その Secret(volsync-data)は secrets.sops.yaml。取り方は ../volsync/application.yaml
+# SQLite(WAL)をスナップショットで取るので、戻したときは WAL から立ち直る(落ちたときと同じ)。アプリと一緒に置くので、アプリを消せばこれも消える
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: data
+  namespace: memos
+spec:
+  sourcePVC: data
+  trigger:
+    schedule: "0 19 * * *"
+  restic:
+    repository: volsync-data
+    copyMethod: Snapshot
+    retain: {daily: 7, weekly: 4, monthly: 6}
+    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+---
+# 戻す側(populator)。PVC data の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationDestination
+metadata:
+  name: data-dst
+  namespace: memos
+spec:
+  trigger:
+    manual: restore-once
+  restic:
+    repository: volsync-data
+    copyMethod: Snapshot
+    capacity: 2Gi
+    accessModes: [ReadWriteOnce]
+    storageClassName: local-path
+    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    # 戻した中身はスナップショットに残るので、作業用の PVC は消す
+    cleanupTempPVC: true
+    cleanupCachePVC: true

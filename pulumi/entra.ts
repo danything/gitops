@@ -18,6 +18,7 @@ const WEB_REDIRECTS: [string, string, string][] = [
   ["hl.doany.io", "/oauth2/callback", "Hubble の前段(oauth2-proxy)"],
   ["m.doany.io", "/_matrix/client/unstable/login/sso/callback/b0fa498f-7e6a-4fe1-a1c6-16fbbb6f397e", "Matrix(Tuwunel)"],
   ["md.doany.io", "/callback", "mado(mado/。このクラスタの外)"],
+  ["ms.doany.io", "/auth/callback", "Memos(deploy/memos/)"],
   ["nb.doany.io", "/oauth2/callback", "NetBird"],
   ["nb.doany.io", "/oauth2/logout/callback", "NetBird(ログアウト)"],
   ["s.doany.io", "/auth/callback", "sonae(地震情報。danything/sonae)"],

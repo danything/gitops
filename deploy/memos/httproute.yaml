@@ -1,0 +1,18 @@
+# 公開経路。証明書は Gateway(deploy/gateway/)のワイルドカードなので指定しない。
+# 画面・API・MCP(/mcp)・OAuth の戻り先(/auth/callback)は全部 5230 の 1 つの口。
+# 管理者と Entra の設定は起動時に当たってから待ち受けるので、経路を最初から付けてよい(memos.yaml)。
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: memos
+  namespace: memos
+spec:
+  parentRefs:
+    - name: doany
+      namespace: kube-system
+      sectionName: https
+  hostnames: ["ms.doany.io"]
+  rules:
+    - backendRefs:
+        - name: memos
+          port: 5230
