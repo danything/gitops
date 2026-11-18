@@ -1,0 +1,193 @@
+# Twenty 本体(t.doany.io。README.md)。server(画面・API・MCP)と worker(ジョブ)の 2 つ。同じイメージで、DB と Redis を共有する。
+#
+# - server は起きるときに DB の初期化・移行と cron の登録をしてから待ち受ける(イメージの entrypoint.sh)。worker はどちらもしない
+# - 添付ファイルは PVC storage(.local-storage)。server と worker の両方が読み書きするので、両方に付ける
+#   (local-path の ReadWriteOnce でも、同じノードの Pod なら一緒に付けられる。ノードは 1 台)
+# - ログインは Microsoft だけ(専用のアプリ登録 twenty。pulumi/entra-twenty.ts)。パスワードは止める
+# - ワークスペースは 1 つだけ(IS_MULTIWORKSPACE_ENABLED=false)。作ったあとは、招待か許可したドメインの人しか登録できない
+apiVersion: v1
+kind: Service
+metadata:
+  name: twenty
+  namespace: twenty
+spec:
+  selector:
+    app: twenty
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage
+  namespace: twenty
+spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の storage-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: storage-dst}
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+# server と worker に共通の設定。秘密は Secret twenty(secrets.sops.yaml)から env で入れる
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: twenty-env
+  namespace: twenty
+data:
+  SERVER_URL: https://t.doany.io
+  NODE_PORT: "3000"
+  STORAGE_TYPE: local
+  IS_MULTIWORKSPACE_ENABLED: "false"
+  # ワークスペースを作ったあとは、招待か許可したドメイン(doany.io)の人しか登録できない(既定と同じ。明示しておく)
+  IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS: "true"
+  AUTH_PASSWORD_ENABLED: "false"
+  AUTH_MICROSOFT_ENABLED: "true"
+  # pulumi/entra-twenty.ts のアプリ登録 twenty(pulumi の出力 twentyClientId)
+  AUTH_MICROSOFT_CLIENT_ID: 4167ec78-8c93-446b-90d8-f29aee91b9ec
+  AUTH_MICROSOFT_CALLBACK_URL: https://t.doany.io/auth/microsoft/redirect
+  # メールとカレンダーの同期は使わない(アプリ登録に Mail.* の権限を付けていない)
+  MESSAGING_PROVIDER_MICROSOFT_ENABLED: "false"
+  CALENDAR_PROVIDER_MICROSOFT_ENABLED: "false"
+  TELEMETRY_ENABLED: "false"
+  ANALYTICS_ENABLED: "false"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twenty
+  namespace: twenty
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  # PVC storage を ReadWriteOnce で持つのと、DB の移行を 2 つの Pod が同時に走らせないため
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: twenty
+  template:
+    metadata:
+      labels:
+        app: twenty
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      # 上流の compose の stop_grace_period と同じ(ジョブを畳む時間)
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: twenty
+          image: twentycrm/twenty:v2.59.3
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: twenty-env
+          env:
+            - name: PG_PASSWORD
+              valueFrom: {secretKeyRef: {name: twenty, key: postgres-password}}
+            - name: REDIS_PASSWORD
+              valueFrom: {secretKeyRef: {name: twenty, key: redis-password}}
+            # パスワードは英数字だけなので、URL にそのまま入れてよい
+            - name: PG_DATABASE_URL
+              value: postgres://twenty:$(PG_PASSWORD)@postgres:5432/twenty
+            - name: REDIS_URL
+              value: redis://:$(REDIS_PASSWORD)@redis:6379
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: twenty, key: encryption-key}}
+            - name: AUTH_MICROSOFT_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: twenty, key: microsoft-client-secret}}
+          # 初回と版を上げたときは、待ち受ける前に DB の移行が走る。長めに待つ
+          startupProbe:
+            httpGet: {path: /healthz, port: 3000}
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /healthz, port: 3000}
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: storage
+              mountPath: /app/packages/twenty-server/.local-storage
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twenty-worker
+  namespace: twenty
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: twenty-worker
+  template:
+    metadata:
+      labels:
+        app: twenty-worker
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: worker
+          image: twentycrm/twenty:v2.59.3
+          # ENTRYPOINT(entrypoint.sh)は残し、CMD だけ worker に替える。移行と cron の登録は server がする
+          args: [yarn, worker:prod]
+          envFrom:
+            - configMapRef:
+                name: twenty-env
+          env:
+            - name: DISABLE_DB_MIGRATIONS
+              value: "true"
+            - name: DISABLE_CRON_JOBS_REGISTRATION
+              value: "true"
+            - name: PG_PASSWORD
+              valueFrom: {secretKeyRef: {name: twenty, key: postgres-password}}
+            - name: REDIS_PASSWORD
+              valueFrom: {secretKeyRef: {name: twenty, key: redis-password}}
+            - name: PG_DATABASE_URL
+              value: postgres://twenty:$(PG_PASSWORD)@postgres:5432/twenty
+            - name: REDIS_URL
+              value: redis://:$(REDIS_PASSWORD)@redis:6379
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: twenty, key: encryption-key}}
+            - name: AUTH_MICROSOFT_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: twenty, key: microsoft-client-secret}}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: storage
+              mountPath: /app/packages/twenty-server/.local-storage
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: storage
