@@ -54,6 +54,14 @@ data:
   # メールとカレンダーの同期は使わない(アプリ登録に Mail.* の権限を付けていない)
   MESSAGING_PROVIDER_MICROSOFT_ENABLED: "false"
   CALENDAR_PROVIDER_MICROSOFT_ENABLED: "false"
+  # メールは家のクラスタの中継(deploy/smtp-relay)から info@doany.io として送る(招待・ドメインの確認など)。中継は TLS なし
+  EMAIL_DRIVER: smtp
+  EMAIL_SMTP_HOST: smtp-relay.smtp-relay.svc
+  EMAIL_SMTP_PORT: "587"
+  EMAIL_SMTP_NO_TLS: "true"
+  EMAIL_SMTP_USER: 22ac977d-b140-4dc8-8150-90d645d3475b@fd45a316-97cc-4480-8da8-487109403520
+  EMAIL_FROM_ADDRESS: info@doany.io
+  EMAIL_FROM_NAME: Doa
   TELEMETRY_ENABLED: "false"
   ANALYTICS_ENABLED: "false"
 ---
@@ -106,6 +114,8 @@ spec:
               valueFrom: {secretKeyRef: {name: twenty, key: encryption-key}}
             - name: AUTH_MICROSOFT_CLIENT_SECRET
               valueFrom: {secretKeyRef: {name: twenty, key: microsoft-client-secret}}
+            - name: EMAIL_SMTP_PASSWORD
+              valueFrom: {secretKeyRef: {name: twenty, key: smtp-password}}
           # 初回と版を上げたときは、待ち受ける前に DB の移行が走る。長めに待つ
           startupProbe:
             httpGet: {path: /healthz, port: 3000}
@@ -178,6 +188,8 @@ spec:
               valueFrom: {secretKeyRef: {name: twenty, key: encryption-key}}
             - name: AUTH_MICROSOFT_CLIENT_SECRET
               valueFrom: {secretKeyRef: {name: twenty, key: microsoft-client-secret}}
+            - name: EMAIL_SMTP_PASSWORD
+              valueFrom: {secretKeyRef: {name: twenty, key: smtp-password}}
           resources:
             requests:
               cpu: 50m
