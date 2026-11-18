@@ -1,0 +1,13 @@
+# PSA は baseline。Twenty は uid 1000、Postgres と Redis は公式イメージのまま。特権も hostPort も要らない。
+# 一覧と背景は bootstrap/talos.md「PSA のラベル」。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: twenty
+  annotations:
+    # VolSync の mover を root で動かす(PVC の中の持ち主がアプリごとに違うので。../volsync/application.yaml)
+    volsync.backube/privileged-movers: "true"
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

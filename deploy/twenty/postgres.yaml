@@ -1,0 +1,83 @@
+# Twenty の DB。PostgreSQL 18 系(上流の CI が 18 で回している)。PVC は VolSync がスナップショットから取る(crash-consistent で立ち直る。volsync.yaml)。
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: twenty
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: twenty
+spec:
+  # 新しく作るときは VolSync が R2 の最新から中身を埋める(volsync.yaml の postgres-data-dst)。今ある PVC には効かない
+  dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: postgres-data-dst}
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: twenty
+spec:
+  replicas: 1
+  # ReadWriteOnce なので古い Pod が消えてから新しい Pod が付ける。RollingUpdate だと詰まる。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18.7
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: twenty
+            - name: POSTGRES_USER
+              value: twenty
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: twenty
+                  key: postgres-password
+            # initdb は空でないディレクトリを嫌うので、マウント先の下の段に置く
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, twenty, -d, twenty]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data
