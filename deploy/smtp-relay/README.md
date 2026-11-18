@@ -31,7 +31,7 @@ SMTP AUTH をやめて **Graph の `sendMail`** で送る。OAuth を話せな�
 | パスワード | 送る側のリポジトリの `deploy/secrets.sops.yaml`(todoroku は `todoroku-smtp` の `SMTP_PASSWORD`、yosegaki は `yosegaki-secrets` の `smtp-password`) |
 | 差出人 | `info@doany.io`(ほかのアドレスは Exchange が拒む) |
 
-使っているのは yosegaki(blog のリポジトリ)と todoroku(Forgejo の doa/todoroku)。Infisical も使っていた(2026-11-02 にやめた)。
+使っているのは yosegaki(blog のリポジトリ)と todoroku(Forgejo の doa/todoroku)と Twenty(deploy/twenty。`twenty` の `smtp-password`)。Infisical も使っていた(2026-11-02 にやめた)。
 **送る側を足すときは network-policy.yaml にその namespace を足す。**
 
 ## Entra のアプリと Exchange の絞り込み(1 回だけ。済み)

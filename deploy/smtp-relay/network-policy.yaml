@@ -15,6 +15,8 @@ spec:
             k8s:io.kubernetes.pod.namespace: blog
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: todoroku
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: twenty
       toPorts:
         - ports:
             - port: "8025"

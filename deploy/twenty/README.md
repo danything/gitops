@@ -46,4 +46,5 @@
   上流の Helm chart は古いので使わず、上流の compose(`packages/twenty-docker/docker-compose.yml`)に合わせて書いている
 - **メールとカレンダーの同期は使っていない。** 使うならアプリ登録に Graph の Mail.ReadWrite・Mail.Send・Calendars.ReadWrite を足し、
   `MESSAGING_PROVIDER_MICROSOFT_ENABLED` などを true にする(Microsoft 365 のライセンスが要る)
-- **メールを送らない。** `EMAIL_DRIVER` は既定のまま(ログに出すだけ)。招待のメールは届かないので、許可したドメインで入ってもらう
+- **メールは家の中継から送る**(../smtp-relay/。差出人は info@doany.io)。招待のメールや、許可するドメインの確認のメールが届く。
+  中継のパスワードは yosegaki と同じ値(`smtp-password`。中継の README「送る側の設定」)
