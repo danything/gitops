@@ -92,7 +92,6 @@ headlamp が 1 文字なのは、規則どおりだと head + lamp でも hubble
 | [`headlamp/`](deploy/headlamp/) | Kubernetes の Web UI(`h.doany.io`)。認証は Entra、権限は `bootstrap/apiserver-rbac.yaml` |
 | [`rybbit/`](deploy/rybbit/) | Rybbit(`rt.doany.io`、アクセス解析。クッキー無し)+ ClickHouse + PostgreSQL + Redis。トドロクの離脱をファネル・ジャーニー・セッションリプレイで見る。**使い始めは [deploy/rybbit/README.md](deploy/rybbit/README.md)** |
 | [`twenty/`](deploy/twenty/) | Twenty(`t.doany.io`、CRM・メモ・タスク・独自の表)。PostgreSQL と Redis。ログインは Microsoft(専用のアプリ登録 twenty)、AI からは MCP で読み書きする。**誰が入れるかと最初のワークスペースは [deploy/twenty/README.md](deploy/twenty/README.md)** |
-| [`memos/`](deploy/memos/) | Memos(`ms.doany.io`、Markdown のメモ。手続きの記録・事業の検討書など)。SQLite。ログインは Entra ID、AI からは MCP で読み書きする。**誰が入れるかと管理者は [deploy/memos/README.md](deploy/memos/README.md)** |
 
 **動かしていないもの**は `deploy/_<name>/` に置く。`_` で始まるディレクトリは Argo CD が同期しない
 ([bootstrap/argocd-repos.yaml](bootstrap/argocd-repos.yaml) の `directory.exclude`。全リポジトリ共通の決まり)。
