@@ -52,7 +52,7 @@ spec:
             # **CA の束も持ってくる。** bun の slim のイメージに頼らない。無いと restic は
             # x509 のエラーを黙って retry し続け、何も言わずに止まって見える
             - name: restic
-              image: mirror.gcr.io/restic/restic:0.19.1
+              image: mirror.gcr.io/restic/restic:0.20.0
               command: [cp, /usr/bin/restic, /etc/ssl/certs/ca-certificates.crt, /tools/]
               securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
               volumeMounts:
