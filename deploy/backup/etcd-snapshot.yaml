@@ -59,7 +59,7 @@ spec:
           containers:
             - name: upload
               # restic の公式のイメージ(Docker Hub の pull-through キャッシュ)
-              image: mirror.gcr.io/restic/restic:0.19.1
+              image: mirror.gcr.io/restic/restic:0.20.0
               workingDir: /work
               command:
                 - sh
