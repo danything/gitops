@@ -62,7 +62,7 @@ spec:
                 limits: {memory: 128Mi}
           containers:
             - name: check
-              image: oven/bun:1.4.4-slim
+              image: oven/bun:1.4.5-slim
               command: [bun, /script/restore-check.js]
               securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
               env:
