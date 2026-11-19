@@ -18,7 +18,7 @@ ARG HELM_VERSION=v4.3.2
 # renovate: datasource=github-releases depName=getsops/sops
 ARG SOPS_VERSION=v3.13.3
 # renovate: datasource=github-releases depName=restic/restic
-ARG RESTIC_VERSION=v0.19.1
+ARG RESTIC_VERSION=v0.20.0
 # renovate: datasource=github-releases depName=pulumi/pulumi
 ARG PULUMI_VERSION=v3.277.0
 # renovate: datasource=npm depName=cf
