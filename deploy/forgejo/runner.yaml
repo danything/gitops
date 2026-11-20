@@ -178,7 +178,9 @@ spec:
               memory: 256Mi
             # **ジョブのコンテナは全部この中で動く**ので、ここが CI 全体の上限になる。
             # ノードは 32 GiB(kubelet の予約を引いた allocatable は約 28.2 GiB)で、CI 以外の実使用は 10 GiB ほど(2026-11-20)。
-            # denpa の上限 8Gi と足しても 28 GiB に収まる。ここを超えるとノードごと OOM に巻き込むので、
+            # dind と denpa(上限 8Gi)が上限まで使い、ほかが実測どおりのとき、合計は 28 GiB で allocatable がほぼ埋まる
+            # (余りは約 0.2 GiB で、ページキャッシュの余地も無い。10 GiB は実測で、上限ではない)。
+            # ふだんはそこまで重ならない。ここを超えるとノードごと OOM に巻き込むので、
             # capacity を上げるときは必ず一緒に見る(docs/decisions.md「メモリを 32GB に合わせる」)
             limits:
               memory: 10Gi
