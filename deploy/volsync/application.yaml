@@ -14,8 +14,37 @@
 # - **mover は root**(PVC の中の持ち主がアプリごとに違う)。namespace に `volsync.backube/privileged-movers: "true"` が要る。
 #   Argo CD が作る namespace は bootstrap/argocd-repos.yaml の managedNamespaceMetadata、自分で Namespace を書いているところはそのファイル、
 #   bootstrap 層の namespace は bootstrap/render.sh が付ける。PVC を足したら、その namespace に注釈があるかを見る
-# - **時刻は全部 19:00 UTC(04:00 JST)。** VolSync は並べて流し、22 本で 5 分ほどで終わる(2026-11-02 に全部を同時に取って確かめた)。
+# - **時刻は 18:00〜19:55 UTC(03:00〜04:55 JST)に 5 分おきに 1 本。** 1 本は 1〜3 分で終わるので重ならない。
+#   2026-11-20 までは全部 19:00 UTC に一度に流していたが、ノードが 32GB に減ってから、24 本の mover と SSD の I/O が
+#   一度に重なるのを避けた(../../docs/decisions.md「メモリを 32GB に合わせる」)。PVC を足したら下の空き(20:00〜20:30)を使い、ここに足す。
+#   mover は moverResources で requests 128Mi・limits 1Gi(Talos の OOM コントローラの標的から外す)。
 #   保持は日次 7・週次 4・月次 6(録画だけ 1 世代)、prune は VolSync の既定の 7 日ごと
+#
+#   | UTC   | namespace / ReplicationSource                     | 置き場 |
+#   | 18:00 | adguardhome/adguardhome-conf                      | gitops |
+#   | 18:05 | adguardhome/adguardhome-work                      | gitops |
+#   | 18:10 | forgejo/forgejo-repos                             | gitops |
+#   | 18:15 | forgejo/postgres-data                             | gitops |
+#   | 18:20 | matrix/tuwunel-data                               | gitops |
+#   | 18:25 | netbird/netbird-data                              | gitops |
+#   | 18:30 | netbird/netbird-routing-peer-data                 | gitops |
+#   | 18:35 | rybbit/clickhouse-data                            | gitops |
+#   | 18:40 | rybbit/postgres-data                              | gitops |
+#   | 18:45 | twenty/storage                                    | gitops |
+#   | 18:50 | twenty/postgres-data                              | gitops |
+#   | 18:55 | ashi/ashi-data                                    | danything/ashi |
+#   | 19:00 | blog/yosegaki-db                                  | danything/blog |
+#   | 19:05 | denpa/agent-config                                | danything/denpa |
+#   | 19:10 | denpa/denpa-data                                  | danything/denpa |
+#   | 19:15 | denpa/denpa-encoded                               | danything/denpa |
+#   | 19:20 | lgtm/lgtm-db                                      | danything/lgtm |
+#   | 19:25 | lgtm/lgtm-images                                  | danything/lgtm |
+#   | 19:30 | sonae/sonae-data                                  | danything/sonae |
+#   | 19:35 | todoroku/todoroku-db                              | doa/todoroku(Forgejo) |
+#   | 19:40 | todoroku/todoroku-files                           | doa/todoroku(Forgejo) |
+#   | 19:45 | worklog/worklog-db                                | doa/worklog-cloud(Forgejo) |
+#   | 19:50 | xool/xool-db                                      | danything/xool |
+#   | 19:55 | yuzuriha/yuzuriha-data                            | danything/yuzuriha |
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -251,6 +251,7 @@ for n in "kube-apiserver:$K8S" "ghcr.io/siderolabs/kubelet:$K8S" \
 	"gateway-api/releases/download/$GWAPI/standard-install.yaml" \
 	'name: argocd' argocd-server 'name: argocd-application-crd' manifests/crds/applicationset-crd.yaml \
 	'name: cert-manager' cert-manager-webhook 'name: cert-manager-crds' \
+	'kind: KubeletConfig' 'systemReserved:' 'evictionSoft:' \
 	"cert-manager/releases/download/$CERTMGR/cert-manager.crds.yaml" \
 	'name: cloudflare-secret'; do
 	grep -qF -- "$n" "$FLAT" || { echo "ERROR: '$n' が生成物に無い" >&2; exit 1; }

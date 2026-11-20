@@ -10,7 +10,7 @@
 | [httproute.yaml](httproute.yaml) | 公開経路。SSH は出さない(clone / push は HTTPS + トークン) |
 | [secrets.sops.yaml](secrets.sops.yaml) | 秘密(SOPS。Secret `forgejo-db`・`forgejo-oauth`・`forgejo-runner` と VolSync の分) |
 
-バックアップは [volsync.yaml](volsync.yaml)(VolSync。PVC 2 本をスナップショットから、毎日 19:00 UTC)。
+バックアップは [volsync.yaml](volsync.yaml)(VolSync。PVC 2 本をスナップショットから、毎日 18:10・18:15 UTC)。
 
 ## 使い始め
 
