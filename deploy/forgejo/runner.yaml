@@ -177,7 +177,7 @@ spec:
               cpu: 100m
               memory: 256Mi
             # **ジョブのコンテナは全部この中で動く**ので、ここが CI 全体の上限になる。
-            # ノードは 32 GiB(kubelet の予約を引いて約 29.5 GiB)で、CI 以外の実使用は 10 GiB ほど(2026-11-20)。
+            # ノードは 32 GiB(kubelet の予約を引いた allocatable は約 28.2 GiB)で、CI 以外の実使用は 10 GiB ほど(2026-11-20)。
             # denpa の上限 8Gi と足しても 28 GiB に収まる。ここを超えるとノードごと OOM に巻き込むので、
             # capacity を上げるときは必ず一緒に見る(docs/decisions.md「メモリを 32GB に合わせる」)
             limits:

@@ -519,7 +519,7 @@ sops:
 ---
 # kubelet の予約と追い出し(../docs/decisions.md「メモリを 32GB に合わせる」)。v1.14 からは KubeletConfig の `config` に書く
 # (v1alpha1 の machine.kubelet.extraConfig と両方に書くと弾かれる。talos.md「machine config の書き方」)。
-# system と kube に 1Gi ずつ取り、allocatable を約 29.5Gi にする。空きが 1.5Gi を 1 分切ったら、空きが 500Mi を切ったらすぐ、
+# system と kube に 1Gi ずつ取り、allocatable を約 28.2Gi にする(今は 30.6Gi。evictionHard の 500Mi も引かれる)。空きが 1.5Gi を 1 分切ったら、空きが 500Mi を切ったらすぐ、
 # kubelet が Pod を追い出す(Talos の OOM コントローラや cgroup の OOM より先に、順番を決めて止める)。
 # **evictionHard を書くと、書かなかった既定(nodefs など)は 0 になる**ので、既定の値も書き写す。
 # 追い出しの猶予は 60 秒まで(denpa の terminationGracePeriodSeconds は 6 時間で、そのままだと空かない)。

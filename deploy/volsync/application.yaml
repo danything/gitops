@@ -17,7 +17,8 @@
 # - **時刻は 18:00〜19:55 UTC(03:00〜04:55 JST)に 5 分おきに 1 本。** 1 本は 1〜3 分で終わるので重ならない。
 #   2026-11-20 までは全部 19:00 UTC に一度に流していたが、ノードが 32GB に減ってから、24 本の mover と SSD の I/O が
 #   一度に重なるのを避けた(../../docs/decisions.md「メモリを 32GB に合わせる」)。PVC を足したら下の空き(20:00〜20:30)を使い、ここに足す。
-#   mover は moverResources で requests 128Mi・limits 1Gi(Talos の OOM コントローラの標的から外す)。
+#   mover は moverResources で requests 128Mi・limits 1Gi(Talos の OOM コントローラの標的から外す)。戻す側(<pvc>-dst)には付けない
+#   (1 回だけ走り、大きい PVC を戻すのが OOM で止まるほうが困る)。
 #   保持は日次 7・週次 4・月次 6(録画だけ 1 世代)、prune は VolSync の既定の 7 日ごと
 #
 #   | UTC   | namespace / ReplicationSource                     | 置き場 |

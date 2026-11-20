@@ -423,6 +423,11 @@ Talos の OOM コントローラは limits のある Pod を 0 点にして標�
   ashi・blog・lgtm・sonae・xool など。実測は小さいが、詰まったら先に殺される。順に足す
 - **trim**: `FilesystemTrimConfig` の `chunkSize` と `chunkDelay` で 1 回の trim を薄く延ばせる(既定 1GiB ごとに 250ms 休む)。
   今回は入れていない。また重なるなら次の手
+- **最初の数日に見ること**: dind の OOMKilled(10Gi を 3 本で分ける。CI の山は測っていない)、VolSync の mover の OOMKilled
+  (restic はリポジトリの索引の大きさでメモリが増える。落ちると notify が鳴る)、denpa のエンコード中の使用量(山は測っていない)。
+  当てる前に `kubectl describe node main` の requests の合計(2026-11-20 は 8.4GiB)が新しい allocatable(約 28.2GiB)に収まるかも見る
+- **戻す側(ReplicationDestination)の mover には limits を付けていない。** PVC を作るときに 1 回だけ走り、
+  大きい PVC を戻すのが OOM で止まるほうが困るため
 
 **メモリを足すなら**: 空きが 4 スロットある。今の Samsung M393A1G43DB1-CRC(DDR4-2400 8GB の ECC RDIMM)と同じものを足す
 (挿す順は [../ROADMAP.md](../ROADMAP.md)「ノード main(HP Z440)」)。足しても上の limits と予約はそのままでよい(余りが増えるだけ)。
