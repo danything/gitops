@@ -94,7 +94,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: twenty
-          image: twentycrm/twenty:v2.59.3
+          image: twentycrm/twenty:v2.60.1
           ports:
             - containerPort: 3000
           envFrom:
@@ -165,7 +165,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: worker
-          image: twentycrm/twenty:v2.59.3
+          image: twentycrm/twenty:v2.60.1
           # ENTRYPOINT(entrypoint.sh)は残し、CMD だけ worker に替える。移行と cron の登録は server がする
           args: [yarn, worker:prod]
           envFrom:
