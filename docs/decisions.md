@@ -391,3 +391,43 @@ Secret に付けない(`sopssecret_controller.go`)ので、tracking-id は付か
 
 外したときに Argo CD に引っかかっていた Secret はその 1 つだけだった(各 Application の「excluded in the settings」の条件)。
 bootstrap の Secret は machine config で入れていて、Argo CD の対象外(`exclude: bootstrap/**`)なので変わらない。
+
+## メモリを 32GB に合わせる(2026-11-20)
+
+**ノードのメモリが 48GB から 32GB に減った**(8GB の RDIMM × 4)のに、limits の合計は 80GiB のままで、値の多くは 46GiB を前提にしていた。
+2026-11-20 16:05 (JST) に Talos の OOM コントローラ(メモリの PSI を見て、ノードが詰まると cgroup ごと SIGKILL する)が、
+limits の無い BestEffort の Pod(argocd-application-controller・argocd-repo-server・cilium-envoy)を殺した。
+きっかけはメモリの量そのものより I/O で、遅い SATA の SSD の trim(Talos の `FilesystemTrimConfig`。既定で 168 時間おき、今回は 69GB)と
+Renovate(3 本で約 3GiB)が重なって I/O が詰まり、PSI が上がった。etcd のヘルスチェックも 2 回落ちた。
+そのときの実使用は 10.5GiB ほど(`kubectl top node`)で、足りなかったのは量ではなく、詰まったときに誰から殺されるかの順だった。
+
+**決めたこと**: 大食いの上限を 32GB に収まるように下げ、基盤の BestEffort には requests と limits を付け、同時に走るものをずらす。
+Talos の OOM コントローラは limits のある Pod を 0 点にして標的から外すので、limits を付けるとまず BestEffort のアプリが選ばれる。
+そのぶん limits は実測の 2 倍以上にして、cgroup の OOM で自分から落ちないようにした。
+
+| 何 | 前 | 後 | 理由 |
+| --- | --- | --- | --- |
+| Forgejo の dind(`deploy/forgejo/runner.yaml`) | 28Gi・capacity 8 | **10Gi・capacity 3** | 1 本あたり 3Gi 強で、前(28Gi / 8)と同じ。CI 以外の実使用 10GiB と denpa の 8Gi を足しても 28GiB |
+| denpa(danything/denpa の `deploy/application.yaml`) | 24Gi | **8Gi** | 平常は 100Mi ほど。ffmpeg(エンコード 2 本・その場の変換 4 本まで)を積んでも収まる量。chart の既定も 8Gi にした |
+| tuner-agent(同上) | 無し | **128Mi / 512Mi** | 実測 94〜97Mi(チューナー 9 台)。.NET の GC は limits に合わせて動く |
+| Renovate(`deploy/renovate/renovate.yaml`) | parallelism 3 | **2** | 1 本で最大 4Gi。3 本目は先に終わった番号のあと(どれも 1.5〜8 分) |
+| VolSync の 24 本 | 全部 19:00 UTC | **18:00〜19:55 UTC に 5 分おき** | 一覧は [../deploy/volsync/application.yaml](../deploy/volsync/application.yaml)。mover は requests 128Mi・limits 1Gi |
+| Argo CD・cert-manager・Cilium の Envoy と operator と Hubble・OpenEBS LVM(`bootstrap/*-values*.yaml`) | 無し(BestEffort) | 実測の近くを requests、2〜8 倍を limits | 値は各ファイルのコメント。repo-server は helm を描くたびに膨らむので 1Gi |
+| kubelet(`bootstrap/talos.sops.yaml` の `KubeletConfig`) | 既定 | system・kube に 1Gi ずつ予約、evictionHard 500Mi、evictionSoft 1.5Gi(1 分) | OOM コントローラより先に kubelet が順番を決めて追い出す |
+
+- **bootstrap/ の分(Argo CD・cert-manager・Cilium・OpenEBS LVM・kubelet)は Argo CD では当たらない。** machine config なので
+  `bootstrap/apply.sh --mode=no-reboot` → `talosctl upgrade-k8s`(kubelet の分は apply-config だけで当たる。[../bootstrap/talos.md](../bootstrap/talos.md)「当て方」)
+- **evictionHard は書いたものだけになる**(書かなかった nodefs などの既定は 0 になる)ので、既定の値も書き写した。
+  追い出しの猶予は `evictionMaxPodGracePeriod: 60`(denpa は 6 時間待つので、そのままでは空かない)
+- **まだ BestEffort のもの**: adguardhome・auth の oauth2-proxy・netbird・snapshot-controller(URL で入れていて値を渡せない)・
+  ashi・blog・lgtm・sonae・xool など。実測は小さいが、詰まったら先に殺される。順に足す
+- **trim**: `FilesystemTrimConfig` の `chunkSize` と `chunkDelay` で 1 回の trim を薄く延ばせる(既定 1GiB ごとに 250ms 休む)。
+  今回は入れていない。また重なるなら次の手
+- **最初の数日に見ること**: dind の OOMKilled(10Gi を 3 本で分ける。CI の山は測っていない)、VolSync の mover の OOMKilled
+  (restic はリポジトリの索引の大きさでメモリが増える。落ちると notify が鳴る)、denpa のエンコード中の使用量(山は測っていない)。
+  当てる前に `kubectl describe node main` の requests の合計(2026-11-20 は 8.4GiB)が新しい allocatable(約 28.2GiB)に収まるかも見る
+- **戻す側(ReplicationDestination)の mover には limits を付けていない。** PVC を作るときに 1 回だけ走り、
+  大きい PVC を戻すのが OOM で止まるほうが困るため
+
+**メモリを足すなら**: 空きが 4 スロットある。今の Samsung M393A1G43DB1-CRC(DDR4-2400 8GB の ECC RDIMM)と同じものを足す
+(挿す順は [../ROADMAP.md](../ROADMAP.md)「ノード main(HP Z440)」)。足しても上の limits と予約はそのままでよい(余りが増えるだけ)。

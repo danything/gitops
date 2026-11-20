@@ -9,12 +9,13 @@ metadata:
 spec:
   sourcePVC: tuwunel-data
   trigger:
-    schedule: "0 19 * * *"
+    schedule: "20 18 * * *"
   restic:
     repository: volsync-tuwunel-data
     copyMethod: Snapshot
     retain: {daily: 7, weekly: 4, monthly: 6}
     moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    moverResources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 1Gi}}
 ---
 # 戻す側(populator)。PVC tuwunel-data の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
 # (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す

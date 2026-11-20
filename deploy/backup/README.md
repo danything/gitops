@@ -5,7 +5,7 @@ PVC のバックアップは VolSync([../volsync/application.yaml](../volsync/ap
 
 | | 何 | 時刻(UTC) |
 | --- | --- | --- |
-| 各アプリの `deploy/volsync.yaml`(VolSync 本体は [../volsync/](../volsync/)) | PVC ごとの ReplicationSource。保持は日次 7・週次 4・月次 6(録画だけ 1 世代) | 19:00 |
+| 各アプリの `deploy/volsync.yaml`(VolSync 本体は [../volsync/](../volsync/)) | PVC ごとの ReplicationSource。保持は日次 7・週次 4・月次 6(録画だけ 1 世代) | 18:00〜19:55(5 分おきに 1 本。割り当ては [../volsync/application.yaml](../volsync/application.yaml)) |
 | [etcd-snapshot.yaml](etcd-snapshot.yaml) | etcd のスナップショット(`<bucket>/etcd`)。保持は日次 7・週次 4 | 13:00 |
 | [notify.yaml](notify.yaml) | 全部の ReplicationSource と etcd-snapshot が 26 時間以内に成功したかを、日次で通知の部屋に 1 行 | 21:00 |
 | [restore-check.yaml](restore-check.yaml) | 毎月 1 日、全部の PVC の最新を実際に取り出して開けるかを確かめる | 06:00(1 日) |
@@ -27,7 +27,7 @@ VolSync の Secret(`volsync-<pvc>`。各 namespace の secrets.sops.yaml)も同�
 アプリを消せば定義も消えるので、gitops を直す必要は無い。戻すときは各 PVC の `dataSourceRef`(volsync.yaml の `<pvc>-dst`)で、PVC を作ると R2 の最新から埋まる。
 
 - **足す**: アプリの secrets.sops.yaml に `volsync-<pvc>` の secretTemplate(ほかの PVC のものを写してリポジトリだけ変える)、`volsync.yaml` に ReplicationSource・ReplicationDestination(`<pvc>-dst`。
-  capacity は PVC と同じ)を 1 組足し、PVC に `dataSourceRef` で `<pvc>-dst` を書く(ほかのアプリの volsync.yaml と pvc.yaml を写す。時刻はどれも 19:00)。
+  capacity は PVC と同じ)を 1 組足し、PVC に `dataSourceRef` で `<pvc>-dst` を書く(ほかのアプリの volsync.yaml と pvc.yaml を写す。時刻は [../volsync/application.yaml](../volsync/application.yaml) の一覧の空きを使い、一覧にも足す)。
   **dataSourceRef は PVC を作るときにしか書けない**(今ある PVC に足しても効かない。Argo CD は差分を見ない設定)。新しいアプリなら secrets.sops.yaml ごと作る。
   その namespace に `volsync.backube/privileged-movers: "true"` の注釈があるかを見る(無いと mover が root で動けず、読めないファイルで落ちる)。
   大きくて開いて見るものが無い PVC(録画など)は、ReplicationSource に注釈 `backup.doany.io/restore-check: check-only` を付けると、

@@ -20,11 +20,20 @@ crds:
   csi:
     volumeSnapshots:
       enabled: false
+# メモリの requests と limits(BestEffort にしない。../docs/decisions.md「メモリを 32GB に合わせる」)。
+# chart は同じ値を Pod の**どのコンテナにも**付ける。実測(2026-11-20)は controller の 4 つが 14〜36Mi、node の 2 つが 7Mi・29Mi。
+# node の openebs-lvm-plugin は lvcreate などを子として走らせるので多めに
 lvmController:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
   # snapshot-controller はクラスタに 1 つ(VolSync も使う)なので、chart の同梱ではなく render.sh が入れる
   snapshotController:
     enabled: false
 lvmNode:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 256Mi}
   # thin プールが出来てから動かす(storage.yaml の lvm-thinpool がこのラベルを付ける)。
   # 先に PVC を受けると、OpenEBS が最初の PVC と同じ大きさの小さい thin プールを作ってしまう。
   nodeSelector:

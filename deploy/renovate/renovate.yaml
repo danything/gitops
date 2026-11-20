@@ -123,7 +123,9 @@ spec:
       # 番号 0・1・2 が run.sh の case の danything・5ym・doa
       completionMode: Indexed
       completions: 3
-      parallelism: 3
+      # 同時に 2 本(1 本で最大 4Gi)。3 本で約 3GiB を食い、SSD の trim と重なって OOM を呼んだ(2026-11-20。
+      # docs/decisions.md「メモリを 32GB に合わせる」)。3 本目は先に終わった番号のあとに走る(どれも 1.5〜8 分で、15 分おきに収まる)
+      parallelism: 2
       # 番号ごとに数える。1 つが落ちても(OOMKilled など。exit 0 にできない終わり方)残りの番号は最後まで回す
       backoffLimitPerIndex: 0
       # トークンは 1 時間で切れる。それより前に止める

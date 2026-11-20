@@ -152,7 +152,7 @@ NAT ループバック(ヘアピン)が要る。家の中だけつながらな�
 
 ## バックアップ
 
-VolSync([volsync.yaml](volsync.yaml)、毎日 19:00 UTC)。`tuwunel-data` を PVC ごと
+VolSync([volsync.yaml](volsync.yaml)、毎日 18:20 UTC)。`tuwunel-data` を PVC ごと
 スナップショットから取る。RocksDB は crash-consistent なスナップショットから自分で立ち直るので、
 Tuwunel にバックアップを作らせることはもうしない(k8up の頃の `backups/` は 2026-11-01 に PVC から消した)。
 

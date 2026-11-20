@@ -517,6 +517,47 @@ sops:
     mac_only_encrypted: true
     version: 3.13.3
 ---
+# kubelet の予約と追い出し(../docs/decisions.md「メモリを 32GB に合わせる」)。v1.14 からは KubeletConfig の `config` に書く
+# (v1alpha1 の machine.kubelet.extraConfig と両方に書くと弾かれる。talos.md「machine config の書き方」)。
+# system と kube に 1Gi ずつ取り、allocatable を約 28.2Gi にする(今は 30.6Gi。evictionHard の 500Mi も引かれる)。空きが 1.5Gi を 1 分切ったら、空きが 500Mi を切ったらすぐ、
+# kubelet が Pod を追い出す(Talos の OOM コントローラや cgroup の OOM より先に、順番を決めて止める)。
+# **evictionHard を書くと、書かなかった既定(nodefs など)は 0 になる**ので、既定の値も書き写す。
+# 追い出しの猶予は 60 秒まで(denpa の terminationGracePeriodSeconds は 6 時間で、そのままだと空かない)。
+apiVersion: v1alpha1
+kind: KubeletConfig
+config:
+    systemReserved:
+        memory: 1Gi
+    kubeReserved:
+        memory: 1Gi
+    evictionHard:
+        memory.available: 500Mi
+        nodefs.available: 10%
+        nodefs.inodesFree: 5%
+        imagefs.available: 15%
+        imagefs.inodesFree: 5%
+    evictionSoft:
+        memory.available: 1536Mi
+    evictionSoftGracePeriod:
+        memory.available: 1m
+    evictionMaxPodGracePeriod: 60
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBIQnpITHlrS0lxZkZXb3dy
+            UmNMYUhFamtsR2Rpb3BTMXozYjQwQkoxOEhFClFOeDRQV2tTYTBlL09RUS9oMUZG
+            ZHZwNXVnYzA4dkIyME0rbnc0Zm44SEUKLS0tIDhTNmNMU1ZVeGEwbzltTDdpVVRP
+            M0FiWEJ2MHIzRkU2WHRxWlo3N0FsNlEKgYVZr+vTicTztpwMQ7oj/yLEk12f/JZX
+            uMTe29EqIoB7gE/SCG9z+qoLXd4NHrA1lfrLjTDSCYNEhGiDyMhIMQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+    encrypted_regex: ^password$
+    lastmodified: "2026-10-30T16:40:35Z"
+    mac: ENC[AES256_GCM,data:HeBfzNkyaDPxwfMepe0/4U5g0tAUyMf9AZMYly5La46tj8Ap5K4z9jp3tcOR9tADq1nCBhgtIKDiLmrNqOOWLShV1jDVM35hpBDHMpYuJjAGish8pBZUb3TetvSa1fnzOE24JrCZxpaK69q5V9akQzKIlhM/qgRhU7jFqPhyDT8=,iv:8QW9fMoDnME0qsE/TMcpi3zKgl+Oy+9mN8jzRY7XnN4=,tag:gOxsxLzsRPBx8iQjY5RW/A==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
+---
 # API サーバの公開名。外から ks.doany.io を証明書検証つきで使うため(公開名は自動では入らない)
 apiVersion: v1alpha1
 kind: KubeAPIServerConfig

@@ -63,8 +63,9 @@ data:
     log:
       level: info
     runner:
-      # 同時に受けるジョブの数。CPU は余っているので、上限は dind のメモリ(下の limits)で決まる
-      capacity: 8
+      # 同時に受けるジョブの数。CPU は余っているので、上限は dind のメモリ(下の limits)で決まる。
+      # 10Gi を 3 本で分けて 1 本あたり 3Gi 強(48GB のころの 28Gi / 8 本とほぼ同じ)。docs/decisions.md「メモリを 32GB に合わせる」
+      capacity: 3
       timeout: 3h
       labels:
         - ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04
@@ -138,9 +139,9 @@ spec:
             requests:
               cpu: 50m
               memory: 64Mi
-            # 8 本ぶんのログを同時に流すので少し余裕を持たせる
+            # ジョブのログを流すだけ(実測 21Mi)。3 本ぶんを同時に流しても余る
             limits:
-              memory: 2Gi
+              memory: 1Gi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -176,10 +177,11 @@ spec:
               cpu: 100m
               memory: 256Mi
             # **ジョブのコンテナは全部この中で動く**ので、ここが CI 全体の上限になる。
-            # ノードは 46 GiB で、CI 以外の実使用は 8 GiB ほど。28Gi なら 10 GiB 残る。
-            # ここを超えるとノードごと OOM に巻き込むので、capacity を上げるときは必ず一緒に見る
+            # ノードは 32 GiB(kubelet の予約を引いた allocatable は約 28.2 GiB)で、CI 以外の実使用は 10 GiB ほど(2026-11-20)。
+            # denpa の上限 8Gi と足しても 28 GiB に収まる。ここを超えるとノードごと OOM に巻き込むので、
+            # capacity を上げるときは必ず一緒に見る(docs/decisions.md「メモリを 32GB に合わせる」)
             limits:
-              memory: 28Gi
+              memory: 10Gi
           securityContext:
             privileged: true
           volumeMounts:

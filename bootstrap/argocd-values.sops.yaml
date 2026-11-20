@@ -13,6 +13,28 @@ redis:
     image:
         repository: mirror.gcr.io/library/redis
         tag: 8.10.3-alpine
+    resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {memory: 128Mi}
+# **メモリの requests と limits を全部に付ける**(../docs/decisions.md「メモリを 32GB に合わせる」)。無いと BestEffort で、
+# ノードが詰まったとき Talos の OOM コントローラが真っ先に殺す(2026-11-20 に controller と repo-server が殺された)。
+# requests は実測(2026-11-20)の近く、limits は山を見込んで多めに(repo-server は helm を描くたびに膨らむ)
+controller:
+    resources:
+        requests: {cpu: 100m, memory: 256Mi}
+        limits: {memory: 1Gi}
+repoServer:
+    resources:
+        requests: {cpu: 50m, memory: 128Mi}
+        limits: {memory: 1Gi}
+server:
+    resources:
+        requests: {cpu: 10m, memory: 64Mi}
+        limits: {memory: 256Mi}
+applicationSet:
+    resources:
+        requests: {cpu: 10m, memory: 64Mi}
+        limits: {memory: 256Mi}
 # Dex を使わず Entra ID に直接 OIDC(../deploy/auth/deployment.yaml と同じアプリ登録)
 dex:
     enabled: false
@@ -41,6 +63,9 @@ configs:
             g, admin, role:admin
         scopes: '[roles, email]'
 notifications:
+    resources:
+        requests: {cpu: 10m, memory: 64Mi}
+        limits: {memory: 256Mi}
     secret:
         # helm の空の Secret が外で管理する argocd-notifications-secret と取り合う
         create: false

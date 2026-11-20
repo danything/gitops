@@ -57,8 +57,20 @@ gatewayAPI:
 hubble:
   relay:
     enabled: true
+    # 実測 18Mi。ui は frontend 33Mi・backend 11Mi(2026-11-20)
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 128Mi}
   ui:
     enabled: true
+    frontend:
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {memory: 128Mi}
+    backend:
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {memory: 128Mi}
   # 証明書はクラスタ内の CronJob が作る。既定の `helm` は描くたびに作り直し、machine config に秘密鍵が載る。
   tls:
     auto:
@@ -74,8 +86,17 @@ envoy:
         - SYS_ADMIN
         - NET_BIND_SERVICE
       keepCapNetBindService: true
+  # メモリの requests と limits(BestEffort にしない。../docs/decisions.md「メモリを 32GB に合わせる」)。
+  # 2026-11-20 に Talos の OOM コントローラに殺された。実測 122Mi。全部の公開経路を通すので limits は大きめに
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}
 
 securityContext:
   privileged: true
 operator:
   replicas: 1
+  # 実測 56Mi(2026-11-20)
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 256Mi}
