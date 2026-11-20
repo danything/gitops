@@ -42,205 +42,205 @@ spec:
             # - gitops は公開リポジトリ。クライアントの固定設定(端末名・MAC)などを足すときは公開してよいか考える
             - name: CONFIG
               value: |
-                http:
-                  pprof:
-                    port: 6060
-                    enabled: false
-                  doh:
-                    routes:
-                      - GET /dns-query
-                      - POST /dns-query
-                      - GET /dns-query/{ClientID}
-                      - POST /dns-query/{ClientID}
-                    insecure_enabled: false
-                  address: 0.0.0.0:80
-                  session_ttl: 30d
-                users: []
                 auth_attempts: 5
                 block_auth_min: 15
-                http_proxy: ""
-                language: ""
-                theme: auto
+                clients:
+                  persistent: []
+                  runtime_sources:
+                    arp: true
+                    dhcp: true
+                    hosts: true
+                    rdns: true
+                    whois: true
+                dhcp:
+                  dhcpv4:
+                    gateway_ip: ""
+                    icmp_timeout_msec: 1000
+                    lease_duration: 86400
+                    options: []
+                    range_end: ""
+                    range_start: ""
+                    subnet_mask: ""
+                  dhcpv6:
+                    lease_duration: 86400
+                    ra_allow_slaac: false
+                    ra_slaac_only: false
+                    range_start: ""
+                  enabled: false
+                  interface_name: ""
+                  local_domain_name: lan
                 dns:
+                  aaaa_disabled: false
+                  allowed_clients: []
+                  anonymize_client_ip: false
                   bind_hosts:
                     - '::'
-                  port: 53
-                  anonymize_client_ip: false
-                  ratelimit: 20
-                  ratelimit_subnet_len_ipv4: 24
-                  ratelimit_subnet_len_ipv6: 56
-                  ratelimit_whitelist: []
-                  refuse_any: true
-                  upstream_dns:
-                    - https://cloudflare-dns.com/dns-query
-                  upstream_dns_file: ""
+                  blocked_hosts:
+                    - version.bind
+                    - id.server
+                    - hostname.bind
+                  bogus_nxdomain: []
                   bootstrap_dns:
                     - 1.1.1.1
                     - 1.0.0.1
                     - 2606:4700:4700::1111
                     - 2606:4700:4700::1001
-                  fallback_dns: []
-                  upstream_mode: load_balance
-                  fastest_timeout: 1s
-                  allowed_clients: []
+                  bootstrap_prefer_ipv6: false
+                  cache_enabled: true
+                  cache_optimistic: false
+                  cache_optimistic_answer_ttl: 30s
+                  cache_optimistic_max_age: 12h
+                  cache_size: 4194304
+                  cache_ttl_max: 0
+                  cache_ttl_min: 0
                   disallowed_clients: []
-                  blocked_hosts:
-                    - version.bind
-                    - id.server
-                    - hostname.bind
+                  dns64_prefixes: []
+                  edns_client_subnet:
+                    custom_ip: ""
+                    enabled: false
+                    use_custom: false
+                  enable_dnssec: true
+                  fallback_dns: []
+                  fastest_timeout: 1s
+                  handle_ddr: true
+                  hostsfile_enabled: true
+                  ipset: []
+                  ipset_file: ""
+                  local_ptr_upstreams: []
+                  max_goroutines: 300
+                  pending_requests:
+                    enabled: true
+                  port: 53
+                  private_networks: []
+                  ratelimit: 20
+                  ratelimit_subnet_len_ipv4: 24
+                  ratelimit_subnet_len_ipv6: 56
+                  ratelimit_whitelist: []
+                  refuse_any: true
+                  serve_http3: false
+                  serve_plain_dns: true
                   trusted_proxies:
                     - 127.0.0.0/8
                     - ::1/128
                     - 10.42.0.0/16
                     - fd42::/64
-                  cache_enabled: true
-                  cache_size: 4194304
-                  cache_ttl_min: 0
-                  cache_ttl_max: 0
-                  cache_optimistic: false
-                  cache_optimistic_answer_ttl: 30s
-                  cache_optimistic_max_age: 12h
-                  bogus_nxdomain: []
-                  aaaa_disabled: false
-                  enable_dnssec: true
-                  edns_client_subnet:
-                    custom_ip: ""
-                    enabled: false
-                    use_custom: false
-                  max_goroutines: 300
-                  handle_ddr: true
-                  ipset: []
-                  ipset_file: ""
-                  bootstrap_prefer_ipv6: false
+                  upstream_dns:
+                    - https://cloudflare-dns.com/dns-query
+                  upstream_dns_file: ""
+                  upstream_mode: load_balance
                   upstream_timeout: 10s
-                  private_networks: []
-                  use_private_ptr_resolvers: true
-                  local_ptr_upstreams: []
                   use_dns64: false
-                  dns64_prefixes: []
-                  serve_http3: false
                   use_http3_upstreams: false
-                  serve_plain_dns: true
-                  hostsfile_enabled: true
-                  pending_requests:
-                    enabled: true
-                tls:
-                  enabled: true
-                  server_name: d.doany.io
-                  force_https: false
-                  port_https: 443
-                  port_dns_over_tls: 853
-                  port_dns_over_quic: 853
-                  port_dnscrypt: 0
-                  dnscrypt_config_file: ""
-                  certificate_chain: ""
-                  private_key: ""
-                  certificate_path: /opt/adguardhome/ssl/server.crt
-                  private_key_path: /opt/adguardhome/ssl/server.key
-                  strict_sni_check: false
-                querylog:
-                  dir_path: ""
-                  ignored: []
-                  interval: 1d
-                  size_memory: 1000
-                  enabled: true
-                  ignored_enabled: false
-                  file_enabled: true
-                statistics:
-                  dir_path: ""
-                  ignored: []
-                  interval: 1d
-                  enabled: true
-                  ignored_enabled: false
-                filters:
-                  - enabled: true
-                    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_48.txt
-                    name: HaGeZi's Pro Blocklist
-                    id: 1783264397
-                whitelist_filters: []
-                user_rules:
-                  - ""
-                dhcp:
-                  enabled: false
-                  interface_name: ""
-                  local_domain_name: lan
-                  dhcpv4:
-                    gateway_ip: ""
-                    subnet_mask: ""
-                    range_start: ""
-                    range_end: ""
-                    lease_duration: 86400
-                    icmp_timeout_msec: 1000
-                    options: []
-                  dhcpv6:
-                    range_start: ""
-                    lease_duration: 86400
-                    ra_slaac_only: false
-                    ra_allow_slaac: false
+                  use_private_ptr_resolvers: true
                 filtering:
-                  blocking_ipv4: ""
-                  blocking_ipv6: ""
+                  blocked_response_ttl: 10
                   blocked_services:
+                    ids: []
                     schedule:
                       time_zone: Asia/Tokyo
-                    ids: []
+                  blocking_ipv4: ""
+                  blocking_ipv6: ""
+                  blocking_mode: default
+                  cache_time: 30
+                  filtering_enabled: true
+                  filters_update_interval: 24
+                  max_http_size: 256MB
+                  parental_block_host: family-block.dns.adguard.com
+                  parental_cache_size: 1048576
+                  parental_enabled: false
                   protection_disabled_until: null
+                  protection_enabled: true
+                  rewrites:
+                    - answer: 10.10.0.4
+                      domain: '*.l.doany.io'
+                      enabled: true
+                  rewrites_enabled: true
+                  safe_fs_patterns:
+                    - /opt/adguardhome/work/userfilters/*
                   safe_search:
-                    enabled: false
                     bing: true
                     duckduckgo: true
                     ecosia: true
+                    enabled: false
                     google: true
                     pixabay: true
                     yandex: true
                     youtube: true
-                  blocking_mode: default
-                  parental_block_host: family-block.dns.adguard.com
                   safebrowsing_block_host: standard-block.dns.adguard.com
-                  rewrites:
-                    - domain: '*.l.doany.io'
-                      answer: 10.10.0.4
-                      enabled: true
-                  safe_fs_patterns:
-                    - /opt/adguardhome/work/userfilters/*
-                  max_http_size: 256MB
                   safebrowsing_cache_size: 1048576
-                  safesearch_cache_size: 1048576
-                  parental_cache_size: 1048576
-                  cache_time: 30
-                  filters_update_interval: 24
-                  blocked_response_ttl: 10
-                  filtering_enabled: true
-                  rewrites_enabled: true
-                  parental_enabled: false
                   safebrowsing_enabled: false
-                  protection_enabled: true
-                clients:
-                  runtime_sources:
-                    whois: true
-                    arp: true
-                    rdns: true
-                    dhcp: true
-                    hosts: true
-                  persistent: []
+                  safesearch_cache_size: 1048576
+                filters:
+                  - enabled: true
+                    id: 1783264397
+                    name: HaGeZi's Pro Blocklist
+                    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_48.txt
+                http:
+                  address: 0.0.0.0:80
+                  doh:
+                    insecure_enabled: false
+                    routes:
+                      - GET /dns-query
+                      - POST /dns-query
+                      - GET /dns-query/{ClientID}
+                      - POST /dns-query/{ClientID}
+                  pprof:
+                    enabled: false
+                    port: 6060
+                  session_ttl: 30d
+                http_proxy: ""
+                language: ""
                 log:
+                  compress: false
                   enabled: true
                   file: ""
+                  local_time: false
+                  max_age: 3
                   max_backups: 0
                   max_size: 100
-                  max_age: 3
-                  compress: false
-                  local_time: false
                   verbose: false
                 os:
                   group: ""
-                  user: ""
                   rlimit_nofile: 0
-                schema_version: 34
+                  user: ""
+                querylog:
+                  dir_path: ""
+                  enabled: true
+                  file_enabled: true
+                  ignored: []
+                  ignored_enabled: false
+                  interval: 1d
+                  size_memory: 1000
+                schema_version: 35
+                statistics:
+                  dir_path: ""
+                  enabled: true
+                  ignored: []
+                  ignored_enabled: false
+                  interval: 1d
+                theme: auto
+                tls:
+                  certificate_chain: ""
+                  certificate_path: /opt/adguardhome/ssl/server.crt
+                  dnscrypt_config_file: ""
+                  enabled: true
+                  force_https: false
+                  port_dns_over_quic: 853
+                  port_dns_over_tls: 853
+                  port_dnscrypt: 0
+                  port_https: 443
+                  private_key: ""
+                  private_key_path: /opt/adguardhome/ssl/server.key
+                  server_name: d.doany.io
+                  strict_sni_check: false
+                user_rules:
+                  - ""
+                users: []
+                whitelist_filters: []
       containers:
         - name: adguardhome
           # 版を上げる Renovate の PR では renovate-post-upgrade.sh が `CONFIG` も移行する(上の注記)。その PR は自動マージする
-          image: adguard/adguardhome:v0.107.80
+          image: adguard/adguardhome:v1.0.0
           # LoadBalancer は使わず、ノードの全アドレスで受けるために hostPort を持つ(docs/decisions.md「LoadBalancer をどう置き換えるか」)。
           # hostPort は送信元 IP を保つので、AdGuard のクライアント別統計が取れる。
           ports:
