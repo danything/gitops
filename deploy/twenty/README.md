@@ -47,7 +47,7 @@
 
 ## メールとカレンダーの同期
 
-設定 › アカウントで Microsoft のアカウントをつなぐと、そのメールと予定を取り込む(`MESSAGING_PROVIDER_MICROSOFT_ENABLED`・
+設定 › Apps preferences › Outlook の「Connect with Microsoft」でアカウントをつなぐと、そのメールと予定を取り込む(`MESSAGING_PROVIDER_MICROSOFT_ENABLED`・
 `CALENDAR_PROVIDER_MICROSOFT_ENABLED`)。つなぐのは info@doany.io(仕事)と y16m@outlook.com(個人。普段の予定はこちら)。
 
 - **アプリ登録は同じ `twenty`。** つなぐときの戻り先は `/auth/microsoft-apis/get-access-token`(`AUTH_MICROSOFT_APIS_CALLBACK_URL`)。
