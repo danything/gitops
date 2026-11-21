@@ -3,7 +3,7 @@
 # - server は起きるときに DB の初期化・移行と cron の登録をしてから待ち受ける(イメージの entrypoint.sh)。worker はどちらもしない
 # - 添付ファイルは PVC storage(.local-storage)。server と worker の両方が読み書きするので、両方に付ける
 #   (local-path の ReadWriteOnce でも、同じノードの Pod なら一緒に付けられる。ノードは 1 台)
-# - ログインは Microsoft だけ(専用のアプリ登録 twenty。pulumi/entra-twenty.ts)。パスワードは止める
+# - ログインは Microsoft だけ(専用のアプリ登録 twenty。pulumi/entra-twenty.ts)。パスワードは止める。同じアプリ登録でメールとカレンダーも同期する
 # - ワークスペースは 1 つだけ(IS_MULTIWORKSPACE_ENABLED=false)。作ったあとは、招待か許可したドメインの人しか登録できない
 apiVersion: v1
 kind: Service
@@ -51,9 +51,11 @@ data:
   # pulumi/entra-twenty.ts のアプリ登録 twenty(pulumi の出力 twentyClientId)
   AUTH_MICROSOFT_CLIENT_ID: 4167ec78-8c93-446b-90d8-f29aee91b9ec
   AUTH_MICROSOFT_CALLBACK_URL: https://t.doany.io/auth/microsoft/redirect
-  # メールとカレンダーの同期は使わない(アプリ登録に Mail.* の権限を付けていない)
-  MESSAGING_PROVIDER_MICROSOFT_ENABLED: "false"
-  CALENDAR_PROVIDER_MICROSOFT_ENABLED: "false"
+  # メールとカレンダーの同期(設定 › アカウントで Microsoft のアカウントをつなぐ)。権限と戻り先はアプリ登録 twenty に足してある。
+  # 同期のジョブは worker が回し、定期の分は server が起きるときに登録する(cron:register:all。イメージの entrypoint.sh)
+  MESSAGING_PROVIDER_MICROSOFT_ENABLED: "true"
+  CALENDAR_PROVIDER_MICROSOFT_ENABLED: "true"
+  AUTH_MICROSOFT_APIS_CALLBACK_URL: https://t.doany.io/auth/microsoft-apis/get-access-token
   # メールは家のクラスタの中継(deploy/smtp-relay)から info@doany.io として送る(招待・ドメインの確認など)。中継は TLS なし
   EMAIL_DRIVER: smtp
   EMAIL_SMTP_HOST: smtp-relay.smtp-relay.svc

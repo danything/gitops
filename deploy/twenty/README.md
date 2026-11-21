@@ -19,9 +19,14 @@
 - **ログインは Microsoft だけ。** パスワードは止めてある(`AUTH_PASSWORD_ENABLED=false`)
 - **アプリ登録は Twenty 専用の `twenty`**([pulumi/entra-twenty.ts](../../pulumi/entra-twenty.ts))。
   Twenty は認可の入口を `common` に決め打ちしていて、自分のテナント専用の共用のアプリ登録 Main では弾かれる(AADSTS50194)。
-  そのためこのアプリだけマルチテナントにしてあり、**ほかのテナントの人もサインインの画面までは来られる**
+  そのためこのアプリだけ外に開いてある(`AzureADandPersonalMicrosoftAccount`)。**ほかのテナントの人も、個人の Microsoft アカウント
+  (outlook.com など)の人も、サインインの画面までは来られる**。個人のアカウントを入れたのは、持ち主の普段の予定(y16m@outlook.com)を
+  同期につなぐため(下の「メールとカレンダーの同期」)
 - **入れる人は Twenty の側で絞る。** ワークスペースは 1 つだけで、作ったあとは招待か「許可したドメイン」の人しか登録できない
   (`IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS`)。許可したドメインは `doany.io` だけ(設定 › セキュリティ。DB に持つ)
+- **個人のアカウントで入られる心配は無い。** 個人のアカウントの名前(UPN)はそのメールアドレスで、作るときにそのアドレスでメールを
+  受けて確かめる。`@doany.io` のメールを受けられるのは自分のテナントだけなので、他人が `@doany.io` の個人のアカウントを作って
+  許可したドメインを通ることはできない。それ以外のアドレス(`@outlook.com` など)は招待が無ければ登録で弾かれる
 - 識別に使うのは Microsoft のアカウントの UPN(`info@doany.io` など)
 
 ## 最初のワークスペース
@@ -40,11 +45,30 @@
 - `microsoft-client-secret` には期限がある(テナントの方針で最長 180 日。今のものは 2027-05-17 まで)。切れたらサインインできなくなる。
   画面で作り直して `tools/t sops edit secrets.sops.yaml` で差し替える
 
+## メールとカレンダーの同期
+
+設定 › アカウントで Microsoft のアカウントをつなぐと、そのメールと予定を取り込む(`MESSAGING_PROVIDER_MICROSOFT_ENABLED`・
+`CALENDAR_PROVIDER_MICROSOFT_ENABLED`)。つなぐのは info@doany.io(仕事)と y16m@outlook.com(個人。普段の予定はこちら)。
+
+- **アプリ登録は同じ `twenty`。** つなぐときの戻り先は `/auth/microsoft-apis/get-access-token`(`AUTH_MICROSOFT_APIS_CALLBACK_URL`)。
+  権限は Graph の委任の openid・email・profile・offline_access・User.Read・Mail.ReadWrite・Mail.Send・Calendars.ReadWrite。
+  **Twenty は、メールだけ・カレンダーだけを同期するときも全部を求める**(上流の get-microsoft-apis-oauth-scopes.ts)。減らすとつなげない
+- **自分のテナントのアカウントは、管理者の同意が要ることがある。** テナントの方針でユーザーが Mail.ReadWrite などに同意できないと、
+  つなぐときに AADSTS90094 になる。Entra 管理センター › アプリの登録 › twenty › API のアクセス許可 で「doany に管理者の同意を与えます」を押す。
+  個人のアカウントは本人が同意の画面で承諾するだけ
+- **info@doany.io は Exchange Online Kiosk で同期できる。** Graph のメールと予定の API は Kiosk でも使える(2026-11-21 に Graph で
+  メールと予定を読めることを確かめた)。上流の文書の「Microsoft 365 のライセンスが要る」は、メールボックスがあれば足りる。
+  個人のアカウント(outlook.com)には、この制限は無い
+- **同期を回すのは worker。** 定期のジョブ(`MessagingMessageListFetchCronJob`・`CalendarEventListFetchCronJob` など)は、server が起きるときに
+  `cron:register:all` で登録する(イメージの entrypoint.sh。worker では `DISABLE_CRON_JOBS_REGISTRATION` で止めてある)
+- **Graph の変更の通知(webhook)は届かないかもしれない。** Twenty は `/webhooks/microsoft/messaging`・`/webhooks/microsoft/calendar` を
+  Graph に購読させて、届いたらすぐ取り込む。doany.io のゾーンは Cloudflare がデータセンターの IP にチャレンジを返すので、Microsoft からの
+  通知(と購読を作るときの確かめ)は弾かれうる。弾かれても、購読が FAILED になるだけで、定期のジョブ(数分ごと)で取り込まれる
+- つないだアカウントのトークン(更新トークン)は DB に `ENCRYPTION_KEY` で暗号化して持つ
+
 ## 気にしておくこと
 
 - **版。** `twentycrm/twenty:vX.Y.Z`。server が起きるたびに DB の移行(`upgrade`)が走る。版を飛ばすと移行が長くなる。
   上流の Helm chart は古いので使わず、上流の compose(`packages/twenty-docker/docker-compose.yml`)に合わせて書いている
-- **メールとカレンダーの同期は使っていない。** 使うならアプリ登録に Graph の Mail.ReadWrite・Mail.Send・Calendars.ReadWrite を足し、
-  `MESSAGING_PROVIDER_MICROSOFT_ENABLED` などを true にする(Microsoft 365 のライセンスが要る)
 - **メールは家の中継から送る**(../smtp-relay/。差出人は info@doany.io)。招待のメールや、許可するドメインの確認のメールが届く。
   中継のパスワードは yosegaki と同じ値(`smtp-password`。中継の README「送る側の設定」)
