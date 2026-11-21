@@ -51,7 +51,7 @@ data:
   # pulumi/entra-twenty.ts のアプリ登録 twenty(pulumi の出力 twentyClientId)
   AUTH_MICROSOFT_CLIENT_ID: 4167ec78-8c93-446b-90d8-f29aee91b9ec
   AUTH_MICROSOFT_CALLBACK_URL: https://t.doany.io/auth/microsoft/redirect
-  # メールとカレンダーの同期(設定 › アカウントで Microsoft のアカウントをつなぐ)。権限と戻り先はアプリ登録 twenty に足してある。
+  # メールとカレンダーの同期(設定 › Apps preferences › Outlook でアカウントをつなぐ)。権限と戻り先はアプリ登録 twenty に足してある。
   # 同期のジョブは worker が回し、定期の分は server が起きるときに登録する(cron:register:all。イメージの entrypoint.sh)
   MESSAGING_PROVIDER_MICROSOFT_ENABLED: "true"
   CALENDAR_PROVIDER_MICROSOFT_ENABLED: "true"
