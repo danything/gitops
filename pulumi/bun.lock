@@ -12,7 +12,7 @@
       },
       "devDependencies": {
         "@types/bun": "1.4.5",
-        "cf": "1.0.0-rc.3",
+        "cf": "1.0.0-rc.4",
         "typescript": "7.0.2",
       },
     },
@@ -241,7 +241,7 @@
 
     "bun-types": ["bun-types@1.4.5", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-ECHn+9dhL3wv0G6u0+7dQvrnaimXiRDxxerYBmhTaLyJEEuvTPWk2Fye3XIf5Y++JIIiHKfQw4Z7V5D8KuiXbg=="],
 
-    "cf": ["cf@1.0.0-rc.3", "", { "dependencies": { "@cloudflare/build-output-utils": "1.0.0-rc.3", "@cloudflare/config": "1.0.0-rc.3", "@cloudflare/runtime-types": "0.1.32", "blake3-wasm": "2.1.5", "miniflare": "5.20261119.0-beta" }, "bin": { "cf": "./bin/cf", "cloudflare": "./bin/cf" } }, "sha512-TUiBq/+W8t2gIj4tuAWWObsP+tVV2RaL3Vp9sKeknXM0/WQV1tJKXW3TKtxhw4ZAnUbq8GW1d+Eri6abIpGR/g=="],
+    "cf": ["cf@1.0.0-rc.4", "", { "dependencies": { "@cloudflare/build-output-utils": "1.0.0-rc.3", "@cloudflare/config": "1.0.0-rc.3", "@cloudflare/runtime-types": "0.1.32", "blake3-wasm": "2.1.5", "miniflare": "5.20261119.0-beta" }, "bin": { "cf": "./bin/cf", "cloudflare": "./bin/cf" } }, "sha512-QNJOSb4DT4HOO/ZwIL0zG5GhnX64cN6a8Dmfln/IwXim/G0eTkQdo/0rEexbY3FJI6rzG19GotWN8I+udulgxA=="],
 
     "cjs-module-lexer": ["cjs-module-lexer@2.3.0", "", {}, "sha512-lmNyBzi6iYiqyrExTctfmjd8tInx+dHu9PBomTfH5RXS53c27JMFJgzNv5TyAnm3PgGf+MLy0+Ws41/HlVxdKQ=="],
 
