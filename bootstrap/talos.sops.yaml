@@ -31,7 +31,7 @@
 #
 # VolumeSnapshot の CRD と snapshot-controller(storage.yaml の VolumeSnapshotClass が使う)。
 # renovate: datasource=github-releases depName=kubernetes-csi/external-snapshotter
-# version: v8.7.0
+# version: v8.7.1
 machine:
     sysctls:
         # 無いと IPv6 の既定経路が消える(Kubernetes が forwarding=1 にすると accept_ra=1 は RA を無視する)
