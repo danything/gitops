@@ -130,7 +130,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: tuwunel
-          image: ghcr.io/matrix-construct/tuwunel:v2.0.0
+          image: ghcr.io/matrix-construct/tuwunel:v2.1.0
           env:
             - name: TUWUNEL_CONFIG
               value: /etc/tuwunel/tuwunel.toml
