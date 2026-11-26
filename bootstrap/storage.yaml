@@ -123,7 +123,7 @@ spec:
             - name: dev
               mountPath: /dev
         - name: label
-          image: registry.k8s.io/kubectl:v1.37.2
+          image: registry.k8s.io/kubectl:v1.37.3
           args: [label, node, $(NODE), doany.io/lvm-thinpool=ready, --overwrite]
           env:
             - name: NODE
