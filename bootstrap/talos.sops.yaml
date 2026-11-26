@@ -23,7 +23,7 @@
 #
 # Kubernetes。上げるのは upgrade-k8s で、マイナーを飛ばさない。tools/Dockerfile の kubectl と同じ depName。
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
-# version: v1.37.2
+# version: v1.37.3
 #
 # Gateway API の CRD(standard チャンネルで足りる)。
 # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
