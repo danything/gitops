@@ -113,7 +113,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: clickhouse
-          image: clickhouse/clickhouse-server:26.11.4.11
+          image: clickhouse/clickhouse-server:26.11.5.8
           ports:
             - containerPort: 8123
           env:
